@@ -1263,7 +1263,7 @@ function DashboardContent({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 border border-gray-400 backdrop-blur-sm transition-all duration-300"
+                    className="hidden md:inline-flex h-8 w-8 border border-gray-400 backdrop-blur-sm transition-all duration-300"
                     title={`Switch to ${
                       currentMode === "light" ? "dark" : "light"
                     } theme`}

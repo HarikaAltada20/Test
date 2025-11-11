@@ -378,10 +378,8 @@ export default function BillingClientPage({
         return `Bank: ...${
           method.details?.account_number?.slice(-4) || "XXXX"
         } (${method.friendly_name || "Bank"})`;
-      case "phantom":
-        return `Phantom: ...${
-          method.details?.wallet_address?.slice(-4) || "XXXX"
-        } (${method.friendly_name || "Phantom Wallet"})`;
+        case "phantom":
+          return `Phantom: ...${method.details?.wallet_address?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Phantom Wallet'})`;
       default:
         return "Unknown Method Type";
     }
