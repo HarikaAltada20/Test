@@ -93,6 +93,16 @@ interface YouTubeVideo {
         width: number;
         height: number;
       };
+      standard?: {
+        url: string;
+        width: number;
+        height: number;
+      };
+      maxres?: {
+        url: string;
+        width: number;
+        height: number;
+      };
     };
   };
   statistics?: {
@@ -120,6 +130,25 @@ function extractYoutubeId(url: string) {
     /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([\w-]{11})(?:&\S+)?/i;
   const match = url.match(regex);
   return match ? match[1] : null;
+}
+
+// Helper to choose the highest quality available YouTube thumbnail
+function getYouTubeThumbnailUrl(
+  thumbnails?: YouTubeVideo["snippet"]["thumbnails"],
+  videoId?: string
+) {
+  if (!thumbnails) {
+    return videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
+  }
+
+  return (
+    thumbnails.maxres?.url ||
+    thumbnails.standard?.url ||
+    thumbnails.high?.url ||
+    thumbnails.medium?.url ||
+    thumbnails.default?.url ||
+    (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null)
+  );
 }
 
 export default function SubmitContentPage({
@@ -1620,6 +1649,12 @@ export default function SubmitContentPage({
         : 0,
     };
 
+    const youtubeThumbnailUrl =
+      getYouTubeThumbnailUrl(
+        videoToSubmit.snippet.thumbnails,
+        videoToSubmit.id.videoId
+      ) || `https://i.ytimg.com/vi/${videoToSubmit.id.videoId}/hqdefault.jpg`;
+
     const submissionPayload = {
       contest_id: contestId,
       creator_id: user!.id,
@@ -1631,7 +1666,7 @@ export default function SubmitContentPage({
       content_link: `https://www.youtube.com/watch?v=${videoToSubmit.id.videoId}`,
       video_id: videoToSubmit.id.videoId,
       video_title: videoToSubmit.snippet.title,
-      video_thumbnail_url: videoToSubmit.snippet.thumbnails.default.url,
+      video_thumbnail_url: youtubeThumbnailUrl,
       other_stats: { youtube: youtubeStats },
     };
 
@@ -1753,6 +1788,10 @@ export default function SubmitContentPage({
             : 0,
         };
 
+        const youtubeThumbnailUrl =
+          getYouTubeThumbnailUrl(video.snippet.thumbnails, video.id.videoId) ||
+          `https://i.ytimg.com/vi/${video.id.videoId}/hqdefault.jpg`;
+
         const submissionPayload = {
           contest_id: contestId,
           creator_id: user!.id,
@@ -1761,7 +1800,7 @@ export default function SubmitContentPage({
           content_link: `https://www.youtube.com/watch?v=${video.id.videoId}`,
           video_id: video.id.videoId,
           video_title: video.snippet.title,
-          video_thumbnail_url: video.snippet.thumbnails.default.url,
+          video_thumbnail_url: youtubeThumbnailUrl,
           views: video?.statistics?.viewCount
             ? parseInt(video.statistics.viewCount)
             : 0,
@@ -2772,6 +2811,13 @@ export default function SubmitContentPage({
                               }
                             };
 
+                            const thumbnailUrl =
+                              getYouTubeThumbnailUrl(
+                                video.snippet.thumbnails,
+                                video.id.videoId
+                              ) ||
+                              `https://i.ytimg.com/vi/${video.id.videoId}/hqdefault.jpg`;
+
                             return (
                               <div
                                 key={video.id.videoId}
@@ -2809,11 +2855,7 @@ export default function SubmitContentPage({
                                     {/* Thumbnail */}
                                     <div className="flex-shrink-0 mx-auto sm:mx-0">
                                       <Image
-                                        src={
-                                          video.snippet.thumbnails.medium
-                                            ?.url ||
-                                          video.snippet.thumbnails.default.url
-                                        }
+                                        src={thumbnailUrl}
                                         alt={video.snippet.title}
                                         width={160}
                                         height={90}
@@ -2856,12 +2898,14 @@ export default function SubmitContentPage({
                                       </div>
 
                                       {/* Date */}
-                                      <p className={cn(
-                                        "text-md text-center sm:text-left",
-                                        isDark
-                                          ? "text-white"
-                                          : "text-gray-600"
-                                      )}>
+                                      <p
+                                        className={cn(
+                                          "text-md text-center sm:text-left",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-gray-600"
+                                        )}
+                                      >
                                         Published:{" "}
                                         {dayjs(
                                           video.snippet.publishedAt
@@ -2870,13 +2914,14 @@ export default function SubmitContentPage({
 
                                       {/* Statistics */}
                                       {video.statistics && (
-                                        <div 
-                                        className={cn(
-                                          "flex flex-wrap justify-center sm:justify-start gap-x-3 gap-y-1 text-md",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-gray-600"
-                                        )}>
+                                        <div
+                                          className={cn(
+                                            "flex flex-wrap justify-center sm:justify-start gap-x-3 gap-y-1 text-md",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-gray-600"
+                                          )}
+                                        >
                                           {video.statistics.viewCount && (
                                             <div className="flex items-center gap-1">
                                               <Eye className="h-4 w-4" />
@@ -2977,6 +3022,13 @@ export default function SubmitContentPage({
                           }
                         };
 
+                        const previewThumbnailUrl =
+                          getYouTubeThumbnailUrl(
+                            videoPreview.snippet.thumbnails,
+                            videoPreview.id.videoId
+                          ) ||
+                          `https://i.ytimg.com/vi/${videoPreview.id.videoId}/hqdefault.jpg`;
+
                         return (
                           <Card
                             className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${
@@ -3010,12 +3062,7 @@ export default function SubmitContentPage({
                                 {/* Thumbnail */}
                                 <div className="flex-shrink-0 mx-auto sm:mx-0">
                                   <Image
-                                    src={
-                                      videoPreview.snippet.thumbnails.medium
-                                        ?.url ||
-                                      videoPreview.snippet.thumbnails.default
-                                        .url
-                                    }
+                                    src={previewThumbnailUrl}
                                     alt={videoPreview.snippet.title}
                                     width={160}
                                     height={90}
@@ -4003,154 +4050,157 @@ export default function SubmitContentPage({
                           </h4>
                           <div className="space-y-3 max-h-96 overflow-y-auto">
                             {/* YouTube Videos */}
-                            {fetchedVideos.map(
-                              (video, index) =>
-                                video && (
-                                  <Card
-                                    key={`youtube-${index}`}
-                                    className={`cursor-pointer transition-all duration-200 ${
-                                      isVideoAlreadySubmitted(
-                                        video.id.videoId,
-                                        `https://www.youtube.com/watch?v=${video.id.videoId}`
-                                      )
-                                        ? isDark
-                                          ? "border-2 border-red-500 bg-red-900/40 opacity-90"
-                                          : "border-2 border-red-300 bg-red-50 opacity-75"
-                                        : selectedVideoIndices.includes(index)
-                                        ? isDark
-                                          ? "border-2 border-purple-400 bg-[#2B184A]"
-                                          : "border-2 border-purple-500 bg-purple-50"
-                                        : isDark
-                                        ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
-                                        : "border border-gray-200 hover:border-purple-300 bg-white"
-                                    }`}
-                                    onClick={() =>
-                                      handleVideoSelection(
-                                        index,
-                                        !selectedVideoIndices.includes(index)
-                                      )
-                                    }
-                                  >
-                                    <CardContent className="p-4">
-                                      <div className="flex items-start gap-4">
-                                        <div className="flex-shrink-0">
-                                          <Image
-                                            src={
-                                              video.snippet.thumbnails.medium
-                                                ?.url ||
-                                              video.snippet.thumbnails.default
-                                                .url
-                                            }
-                                            alt={video.snippet.title}
-                                            width={120}
-                                            height={68}
-                                            className="rounded-lg object-cover aspect-video"
-                                          />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-start justify-between">
-                                            <div className="flex-1">
-                                              <div className="flex items-start gap-2 mb-2">
-                                                <h5 className="font-medium text-sm line-clamp-2 flex-1">
-                                                  {video.snippet.title}
-                                                </h5>
-                                                {isVideoAlreadySubmitted(
-                                                  video.id.videoId,
-                                                  `https://www.youtube.com/watch?v=${video.id.videoId}`
-                                                ) && (
-                                                  <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
-                                                    <AlertTriangle className="h-3 w-3" />
-                                                    Already Submitted
-                                                  </div>
-                                                )}
+                            {fetchedVideos.map((video, index) => {
+                              if (!video) return null;
+
+                              const thumbnailUrl =
+                                getYouTubeThumbnailUrl(
+                                  video.snippet.thumbnails,
+                                  video.id.videoId
+                                ) ||
+                                `https://i.ytimg.com/vi/${video.id.videoId}/hqdefault.jpg`;
+
+                              return (
+                                <Card
+                                  key={`youtube-${index}`}
+                                  className={`cursor-pointer transition-all duration-200 ${
+                                    isVideoAlreadySubmitted(
+                                      video.id.videoId,
+                                      `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                    )
+                                      ? isDark
+                                        ? "border-2 border-red-500 bg-red-900/40 opacity-90"
+                                        : "border-2 border-red-300 bg-red-50 opacity-75"
+                                      : selectedVideoIndices.includes(index)
+                                      ? isDark
+                                        ? "border-2 border-purple-400 bg-[#2B184A]"
+                                        : "border-2 border-purple-500 bg-purple-50"
+                                      : isDark
+                                      ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
+                                      : "border border-gray-200 hover:border-purple-300 bg-white"
+                                  }`}
+                                  onClick={() =>
+                                    handleVideoSelection(
+                                      index,
+                                      !selectedVideoIndices.includes(index)
+                                    )
+                                  }
+                                >
+                                  <CardContent className="p-4">
+                                    <div className="flex items-start gap-4">
+                                      <div className="flex-shrink-0">
+                                        <Image
+                                          src={thumbnailUrl}
+                                          alt={video.snippet.title}
+                                          width={120}
+                                          height={68}
+                                          className="rounded-lg object-cover aspect-video"
+                                        />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-start justify-between">
+                                          <div className="flex-1">
+                                            <div className="flex items-start gap-2 mb-2">
+                                              <h5 className="font-medium text-sm line-clamp-2 flex-1">
+                                                {video.snippet.title}
+                                              </h5>
+                                              {isVideoAlreadySubmitted(
+                                                video.id.videoId,
+                                                `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                              ) && (
+                                                <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
+                                                  <AlertTriangle className="h-3 w-3" />
+                                                  Already Submitted
+                                                </div>
+                                              )}
+                                            </div>
+                                            <div
+                                              className={cn(
+                                                "flex items-center gap-4 text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-600"
+                                              )}
+                                            >
+                                              <div className="flex items-center gap-1">
+                                                <Eye
+                                                  className={cn(
+                                                    "h-4 w-4",
+                                                    isDark
+                                                      ? "text-gray-300"
+                                                      : "text-gray-600"
+                                                  )}
+                                                />
+                                                <span className="font-medium">
+                                                  {video.statistics
+                                                    ?.viewCount || 0}{" "}
+                                                </span>
+                                                <span>views</span>
                                               </div>
-                                              <div
-                                                className={cn(
-                                                  "flex items-center gap-4 text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-600"
-                                                )}
-                                              >
-                                                <div className="flex items-center gap-1">
-                                                  <Eye
-                                                    className={cn(
-                                                      "h-4 w-4",
-                                                      isDark
-                                                        ? "text-gray-300"
-                                                        : "text-gray-600"
-                                                    )}
-                                                  />
-                                                  <span className="font-medium">
-                                                    {video.statistics
-                                                      ?.viewCount || 0}{" "}
-                                                  </span>
-                                                  <span>views</span>
-                                                </div>
 
-                                                <div className="flex items-center gap-1">
-                                                  <ThumbsUp
-                                                    className={cn(
-                                                      "h-4 w-4",
-                                                      isDark
-                                                        ? "text-gray-300"
-                                                        : "text-gray-600"
-                                                    )}
-                                                  />
-                                                  <span>
-                                                    {video.statistics
-                                                      ?.likeCount || 0}{" "}
-                                                  </span>
-                                                  <span>likes</span>
-                                                </div>
+                                              <div className="flex items-center gap-1">
+                                                <ThumbsUp
+                                                  className={cn(
+                                                    "h-4 w-4",
+                                                    isDark
+                                                      ? "text-gray-300"
+                                                      : "text-gray-600"
+                                                  )}
+                                                />
+                                                <span>
+                                                  {video.statistics
+                                                    ?.likeCount || 0}{" "}
+                                                </span>
+                                                <span>likes</span>
+                                              </div>
 
-                                                <div className="flex items-center gap-1">
-                                                  <MessageSquare
-                                                    className={cn(
-                                                      "h-4 w-4",
-                                                      isDark
-                                                        ? "text-gray-300"
-                                                        : "text-gray-600"
-                                                    )}
-                                                  />
-                                                  <span className="font-medium">
-                                                    {video.statistics
-                                                      ?.commentCount || 0}{" "}
-                                                  </span>
-                                                  <span>comments</span>
-                                                </div>
+                                              <div className="flex items-center gap-1">
+                                                <MessageSquare
+                                                  className={cn(
+                                                    "h-4 w-4",
+                                                    isDark
+                                                      ? "text-gray-300"
+                                                      : "text-gray-600"
+                                                  )}
+                                                />
+                                                <span className="font-medium">
+                                                  {video.statistics
+                                                    ?.commentCount || 0}{" "}
+                                                </span>
+                                                <span>comments</span>
                                               </div>
                                             </div>
-                                            <div className="flex-shrink-0 ml-2">
-                                              <Checkbox
-                                                aria-label="Select video"
-                                                checked={selectedVideoIndices.includes(
-                                                  index
-                                                )}
-                                                onCheckedChange={(checked) =>
-                                                  handleVideoSelection(
-                                                    index,
-                                                    Boolean(checked)
-                                                  )
-                                                }
-                                                onClick={(event) =>
-                                                  event.stopPropagation()
-                                                }
-                                                className={cn(
-                                                  "h-5 w-5 border-2",
-                                                  isDark
-                                                    ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
-                                                )}
-                                              />
-                                            </div>
+                                          </div>
+                                          <div className="flex-shrink-0 ml-2">
+                                            <Checkbox
+                                              aria-label="Select video"
+                                              checked={selectedVideoIndices.includes(
+                                                index
+                                              )}
+                                              onCheckedChange={(checked) =>
+                                                handleVideoSelection(
+                                                  index,
+                                                  Boolean(checked)
+                                                )
+                                              }
+                                              onClick={(event) =>
+                                                event.stopPropagation()
+                                              }
+                                              className={cn(
+                                                "h-5 w-5 border-2",
+                                                isDark
+                                                  ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                                  : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
+                                              )}
+                                            />
                                           </div>
                                         </div>
                                       </div>
-                                    </CardContent>
-                                  </Card>
-                                )
-                            )}
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              );
+                            })}
 
                             {/* Instagram Reels */}
                             {fetchedReels.map(
