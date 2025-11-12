@@ -56,6 +56,7 @@ import {
   Landmark,
   Wallet as CryptoWalletIcon,
   Wallet,
+  X,
   Sparkles,
   Power,
   Loader2,
@@ -494,6 +495,20 @@ export default function BillingClientPage({
     return /^0x[a-fA-F0-9]{40}$/.test(address.trim());
   };
 
+  const isAlphabeticName = (name: string): boolean => {
+    const cleanedName = name.trim();
+    if (!cleanedName) return false;
+    return /^[A-Za-z][A-Za-z\s'.-]*$/.test(cleanedName);
+  };
+
+  const isValidUpiId = (value: string): boolean => {
+    const trimmedValue = value.trim();
+    if (!trimmedValue) return false;
+    return /^[A-Za-z0-9][A-Za-z0-9.\-_]{1,}@[A-Za-z][A-Za-z0-9]{2,}$/.test(
+      trimmedValue
+    );
+  };
+
   // Handle save payout method
   const handleSavePayoutMethod = async () => {
     if (!authUser) {
@@ -502,6 +517,10 @@ export default function BillingClientPage({
     }
     if (!payoutFriendlyName.trim()) {
       toast.error("Please provide a friendly name for this payout method.");
+      return;
+    }
+    if (/^\d+$/.test(payoutFriendlyName.trim())) {
+      toast.error("Invalid friendly name.");
       return;
     }
 
@@ -524,6 +543,14 @@ export default function BillingClientPage({
     } else if (selectedPayoutType === "upi") {
       if (!bankAccountHolder.trim() || !upiId.trim()) {
         toast.error("Account holder name and UPI ID are required.");
+        return;
+      }
+      if (!isAlphabeticName(bankAccountHolder)) {
+        toast.error("Invalid account holder name.");
+        return;
+      }
+      if (!isValidUpiId(upiId)) {
+        toast.error("Please enter a valid UPI ID (e.g., name@bank).");
         return;
       }
       details = {
@@ -616,6 +643,7 @@ export default function BillingClientPage({
       setCryptoNetwork(method.details.network || "BNB_BEP20");
     } else if (method.method_type === "upi" && method.details) {
       setUpiId(method.details.upi_id || "");
+      setBankAccountHolder(method.details.account_holder_name || "");
     } else if (method.method_type === "bank_transfer" && method.details) {
       setBankAccountHolder(method.details.account_holder_name || "");
       setBankAccountNumber(method.details.account_number || "");
@@ -1851,27 +1879,43 @@ export default function BillingClientPage({
         }}
         isdark={isDark}
       >
-        <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle
-              style={{
-                color: isDark ? "white" : "#1f2937",
-                transition: "none",
-              }}
-            >
-              {currentPayoutMethod?.id
-                ? "Edit Payout Method"
-                : "Add New Payout Method"}
-            </DialogTitle>
-            <DialogDescription
-              style={{
-                color: isDark ? "white" : "#1f2937",
-                transition: "none",
-              }}
-            >
-              Manage your payout methods. Your default method will be
-              pre-selected for withdrawals.
-            </DialogDescription>
+        <DialogContent
+          hideCloseButton
+          className="sm:max-w-2xl sm:w-[95vw] max-w-xl w-[92vw] max-h-[90vh] overflow-y-auto"
+        >
+          <DialogHeader className="text-left">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <DialogTitle
+                  style={{
+                    color: isDark ? "white" : "#1f2937",
+                    transition: "none",
+                  }}
+                >
+                  {currentPayoutMethod?.id
+                    ? "Edit Payout Method"
+                    : "Add New Payout Method"}
+                </DialogTitle>
+                <DialogDescription
+                  style={{
+                    color: isDark ? "white" : "#1f2937",
+                    transition: "none",
+                  }}
+                >
+                  Manage your payout methods. Your default method will be
+                  pre-selected for withdrawals.
+                </DialogDescription>
+              </div>
+              <DialogClose
+                className={cn(
+                  "shrink-0 rounded-full transition-colors",
+                  isDark ? "text-white" : "text-gray-600 hover:bg-gray-100"
+                )}
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </DialogClose>
+            </div>
           </DialogHeader>
           <div className="py-4 space-y-4">
             {/* Country selector controls which payout methods show */}
@@ -1911,7 +1955,7 @@ export default function BillingClientPage({
             </div>
             {/* Tabs for payout types */}
             <Tabs
-              defaultValue={selectedPayoutType}
+              value={selectedPayoutType}
               onValueChange={(value) =>
                 setSelectedPayoutType(value as PayoutMethodType)
               }
@@ -2460,7 +2504,6 @@ export default function BillingClientPage({
                 {payoutMethods.map((method) => (
                   <div
                     key={method.id}
-                   
                     className={cn(
                       "flex items-center justify-between p-3 rounded-lg border transition-colors",
                       isDark
