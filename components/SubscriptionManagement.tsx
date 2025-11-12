@@ -122,7 +122,8 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
         if (subscriptionResult.subscription) {
           try {
             const billingResponse = await fetch(
-              "/api/subscriptions/billing-details"
+              `/api/subscriptions/billing-details?t=${Date.now()}`,
+              { cache: "no-store" }
             );
             const billingResult = await billingResponse.json();
 
@@ -692,9 +693,9 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                     </Alert>
                   ) : (
                     // Show cancellation warning when canceled but no active scheduled changes
-                    <Alert className="border-red-200 bg-red-50">
-                      <AlertTriangle className="h-4 w-4 text-red-600" />
-                      <AlertDescription>
+                    <Alert className="border border-red-600/40 bg-red-900/30 text-red-100">
+                      <AlertTriangle className="h-4 w-4 text-red-300" />
+                      <AlertDescription className="text-red-100">
                         <strong>Subscription Ending:</strong> Your subscription
                         will be canceled on{" "}
                         {formatDate(billingDetails.nextBillingDate)}. You'll
