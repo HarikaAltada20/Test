@@ -55,6 +55,7 @@ import {
   Sparkles,
   Power,
   Loader2,
+  X,
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
@@ -387,6 +388,20 @@ export default function EarningsClientPage({
     }
   };
 
+  const isAlphabeticName = (name: string): boolean => {
+    const cleanedName = name.trim();
+    if (!cleanedName) return false;
+    return /^[A-Za-z][A-Za-z\s'.-]*$/.test(cleanedName);
+  };
+
+  const isValidUpiId = (value: string): boolean => {
+    const trimmedValue = value.trim();
+    if (!trimmedValue) return false;
+    return /^[A-Za-z0-9][A-Za-z0-9.\-_]{1,}@[A-Za-z][A-Za-z0-9]{2,}$/.test(
+      trimmedValue
+    );
+  };
+
   const handleSavePayoutMethod = async () => {
     if (!authUser) {
       toast.error("Authentication error.");
@@ -394,6 +409,10 @@ export default function EarningsClientPage({
     }
     if (!payoutFriendlyName.trim()) {
       toast.error("Please provide a friendly name for this payout method.");
+      return;
+    }
+    if (/^\d+$/.test(payoutFriendlyName.trim())) {
+      toast.error("Invalid friendly name.");
       return;
     }
 
@@ -416,6 +435,14 @@ export default function EarningsClientPage({
     } else if (selectedPayoutType === "upi") {
       if (!bankAccountHolder.trim() || !upiId.trim()) {
         toast.error("Account holder name and UPI ID are required.");
+        return;
+      }
+      if (!isAlphabeticName(bankAccountHolder)) {
+        toast.error("Invalid account holder name.");
+        return;
+      }
+      if (!isValidUpiId(upiId)) {
+        toast.error("Please enter a valid UPI ID (e.g., name@bank).");
         return;
       }
       details = {
@@ -590,6 +617,16 @@ export default function EarningsClientPage({
   const handleEditPayoutMethod = (method: PayoutMethod) => {
     setCurrentPayoutMethod(method);
     setSelectedPayoutType(method.method_type);
+    if (
+      method.method_type === "upi" ||
+      method.method_type === "bank_transfer"
+    ) {
+      setPayoutCountry("IN");
+    } else {
+      setPayoutCountry((prev) =>
+        prev === "IN" && method.method_type !== "phantom" ? "IN" : "OTHER"
+      );
+    }
     setPayoutFriendlyName(method.friendly_name || "");
 
     if (method.method_type === "crypto" && method.details) {
@@ -598,6 +635,7 @@ export default function EarningsClientPage({
       setCryptoCurrency(method.details.currency || "BNB");
     } else if (method.method_type === "upi" && method.details) {
       setUpiId(method.details.upi_id || "");
+      setBankAccountHolder(method.details.account_holder_name || "");
     } else if (method.method_type === "bank_transfer" && method.details) {
       setBankAccountHolder(method.details.account_holder_name || "");
       setBankAccountNumber(method.details.account_number || "");
@@ -1841,21 +1879,37 @@ export default function EarningsClientPage({
         }}
         isdark={isDark}
       >
-        <DialogContent className="sm:max-w-[625px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle
-              className={cn(isDark ? "text-white" : "text-gray-800")}
-            >
-              {currentPayoutMethod?.id
-                ? "Edit Payout Method"
-                : "Add New Payout Method"}
-            </DialogTitle>
-            <DialogDescription
-              className={cn(isDark ? "text-white" : "text-gray-800")}
-            >
-              Manage your payout methods. Your default method will be
-              pre-selected for withdrawals.
-            </DialogDescription>
+        <DialogContent
+          hideCloseButton
+          className="sm:max-w-[625px] max-h-[90vh] overflow-y-auto"
+        >
+          <DialogHeader className="text-left">
+            <div className="flex items-start justify-between gap-4 w-full">
+              <div className="space-y-1">
+                <DialogTitle
+                  className={cn(isDark ? "text-white" : "text-gray-800")}
+                >
+                  {currentPayoutMethod?.id
+                    ? "Edit Payout Method"
+                    : "Add New Payout Method"}
+                </DialogTitle>
+                <DialogDescription
+                  className={cn(isDark ? "text-white" : "text-gray-800")}
+                >
+                  Manage your payout methods. Your default method will be
+                  pre-selected for withdrawals.
+                </DialogDescription>
+              </div>
+              <DialogClose
+                className={cn(
+                  "shrink-0 rounded-full transition-colors",
+                  isDark ? "text-white" : "text-gray-600 hover:bg-gray-100"
+                )}
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </DialogClose>
+            </div>
           </DialogHeader>
           <div className="py-4 space-y-4 text-gray-700">
             {/* Country selector controls which payout methods show */}
@@ -1870,7 +1924,13 @@ export default function EarningsClientPage({
                 }}
                 disabled={isLoading}
               >
-                <SelectTrigger id="payoutCountry" className={cn("border",isDark ? "border-gray-600" : "border-gray-300")}>
+                <SelectTrigger
+                  id="payoutCountry"
+                  className={cn(
+                    "border",
+                    isDark ? "border-gray-600" : "border-gray-300"
+                  )}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
@@ -1885,7 +1945,7 @@ export default function EarningsClientPage({
             </div>
             {/* Tabs for payout types */}
             <Tabs
-              defaultValue={selectedPayoutType}
+              value={selectedPayoutType}
               onValueChange={(value) =>
                 setSelectedPayoutType(value as PayoutMethodType)
               }
@@ -1893,24 +1953,46 @@ export default function EarningsClientPage({
             >
               {payoutCountry === "IN" ? (
                 <TabsList className="grid w-full grid-cols-4 gap-2">
-                  <TabsTrigger value="upi"
-                    className={cn("border",isDark ? "border-gray-400 text-gray-300" : "border-gray-500 text-gray-800")}>
+                  <TabsTrigger
+                    value="upi"
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "border-gray-400 text-gray-300"
+                        : "border-gray-500 text-gray-800"
+                    )}
+                  >
                     UPI
                   </TabsTrigger>
                   <TabsTrigger
-                    className={cn("border",isDark ? "border-gray-400 text-gray-300" : "border-gray-500 text-gray-800")}
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "border-gray-400 text-gray-300"
+                        : "border-gray-500 text-gray-800"
+                    )}
                     value="bank_transfer"
                   >
                     Bank Transfer
                   </TabsTrigger>
                   <TabsTrigger
-                    className={cn("border",isDark ? "border-gray-400 text-gray-300" : "border-gray-500 text-gray-800")}
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "border-gray-400 text-gray-300"
+                        : "border-gray-500 text-gray-800"
+                    )}
                     value="crypto"
                   >
                     Crypto
                   </TabsTrigger>
                   <TabsTrigger
-                    className={cn("border",isDark ? "border-gray-400 text-gray-300" : "border-gray-500 text-gray-800")}
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "border-gray-400 text-gray-300"
+                        : "border-gray-500 text-gray-800"
+                    )}
                     value="phantom"
                   >
                     Phantom Wallet
@@ -1918,8 +2000,28 @@ export default function EarningsClientPage({
                 </TabsList>
               ) : (
                 <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="crypto"  className={cn("border",isDark ? "border-gray-400 text-gray-300" : "border-gray-500 text-gray-800")}>Crypto</TabsTrigger>
-                  <TabsTrigger value="phantom"  className={cn("border",isDark ? "border-gray-400 text-gray-300" : "border-gray-500 text-gray-800")}>Phantom Wallet</TabsTrigger>
+                  <TabsTrigger
+                    value="crypto"
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "border-gray-400 text-gray-300"
+                        : "border-gray-500 text-gray-800"
+                    )}
+                  >
+                    Crypto
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="phantom"
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "border-gray-400 text-gray-300"
+                        : "border-gray-500 text-gray-800"
+                    )}
+                  >
+                    Phantom Wallet
+                  </TabsTrigger>
                 </TabsList>
               )}
               {/* Content for each payout type */}
@@ -2028,9 +2130,7 @@ export default function EarningsClientPage({
                     </SelectContent>
                   </Select>
                 </div>
-                <div
-                  className="rounded-md border p-2 text-xs border-red-500/40 bg-red-500/10 text-red-500"                  
-                >
+                <div className="rounded-md border p-2 text-xs border-red-500/40 bg-red-500/10 text-red-500">
                   {cryptoNetwork === "BNB_SMART_CHAIN" ? (
                     <>
                       We only support BNB Smart Chain (BEP20). Do not enter
@@ -2371,7 +2471,7 @@ export default function EarningsClientPage({
                 "w-full text-md rounded-full",
                 isDark
                   ? "bg-[#7F39EC]  py-3 text-white"
-                  : " bg-[#D9C0FF61]  py-3.5text-[#7F39EC] "
+                  : " bg-[#D9C0FF61]  py-3.5 text-[#7F39EC] "
               )}
             >
               {isLoading
@@ -2383,13 +2483,14 @@ export default function EarningsClientPage({
           </DialogFooter>
 
           {payoutMethods.length > 0 && (
-            <div 
-            className={cn(
-              "mt-6 pt-4 border-t",
-              isDark
-                ? "border-gray-700 text-white"
-                : "border-gray-200 text-gray-800"
-            )}>
+            <div
+              className={cn(
+                "mt-6 pt-4 border-t",
+                isDark
+                  ? "border-gray-700 text-white"
+                  : "border-gray-200 text-gray-800"
+              )}
+            >
               <h3 className="text-lg font-medium mb-3">Your Saved Methods</h3>
               <div className="space-y-3 max-h-60 overflow-y-auto">
                 {payoutMethods.map((method) => (
@@ -2482,10 +2583,14 @@ export default function EarningsClientPage({
       >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle className={cn(isDark ? "text-white" : "text-gray-800")}>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-800")}
+            >
               Withdraw {activeTabModal === "cash" ? "Balance" : "Coins"}
             </DialogTitle>
-            <DialogDescription className={cn(isDark ? "text-white" : "text-gray-800")}>
+            <DialogDescription
+              className={cn(isDark ? "text-white" : "text-gray-800")}
+            >
               Withdraw funds to your preferred payout method. Minimum withdrawal
               is {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.
             </DialogDescription>
@@ -2493,7 +2598,12 @@ export default function EarningsClientPage({
           <div className="py-4 space-y-4">
             {activeTabModal === "cash" && (
               <>
-                <div className={cn("text-lg", isDark ? "text-white" : "text-gray-800")}>
+                <div
+                  className={cn(
+                    "text-lg",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   Available:{" "}
                   <span className="font-semibold">
                     {profile
@@ -2529,7 +2639,12 @@ export default function EarningsClientPage({
             )}
             {activeTabModal === "coins" && (
               <>
-                <div className={cn("text-lg", isDark ? "text-white" : "text-gray-800")}>
+                <div
+                  className={cn(
+                    "text-lg",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   Available Coins:{" "}
                   <span className="font-semibold">
                     {formatCoins(userData?.coins || 0)}
@@ -2556,14 +2671,19 @@ export default function EarningsClientPage({
               </>
             )}
             <div>
-              <Label htmlFor="withdrawalUserNotes" className={cn(isDark ? "text-white" : "text-gray-800")}>Notes (Optional)</Label>
+              <Label
+                htmlFor="withdrawalUserNotes"
+                className={cn(isDark ? "text-white" : "text-gray-800")}
+              >
+                Notes (Optional)
+              </Label>
               <Input
                 id="withdrawalUserNotes"
                 value={withdrawalUserNotes}
                 onChange={(e) => setWithdrawalUserNotes(e.target.value)}
                 placeholder="Optional notes for your withdrawal request"
                 disabled={isLoading}
-                 className={cn(
+                className={cn(
                   isDark
                     ? "bg-[#06021D] border border-gray-600 text-white"
                     : "bg-white text-black"
@@ -2571,27 +2691,45 @@ export default function EarningsClientPage({
               />
             </div>
             <div>
-              <Label htmlFor="payoutMethodSelect" className={cn(isDark ? "text-white" : "text-gray-800")}>Select Payout Method</Label>
+              <Label
+                htmlFor="payoutMethodSelect"
+                className={cn(isDark ? "text-white" : "text-gray-800")}
+              >
+                Select Payout Method
+              </Label>
               <Select
                 value={selectedWithdrawMethodId || ""}
                 onValueChange={setSelectedWithdrawMethodId}
                 disabled={isLoading || payoutMethods.length === 0}
               >
-                <SelectTrigger id="payoutMethodSelect" className={cn(isDark ? "border-gray-600" : "border-slate-300")}>
+                <SelectTrigger
+                  id="payoutMethodSelect"
+                  className={cn(
+                    isDark ? "border-gray-600" : "border-slate-300"
+                  )}
+                >
                   <SelectValue placeholder="Choose a method..." />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
                   {payoutMethods
                     .filter((m) => m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
+                      <SelectItem
+                        key={method.id}
+                        value={method.id}
+                        isDark={isDark}
+                      >
                         {getPayoutMethodSummary(method)} (Default)
                       </SelectItem>
                     ))}
                   {payoutMethods
                     .filter((m) => !m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
+                      <SelectItem
+                        key={method.id}
+                        value={method.id}
+                        isDark={isDark}
+                      >
                         {getPayoutMethodSummary(method)}
                       </SelectItem>
                     ))}
@@ -2606,7 +2744,6 @@ export default function EarningsClientPage({
           </div>
 
           <DialogFooter>
-            
             <Button
               onClick={handleWithdraw}
               loading={isSubmittingWithdrawal}
@@ -2637,17 +2774,17 @@ export default function EarningsClientPage({
               Request Withdrawal
             </Button>
             <DialogClose asChild>
-            <Button
-              disabled={isLoading}
-              className={cn(
-                "w-full text-md rounded-full",
-                isDark
-                  ? "py-2 border bg-[#06021D] border-[#FF5353] text-[#FF5353]"
-                  : "bg-[#FF323224] text-[#E50000] py-2"
-              )}
-            >
-              Cancel
-            </Button>
+              <Button
+                disabled={isLoading}
+                className={cn(
+                  "w-full text-md rounded-full",
+                  isDark
+                    ? "py-2 border bg-[#06021D] border-[#FF5353] text-[#FF5353]"
+                    : "bg-[#FF323224] text-[#E50000] py-2"
+                )}
+              >
+                Cancel
+              </Button>
             </DialogClose>
           </DialogFooter>
         </DialogContent>

@@ -53,6 +53,9 @@ const CheckoutForm = ({
     "idle" | "creating" | "confirming" | "polling"
   >("idle");
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
+  const [cardNumberEmpty, setCardNumberEmpty] = useState(true);
+  const [cardExpiryEmpty, setCardExpiryEmpty] = useState(true);
+  const [cardCvcEmpty, setCardCvcEmpty] = useState(true);
   const getInitialMode = (): "light" | "dark" => {
     if (typeof document === "undefined") return "light";
     const dataMode = document
@@ -295,7 +298,11 @@ const CheckoutForm = ({
         {/* Card Number */}
         <div className="mb-4">
           <Label className="text-xs  mb-2 block">Card Number</Label>
-          <CardNumberElement options={cardElementStyle} className="w-full" />
+          <CardNumberElement
+            options={cardElementStyle}
+            className="w-full"
+            onChange={(event) => setCardNumberEmpty(event.empty)}
+          />
         </div>
 
         {/* Expiry and CVV in a row */}
@@ -309,7 +316,11 @@ const CheckoutForm = ({
             >
               Expiry Date
             </Label>
-            <CardExpiryElement options={cardElementStyle} className="w-full" />
+            <CardExpiryElement
+              options={cardElementStyle}
+              className="w-full"
+              onChange={(event) => setCardExpiryEmpty(event.empty)}
+            />
           </div>
           <div>
             <Label
@@ -320,7 +331,11 @@ const CheckoutForm = ({
             >
               CVC
             </Label>
-            <CardCvcElement options={cardElementStyle} className="w-full" />
+            <CardCvcElement
+              options={cardElementStyle}
+              className="w-full"
+              onChange={(event) => setCardCvcEmpty(event.empty)}
+            />
           </div>
         </div>
       </div>
@@ -343,7 +358,13 @@ const CheckoutForm = ({
 
       <Button
         type="submit"
-        disabled={!stripe}
+        disabled={
+          !stripe ||
+          cardNumberEmpty ||
+          cardExpiryEmpty ||
+          cardCvcEmpty ||
+          isProcessing
+        }
         loading={isProcessing}
         loadingText={
           processingStep === "creating"

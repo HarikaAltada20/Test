@@ -109,6 +109,14 @@ type SubscriptionPlan = {
 
 type Step = "basics" | "brief" | "resources" | "prize" | "payment";
 
+const STEP_PROGRESS: Record<Step, number> = {
+  basics: 8,
+  brief: 35,
+  resources: 70,
+  prize: 100,
+  payment: 100,
+};
+
 // Add ResourceItem type at the top (after imports)
 type ResourceItem = {
   url: string;
@@ -282,6 +290,8 @@ export default function CreateContestPage({
   const [newInspirationDescription, setNewInspirationDescription] =
     useState("");
   const [inspirationError, setInspirationError] = useState<string | null>(null);
+
+  const mobileProgressPercent = STEP_PROGRESS[step] ?? 0;
 
   const [winnerCount, setWinnerCount] = useState<number>(3);
   const [winnerAmounts, setWinnerAmounts] = useState<number[]>(
@@ -4176,7 +4186,7 @@ export default function CreateContestPage({
                   </div>
                   <div
                     className={cn(
-                      isDark ? "bg-[#180438] p-4" : "bg-gray-50 p-4 rounded-lg"
+                      isDark ? "bg-[#180438]p-2 sm:p-4" : "bg-gray-50 p-2 sm:p-4 rounded-lg"
                     )}
                   >
                     <div className="flex items-center gap-4 mb-4">
@@ -4504,7 +4514,7 @@ export default function CreateContestPage({
             )}
 
             {/* New Bonus Features - Apply to both contest types */}
-            <div className="space-y-6 py-6 px-2 border-t-2 border-dashed mt-6">
+            <div className="space-y-6 py-6 px-0 sm:px-2 border-t-2 border-dashed mt-6">
               <div>
                 <h3
                   className={cn(
@@ -4625,11 +4635,11 @@ export default function CreateContestPage({
                       (for bonuses & extras)
                     </p>
                     {totalBudget && parseFloat(totalBudget.toString()) > 0 && (
-                      <Alert 
-                      className={cn(
-                        isDark
-                          ? "bg-blue-900/30 border-blue-900"
-                          : "bg-blue-100 border-blue-300"
+                      <Alert
+                        className={cn(
+                          isDark
+                            ? "bg-blue-900/30 border-blue-900"
+                            : "bg-blue-100 border-blue-300"
                         )}
                       >
                         <AlertDescription
@@ -5172,7 +5182,6 @@ export default function CreateContestPage({
   //   setShowBackModal(true);
   // };
 
- 
   useEffect(() => {
     // Push dummy state so we can trap the back button (preserve query string)
     window.history.pushState(
@@ -5692,7 +5701,14 @@ export default function CreateContestPage({
 
           {/* Mobile Stepper */}
           <div className="md:hidden">
-            <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-lg border">
+            <div
+              className={cn(
+                "rounded-xl p-4 shadow-lg border transition-colors duration-300",
+                isDark
+                  ? "bg-[#180438] border-[#3A2C63]"
+                  : "bg-white border-slate-200"
+              )}
+            >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#7F39EC] text-white font-bold">
@@ -5730,16 +5746,19 @@ export default function CreateContestPage({
               </div>
 
               {/* Mobile Progress Bar */}
-              <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#7F39EC] text-white font-bold">
-                  {step === "basics"
-                    ? "1"
-                    : step === "brief"
-                    ? "2"
-                    : step === "resources"
-                    ? "3"
-                    : "4"}
-                </div>
+              <div
+                className={cn(
+                  "h-2 rounded-full overflow-hidden transition-colors duration-300",
+                  isDark ? "bg-[#2D1B55]" : "bg-slate-200"
+                )}
+              >
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    isDark ? "bg-[#9C7BFF]" : "bg-[#7F39EC]"
+                  )}
+                  style={{ width: `${mobileProgressPercent}%` }}
+                />
               </div>
             </div>
           </div>

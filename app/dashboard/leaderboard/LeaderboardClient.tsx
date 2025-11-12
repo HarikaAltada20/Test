@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useLayoutEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -118,6 +118,9 @@ export default function LeaderboardClient({
   const [staticSummary, setStaticSummary] = useState<SummaryStats | null>(null);
   const [creatorCardPlatform, setCreatorCardPlatform] =
     useState<PlatformFilter>("all");
+  const [avatarLoadErrors, setAvatarLoadErrors] = useState<
+    Record<string, string>
+  >({});
   // Initialize mode state with proper detection to prevent flash
   const [mode, setMode] = useState<"light" | "dark">(() => {
     // Check if we're in browser environment
@@ -374,6 +377,13 @@ export default function LeaderboardClient({
         return "0";
     }
   };
+
+  const handleAvatarError = useCallback((userId: string, url?: string) => {
+    setAvatarLoadErrors((prev) => {
+      if (prev[userId] === url) return prev;
+      return { ...prev, [userId]: url || "__error__" };
+    });
+  }, []);
 
   const isDark = mode === "dark";
 
@@ -772,6 +782,10 @@ export default function LeaderboardClient({
                   const rank = (currentPage - 1) * limit + index + 1;
                   const displayName = getUsernameToShow(entry);
                   const metricValue = getMetricValue(entry, sortBy);
+                  const showAvatarImage =
+                    !!entry.profile_picture_url &&
+                    avatarLoadErrors[entry.user_id] !==
+                      entry.profile_picture_url;
 
                   return (
                     <div
@@ -815,9 +829,19 @@ export default function LeaderboardClient({
                               : "ring-2 sm:ring-3 ring-offset-1 sm:ring-offset-2 ring-gray-200"
                           )}
                         >
-                          <AvatarImage
-                            src={entry.profile_picture_url || undefined}
-                          />
+                          {showAvatarImage && (
+                            <AvatarImage
+                              src={entry.profile_picture_url || undefined}
+                              onError={() =>
+                                handleAvatarError(
+                                  entry.user_id,
+                                  entry.profile_picture_url || undefined
+                                )
+                              }
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                            />
+                          )}
                           <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
                             {displayName.charAt(0).toUpperCase()}
                           </AvatarFallback>
@@ -1273,7 +1297,7 @@ export default function LeaderboardClient({
                   hasPreviousPage={currentPage > 1}
                   onPageChange={setCurrentPage}
                   onLimitChange={setLimit}
-                  loading={loading}        
+                  loading={loading}
                   hide200Option
                 />
               </div>
