@@ -158,7 +158,8 @@ export const SubscriptionManagementBilling = memo(
           if (subscriptionResult.subscription) {
             try {
               const billingResponse = await fetch(
-                "/api/subscriptions/billing-details"
+                `/api/subscriptions/billing-details?t=${Date.now()}`,
+                { cache: "no-store" }
               );
               const billingResult = await billingResponse.json();
 
@@ -801,9 +802,23 @@ export const SubscriptionManagementBilling = memo(
                       </Alert>
                     ) : (
                       // Show cancellation warning when canceled but no active scheduled changes
-                      <Alert className="border-red-200 bg-red-50">
-                        <AlertTriangle className="h-4 w-4 text-red-600" />
-                        <AlertDescription>
+                      <Alert
+                        className={cn(
+                          "border",
+                          isDark
+                            ? "border-red-600/40 bg-red-900/30 text-red-100"
+                            : "border-red-200 bg-red-50 text-red-900"
+                        )}
+                      >
+                        <AlertTriangle
+                          className={cn(
+                            "h-4 w-4",
+                            isDark ? "text-red-300" : "text-red-600"
+                          )}
+                        />
+                        <AlertDescription
+                          className={cn(isDark ? "text-red-100" : "text-red-900")}
+                        >
                           <strong>Subscription Ending:</strong> Your
                           subscription will be canceled on{" "}
                           {formatDate(billingDetails.nextBillingDate)}. You'll
@@ -833,9 +848,23 @@ export const SubscriptionManagementBilling = memo(
                       </span>
                     </div>
 
-                    <Alert className="border-[#7F39EC] bg-[#D9C0FF26]">
-                      <Info className="h-4 w-4 text-black" />
-                      <AlertDescription >
+                    <Alert
+                      className={cn(
+                        "border",
+                        isDark
+                          ? "border-[#C9A7FF] bg-[#C9A7FF26] text-white"
+                          : "border-[#7F39EC] bg-[#D9C0FF26] text-black"
+                      )}
+                    >
+                      <Info
+                        className={cn(
+                          "h-4 w-4",
+                          isDark ? "text-white" : "text-black"
+                        )}
+                      />
+                      <AlertDescription
+                        className={cn(isDark ? "text-white" : "text-black")}
+                      >
                         <strong>Important:</strong> Your plan will change on{" "}
                         {billingDetails
                           ? formatDate(billingDetails.nextBillingDate)

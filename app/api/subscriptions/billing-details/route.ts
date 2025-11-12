@@ -42,20 +42,81 @@ export async function GET(request: NextRequest) {
     // Get plan details
     const plan = getSubscriptionPlanById(subscription.product_id);
     
-    // Calculate billing details
+    // Calculate billing details (prefer Stripe as the source of truth)
     const now = new Date();
-    const periodStart = new Date(subscription.current_period_start);
-    const periodEnd = new Date(subscription.current_period_end);
+
+    let periodStart = new Date(subscription.current_period_start);
+    let periodEnd = new Date(subscription.current_period_end);
+    let status: string = String(subscription.status);
+    let cancelAtPeriodEnd = subscription.cancel_at_period_end;
+
+    try {
+      if (subscription.id && subscription.id !== 'free-plan') {
+        // Use loose typing to remain compatible across Stripe API versions
+        const stripeSub: any = await stripe().subscriptions.retrieve(subscription.id);
+
+        // Use Stripe timestamps if available (handles coupons, pauses, etc.)
+        if (stripeSub?.current_period_start) {
+          periodStart = new Date(Number(stripeSub.current_period_start) * 1000);
+        }
+        if (stripeSub?.current_period_end) {
+          periodEnd = new Date(Number(stripeSub.current_period_end) * 1000);
+        }
+        status = String(stripeSub?.status || status);
+        cancelAtPeriodEnd = !!stripeSub?.cancel_at_period_end;
+      }
+    } catch (stripeErr) {
+      // Fallback silently to DB values if Stripe fetch fails
+      console.warn('[API] billing-details: failed to fetch Stripe subscription, using DB values', stripeErr);
+    }
+
+    // If dates appear stale (already in the past), roll them forward by the correct interval
+    if (periodEnd.getTime() <= now.getTime()) {
+      const resolveInterval = (): 'month' | 'year' => {
+        // Prefer matching against our configured prices
+        try {
+          if (plan?.prices?.yearly?.id && plan.prices.yearly.id === subscription.price_id) {
+            return 'year';
+          }
+          return 'month';
+        } catch {
+          return 'month';
+        }
+      };
+
+      const interval = resolveInterval();
+      const advance = (d: Date) => {
+        const next = new Date(d);
+        if (interval === 'year') {
+          next.setFullYear(next.getFullYear() + 1);
+        } else {
+          next.setMonth(next.getMonth() + 1);
+        }
+        return next;
+      };
+
+      // Advance until the end is in the future (safety cap: 24 cycles)
+      let safety = 24;
+      let newStart = new Date(periodStart);
+      let newEnd = new Date(periodEnd);
+      while (newEnd.getTime() <= now.getTime() && safety-- > 0) {
+        newStart = new Date(newEnd);
+        newEnd = advance(newEnd);
+      }
+      periodStart = newStart;
+      periodEnd = newEnd;
+    }
+
     const daysUntilNextBilling = Math.ceil((periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    
+
     const billingDetails = {
       currentPeriodStart: periodStart.toISOString(),
       currentPeriodEnd: periodEnd.toISOString(),
       nextBillingDate: periodEnd.toISOString(),
       daysUntilNextBilling: Math.max(0, daysUntilNextBilling),
-      isCanceled: subscription.status === 'canceled',
-      cancelAtPeriodEnd: subscription.cancel_at_period_end,
-      status: subscription.status,
+      isCanceled: status === 'canceled',
+      cancelAtPeriodEnd,
+      status,
       amount: plan?.price || 0,
       currency: 'usd'
     };
