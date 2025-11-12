@@ -392,7 +392,7 @@ export default function PricingClient() {
           <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
           <p className="text-gray-300 text-lg">Loading...</p>
         </div> */}
-       <PageLoadingSpinner mode="dark" />
+        <PageLoadingSpinner mode="dark" />
       </div>
     );
   }
@@ -837,10 +837,10 @@ export default function PricingClient() {
 
             {/* Loading State */}
             {isLoading && (
-                <div className="flex items-center justify-center h-[64vh]">
-                 <PageLoadingSpinner mode="dark"/>
-                  <p className="text-gray-600">Loading pricing plans...</p>
-               
+              <div className="flex items-center justify-center h-[64vh]">
+                <PageLoadingSpinner mode="dark" />
+                <p className="text-gray-600">Loading pricing plans...</p>
+
               </div>
             )}
 
@@ -956,9 +956,9 @@ export default function PricingClient() {
                             <Check className="h-4 w-4 text-green-500" />
                             <span className="text-sm">
                               {plan.features.analytics === "basic"
-                                ? "Basic analytics & insights"
+                                ? "Advanced analytics & insights"
                                 : plan.features.analytics === "advanced"
-                                  ? "Advanced analytics & reports"
+                                  ? "Advanced analytics & insights"
                                   : plan.features.analytics === "comprehensive"
                                     ? "Comprehensive analytics dashboard"
                                     : plan.features.analytics}
@@ -1163,19 +1163,19 @@ export default function PricingClient() {
               </p>
 
               <a
-  href="https://calendly.com/guptavishesh2/30min"
-  target="_blank"
-  rel="noopener noreferrer"
-  className="inline-flex items-center gap-2 justify-center rounded-3xl mt-8 relative text-white font-bold px-8 py-3 text-lg overflow-hidden"
-  style={{
-    background:
-      "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-  }}
->
-  <div className="scan-line pointer-events-none"></div>
-  Book a Demo
-  <ArrowRight className="h-5 w-5" />
-</a>
+                href="https://calendly.com/guptavishesh2/30min"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 justify-center rounded-3xl mt-8 relative text-white font-bold px-8 py-3 text-lg overflow-hidden"
+                style={{
+                  background:
+                    "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+                }}
+              >
+                <div className="scan-line pointer-events-none"></div>
+                Book a Demo
+                <ArrowRight className="h-5 w-5" />
+              </a>
 
             </div>
 

@@ -64,7 +64,7 @@ export const subscriptionPlans = [
       maxWinnersPerContest: 3,
       commissionPercentage: 50,
       contestTypes: ['leaderboard'], // Leaderboard-based contests only
-      analytics: 'basic', // Basic analytics for contest performance
+      analytics: 'Advanced', // Basic analytics for contest performance
       support: 'basic', // Standard support
       description: 'Entry-level users, startups, or small businesses wanting to test the platform',
     },
@@ -94,7 +94,7 @@ export const subscriptionPlans = [
       maxWinnersPerContest: 10,
       commissionPercentage: 20,
       contestTypes: ['leaderboard', 'cpm'], // Leaderboard-based and CPM-based contests
-      analytics: 'basic', // Basic analytics and contest performance insights
+      analytics: 'Advanced', // Basic analytics and contest performance insights
       support: 'basic', // Standard support
       description: 'Small to medium-sized businesses that want to run more contests and grow their presence',
     },
@@ -124,7 +124,7 @@ export const subscriptionPlans = [
       maxWinnersPerContest: 25,
       commissionPercentage: 12,
       contestTypes: ['leaderboard', 'cpm'], // Leaderboard-based and CPM-based contests
-      analytics: 'advanced', // Advanced analytics and contest performance reports
+      analytics: 'Advanced', // Advanced analytics and contest performance reports
       support: 'priority', // Prioritized customer support
       description: 'Medium to large brands scaling their presence and want more contests and flexibility',
     },
@@ -154,7 +154,7 @@ export const subscriptionPlans = [
       maxWinnersPerContest: 50,
       commissionPercentage: 10,
       contestTypes: ['leaderboard', 'cpm'], // Leaderboard-based and CPM-based contests
-      analytics: 'comprehensive', // Comprehensive analytics and performance dashboards
+      analytics: 'Advanced',
       support: 'premium', // Premium, Dedicated 24/7 customer support
       description: 'Large businesses, agencies, and enterprises looking to run high-volume campaigns with premium support',
     },
