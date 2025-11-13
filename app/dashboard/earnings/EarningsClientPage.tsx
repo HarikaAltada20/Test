@@ -2581,7 +2581,7 @@ export default function EarningsClientPage({
         }}
         isdark={isDark}
       >
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle
               className={cn(isDark ? "text-white" : "text-gray-800")}

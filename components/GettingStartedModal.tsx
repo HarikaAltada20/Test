@@ -158,7 +158,7 @@ export default function GettingStartedModal({
     return (
       <div
         className={cn(
-          "fixed inset-0 bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
+          "fixed inset-0 bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50 ",
           isDark ? "bg-[#100A33]" : "bg-black"
         )}
       >
@@ -227,14 +227,14 @@ export default function GettingStartedModal({
         {!isWelcome && (
           <div
             className={cn(
-              "rounded-2xl w-full max-w-4xl lg:max-w-6xl flex flex-col md:flex-row overflow-hidden relative",
+              "rounded-2xl w-full max-w-4xl lg:max-w-6xl flex flex-col md:flex-row overflow-hidden  max-h-[90vh] overflow-y-auto relative",
               isDark ? "bg-[#06021D] border border-gray-800" : "bg-white"
             )}
           >
             <button
               onClick={handleCloseAll}
               className={cn(
-                "absolute top-6 right-6 border z-10 px-6 py-2 rounded-full backdrop-blur-sm",
+                "absolute top-10 sm:top-6 right-6 border z-10 px-6 py-2 rounded-full backdrop-blur-sm",
                 isDark
                   ? "bg-[#06021D] border-white"
                   : "text-[#4A00BE] border-[#4A00BE] bg-white/80"
