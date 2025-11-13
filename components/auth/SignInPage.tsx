@@ -86,8 +86,9 @@ export default function SignInPage() {
       }
 
       toast({
-        title: `Welcome back, ${data.user?.user_metadata?.full_name || data.user?.email || "User"
-          }!`,
+        title: `Welcome back, ${
+          data.user?.user_metadata?.full_name || "User"
+        }!`,
         description: "You have successfully signed in.",
         duration: TOAST_DURATION_SHORT,
       });
