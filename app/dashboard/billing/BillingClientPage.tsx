@@ -2589,7 +2589,7 @@ export default function BillingClientPage({
         }}
         isdark={isDark}
       >
-        <DialogContent className="sm:max-w-[425px] w-[95vw]">
+        <DialogContent className="sm:max-w-[425px] w-[95vw] w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle
               style={{
@@ -2804,7 +2804,7 @@ export default function BillingClientPage({
         }}
         isdark={isDark}
       >
-        <DialogContent className="sm:max-w-[500px] w-[95vw] overflow-y-auto">
+        <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle
               className={cn(
