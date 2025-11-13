@@ -43,18 +43,36 @@ const REJECTION_REASON_DESCRIPTIONS: Record<string, string> = {
     "Content does not align with our brand guidelines, tone, or messaging requirements",
   "Inappropriate Content":
     "Content contains inappropriate, offensive, or unsuitable material for our platform",
+  // New canonical labels (alongside legacy)
+  "Inappropriate content":
+    "Content contains inappropriate, offensive, or unsuitable material for our platform",
   "Copyright Issues":
     "Content may violate copyright, trademark, or intellectual property rights",
+  "Copyright issue":
+    "Content may violate copyright, trademark, or intellectual property rights",
   "Technical Issues":
+    "Content has technical problems, is not accessible, or fails to load properly",
+  "Technical issues":
     "Content has technical problems, is not accessible, or fails to load properly",
   "Off Topic":
     "Content is not relevant to the contest theme, brief, or specific requirements",
   "Duplicate Content":
     "Content appears to be duplicate or very similar to existing submissions or previous work",
+  "Duplicate content":
+    "Content appears to be duplicate or very similar to existing submissions or previous work",
   "Incomplete Submission":
     "Submission is incomplete, missing required elements, or appears unfinished",
   "Other Reason":
     "Other reason not listed above - please provide specific details",
+  "Custom Reason":
+    "Other reason not listed above - please provide specific details",
+  // New categories
+  "Contest brief or rules not followed":
+    "Submission does not follow the contest brief or rules",
+  "Terms & Conditions violation":
+    "Violates the platform or contest terms and conditions",
+  "Quality standards not met":
+    "Content quality does not meet the required standards",
 };
 
 interface SubmissionsClientProps {
@@ -841,9 +859,10 @@ export default function SubmissionsClient({
                                     <p className="mt-0.5">
                                       {rejectionDetails.reason}
                                     </p>
-                                    {REJECTION_REASON_DESCRIPTIONS[
-                                      rejectionDetails.reason
-                                    ] && (
+                                    {!rejectionDetails.additionalNotes &&
+                                      REJECTION_REASON_DESCRIPTIONS[
+                                        rejectionDetails.reason
+                                      ] && (
                                       <p className="mt-0.5 text-[11px] opacity-90">
                                         {
                                           REJECTION_REASON_DESCRIPTIONS[

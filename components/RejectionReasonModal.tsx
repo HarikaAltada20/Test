@@ -24,54 +24,44 @@ import { cn } from '@/lib/utils';
 // Predefined rejection reasons with improved descriptions
 const PREDEFINED_REASONS = [
     {
-        value: 'content_guidelines',
-        label: 'Content Guidelines Violation',
-        description: 'Content does not follow the contest guidelines, platform rules, or community standards'
+        value: 'contest_rules',
+        label: 'Contest brief or rules not followed',
+        description: 'Submission does not follow the contest brief or rules'
     },
     {
-        value: 'quality_standards',
-        label: 'Quality Standards Not Met',
-        description: 'Content quality, production value, or presentation does not meet the required standards'
-    },
-    {
-        value: 'brand_guidelines',
-        label: 'Brand Guidelines Violation',
-        description: 'Content does not align with our brand guidelines, tone, or messaging requirements'
+        value: 'terms_violation',
+        label: 'Terms & Conditions violation',
+        description: 'Violates the platform or contest terms and conditions'
     },
     {
         value: 'inappropriate_content',
-        label: 'Inappropriate Content',
-        description: 'Content contains inappropriate, offensive, or unsuitable material for our platform'
+        label: 'Inappropriate content',
+        description: 'Content is offensive, harmful, or otherwise inappropriate'
     },
     {
-        value: 'copyright_issues',
-        label: 'Copyright Issues',
-        description: 'Content may violate copyright, trademark, or intellectual property rights'
+        value: 'copyright_issue',
+        label: 'Copyright issue',
+        description: 'Potential copyright or intellectual property infringement'
     },
     {
         value: 'technical_issues',
-        label: 'Technical Issues',
-        description: 'Content has technical problems, is not accessible, or fails to load properly'
-    },
-    {
-        value: 'off_topic',
-        label: 'Off Topic',
-        description: 'Content is not relevant to the contest theme, brief, or specific requirements'
+        label: 'Technical issues',
+        description: 'Content has technical problems, is inaccessible, or was deleted'
     },
     {
         value: 'duplicate_content',
-        label: 'Duplicate Content',
-        description: 'Content appears to be duplicate or very similar to existing submissions or previous work'
+        label: 'Duplicate content',
+        description: 'Same or very similar to an existing submission'
     },
     {
-        value: 'incomplete_submission',
-        label: 'Incomplete Submission',
-        description: 'Submission is incomplete, missing required elements, or appears unfinished'
+        value: 'quality_standards',
+        label: 'Quality standards not met',
+        description: 'Content quality does not meet the required standards'
     },
     {
         value: 'other',
-        label: 'Other Reason',
-        description: 'Other reason not listed above - please provide specific details'
+        label: 'Custom Reason',
+        description: 'Provide a specific custom reason in your own words'
     }
 ];
 
@@ -94,62 +84,66 @@ export default function RejectionReasonModal({
     const getInitialMode = (): "light" | "dark" => {
         if (typeof document === "undefined") return "light";
         const dataMode = document
-          .querySelector("[data-mode]")
-          ?.getAttribute("data-mode");
+            .querySelector("[data-mode]")
+            ?.getAttribute("data-mode");
         if (dataMode === "dark" || dataMode === "light") {
-          return dataMode;
+            return dataMode;
         }
         if (document.documentElement.classList.contains("dark")) {
-          return "dark";
+            return "dark";
         }
         if (
-          typeof window !== "undefined" &&
-          window.matchMedia &&
-          window.matchMedia("(prefers-color-scheme: dark)").matches
+            typeof window !== "undefined" &&
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
         ) {
-          return "dark";
+            return "dark";
         }
         return "light";
-      };
-    
-      const [mode, setMode] = useState<"light" | "dark">(getInitialMode);
-      // Read mode from data attribute and html class, respond to changes
-      useEffect(() => {
+    };
+
+    const [mode, setMode] = useState<"light" | "dark">(getInitialMode);
+    // Read mode from data attribute and html class, respond to changes
+    useEffect(() => {
         const readMode = (): "light" | "dark" => {
-          const el = document.querySelector("[data-mode]");
-          const attr = el?.getAttribute("data-mode");
-          if (attr === "dark" || attr === "light") return attr;
-          return document.documentElement.classList.contains("dark")
-            ? "dark"
-            : "light";
+            const el = document.querySelector("[data-mode]");
+            const attr = el?.getAttribute("data-mode");
+            if (attr === "dark" || attr === "light") return attr;
+            return document.documentElement.classList.contains("dark")
+                ? "dark"
+                : "light";
         };
-    
+
         // Set immediately on mount to avoid any flicker
         setMode(readMode());
-    
+
         // Watch for changes on either data-mode or html class
         const observer = new MutationObserver(() => {
-          setMode(readMode());
+            setMode(readMode());
         });
         const dataModeTarget = document.querySelector("[data-mode]");
         if (dataModeTarget) {
-          observer.observe(dataModeTarget, {
-            attributes: true,
-            attributeFilter: ["data-mode"],
-          });
+            observer.observe(dataModeTarget, {
+                attributes: true,
+                attributeFilter: ["data-mode"],
+            });
         }
         observer.observe(document.documentElement, {
-          attributes: true,
-          attributeFilter: ["class"],
+            attributes: true,
+            attributeFilter: ["class"],
         });
-    
+
         return () => observer.disconnect();
-      }, []);
+    }, []);
 
     const handleConfirm = () => {
-        const finalReason = selectedReason === 'other' ? customReason : selectedReason;
+        const finalReason = selectedReason === 'other' ? customReason : getSelectedReasonLabel();
         if (finalReason.trim()) {
-            onConfirm(finalReason, additionalNotes.trim() || undefined);
+            const notesToSend =
+                selectedReason !== 'other' && additionalNotes.trim()
+                    ? additionalNotes.trim()
+                    : undefined;
+            onConfirm(finalReason, notesToSend);
         }
     };
 
@@ -333,7 +327,7 @@ export default function RejectionReasonModal({
                         </div>
                     )}
 
-                    {/* Additional Notes (Optional) */}
+                    {/* Additional Notes (Optional for predefined reasons) */}
                     {selectedReason && selectedReason !== 'other' && (
                         <div className="space-y-3">
                             <Label htmlFor="additional-notes" className="text-sm font-medium">
@@ -342,7 +336,7 @@ export default function RejectionReasonModal({
                             <div className="relative">
                                 <Textarea
                                     id="additional-notes"
-                                    placeholder="Add any additional context, specific feedback, or suggestions for improvement..."
+                                    placeholder="Add any specific context or feedback for the creator..."
                                     value={additionalNotes}
                                     onChange={(e) => setAdditionalNotes(e.target.value)}
                                     rows={3}
@@ -353,22 +347,16 @@ export default function RejectionReasonModal({
                                     {additionalNotes.length}/300
                                 </div>
                             </div>
-                            <div className="flex items-start gap-2">
-                                <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                                <p className="text-xs text-muted-foreground">
-                                    Optional: Provide specific feedback, suggestions, or additional context that might help the creator improve their future submissions.
-                                </p>
-                            </div>
                         </div>
                     )}
 
                     {/* Warning Alert */}
-                    <Alert 
-                      className={cn(
-                        isDark
-                          ? "bg-[#FDD36F5C] text-[#FDD36F]"
-                          : "border-orange-200 bg-orange-50 text-orange-800"
-                      )}>
+                    <Alert
+                        className={cn(
+                            isDark
+                                ? "bg-[#FDD36F5C] text-[#FDD36F]"
+                                : "border-orange-200 bg-orange-50 text-orange-800"
+                        )}>
                         {/* <AlertCircle className="h-4 w-4"/> */}
                         <AlertDescription>
                             <span className="font-medium">Note:</span> Once rejected, this submission will be hidden from the public leaderboard and the creator will be notified of the rejection reason.
@@ -377,15 +365,15 @@ export default function RejectionReasonModal({
                 </div>
 
                 <DialogFooter className="gap-3 pt-6 border-t mt-6">
-                <button
+                    <button
                         onClick={handleConfirm}
                         disabled={isConfirmDisabled() || isLoading}
                         className={cn(
                             "w-full text-md rounded-full flex-1 sm:flex-none",
                             isDark
-                              ? "bg-[#7F39EC] py-3 text-white"
-                              : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
-                          )}
+                                ? "bg-[#7F39EC] py-3 text-white"
+                                : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+                        )}
                     >
                         {isLoading ? (
                             <>
@@ -400,20 +388,20 @@ export default function RejectionReasonModal({
                         )}
                     </button>
                     <button
-                      
+
                         onClick={handleClose}
 
                         disabled={isLoading}
                         className={cn(
                             "w-full text-md rounded-full flex-1 sm:flex-none",
                             isDark
-                              ? "py-3 border border-[#FF5353] text-[#FF5353]"
-                              : "bg-[#FF323224] text-[#E50000] py-4"
-                          )}
+                                ? "py-3 border border-[#FF5353] text-[#FF5353]"
+                                : "bg-[#FF323224] text-[#E50000] py-4"
+                        )}
                     >
                         Cancel
                     </button>
-                  
+
                 </DialogFooter>
             </DialogContent>
         </Dialog>

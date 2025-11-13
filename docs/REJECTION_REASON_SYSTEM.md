@@ -8,23 +8,21 @@ This system allows brands/admins to reject submissions with predefined reasons o
 ### 1. RejectionReasonModal Component
 - **Location**: `components/RejectionReasonModal.tsx`
 - **Features**:
-  - Dropdown with 10 predefined rejection reasons
-  - Custom reason input for "Other" option
+  - Dropdown with predefined rejection reasons
+  - Mutually exclusive choice: pick a predefined reason OR select "Custom Reason"
+  - Custom reason input appears only when "Custom Reason" is selected
   - Description preview for selected reasons
   - Loading state support
   - Form validation
 
 ### 2. Predefined Rejection Reasons
-1. **Content Guidelines Violation** - Content does not follow contest guidelines or platform rules
-2. **Quality Standards Not Met** - Content quality does not meet the required standards
-3. **Brand Guidelines Violation** - Content does not align with brand guidelines or requirements
-4. **Inappropriate Content** - Content contains inappropriate or offensive material
-5. **Copyright Issues** - Content may violate copyright or intellectual property rights
-6. **Technical Issues** - Content has technical problems or is not accessible
-7. **Off Topic** - Content is not relevant to the contest theme or requirements
-8. **Duplicate Content** - Content appears to be duplicate or very similar to existing submissions
-9. **Incomplete Submission** - Submission is incomplete or missing required elements
-10. **Other** - Other reason not listed above
+1. **Contest brief or rules not followed** - Submission does not follow the contest brief or rules. Include specifics in the description.
+2. **Terms & Conditions violation** - Violates the platform or contest terms and conditions.
+3. **Inappropriate content** - Content is offensive, harmful, or otherwise inappropriate.
+4. **Copyright issue** - Potential copyright or intellectual property infringement.
+5. **Technical issues** - Content has technical problems, is inaccessible, or was deleted.
+6. **Duplicate content** - Same or very similar to an existing submission.
+7. **Quality standards not met** - Content quality does not meet the required standards.
 
 ### 3. API Updates
 - **Updated**: `app/api/admin/verify-submission/route.ts`
@@ -52,8 +50,8 @@ This system allows brands/admins to reject submissions with predefined reasons o
 ### For Brands/Admins:
 1. Click "Mark as Rejected" in submission dropdown
 2. Modal opens with predefined reasons
-3. Select a reason or choose "Other" for custom reason
-4. If "Other" is selected, enter custom reason
+3. Select one predefined reason OR choose "Custom Reason"
+4. If "Custom Reason" is selected, enter your custom reason
 5. Click "Reject Submission" to confirm
 6. Submission status updates to 'rejected' with reason stored in description
 
