@@ -388,6 +388,20 @@ export default function EarningsClientPage({
     }
   };
 
+  const isAlphabeticName = (name: string): boolean => {
+    const cleanedName = name.trim();
+    if (!cleanedName) return false;
+    return /^[A-Za-z][A-Za-z\s'.-]*$/.test(cleanedName);
+  };
+
+  const isValidUpiId = (value: string): boolean => {
+    const trimmedValue = value.trim();
+    if (!trimmedValue) return false;
+    return /^[A-Za-z0-9][A-Za-z0-9.\-_]{1,}@[A-Za-z][A-Za-z0-9]{2,}$/.test(
+      trimmedValue
+    );
+  };
+
   const handleSavePayoutMethod = async () => {
     if (!authUser) {
       toast.error("Authentication error.");
@@ -395,6 +409,10 @@ export default function EarningsClientPage({
     }
     if (!payoutFriendlyName.trim()) {
       toast.error("Please provide a friendly name for this payout method.");
+      return;
+    }
+    if (/^\d+$/.test(payoutFriendlyName.trim())) {
+      toast.error("Invalid friendly name.");
       return;
     }
 
@@ -417,6 +435,14 @@ export default function EarningsClientPage({
     } else if (selectedPayoutType === "upi") {
       if (!bankAccountHolder.trim() || !upiId.trim()) {
         toast.error("Account holder name and UPI ID are required.");
+        return;
+      }
+      if (!isAlphabeticName(bankAccountHolder)) {
+        toast.error("Invalid account holder name.");
+        return;
+      }
+      if (!isValidUpiId(upiId)) {
+        toast.error("Please enter a valid UPI ID (e.g., name@bank).");
         return;
       }
       details = {
@@ -591,6 +617,16 @@ export default function EarningsClientPage({
   const handleEditPayoutMethod = (method: PayoutMethod) => {
     setCurrentPayoutMethod(method);
     setSelectedPayoutType(method.method_type);
+    if (
+      method.method_type === "upi" ||
+      method.method_type === "bank_transfer"
+    ) {
+      setPayoutCountry("IN");
+    } else {
+      setPayoutCountry((prev) =>
+        prev === "IN" && method.method_type !== "phantom" ? "IN" : "OTHER"
+      );
+    }
     setPayoutFriendlyName(method.friendly_name || "");
 
     if (method.method_type === "crypto" && method.details) {
@@ -599,6 +635,7 @@ export default function EarningsClientPage({
       setCryptoCurrency(method.details.currency || "BNB");
     } else if (method.method_type === "upi" && method.details) {
       setUpiId(method.details.upi_id || "");
+      setBankAccountHolder(method.details.account_holder_name || "");
     } else if (method.method_type === "bank_transfer" && method.details) {
       setBankAccountHolder(method.details.account_holder_name || "");
       setBankAccountNumber(method.details.account_number || "");
@@ -1908,7 +1945,7 @@ export default function EarningsClientPage({
             </div>
             {/* Tabs for payout types */}
             <Tabs
-              defaultValue={selectedPayoutType}
+              value={selectedPayoutType}
               onValueChange={(value) =>
                 setSelectedPayoutType(value as PayoutMethodType)
               }
@@ -2434,7 +2471,7 @@ export default function EarningsClientPage({
                 "w-full text-md rounded-full",
                 isDark
                   ? "bg-[#7F39EC]  py-3 text-white"
-                  : " bg-[#D9C0FF61]  py-3.5text-[#7F39EC] "
+                  : " bg-[#D9C0FF61]  py-3.5 text-[#7F39EC] "
               )}
             >
               {isLoading

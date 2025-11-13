@@ -7,6 +7,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -92,6 +93,16 @@ interface YouTubeVideo {
         width: number;
         height: number;
       };
+      standard?: {
+        url: string;
+        width: number;
+        height: number;
+      };
+      maxres?: {
+        url: string;
+        width: number;
+        height: number;
+      };
     };
   };
   statistics?: {
@@ -119,6 +130,25 @@ function extractYoutubeId(url: string) {
     /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([\w-]{11})(?:&\S+)?/i;
   const match = url.match(regex);
   return match ? match[1] : null;
+}
+
+// Helper to choose the highest quality available YouTube thumbnail
+function getYouTubeThumbnailUrl(
+  thumbnails?: YouTubeVideo["snippet"]["thumbnails"],
+  videoId?: string
+) {
+  if (!thumbnails) {
+    return videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
+  }
+
+  return (
+    thumbnails.maxres?.url ||
+    thumbnails.standard?.url ||
+    thumbnails.high?.url ||
+    thumbnails.medium?.url ||
+    thumbnails.default?.url ||
+    (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null)
+  );
 }
 
 export default function SubmitContentPage({
@@ -1619,6 +1649,12 @@ export default function SubmitContentPage({
         : 0,
     };
 
+    const youtubeThumbnailUrl =
+      getYouTubeThumbnailUrl(
+        videoToSubmit.snippet.thumbnails,
+        videoToSubmit.id.videoId
+      ) || `https://i.ytimg.com/vi/${videoToSubmit.id.videoId}/hqdefault.jpg`;
+
     const submissionPayload = {
       contest_id: contestId,
       creator_id: user!.id,
@@ -1630,7 +1666,7 @@ export default function SubmitContentPage({
       content_link: `https://www.youtube.com/watch?v=${videoToSubmit.id.videoId}`,
       video_id: videoToSubmit.id.videoId,
       video_title: videoToSubmit.snippet.title,
-      video_thumbnail_url: videoToSubmit.snippet.thumbnails.default.url,
+      video_thumbnail_url: youtubeThumbnailUrl,
       other_stats: { youtube: youtubeStats },
     };
 
@@ -1752,6 +1788,10 @@ export default function SubmitContentPage({
             : 0,
         };
 
+        const youtubeThumbnailUrl =
+          getYouTubeThumbnailUrl(video.snippet.thumbnails, video.id.videoId) ||
+          `https://i.ytimg.com/vi/${video.id.videoId}/hqdefault.jpg`;
+
         const submissionPayload = {
           contest_id: contestId,
           creator_id: user!.id,
@@ -1760,7 +1800,7 @@ export default function SubmitContentPage({
           content_link: `https://www.youtube.com/watch?v=${video.id.videoId}`,
           video_id: video.id.videoId,
           video_title: video.snippet.title,
-          video_thumbnail_url: video.snippet.thumbnails.default.url,
+          video_thumbnail_url: youtubeThumbnailUrl,
           views: video?.statistics?.viewCount
             ? parseInt(video.statistics.viewCount)
             : 0,
@@ -2669,101 +2709,91 @@ export default function SubmitContentPage({
                           )}
 
                         <div className="space-y-4 max-h-96 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800 px-2 pb-4">
-                          {paginatedUserVideos.map((video, index) => (
-                            <div
-                              key={video.id.videoId}
-                              className={`cursor-pointer max-w-[1200px] mx-auto ${
-                                index === 0 ? "mt-4" : ""
-                              } ${
-                                index === paginatedUserVideos.length - 1
-                                  ? "mb-4"
-                                  : ""
-                              } ${
-                                (
-                                  contest?.multiple_submissions_enabled
-                                    ? selectedVideosFromTabs.some(
-                                        (v) => v.id.videoId === video.id.videoId
-                                      )
-                                    : selectedVideo?.id.videoId ===
-                                      video.id.videoId
+                          {paginatedUserVideos.map((video, index) => {
+                            const isMultiSelect =
+                              contest?.multiple_submissions_enabled;
+                            const isSelected = isMultiSelect
+                              ? selectedVideosFromTabs.some(
+                                  (v) => v.id.videoId === video.id.videoId
                                 )
-                                  ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                                  : "border-2 border-[#7F39EC] rounded-lg"
-                              }`}
-                              onClick={() => {
-                                if (contest?.multiple_submissions_enabled) {
-                                  // Multiple selection mode
-                                  const isAlreadySelected =
-                                    selectedVideosFromTabs.some(
-                                      (v) => v.id.videoId === video.id.videoId
-                                    );
+                              : selectedVideo?.id.videoId === video.id.videoId;
+
+                            const handleSelectionChange = (
+                              shouldSelect: boolean
+                            ) => {
+                              if (isMultiSelect) {
+                                const isAlreadySelected =
+                                  selectedVideosFromTabs.some(
+                                    (v) => v.id.videoId === video.id.videoId
+                                  );
+
+                                if (shouldSelect) {
                                   if (isAlreadySelected) {
-                                    // Remove from selection
-                                    setSelectedVideosFromTabs(
-                                      selectedVideosFromTabs.filter(
-                                        (v) => v.id.videoId !== video.id.videoId
-                                      )
-                                    );
-                                  } else {
-                                    // Check if video is already selected elsewhere
-                                    if (
-                                      isVideoAlreadySelected(
-                                        video.id.videoId,
-                                        "youtube"
-                                      )
-                                    ) {
-                                      toast({
-                                        title: "Video Already Selected",
-                                        description:
-                                          "This video is already selected from another source",
-                                        variant: "destructive",
-                                      });
-                                      return;
-                                    }
-
-                                    // Check if video is already submitted
-                                    if (
-                                      isVideoAlreadySubmitted(
-                                        video.id.videoId,
-                                        `https://www.youtube.com/watch?v=${video.id.videoId}`
-                                      )
-                                    ) {
-                                      toast({
-                                        title: "Video Already Submitted",
-                                        description:
-                                          "This video has already been submitted for this contest",
-                                        variant: "destructive",
-                                      });
-                                      return;
-                                    }
-
-                                    // Add to selection (check limit against remaining submissions)
-                                    const maxSubmissions =
-                                      contest?.max_submissions_per_creator || 1;
-                                    const remainingSubmissions =
-                                      maxSubmissions -
-                                      submissionProgress.submitted;
-                                    const totalSelected =
-                                      selectedVideosFromTabs.length +
-                                      selectedReelsFromTabs.length +
-                                      selectedVideos.length +
-                                      selectedReels.length;
-
-                                    if (totalSelected < remainingSubmissions) {
-                                      setSelectedVideosFromTabs([
-                                        ...selectedVideosFromTabs,
-                                        video,
-                                      ]);
-                                    } else {
-                                      toast({
-                                        title: "Selection Limit Reached",
-                                        description: `You can only select up to ${remainingSubmissions} more videos for this contest (${submissionProgress.submitted} already submitted)`,
-                                        variant: "destructive",
-                                      });
-                                    }
+                                    return;
                                   }
-                                } else {
-                                  // Single selection mode
+
+                                  if (
+                                    isVideoAlreadySelected(
+                                      video.id.videoId,
+                                      "youtube"
+                                    )
+                                  ) {
+                                    toast({
+                                      title: "Video Already Selected",
+                                      description:
+                                        "This video is already selected from another source",
+                                      variant: "destructive",
+                                    });
+                                    return;
+                                  }
+
+                                  if (
+                                    isVideoAlreadySubmitted(
+                                      video.id.videoId,
+                                      `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                    )
+                                  ) {
+                                    toast({
+                                      title: "Video Already Submitted",
+                                      description:
+                                        "This video has already been submitted for this contest",
+                                      variant: "destructive",
+                                    });
+                                    return;
+                                  }
+
+                                  const maxSubmissions =
+                                    contest?.max_submissions_per_creator || 1;
+                                  const remainingSubmissions =
+                                    maxSubmissions -
+                                    submissionProgress.submitted;
+                                  const totalSelected =
+                                    selectedVideosFromTabs.length +
+                                    selectedReelsFromTabs.length +
+                                    selectedVideos.length +
+                                    selectedReels.length;
+
+                                  if (totalSelected < remainingSubmissions) {
+                                    setSelectedVideosFromTabs((prev) => [
+                                      ...prev,
+                                      video,
+                                    ]);
+                                  } else {
+                                    toast({
+                                      title: "Selection Limit Reached",
+                                      description: `You can only select up to ${remainingSubmissions} more videos for this contest (${submissionProgress.submitted} already submitted)`,
+                                      variant: "destructive",
+                                    });
+                                  }
+                                } else if (isAlreadySelected) {
+                                  setSelectedVideosFromTabs((prev) =>
+                                    prev.filter(
+                                      (v) => v.id.videoId !== video.id.videoId
+                                    )
+                                  );
+                                }
+                              } else {
+                                if (shouldSelect) {
                                   setSelectedVideo(video);
                                   setSelectedReel(null);
                                   setInstagramMediaPreview(null);
@@ -2772,124 +2802,170 @@ export default function SubmitContentPage({
                                   setContentLink(
                                     `https://www.youtube.com/watch?v=${video.id.videoId}`
                                   );
-                                  setVideoPreview(null); // Clear manual link preview
+                                  setVideoPreview(null);
+                                } else {
+                                  setSelectedVideo(null);
+                                  setContentLink("");
+                                  setSubmissionType(null);
                                 }
-                              }}
-                            >
-                              <CardContent className="p-4 sm:p-6 relative">
-                                {(contest?.multiple_submissions_enabled
-                                  ? selectedVideosFromTabs.some(
-                                      (v) => v.id.videoId === video.id.videoId
-                                    )
-                                  : selectedVideo?.id.videoId ===
-                                    video.id.videoId) && (
-                                  <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1">
-                                    <Check className="h-4 w-4" />
-                                  </div>
-                                )}
-                                <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
-                                  {/* Thumbnail */}
-                                  <div className="flex-shrink-0 mx-auto sm:mx-0">
-                                    <Image
-                                      src={
-                                        video.snippet.thumbnails.medium?.url ||
-                                        video.snippet.thumbnails.default.url
-                                      }
-                                      alt={video.snippet.title}
-                                      width={160}
-                                      height={90}
-                                      className="rounded-lg object-cover aspect-video shadow-sm w-full max-w-[160px]"
-                                    />
-                                  </div>
+                              }
+                            };
 
-                                  {/* Content */}
-                                  <div className="flex-1 min-w-0 space-y-2 sm:space-y-3">
-                                    {/* Title */}
-                                    <div className="space-y-2">
-                                      <h3
-                                        className={cn(
-                                          "font-medium text-lg leading-5 text-center sm:text-left line-clamp-2",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-gray-900"
-                                        )}
-                                        title={video.snippet.title}
-                                      >
-                                        {video.snippet.title}
-                                      </h3>
-                                      <div className="flex justify-center sm:justify-start">
-                                        <a
-                                          href={`https://www.youtube.com/watch?v=${video.id.videoId}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className={cn(
-                                            "inline-flex items-center text-sm hover:underline",
-                                            isDark
-                                              ? "text-purple-400"
-                                              : "text-[#4A00BE]"
-                                          )}
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          <ExternalLink className="h-3 w-3 mr-1" />
-                                          Open on YouTube
-                                        </a>
-                                      </div>
+                            const thumbnailUrl =
+                              getYouTubeThumbnailUrl(
+                                video.snippet.thumbnails,
+                                video.id.videoId
+                              ) ||
+                              `https://i.ytimg.com/vi/${video.id.videoId}/hqdefault.jpg`;
+
+                            return (
+                              <div
+                                key={video.id.videoId}
+                                className={`cursor-pointer max-w-[1200px] mx-auto ${
+                                  index === 0 ? "mt-4" : ""
+                                } ${
+                                  index === paginatedUserVideos.length - 1
+                                    ? "mb-4"
+                                    : ""
+                                } ${
+                                  isSelected
+                                    ? "border-2 border-[#7F39EC] rounded-lg bg-purple-700/20"
+                                    : "border-2 border-[#7F39EC] rounded-lg"
+                                }`}
+                                onClick={() =>
+                                  handleSelectionChange(!isSelected)
+                                }
+                              >
+                                <CardContent className="p-4 sm:p-6 relative">
+                                  <Checkbox
+                                    aria-label="Select YouTube video"
+                                    checked={isSelected}
+                                    onCheckedChange={(checked) =>
+                                      handleSelectionChange(Boolean(checked))
+                                    }
+                                    onClick={(event) => event.stopPropagation()}
+                                    className={cn(
+                                      "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
+                                      isDark
+                                        ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                        : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
+                                    )}
+                                  />
+                                  <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
+                                    {/* Thumbnail */}
+                                    <div className="flex-shrink-0 mx-auto sm:mx-0">
+                                      <Image
+                                        src={thumbnailUrl}
+                                        alt={video.snippet.title}
+                                        width={160}
+                                        height={90}
+                                        className="rounded-lg object-cover aspect-video shadow-sm w-full max-w-[160px]"
+                                      />
                                     </div>
 
-                                    {/* Date */}
-                                    <p className="text-md text-muted-foreground text-center sm:text-left">
-                                      Published:{" "}
-                                      {dayjs(video.snippet.publishedAt).format(
-                                        "MMM D, YYYY [at] h:mm A"
-                                      )}
-                                    </p>
-
-                                    {/* Statistics */}
-                                    {video.statistics && (
-                                      <div className="flex flex-wrap justify-center sm:justify-start gap-x-3 gap-y-1 text-md text-muted-foreground">
-                                        {video.statistics.viewCount && (
-                                          <div className="flex items-center gap-1">
-                                            <Eye className="h-4 w-4" />
-                                            <span className="font-medium">
-                                              {parseInt(
-                                                video.statistics.viewCount.toString()
-                                              ).toLocaleString()}
-                                            </span>
-                                            <span>views</span>
-                                          </div>
-                                        )}
-                                        {video.statistics.likeCount && (
-                                          <div className="flex items-center gap-1">
-                                            <ThumbsUp className="h-4 w-4" />
-                                            <span className="font-medium">
-                                              {parseInt(
-                                                video.statistics.likeCount.toString()
-                                              ).toLocaleString()}
-                                            </span>
-                                            <span>likes</span>
-                                          </div>
-                                        )}
-                                        {video.statistics.commentCount && (
-                                          <div className="flex items-center gap-1">
-                                            <MessageSquare className="h-4 w-4" />
-                                            <span className="font-medium">
-                                              {" "}
-                                              {parseInt(
-                                                video.statistics.commentCount.toString()
-                                              ).toLocaleString()}
-                                            </span>
-                                            <span className="ml-1">
-                                              comments
-                                            </span>
-                                          </div>
-                                        )}
+                                    {/* Content */}
+                                    <div className="flex-1 min-w-0 space-y-2 sm:space-y-3">
+                                      {/* Title */}
+                                      <div className="space-y-2">
+                                        <h3
+                                          className={cn(
+                                            "font-medium text-lg leading-5 text-center sm:text-left line-clamp-2",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-gray-900"
+                                          )}
+                                          title={video.snippet.title}
+                                        >
+                                          {video.snippet.title}
+                                        </h3>
+                                        <div className="flex justify-center sm:justify-start">
+                                          <a
+                                            href={`https://www.youtube.com/watch?v=${video.id.videoId}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={cn(
+                                              "inline-flex items-center text-sm hover:underline",
+                                              isDark
+                                                ? "text-purple-400"
+                                                : "text-[#4A00BE]"
+                                            )}
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <ExternalLink className="h-3 w-3 mr-1" />
+                                            Open on YouTube
+                                          </a>
+                                        </div>
                                       </div>
-                                    )}
+
+                                      {/* Date */}
+                                      <p
+                                        className={cn(
+                                          "text-md text-center sm:text-left",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-gray-600"
+                                        )}
+                                      >
+                                        Published:{" "}
+                                        {dayjs(
+                                          video.snippet.publishedAt
+                                        ).format("MMM D, YYYY [at] h:mm A")}
+                                      </p>
+
+                                      {/* Statistics */}
+                                      {video.statistics && (
+                                        <div
+                                          className={cn(
+                                            "flex flex-wrap justify-center sm:justify-start gap-x-3 gap-y-1 text-md",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-gray-600"
+                                          )}
+                                        >
+                                          {video.statistics.viewCount && (
+                                            <div className="flex items-center gap-1">
+                                              <Eye className="h-4 w-4" />
+                                              <span className="font-medium">
+                                                {parseInt(
+                                                  video.statistics.viewCount.toString()
+                                                ).toLocaleString()}
+                                              </span>
+                                              <span>views</span>
+                                            </div>
+                                          )}
+                                          {video.statistics.likeCount && (
+                                            <div className="flex items-center gap-1">
+                                              <ThumbsUp className="h-4 w-4" />
+                                              <span className="font-medium">
+                                                {parseInt(
+                                                  video.statistics.likeCount.toString()
+                                                ).toLocaleString()}
+                                              </span>
+                                              <span>likes</span>
+                                            </div>
+                                          )}
+                                          {video.statistics.commentCount && (
+                                            <div className="flex items-center gap-1">
+                                              <MessageSquare className="h-4 w-4" />
+                                              <span className="font-medium">
+                                                {" "}
+                                                {parseInt(
+                                                  video.statistics.commentCount.toString()
+                                                ).toLocaleString()}
+                                              </span>
+                                              <span className="ml-1">
+                                                comments
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              </CardContent>
-                            </div>
-                          ))}
+                                </CardContent>
+                              </div>
+                            );
+                          })}
                         </div>
                       </>
                     )}
@@ -2922,136 +2998,163 @@ export default function SubmitContentPage({
                         </Button>
                       </div>
                     )}
-                    {videoPreview && (
-                      <Card
-                        className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${
-                          selectedVideo?.id.videoId === videoPreview.id.videoId
-                            ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                            : "border-2 border-[#7F39EC] rounded-lg "
-                        }`}
-                        onClick={() => {
-                          setSelectedVideo(videoPreview);
-                          setSelectedReel(null);
-                          setInstagramMediaPreview(null);
-                          setInstagramLink("");
-                          setSubmissionType("youtube");
-                          setContentLink(
-                            `https://www.youtube.com/watch?v=${videoPreview.id.videoId}`
-                          );
-                          // Keep videoPreview to show the card remains visible when selected
-                        }}
-                      >
-                        <div className="p-3 md:p-4">
-                          <CardTitle className="text-base">
-                            Video Preview
-                          </CardTitle>
-                        </div>
-                        <CardContent className="p-3 sm:p-4 relative">
-                          {selectedVideo?.id.videoId ===
-                            videoPreview.id.videoId && (
-                            <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1">
-                              <Check className="h-4 w-4" />
-                            </div>
-                          )}
-                          <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
-                            {/* Thumbnail */}
-                            <div className="flex-shrink-0 mx-auto sm:mx-0">
-                              <Image
-                                src={
-                                  videoPreview.snippet.thumbnails.medium?.url ||
-                                  videoPreview.snippet.thumbnails.default.url
-                                }
-                                alt={videoPreview.snippet.title}
-                                width={160}
-                                height={90}
-                                className="rounded-lg object-cover aspect-video shadow-sm w-full max-w-[160px]"
-                              />
-                            </div>
+                    {videoPreview &&
+                      (() => {
+                        const isSelected =
+                          selectedVideo?.id.videoId === videoPreview.id.videoId;
 
-                            {/* Content */}
-                            <div className="flex-1 min-w-0 space-y-2 sm:space-y-3">
-                              {/* Title */}
-                              <div className="space-y-1">
-                                <h3
-                                  className={cn(
-                                    "font-medium text-lg leading-5 text-center sm:text-left line-clamp-2",
-                                    isDark ? "text-white" : "text-gray-900"
+                        const handleSelectionChange = (
+                          shouldSelect: boolean
+                        ) => {
+                          if (shouldSelect) {
+                            setSelectedVideo(videoPreview);
+                            setSelectedReel(null);
+                            setInstagramMediaPreview(null);
+                            setInstagramLink("");
+                            setSubmissionType("youtube");
+                            setContentLink(
+                              `https://www.youtube.com/watch?v=${videoPreview.id.videoId}`
+                            );
+                          } else {
+                            setSelectedVideo(null);
+                            setContentLink("");
+                            setSubmissionType(null);
+                          }
+                        };
+
+                        const previewThumbnailUrl =
+                          getYouTubeThumbnailUrl(
+                            videoPreview.snippet.thumbnails,
+                            videoPreview.id.videoId
+                          ) ||
+                          `https://i.ytimg.com/vi/${videoPreview.id.videoId}/hqdefault.jpg`;
+
+                        return (
+                          <Card
+                            className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${
+                              isSelected
+                                ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                                : "border-2 border-[#7F39EC] rounded-lg "
+                            }`}
+                            onClick={() => handleSelectionChange(!isSelected)}
+                          >
+                            <div className="p-3 md:p-4">
+                              <CardTitle className="text-base">
+                                Video Preview
+                              </CardTitle>
+                            </div>
+                            <CardContent className="p-3 sm:p-4 relative">
+                              <Checkbox
+                                aria-label="Select YouTube preview video"
+                                checked={isSelected}
+                                onCheckedChange={(checked) =>
+                                  handleSelectionChange(Boolean(checked))
+                                }
+                                onClick={(event) => event.stopPropagation()}
+                                className={cn(
+                                  "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
+                                  isDark
+                                    ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
+                                )}
+                              />
+                              <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
+                                {/* Thumbnail */}
+                                <div className="flex-shrink-0 mx-auto sm:mx-0">
+                                  <Image
+                                    src={previewThumbnailUrl}
+                                    alt={videoPreview.snippet.title}
+                                    width={160}
+                                    height={90}
+                                    className="rounded-lg object-cover aspect-video shadow-sm w-full max-w-[160px]"
+                                  />
+                                </div>
+
+                                {/* Content */}
+                                <div className="flex-1 min-w-0 space-y-2 sm:space-y-3">
+                                  {/* Title */}
+                                  <div className="space-y-1">
+                                    <h3
+                                      className={cn(
+                                        "font-medium text-lg leading-5 text-center sm:text-left line-clamp-2",
+                                        isDark ? "text-white" : "text-gray-900"
+                                      )}
+                                      title={videoPreview.snippet.title}
+                                    >
+                                      {videoPreview.snippet.title}
+                                    </h3>
+                                    <div className="flex justify-center sm:justify-start">
+                                      <a
+                                        href={`https://www.youtube.com/watch?v=${videoPreview.id.videoId}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className={cn(
+                                          "inline-flex items-center text-sm hover:underline",
+                                          isDark
+                                            ? "text-purple-400"
+                                            : "text-purple-600"
+                                        )}
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <ExternalLink className="h-3 w-3 mr-1" />
+                                        Open on YouTube
+                                      </a>
+                                    </div>
+                                  </div>
+
+                                  {/* Date */}
+                                  <p className="text-md text-muted-foreground text-center sm:text-left">
+                                    Published:{" "}
+                                    {dayjs(
+                                      videoPreview.snippet.publishedAt
+                                    ).format("MMM D, YYYY [at] h:mm A")}
+                                  </p>
+
+                                  {/* Statistics */}
+                                  {videoPreview.statistics && (
+                                    <div className="flex flex-wrap justify-center sm:justify-start gap-x-3 gap-y-1 text-md text-muted-foreground">
+                                      {videoPreview.statistics.viewCount && (
+                                        <div className="flex items-center gap-1">
+                                          <Eye className="h-4 w-4" />
+                                          <span className="font-medium">
+                                            {" "}
+                                            {parseInt(
+                                              videoPreview.statistics.viewCount.toString()
+                                            ).toLocaleString()}
+                                          </span>
+                                          <span>views</span>
+                                        </div>
+                                      )}
+                                      {videoPreview.statistics.likeCount && (
+                                        <div className="flex items-center gap-1">
+                                          <ThumbsUp className="h-4 w-4" />
+                                          <span className="font-medium">
+                                            {parseInt(
+                                              videoPreview.statistics.likeCount.toString()
+                                            ).toLocaleString()}
+                                          </span>
+                                          <span>likes</span>
+                                        </div>
+                                      )}
+                                      {videoPreview.statistics.commentCount && (
+                                        <div className="flex items-center gap-1">
+                                          <MessageSquare className="h-4 w-4" />
+                                          <span className="font-medium">
+                                            {parseInt(
+                                              videoPreview.statistics.commentCount.toString()
+                                            ).toLocaleString()}
+                                          </span>
+                                          <span>comments</span>
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
-                                  title={videoPreview.snippet.title}
-                                >
-                                  {videoPreview.snippet.title}
-                                </h3>
-                                <div className="flex justify-center sm:justify-start">
-                                  <a
-                                    href={`https://www.youtube.com/watch?v=${videoPreview.id.videoId}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className={cn(
-                                      "inline-flex items-center text-sm hover:underline",
-                                      isDark
-                                        ? "text-purple-400"
-                                        : "text-purple-600"
-                                    )}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <ExternalLink className="h-3 w-3 mr-1" />
-                                    Open on YouTube
-                                  </a>
                                 </div>
                               </div>
-
-                              {/* Date */}
-                              <p className="text-md text-muted-foreground text-center sm:text-left">
-                                Published:{" "}
-                                {dayjs(videoPreview.snippet.publishedAt).format(
-                                  "MMM D, YYYY [at] h:mm A"
-                                )}
-                              </p>
-
-                              {/* Statistics */}
-                              {videoPreview.statistics && (
-                                <div className="flex flex-wrap justify-center sm:justify-start gap-x-3 gap-y-1 text-md text-muted-foreground">
-                                  {videoPreview.statistics.viewCount && (
-                                    <div className="flex items-center gap-1">
-                                      <Eye className="h-4 w-4" />
-                                      <span className="font-medium">
-                                        {" "}
-                                        {parseInt(
-                                          videoPreview.statistics.viewCount.toString()
-                                        ).toLocaleString()}
-                                      </span>
-                                      <span>views</span>
-                                    </div>
-                                  )}
-                                  {videoPreview.statistics.likeCount && (
-                                    <div className="flex items-center gap-1">
-                                      <ThumbsUp className="h-4 w-4" />
-                                      <span className="font-medium">
-                                        {parseInt(
-                                          videoPreview.statistics.likeCount.toString()
-                                        ).toLocaleString()}
-                                      </span>
-                                      <span>likes</span>
-                                    </div>
-                                  )}
-                                  {videoPreview.statistics.commentCount && (
-                                    <div className="flex items-center gap-1">
-                                      <MessageSquare className="h-4 w-4" />
-                                      <span className="font-medium">
-                                        {parseInt(
-                                          videoPreview.statistics.commentCount.toString()
-                                        ).toLocaleString()}
-                                      </span>
-                                      <span>comments</span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
+                            </CardContent>
+                          </Card>
+                        );
+                      })()}
                   </TabsContent>
                 </Tabs>
               )}
@@ -3342,186 +3445,204 @@ export default function SubmitContentPage({
                           )}
 
                         <div className="space-y-4 max-h-96 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800 px-2 pb-4">
-                          {paginatedUserReels.map((reel, index) => (
-                            <div
-                              key={reel.id}
-                              className={`cursor-pointer max-w-[1200px] mt-6 mx-auto ${
-                                index === 0 ? "mt-4" : ""
-                              } ${
-                                index === paginatedUserReels.length - 1
-                                  ? "mb-4"
-                                  : ""
-                              } ${
-                                (
-                                  contest?.multiple_submissions_enabled
-                                    ? selectedReelsFromTabs.some(
-                                        (r) => r.id === reel.id
-                                      )
-                                    : selectedReel?.id === reel.id
+                          {paginatedUserReels.map((reel, index) => {
+                            const isMultiSelect =
+                              contest?.multiple_submissions_enabled;
+                            const isSelected = isMultiSelect
+                              ? selectedReelsFromTabs.some(
+                                  (r) => r.id === reel.id
                                 )
-                                  ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                                  : "border-2 border-[#7F39EC] rounded-lg "
-                              }`}
-                              onClick={() => {
-                                if (contest?.multiple_submissions_enabled) {
-                                  // Multiple selection mode
-                                  const isAlreadySelected =
-                                    selectedReelsFromTabs.some(
-                                      (r) => r.id === reel.id
-                                    );
+                              : selectedReel?.id === reel.id;
+
+                            const handleSelectionChange = (
+                              shouldSelect: boolean
+                            ) => {
+                              if (isMultiSelect) {
+                                const isAlreadySelected =
+                                  selectedReelsFromTabs.some(
+                                    (r) => r.id === reel.id
+                                  );
+
+                                if (shouldSelect) {
                                   if (isAlreadySelected) {
-                                    // Remove from selection
-                                    setSelectedReelsFromTabs(
-                                      selectedReelsFromTabs.filter(
-                                        (r) => r.id !== reel.id
-                                      )
-                                    );
-                                  } else {
-                                    // Check if reel is already selected elsewhere
-                                    if (
-                                      isVideoAlreadySelected(
-                                        reel.id,
-                                        "instagram"
-                                      )
-                                    ) {
-                                      toast({
-                                        title: "Video Already Selected",
-                                        description:
-                                          "This video is already selected from another source",
-                                        variant: "destructive",
-                                      });
-                                      return;
-                                    }
-
-                                    // Check if reel is already submitted
-                                    if (
-                                      isVideoAlreadySubmitted(
-                                        reel.id,
-                                        reel.permalink
-                                      )
-                                    ) {
-                                      toast({
-                                        title: "Reel Already Submitted",
-                                        description:
-                                          "This reel has already been submitted for this contest",
-                                        variant: "destructive",
-                                      });
-                                      return;
-                                    }
-
-                                    // Add to selection (check limit against remaining submissions)
-                                    const maxSubmissions =
-                                      contest?.max_submissions_per_creator || 1;
-                                    const remainingSubmissions =
-                                      maxSubmissions -
-                                      submissionProgress.submitted;
-                                    const totalSelected =
-                                      selectedVideosFromTabs.length +
-                                      selectedReelsFromTabs.length +
-                                      selectedVideos.length +
-                                      selectedReels.length;
-
-                                    if (totalSelected < remainingSubmissions) {
-                                      setSelectedReelsFromTabs([
-                                        ...selectedReelsFromTabs,
-                                        reel,
-                                      ]);
-                                    } else {
-                                      toast({
-                                        title: "Selection Limit Reached",
-                                        description: `You can only select up to ${remainingSubmissions} more videos for this contest (${submissionProgress.submitted} already submitted)`,
-                                        variant: "destructive",
-                                      });
-                                    }
+                                    return;
                                   }
-                                } else {
-                                  // Single selection mode
+
+                                  if (
+                                    isVideoAlreadySelected(reel.id, "instagram")
+                                  ) {
+                                    toast({
+                                      title: "Video Already Selected",
+                                      description:
+                                        "This video is already selected from another source",
+                                      variant: "destructive",
+                                    });
+                                    return;
+                                  }
+
+                                  if (
+                                    isVideoAlreadySubmitted(
+                                      reel.id,
+                                      reel.permalink
+                                    )
+                                  ) {
+                                    toast({
+                                      title: "Reel Already Submitted",
+                                      description:
+                                        "This reel has already been submitted for this contest",
+                                      variant: "destructive",
+                                    });
+                                    return;
+                                  }
+
+                                  const maxSubmissions =
+                                    contest?.max_submissions_per_creator || 1;
+                                  const remainingSubmissions =
+                                    maxSubmissions -
+                                    submissionProgress.submitted;
+                                  const totalSelected =
+                                    selectedVideosFromTabs.length +
+                                    selectedReelsFromTabs.length +
+                                    selectedVideos.length +
+                                    selectedReels.length;
+
+                                  if (totalSelected < remainingSubmissions) {
+                                    setSelectedReelsFromTabs((prev) => [
+                                      ...prev,
+                                      reel,
+                                    ]);
+                                  } else {
+                                    toast({
+                                      title: "Selection Limit Reached",
+                                      description: `You can only select up to ${remainingSubmissions} more videos for this contest (${submissionProgress.submitted} already submitted)`,
+                                      variant: "destructive",
+                                    });
+                                  }
+                                } else if (isAlreadySelected) {
+                                  setSelectedReelsFromTabs((prev) =>
+                                    prev.filter((r) => r.id !== reel.id)
+                                  );
+                                }
+                              } else {
+                                if (shouldSelect) {
                                   setSelectedReel(reel);
                                   setSelectedVideo(null);
                                   setVideoPreview(null);
                                   setContentLink("");
                                   setSubmissionType("instagram");
                                   setInstagramLink(reel.permalink);
-                                  setInstagramMediaPreview(null); // Clear manual link preview
+                                  setInstagramMediaPreview(null);
+                                } else {
+                                  setSelectedReel(null);
+                                  setContentLink("");
+                                  setSubmissionType(null);
                                 }
-                              }}
-                            >
-                              <CardContent className="p-4 sm:p-6 relative">
-                                {(contest?.multiple_submissions_enabled
-                                  ? selectedReelsFromTabs.some(
-                                      (r) => r.id === reel.id
-                                    )
-                                  : selectedReel?.id === reel.id) && (
-                                  <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1 shadow-lg animate-in zoom-in-95 duration-200">
-                                    <Check className="h-4 w-4" />
-                                  </div>
-                                )}
-                                <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
-                                  {/* Thumbnail */}
-                                  <div className="flex-shrink-0 mx-auto sm:mx-0">
-                                    {reel.thumbnail_url ? (
-                                      <Image
-                                        src={reel.thumbnail_url}
-                                        alt={reel.caption || "Instagram media"}
-                                        width={120}
-                                        height={120}
-                                        className="rounded-lg object-cover aspect-square shadow-sm w-full max-w-[120px]"
-                                      />
-                                    ) : (
-                                      <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
-                                        📷 No thumbnail
-                                      </div>
+                              }
+                            };
+
+                            return (
+                              <div
+                                key={reel.id}
+                                className={`cursor-pointer max-w-[1200px] mt-6 mx-auto ${
+                                  index === 0 ? "mt-4" : ""
+                                } ${
+                                  index === paginatedUserReels.length - 1
+                                    ? "mb-4"
+                                    : ""
+                                } ${
+                                  isSelected
+                                    ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                                    : "border-2 border-[#7F39EC] rounded-lg "
+                                }`}
+                                onClick={() =>
+                                  handleSelectionChange(!isSelected)
+                                }
+                              >
+                                <CardContent className="p-4 sm:p-6 relative">
+                                  <Checkbox
+                                    aria-label="Select Instagram reel"
+                                    checked={isSelected}
+                                    onCheckedChange={(checked) =>
+                                      handleSelectionChange(Boolean(checked))
+                                    }
+                                    onClick={(event) => event.stopPropagation()}
+                                    className={cn(
+                                      "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
+                                      isDark
+                                        ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                        : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
                                     )}
-                                  </div>
+                                  />
+                                  <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
+                                    {/* Thumbnail */}
+                                    <div className="flex-shrink-0 mx-auto sm:mx-0">
+                                      {reel.thumbnail_url ? (
+                                        <Image
+                                          src={reel.thumbnail_url}
+                                          alt={
+                                            reel.caption || "Instagram media"
+                                          }
+                                          width={120}
+                                          height={120}
+                                          className="rounded-lg object-cover aspect-square shadow-sm w-full max-w-[120px]"
+                                        />
+                                      ) : (
+                                        <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
+                                          📷 No thumbnail
+                                        </div>
+                                      )}
+                                    </div>
 
-                                  {/* Content */}
-                                  <div className="flex-1 min-w-0 space-y-2 sm:space-y-4">
-                                    {/* Caption/Title */}
-                                    <div className="space-y-1">
-                                      <h3
-                                        className="font-medium text-md leading-5 text-center sm:text-left line-clamp-3"
-                                        title={
-                                          reel.caption || "Instagram media"
-                                        }
-                                      >
-                                        {reel.caption || "No caption available"}
-                                      </h3>
-                                      <div className="flex justify-center sm:justify-start">
-                                        <a
-                                          href={reel.permalink}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center text-sm text-purple-600 hover:text-purple-800 hover:underline"
-                                          onClick={(e) => e.stopPropagation()}
+                                    {/* Content */}
+                                    <div className="flex-1 min-w-0 space-y-2 sm:space-y-4">
+                                      {/* Caption/Title */}
+                                      <div className="space-y-1">
+                                        <h3
+                                          className="font-medium text-md leading-5 text-center sm:text-left line-clamp-3"
+                                          title={
+                                            reel.caption || "Instagram media"
+                                          }
                                         >
-                                          <ExternalLink className="h-3 w-3 mr-1" />
-                                          Open on Instagram
-                                        </a>
+                                          {reel.caption ||
+                                            "No caption available"}
+                                        </h3>
+                                        <div className="flex justify-center sm:justify-start">
+                                          <a
+                                            href={reel.permalink}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center text-sm text-purple-600 hover:text-purple-800 hover:underline"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <ExternalLink className="h-3 w-3 mr-1" />
+                                            Open on Instagram
+                                          </a>
+                                        </div>
                                       </div>
-                                    </div>
 
-                                    {/* Date and Type */}
-                                    <div className="space-y-3">
-                                      <p className="text-sm text-muted-foreground text-center sm:text-left">
-                                        Posted:{" "}
-                                        {dayjs(reel.timestamp).format(
-                                          "MMM D, YYYY [at] h:mm A"
-                                        )}
-                                      </p>
-                                      <div className="flex justify-center sm:justify-start">
-                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-sm font-medium border border-gray-500">
-                                          🎬{" "}
-                                          {reel.media_type === "REEL"
-                                            ? "Instagram Reel"
-                                            : "Video"}
-                                        </span>
+                                      {/* Date and Type */}
+                                      <div className="space-y-3">
+                                        <p className="text-sm text-muted-foreground text-center sm:text-left">
+                                          Posted:{" "}
+                                          {dayjs(reel.timestamp).format(
+                                            "MMM D, YYYY [at] h:mm A"
+                                          )}
+                                        </p>
+                                        <div className="flex justify-center sm:justify-start">
+                                          <span className="inline-flex items-center px-2 py-1 rounded-full text-sm font-medium border border-gray-500">
+                                            🎬{" "}
+                                            {reel.media_type === "REEL"
+                                              ? "Instagram Reel"
+                                              : "Video"}
+                                          </span>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
-                                </div>
-                              </CardContent>
-                            </div>
-                          ))}
+                                </CardContent>
+                              </div>
+                            );
+                          })}
                         </div>
                       </>
                     )}
@@ -3554,105 +3675,130 @@ export default function SubmitContentPage({
                         </Button>
                       </div>
                     )}
-                    {instagramMediaPreview && (
-                      <div
-                        className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${
-                          selectedReel?.id === instagramMediaPreview.id
-                            ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                            : "border-2 border-[#7F39EC] rounded-lg "
-                        }`}
-                        onClick={() => {
-                          setSelectedReel(instagramMediaPreview);
-                          setSelectedVideo(null);
-                          setVideoPreview(null);
-                          setContentLink("");
-                          setSubmissionType("instagram");
-                          setInstagramLink(instagramMediaPreview.permalink);
-                          // Keep instagramMediaPreview to show the card remains visible when selected
-                        }}
-                      >
-                        <CardHeader>
-                          <CardTitle className="text-base">
-                            Media Preview
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="relative">
-                          {selectedReel?.id === instagramMediaPreview.id && (
-                            <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1 shadow-lg">
-                              <Check className="h-4 w-4" />
-                            </div>
-                          )}
-                          <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
-                            {/* Thumbnail */}
-                            <div className="flex-shrink-0 mx-auto sm:mx-0">
-                              {instagramMediaPreview.thumbnail_url ? (
-                                <Image
-                                  src={instagramMediaPreview.thumbnail_url}
-                                  alt={
-                                    instagramMediaPreview.caption ||
-                                    "Instagram media"
-                                  }
-                                  width={120}
-                                  height={120}
-                                  className="rounded-lg object-cover aspect-square shadow-sm w-full max-w-[120px]"
-                                />
-                              ) : (
-                                <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
-                                  📷 No thumbnail
-                                </div>
-                              )}
-                            </div>
+                    {instagramMediaPreview &&
+                      (() => {
+                        const isSelected =
+                          selectedReel?.id === instagramMediaPreview.id;
 
-                            {/* Content */}
-                            <div className="flex-1 min-w-0 space-y-2 sm:space-y-4">
-                              {/* Caption/Title */}
-                              <div className="space-y-1">
-                                <h3
-                                  className="font-medium text-md leading-5 text-center sm:text-left line-clamp-3"
-                                  title={
-                                    instagramMediaPreview.caption ||
-                                    "Instagram media"
-                                  }
-                                >
-                                  {instagramMediaPreview.caption ||
-                                    "No caption available"}
-                                </h3>
-                                <div className="flex justify-center sm:justify-start">
-                                  <a
-                                    href={instagramMediaPreview.permalink}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center text-sm text-purple-600 hover:text-purple-800 hover:underline"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <ExternalLink className="h-3 w-3 mr-1" />
-                                    Open on Instagram
-                                  </a>
+                        const handleSelectionChange = (
+                          shouldSelect: boolean
+                        ) => {
+                          if (shouldSelect) {
+                            setSelectedReel(instagramMediaPreview);
+                            setSelectedVideo(null);
+                            setVideoPreview(null);
+                            setContentLink("");
+                            setSubmissionType("instagram");
+                            setInstagramLink(instagramMediaPreview.permalink);
+                          } else {
+                            setSelectedReel(null);
+                            setContentLink("");
+                            setSubmissionType(null);
+                          }
+                        };
+
+                        return (
+                          <div
+                            className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${
+                              isSelected
+                                ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                                : "border-2 border-[#7F39EC] rounded-lg "
+                            }`}
+                            onClick={() => handleSelectionChange(!isSelected)}
+                          >
+                            <CardHeader>
+                              <CardTitle className="text-base">
+                                Media Preview
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="relative">
+                              <Checkbox
+                                aria-label="Select Instagram preview media"
+                                checked={isSelected}
+                                onCheckedChange={(checked) =>
+                                  handleSelectionChange(Boolean(checked))
+                                }
+                                onClick={(event) => event.stopPropagation()}
+                                className={cn(
+                                  "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
+                                  isDark
+                                    ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
+                                )}
+                              />
+                              <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
+                                {/* Thumbnail */}
+                                <div className="flex-shrink-0 mx-auto sm:mx-0">
+                                  {instagramMediaPreview.thumbnail_url ? (
+                                    <Image
+                                      src={instagramMediaPreview.thumbnail_url}
+                                      alt={
+                                        instagramMediaPreview.caption ||
+                                        "Instagram media"
+                                      }
+                                      width={120}
+                                      height={120}
+                                      className="rounded-lg object-cover aspect-square shadow-sm w-full max-w-[120px]"
+                                    />
+                                  ) : (
+                                    <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
+                                      📷 No thumbnail
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Content */}
+                                <div className="flex-1 min-w-0 space-y-2 sm:space-y-4">
+                                  {/* Caption/Title */}
+                                  <div className="space-y-1">
+                                    <h3
+                                      className="font-medium text-md leading-5 text-center sm:text-left line-clamp-3"
+                                      title={
+                                        instagramMediaPreview.caption ||
+                                        "Instagram media"
+                                      }
+                                    >
+                                      {instagramMediaPreview.caption ||
+                                        "No caption available"}
+                                    </h3>
+                                    <div className="flex justify-center sm:justify-start">
+                                      <a
+                                        href={instagramMediaPreview.permalink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center text-sm text-purple-600 hover:text-purple-800 hover:underline"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <ExternalLink className="h-3 w-3 mr-1" />
+                                        Open on Instagram
+                                      </a>
+                                    </div>
+                                  </div>
+
+                                  {/* Date and Type */}
+                                  <div className="space-y-2">
+                                    <p className="text-sm text-muted-foreground text-center sm:text-left">
+                                      Posted:{" "}
+                                      {dayjs(
+                                        instagramMediaPreview.timestamp
+                                      ).format("MMM D, YYYY [at] h:mm A")}
+                                    </p>
+                                    <div className="flex justify-center sm:justify-start">
+                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-sm font-medium border border-gray-500">
+                                        🎬{" "}
+                                        {instagramMediaPreview.media_type ===
+                                        "REEL"
+                                          ? "Instagram Reel"
+                                          : "Video"}
+                                      </span>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
-
-                              {/* Date and Type */}
-                              <div className="space-y-2">
-                                <p className="text-sm text-muted-foreground text-center sm:text-left">
-                                  Posted:{" "}
-                                  {dayjs(
-                                    instagramMediaPreview.timestamp
-                                  ).format("MMM D, YYYY [at] h:mm A")}
-                                </p>
-                                <div className="flex justify-center sm:justify-start">
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-sm font-medium border border-gray-500">
-                                    🎬{" "}
-                                    {instagramMediaPreview.media_type === "REEL"
-                                      ? "Instagram Reel"
-                                      : "Video"}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
+                            </CardContent>
                           </div>
-                        </CardContent>
-                      </div>
-                    )}
+                        );
+                      })()}
                   </TabsContent>
                 </Tabs>
               )}
@@ -3904,142 +4050,157 @@ export default function SubmitContentPage({
                           </h4>
                           <div className="space-y-3 max-h-96 overflow-y-auto">
                             {/* YouTube Videos */}
-                            {fetchedVideos.map(
-                              (video, index) =>
-                                video && (
-                                  <Card
-                                    key={`youtube-${index}`}
-                                    className={`cursor-pointer transition-all duration-200 ${
-                                      isVideoAlreadySubmitted(
-                                        video.id.videoId,
-                                        `https://www.youtube.com/watch?v=${video.id.videoId}`
-                                      )
-                                        ? isDark
-                                          ? "border-2 border-red-500 bg-red-900/40 opacity-90"
-                                          : "border-2 border-red-300 bg-red-50 opacity-75"
-                                        : selectedVideoIndices.includes(index)
-                                        ? isDark
-                                          ? "border-2 border-purple-400 bg-[#2B184A]"
-                                          : "border-2 border-purple-500 bg-purple-50"
-                                        : isDark
-                                        ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
-                                        : "border border-gray-200 hover:border-purple-300 bg-white"
-                                    }`}
-                                    onClick={() =>
-                                      handleVideoSelection(
-                                        index,
-                                        !selectedVideoIndices.includes(index)
-                                      )
-                                    }
-                                  >
-                                    <CardContent className="p-4">
-                                      <div className="flex items-start gap-4">
-                                        <div className="flex-shrink-0">
-                                          <Image
-                                            src={
-                                              video.snippet.thumbnails.medium
-                                                ?.url ||
-                                              video.snippet.thumbnails.default
-                                                .url
-                                            }
-                                            alt={video.snippet.title}
-                                            width={120}
-                                            height={68}
-                                            className="rounded-lg object-cover aspect-video"
-                                          />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-start justify-between">
-                                            <div className="flex-1">
-                                              <div className="flex items-start gap-2 mb-2">
-                                                <h5 className="font-medium text-sm line-clamp-2 flex-1">
-                                                  {video.snippet.title}
-                                                </h5>
-                                                {isVideoAlreadySubmitted(
-                                                  video.id.videoId,
-                                                  `https://www.youtube.com/watch?v=${video.id.videoId}`
-                                                ) && (
-                                                  <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
-                                                    <AlertTriangle className="h-3 w-3" />
-                                                    Already Submitted
-                                                  </div>
-                                                )}
-                                              </div>
-                                              <div
-                                                className={cn(
-                                                  "flex items-center gap-4 text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-600"
-                                                )}
-                                              >
-                                                <div className="flex items-center gap-1">
-                                                  <Eye
-                                                    className={cn(
-                                                      "h-4 w-4",
-                                                      isDark
-                                                        ? "text-gray-300"
-                                                        : "text-gray-600"
-                                                    )}
-                                                  />
-                                                  <span className="font-medium">
-                                                    {video.statistics
-                                                      ?.viewCount || 0}{" "}
-                                                  </span>
-                                                  <span>views</span>
-                                                </div>
+                            {fetchedVideos.map((video, index) => {
+                              if (!video) return null;
 
-                                                <div className="flex items-center gap-1">
-                                                  <ThumbsUp
-                                                    className={cn(
-                                                      "h-4 w-4",
-                                                      isDark
-                                                        ? "text-gray-300"
-                                                        : "text-gray-600"
-                                                    )}
-                                                  />
-                                                  <span>
-                                                    {video.statistics
-                                                      ?.likeCount || 0}{" "}
-                                                  </span>
-                                                  <span>likes</span>
-                                                </div>
+                              const thumbnailUrl =
+                                getYouTubeThumbnailUrl(
+                                  video.snippet.thumbnails,
+                                  video.id.videoId
+                                ) ||
+                                `https://i.ytimg.com/vi/${video.id.videoId}/hqdefault.jpg`;
 
-                                                <div className="flex items-center gap-1">
-                                                  <MessageSquare
-                                                    className={cn(
-                                                      "h-4 w-4",
-                                                      isDark
-                                                        ? "text-gray-300"
-                                                        : "text-gray-600"
-                                                    )}
-                                                  />
-                                                  <span className="font-medium">
-                                                    {video.statistics
-                                                      ?.commentCount || 0}{" "}
-                                                  </span>
-                                                  <span>comments</span>
+                              return (
+                                <Card
+                                  key={`youtube-${index}`}
+                                  className={`cursor-pointer transition-all duration-200 ${
+                                    isVideoAlreadySubmitted(
+                                      video.id.videoId,
+                                      `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                    )
+                                      ? isDark
+                                        ? "border-2 border-red-500 bg-red-900/40 opacity-90"
+                                        : "border-2 border-red-300 bg-red-50 opacity-75"
+                                      : selectedVideoIndices.includes(index)
+                                      ? isDark
+                                        ? "border-2 border-purple-400 bg-[#2B184A]"
+                                        : "border-2 border-purple-500 bg-purple-50"
+                                      : isDark
+                                      ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
+                                      : "border border-gray-200 hover:border-purple-300 bg-white"
+                                  }`}
+                                  onClick={() =>
+                                    handleVideoSelection(
+                                      index,
+                                      !selectedVideoIndices.includes(index)
+                                    )
+                                  }
+                                >
+                                  <CardContent className="p-4">
+                                    <div className="flex items-start gap-4">
+                                      <div className="flex-shrink-0">
+                                        <Image
+                                          src={thumbnailUrl}
+                                          alt={video.snippet.title}
+                                          width={120}
+                                          height={68}
+                                          className="rounded-lg object-cover aspect-video"
+                                        />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-start justify-between">
+                                          <div className="flex-1">
+                                            <div className="flex items-start gap-2 mb-2">
+                                              <h5 className="font-medium text-sm line-clamp-2 flex-1">
+                                                {video.snippet.title}
+                                              </h5>
+                                              {isVideoAlreadySubmitted(
+                                                video.id.videoId,
+                                                `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                              ) && (
+                                                <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
+                                                  <AlertTriangle className="h-3 w-3" />
+                                                  Already Submitted
                                                 </div>
-                                              </div>
-                                            </div>
-                                            <div className="flex-shrink-0 ml-2">
-                                              {selectedVideoIndices.includes(
-                                                index
-                                              ) ? (
-                                                <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center">
-                                                  <Check className="h-4 w-4" />
-                                                </div>
-                                              ) : (
-                                                <div className="w-6 h-6 border-2 border-gray-300 rounded-full"></div>
                                               )}
                                             </div>
+                                            <div
+                                              className={cn(
+                                                "flex items-center gap-4 text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-600"
+                                              )}
+                                            >
+                                              <div className="flex items-center gap-1">
+                                                <Eye
+                                                  className={cn(
+                                                    "h-4 w-4",
+                                                    isDark
+                                                      ? "text-gray-300"
+                                                      : "text-gray-600"
+                                                  )}
+                                                />
+                                                <span className="font-medium">
+                                                  {video.statistics
+                                                    ?.viewCount || 0}{" "}
+                                                </span>
+                                                <span>views</span>
+                                              </div>
+
+                                              <div className="flex items-center gap-1">
+                                                <ThumbsUp
+                                                  className={cn(
+                                                    "h-4 w-4",
+                                                    isDark
+                                                      ? "text-gray-300"
+                                                      : "text-gray-600"
+                                                  )}
+                                                />
+                                                <span>
+                                                  {video.statistics
+                                                    ?.likeCount || 0}{" "}
+                                                </span>
+                                                <span>likes</span>
+                                              </div>
+
+                                              <div className="flex items-center gap-1">
+                                                <MessageSquare
+                                                  className={cn(
+                                                    "h-4 w-4",
+                                                    isDark
+                                                      ? "text-gray-300"
+                                                      : "text-gray-600"
+                                                  )}
+                                                />
+                                                <span className="font-medium">
+                                                  {video.statistics
+                                                    ?.commentCount || 0}{" "}
+                                                </span>
+                                                <span>comments</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <div className="flex-shrink-0 ml-2">
+                                            <Checkbox
+                                              aria-label="Select video"
+                                              checked={selectedVideoIndices.includes(
+                                                index
+                                              )}
+                                              onCheckedChange={(checked) =>
+                                                handleVideoSelection(
+                                                  index,
+                                                  Boolean(checked)
+                                                )
+                                              }
+                                              onClick={(event) =>
+                                                event.stopPropagation()
+                                              }
+                                              className={cn(
+                                                "h-5 w-5 border-2",
+                                                isDark
+                                                  ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                                  : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
+                                              )}
+                                            />
                                           </div>
                                         </div>
                                       </div>
-                                    </CardContent>
-                                  </Card>
-                                )
-                            )}
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              );
+                            })}
 
                             {/* Instagram Reels */}
                             {fetchedReels.map(
@@ -4142,22 +4303,27 @@ export default function SubmitContentPage({
                                               </div>
                                             </div>
                                             <div className="flex-shrink-0 ml-2">
-                                              {selectedReelIndices.includes(
-                                                index
-                                              ) ? (
-                                                <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center">
-                                                  <Check className="h-4 w-4" />
-                                                </div>
-                                              ) : (
-                                                <div
-                                                  className={cn(
-                                                    "w-6 h-6 border-2 rounded-full",
-                                                    isDark
-                                                      ? "border-gray-500"
-                                                      : "border-gray-300"
-                                                  )}
-                                                ></div>
-                                              )}
+                                              <Checkbox
+                                                aria-label="Select reel"
+                                                checked={selectedReelIndices.includes(
+                                                  index
+                                                )}
+                                                onCheckedChange={(checked) =>
+                                                  handleVideoSelection(
+                                                    index,
+                                                    Boolean(checked)
+                                                  )
+                                                }
+                                                onClick={(event) =>
+                                                  event.stopPropagation()
+                                                }
+                                                className={cn(
+                                                  "h-5 w-5 border-2",
+                                                  isDark
+                                                    ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
+                                                )}
+                                              />
                                             </div>
                                           </div>
                                         </div>
