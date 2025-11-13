@@ -127,22 +127,8 @@ export async function POST(request: Request) {
       const mainReason = reasonParts[0].trim();
       const additionalNotes = reasonParts[1] ? reasonParts[1].trim() : null;
       
-      // Map predefined reason values to their human-readable labels
-      const PREDEFINED_REASONS = {
-        'content_guidelines': 'Content Guidelines Violation',
-        'quality_standards': 'Quality Standards Not Met',
-        'brand_guidelines': 'Brand Guidelines Violation',
-        'inappropriate_content': 'Inappropriate Content',
-        'copyright_issues': 'Copyright Issues',
-        'technical_issues': 'Technical Issues',
-        'off_topic': 'Off Topic',
-        'duplicate_content': 'Duplicate Content',
-        'incomplete_submission': 'Incomplete Submission',
-        'other': 'Other Reason'
-      };
-      
-      // Use the human-readable label if it's a predefined reason, otherwise use as-is
-      const displayReason = PREDEFINED_REASONS[mainReason as keyof typeof PREDEFINED_REASONS] || mainReason;
+      // Store the reason as provided by the client (modal now sends human-readable labels)
+      const displayReason = mainReason;
       
       // Store rejection metadata
       updateData.metadata = {
