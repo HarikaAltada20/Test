@@ -22,6 +22,7 @@ import { PaymentAnimation } from "@/components/ui/payment-success-animation";
 import { WALLET_TOP_UP_MAX_AMOUNT } from "@/constants/subscriptionPlans";
 import { cn } from "@/lib/utils";
 import { SolanaPaymentModal } from "./SolanaPaymentModal";
+import { handleFrontendPaymentFailure as handlePaymentFailureUtil } from "@/lib/payment-utils-client";
 
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
@@ -161,21 +162,26 @@ const CheckoutForm = ({
     errorMessage: string
   ) => {
     try {
-      const response = await fetch("/api/payments/failure", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paymentIntentId,
-          errorMessage,
-          source: "frontend",
-        }),
-      });
+      console.log(
+        "🔴 Handling frontend payment failure for payment intent:",
+        paymentIntentId
+      );
 
-      if (!response.ok) {
-        console.error("Failed to update payment failure status");
+      const success = await handlePaymentFailureUtil(
+        paymentIntentId,
+        errorMessage
+      );
+
+      if (success) {
+        console.log("✅ Payment failure status updated successfully");
+      } else {
+        console.warn(
+          "⚠️Failed to update payment failure status"
+        );
       }
-    } catch (error) {
-      console.error("Error updating payment failure status:", error);
+    } catch (error: any) {
+      console.error("❌ Error updating payment failure status:", error);
+    
     }
   };
 
@@ -589,7 +595,7 @@ export function WalletTopUp({
 
   return (
     <>
-      <div className="px-3 sm:px-0">
+      <div >
         <div className="mb-6">
           <CardTitle
             className={cn(
