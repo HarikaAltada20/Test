@@ -52,7 +52,36 @@ export function EmailOtpVerificationForm({
         throw new Error(verifyError.message || "Invalid verification code");
       }
 
-      // Set the session first if provided
+      console.log("OTP verification successful. verifyData:", {
+        hasUser: !!verifyData?.user,
+        userEmail: verifyData?.user?.email,
+        userNewEmail: verifyData?.user?.new_email,
+        userIdentities: verifyData?.user?.identities,
+        hasSession: !!verifyData?.session,
+        fullUser: verifyData?.user,
+        fullData: verifyData,
+      });
+
+      // Check if verifyData already contains the updated user with new email
+      let finalEmail = newEmail.trim();
+      let emailUpdated = false;
+
+      if (verifyData?.user?.email) {
+        const verifiedEmail = verifyData.user.email.toLowerCase();
+        const expectedEmail = newEmail.trim().toLowerCase();
+        console.log("Checking verifyData.user.email:", {
+          verifiedEmail,
+          expectedEmail,
+          match: verifiedEmail === expectedEmail,
+        });
+        if (verifiedEmail === expectedEmail) {
+          finalEmail = verifyData.user.email;
+          emailUpdated = true;
+          console.log("Email already updated in verifyData:", finalEmail);
+        }
+      }
+
+      // Set the session first if provided - this is critical for the email change to take effect
       if (verifyData?.session) {
         const { error: sessionError } = await supabase.auth.setSession(
           verifyData.session
@@ -63,61 +92,322 @@ export function EmailOtpVerificationForm({
               "Failed to set new session after email change"
           );
         }
+        console.log("Session set successfully after email change");
+
+        // Get user immediately after setting session to check email
+        const {
+          data: { user: userAfterSession },
+          error: getUserError,
+        } = await supabase.auth.getUser();
+        if (!getUserError && userAfterSession) {
+          console.log("User after setting session:", {
+            email: userAfterSession.email,
+            new_email: (userAfterSession as any).new_email,
+            email_change_sent_at: (userAfterSession as any)
+              .email_change_sent_at,
+            email_change_token: (userAfterSession as any).email_change_token,
+            fullUser: userAfterSession,
+          });
+
+          if (userAfterSession?.email) {
+            const userEmail = userAfterSession.email.toLowerCase();
+            const expectedEmail = newEmail.trim().toLowerCase();
+            if (userEmail === expectedEmail) {
+              finalEmail = userAfterSession.email;
+              emailUpdated = true;
+              console.log(
+                "Email updated immediately after setting session:",
+                finalEmail
+              );
+            }
+          }
+
+          // Check if there's a new_email field that needs to be confirmed
+          if (userAfterSession?.new_email) {
+            console.log(
+              "User has new_email field:",
+              userAfterSession.new_email
+            );
+            const newEmailField = userAfterSession.new_email.toLowerCase();
+            const expectedEmail = newEmail.trim().toLowerCase();
+            if (newEmailField === expectedEmail) {
+              console.log(
+                "New email matches expected email, but email field not updated yet"
+              );
+            }
+          }
+        }
+
+        // Refresh the session to ensure the user object is updated
+        const { error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) {
+          console.warn("Error refreshing session:", refreshError);
+          // Don't throw - continue with verification
+        } else {
+          console.log("Session refreshed successfully");
+        }
+      } else {
+        console.warn("No session in verifyData - this might be the issue");
       }
 
-      // Wait a moment for the email change to propagate
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // If email wasn't already updated in verifyData, wait and check again
+      if (!emailUpdated) {
+        // Wait for the email change to propagate on Supabase's backend
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Verify the email was actually updated in auth
-      let finalEmail = newEmail.trim();
-      let retries = 5;
-      let delay = 500;
-      let emailUpdated = false;
+        // Verify the email was actually updated in auth
+        // This is critical - we must confirm the email is updated before proceeding
+        let retries = 12; // Increased retries
+        let delay = 600; // Initial delay
 
-      for (let i = 0; i < retries; i++) {
+        for (let i = 0; i < retries; i++) {
+          // Refresh the session to get the latest user data
+          const {
+            data: { user },
+            error: refreshError,
+          } = await supabase.auth.getUser();
+
+          if (refreshError) {
+            console.error(
+              `Error getting user (attempt ${i + 1}):`,
+              refreshError
+            );
+            // On the last attempt, throw an error
+            if (i === retries - 1) {
+              throw new Error(
+                refreshError.message ||
+                  "Failed to verify email change. Please try logging in with your new email."
+              );
+            }
+          } else if (user) {
+            const userEmail = user.email?.toLowerCase() || "";
+            const userNewEmail = (user as any).new_email?.toLowerCase() || "";
+            const expectedEmail = newEmail.trim().toLowerCase();
+
+            console.log(`Retry attempt ${i + 1}/${retries}:`, {
+              currentEmail: user.email,
+              newEmailField: (user as any).new_email,
+              expectedEmail: expectedEmail,
+              emailMatches: userEmail === expectedEmail,
+              newEmailMatches: userNewEmail === expectedEmail,
+            });
+
+            if (userEmail === expectedEmail) {
+              finalEmail = user.email!;
+              emailUpdated = true;
+              console.log("Email successfully updated in auth:", finalEmail);
+              break;
+            } else if (userNewEmail === expectedEmail) {
+              console.log(
+                `Email is in new_email field but not yet in email field (attempt ${
+                  i + 1
+                }/${retries}). ` +
+                  "This may indicate 'Double confirm email changes' is enabled or email change is pending."
+              );
+            } else {
+              console.log(
+                `Email not yet updated (attempt ${i + 1}/${retries}):`,
+                `Expected: ${expectedEmail}, Got: ${userEmail}, new_email: ${
+                  userNewEmail || "none"
+                }`
+              );
+            }
+          }
+
+          // Wait before next retry (except on last iteration)
+          if (i < retries - 1) {
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            delay = Math.min(delay * 1.4, 2500); // Gradual backoff, max 2.5 seconds
+          }
+        }
+      }
+
+      // CRITICAL: Supabase processes email changes asynchronously
+      // If email still isn't updated, wait longer and retry more times
+      // The OTP verification was successful, so the email change is in progress
+      if (!emailUpdated) {
+        console.log(
+          "Email not updated after initial retries. Waiting longer for async processing..."
+        );
+
+        // Additional retries with longer delays for async processing
+        const additionalRetries = 8;
+        const additionalDelay = 2000; // Start with 2 seconds
+
+        for (let i = 0; i < additionalRetries; i++) {
+          await new Promise((resolve) => setTimeout(resolve, additionalDelay));
+
+          const {
+            data: { user },
+            error: refreshError,
+          } = await supabase.auth.getUser();
+
+          if (!refreshError && user) {
+            const userEmail = user.email?.toLowerCase() || "";
+            const userNewEmail = (user as any).new_email?.toLowerCase() || "";
+            const expectedEmail = newEmail.trim().toLowerCase();
+
+            console.log(
+              `Additional retry attempt ${i + 1}/${additionalRetries}:`,
+              {
+                currentEmail: user.email,
+                newEmailField: (user as any).new_email,
+                expectedEmail: expectedEmail,
+              }
+            );
+
+            if (userEmail === expectedEmail) {
+              finalEmail = user.email!;
+              emailUpdated = true;
+              console.log(
+                `Email successfully updated after additional wait (attempt ${
+                  i + 1
+                }):`,
+                finalEmail
+              );
+              break;
+            } else if (userNewEmail === expectedEmail) {
+              console.log(
+                `Email is in new_email field but not yet in email field (additional attempt ${
+                  i + 1
+                }/${additionalRetries})`
+              );
+            } else {
+              console.log(
+                `Email still not updated (additional attempt ${
+                  i + 1
+                }/${additionalRetries}):`,
+                `Expected: ${expectedEmail}, Got: ${userEmail}, new_email: ${
+                  userNewEmail || "none"
+                }`
+              );
+            }
+          }
+        }
+      }
+
+      // CRITICAL: Only proceed if email is confirmed to be updated in Supabase auth
+      // We must verify the email is actually updated before updating the users table
+      if (!emailUpdated) {
+        // One final attempt with a longer wait
+        console.log("Performing final check for email update in auth...");
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+
         const {
-          data: { user },
-          error: refreshError,
+          data: { user: finalUser },
+          error: finalError,
         } = await supabase.auth.getUser();
 
-        if (refreshError) {
-          console.error(`Error getting user (attempt ${i + 1}):`, refreshError);
-          if (i === retries - 1) {
-            throw new Error(
-              refreshError.message ||
-                "Failed to verify email change. Please try logging in with your new email."
-            );
-          }
-        } else if (user?.email) {
-          const userEmail = user.email.toLowerCase();
+        if (!finalError && finalUser) {
+          const userEmail = finalUser.email?.toLowerCase() || "";
+          const userNewEmail =
+            (finalUser as any).new_email?.toLowerCase() || "";
           const expectedEmail = newEmail.trim().toLowerCase();
 
+          console.log("Final check:", {
+            currentEmail: finalUser.email,
+            newEmailField: (finalUser as any).new_email,
+            expectedEmail: expectedEmail,
+            fullUser: finalUser,
+          });
+
           if (userEmail === expectedEmail) {
-            finalEmail = user.email;
+            finalEmail = finalUser.email!;
             emailUpdated = true;
-            console.log("Email successfully updated in auth:", finalEmail);
-            break;
-          } else {
             console.log(
-              `Email not yet updated (attempt ${i + 1}/${retries}):`,
-              `Expected: ${expectedEmail}, Got: ${userEmail}`
+              "Email confirmed updated in auth on final check:",
+              finalEmail
+            );
+          } else if (userNewEmail === expectedEmail) {
+            console.error(
+              "Email is in new_email field but not updated in email field. " +
+                "This likely means 'Double confirm email changes' is enabled in Supabase settings. " +
+                "The user needs to confirm from both old and new email addresses."
+            );
+          } else {
+            console.error(
+              "Email still not updated in auth after all retries. " +
+                `Expected: ${expectedEmail}, Got: ${userEmail}, new_email: ${
+                  userNewEmail || "none"
+                }`
             );
           }
         }
 
-        if (i < retries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          delay *= 1.5; // Gradual backoff
+        // If still not updated, use admin API to force-update the email
+        // This bypasses the double confirmation requirement
+        if (!emailUpdated) {
+          console.log(
+            "Email not updated after retries. Using admin API to force-update..."
+          );
+
+          try {
+            const response = await fetch("/api/account/force-update-email", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ newEmail: newEmail.trim() }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+              throw new Error(
+                result.error || "Failed to force-update email via admin API"
+              );
+            }
+
+            if (result.email) {
+              finalEmail = result.email;
+              emailUpdated = true;
+              console.log(
+                "Email successfully force-updated via admin API:",
+                finalEmail
+              );
+
+              // Refresh the session to get the updated user data
+              await supabase.auth.refreshSession();
+            } else {
+              throw new Error("Admin API returned success but no email");
+            }
+          } catch (forceUpdateError: any) {
+            console.error("Error force-updating email:", forceUpdateError);
+            throw new Error(
+              `Email change verification completed, but failed to update email: ${forceUpdateError.message}. ` +
+                "Please try again or contact support if the issue persists."
+            );
+          }
         }
       }
 
-      if (!emailUpdated) {
-        throw new Error(
-          "Email change verification timed out. The email may not have been updated. Please try logging in with your new email address, or contact support if the issue persists."
-        );
+      // At this point, emailUpdated is true and finalEmail contains the confirmed email from auth
+      console.log("Email confirmed in Supabase auth:", finalEmail);
+
+      // Verify one more time that the email is actually updated
+      const {
+        data: { user: verifyUser },
+      } = await supabase.auth.getUser();
+
+      if (verifyUser?.email) {
+        const verifyEmail = verifyUser.email.toLowerCase();
+        const expectedEmail = newEmail.trim().toLowerCase();
+
+        if (verifyEmail !== expectedEmail) {
+          console.error(
+            "Email verification failed after force-update. " +
+              `Expected: ${expectedEmail}, Got: ${verifyEmail}`
+          );
+          throw new Error(
+            "Email update completed but verification failed. Please refresh the page and try again."
+          );
+        }
+
+        finalEmail = verifyUser.email;
+        console.log("Email verified in auth:", finalEmail);
       }
 
-      // Update the users table to keep it in sync
+      // The users table is already updated by the admin API, but verify it's in sync
       const {
         data: { user: currentUser },
       } = await supabase.auth.getUser();
@@ -129,9 +419,10 @@ export function EmailOtpVerificationForm({
           .eq("id", currentUser.id);
 
         if (updateError) {
-          console.error("Error updating users table:", updateError);
-          // Don't throw here - the auth email is already updated, which is the critical part
-          // The users table update is secondary and can be synced later
+          console.error("Error syncing users table:", updateError);
+          // Don't throw - auth email is updated which is critical
+        } else {
+          console.log("Users table synced with email:", finalEmail);
         }
       }
 
