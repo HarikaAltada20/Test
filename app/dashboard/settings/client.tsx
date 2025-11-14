@@ -1,4 +1,5 @@
 "use client";
+import React from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +23,26 @@ import {
   EyeOff,
   Copy,
   Gift,
+  User,
+  CreditCard,
+  Shield,
+  FileText,
+  Search,
+  ChevronRight,
+  Star,
+  Zap,
+  Crown,
+  CalendarDays,
+  Info,
+  AlertTriangle,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useEffect, useState, useCallback } from "react";
 import { SiInstagram, SiYoutube } from "react-icons/si";
 import dayjs from "dayjs";
@@ -43,6 +63,11 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 import { hasSubmitted } from "@/lib/form-submissions";
 import { cn } from "@/lib/utils";
+import { useClientAuth } from "@/hooks/use-client-auth";
+import Link from "next/link";
+import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import { formatDate } from "@/lib/date-utils";
+import { getSubscriptionPlanById } from "@/lib/subscription-utils-client";
 dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
@@ -131,6 +156,22 @@ export default function SettingsPage({
   } | null>(null);
   const [isSurveyCompleted, setIsSurveyCompleted] = useState(false);
   const [isSurveyLoading, setIsSurveyLoading] = useState(true);
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isReferralModalOpen, setIsReferralModalOpen] = useState(false);
+  const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
+  const [billingData, setBillingData] = useState<any>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const { logout } = useClientAuth();
+
+  // Clear password fields when modal closes
+  useEffect(() => {
+    if (!isPasswordModalOpen) {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    }
+  }, [isPasswordModalOpen]);
 
   // Read mode from data attribute
   useEffect(() => {
@@ -493,7 +534,7 @@ export default function SettingsPage({
       setPasswordChangeLoading(false);
     }
   };
-  
+
   const buildReferralLinks = () => {
     const base =
       typeof window !== "undefined"
@@ -960,26 +1001,216 @@ export default function SettingsPage({
 
   const isDark = mode === "dark";
 
+  const handleSignOut = async () => {
+    try {
+      await logout();
+      console.log("Sign out successful");
+    } catch (error) {
+      console.error("Sign out error:", error);
+    }
+  };
+
+  const toggleSection = (section: string) => {
+    setExpandedSection(expandedSection === section ? null : section);
+  };
+
+  const fetchBillingDetails = async () => {
+    if (!user?.id) return;
+
+    setBillingLoading(true);
+    try {
+      const response = await fetch(
+        `/api/subscriptions/billing-details?t=${Date.now()}`,
+        {
+          cache: "no-store",
+        }
+      );
+      const result = await response.json();
+
+      if (response.ok) {
+        setBillingData(result);
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to load billing details",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error fetching billing details:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load billing details",
+        variant: "destructive",
+      });
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  const handleBillingModalOpen = (open: boolean) => {
+    setIsBillingModalOpen(open);
+    if (open) {
+      fetchBillingDetails();
+    } else {
+      setBillingData(null);
+    }
+  };
+
+  // Helper functions for plan display
+  const getPlanIcon = (planName: string) => {
+    switch (planName) {
+      case "EXPLORER":
+        return <Gift className="h-6 w-6" />;
+      case "STARTER":
+        return <Star className="h-6 w-6" />;
+      case "BUILDER":
+        return <Zap className="h-6 w-6" />;
+      case "CHAMPION":
+        return <Crown className="h-6 w-6" />;
+      default:
+        return <Gift className="h-6 w-6" />;
+    }
+  };
+
+  const getPlanColor = (planName: string) => {
+    switch (planName) {
+      case "EXPLORER":
+        return "from-gray-400 to-gray-500";
+      case "STARTER":
+        return "from-blue-400 to-blue-500";
+      case "BUILDER":
+        return "from-purple-400 to-purple-500";
+      case "CHAMPION":
+        return "from-yellow-400 to-yellow-500";
+      default:
+        return "from-gray-400 to-gray-500";
+    }
+  };
+
+  const formatDateRange = (startDate: string, endDate: string) => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    const startFormatted = start.toLocaleDateString("en-US", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+    const endFormatted = end.toLocaleDateString("en-US", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+
+    return `${startFormatted} - ${endFormatted}`;
+  };
+
+  const getStatusBadge = (status: string, cancelAtPeriodEnd?: boolean) => {
+    if (status === "active" && cancelAtPeriodEnd) {
+      return (
+        <span
+          className={cn(
+            "px-3 py-1 rounded-full text-sm font-medium",
+            isDark
+              ? "bg-yellow-900/30 text-yellow-300 border border-yellow-600"
+              : "bg-yellow-100 text-yellow-800 border border-yellow-300"
+          )}
+        >
+          Canceling
+        </span>
+      );
+    }
+    if (status === "active") {
+      return (
+        <span
+          className={cn(
+            "px-3 py-1 rounded-full text-sm font-medium",
+            isDark
+              ? "bg-green-900/30 text-green-300 border border-green-600"
+              : "bg-green-100 text-green-800 border border-green-300"
+          )}
+        >
+          Active
+        </span>
+      );
+    }
+    return (
+      <span
+        className={cn(
+          "px-3 py-1 rounded-full text-sm font-medium",
+          isDark
+            ? "bg-gray-900/30 text-gray-300 border border-gray-600"
+            : "bg-gray-100 text-gray-800 border border-gray-300"
+        )}
+      >
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </span>
+    );
+  };
+
+  const settingsItems = [
+    {
+      id: "profile",
+      title: "Profile information",
+      icon: User,
+      href: "/dashboard/profile",
+      isLink: true,
+    },
+    {
+      id: "billing",
+      title: "Subscription and Billing",
+      icon: CreditCard,
+      isLink: false,
+      expandable: false,
+      isModal: true,
+    },
+    {
+      id: "password",
+      title: "Change Password",
+      icon: Shield,
+      isLink: false,
+      expandable: false,
+      isModal: true,
+    },
+    {
+      id: "email",
+      title: "Change Email",
+      icon: Mail,
+      isLink: false,
+      expandable: true,
+    },
+    {
+      id: "terms",
+      title: "Terms of Use",
+      icon: FileText,
+      href: "/terms-of-service",
+      isLink: true,
+      external: false,
+    },
+    {
+      id: "privacy",
+      title: "Privacy Policy",
+      icon: Search,
+      href: "/privacy-policy",
+      isLink: true,
+      external: false,
+    },
+    {
+      id: "referral",
+      title: "Share Referral Links",
+      icon: Gift,
+      isLink: false,
+      expandable: false,
+      isModal: true,
+    },
+  ];
+
   return (
-    <div className="space-y-6 bg-background text-foreground transition-colors duration-300">
-      <div className="flex flex-col items-center justify-center text-center">
-        <h1
-          className={cn(
-            "text-4xl font-bold",
-            isDark ? "text-white" : "text-slate-900"
-          )}
-        >
-          Settings
-        </h1>
-        <p
-          className={cn(
-            "mt-3 text-lg",
-            isDark ? "text-gray-300" : "text-muted-foreground"
-          )}
-        >
-          Manage your account settings and preferences
-        </p>
-      </div>
+    <div className="space-y-6 bg-background text-foreground transition-colors duration-300 max-w-[1200px] mx-auto">
+      {/* Connection Error Alert */}
+
+      {/* Settings Navigation List */}
 
       {/* Connection Error Alert */}
       {connectionError && (
@@ -987,7 +1218,9 @@ export default function SettingsPage({
           variant="destructive"
           className={cn(
             "border",
-            isDark ? "border-[#FF5353] bg-red-900/20" : "bg-red-50 border-red-500"
+            isDark
+              ? "border-[#FF5353] bg-red-900/20"
+              : "bg-red-50 border-red-500"
           )}
         >
           <AlertDescription
@@ -1011,9 +1244,10 @@ export default function SettingsPage({
                     onClick={clearConnectionError}
                     className={cn(
                       "border",
-                      isDark ? "text-[#FF5353] border-[#FF5353]" : "text-red-700 border-red-300"
+                      isDark
+                        ? "text-[#FF5353] border-[#FF5353]"
+                        : "text-red-700 border-red-300"
                     )}
-                    
                   >
                     Dismiss
                   </Button>
@@ -1036,7 +1270,9 @@ export default function SettingsPage({
                             }
                             className={cn(
                               "border",
-                              isDark ? "text-[#FF5353] border-[#FF5353]" : "text-red-700 border-red-300"
+                              isDark
+                                ? "text-[#FF5353] border-[#FF5353]"
+                                : "text-red-700 border-red-300"
                             )}
                           >
                             Create YouTube Channel
@@ -1052,24 +1288,30 @@ export default function SettingsPage({
                             }
                             className={cn(
                               "border",
-                              isDark ? "text-[#FF5353] border-[#FF5353]" : "text-red-700 border-red-300"
+                              isDark
+                                ? "text-[#FF5353] border-[#FF5353]"
+                                : "text-red-700 border-red-300"
                             )}
                           >
                             Learn How
                           </Button>
                         </div>
-                        <p className={cn(
-                          "text-xs",
-                          isDark ? "text-[#FF5353]" : "text-red-600"
-                        )}>
+                        <p
+                          className={cn(
+                            "text-xs",
+                            isDark ? "text-[#FF5353]" : "text-red-600"
+                          )}
+                        >
                           💡 Tip: You can also create a channel by uploading
                           your first video to YouTube. After creating your
                           channel, return here to connect it.
                         </p>
-                        <div className={cn(
-                          "text-xs",
-                          isDark ? "text-[#FF5353]" : "text-red-600"
-                        )}>
+                        <div
+                          className={cn(
+                            "text-xs",
+                            isDark ? "text-[#FF5353]" : "text-red-600"
+                          )}
+                        >
                           <p className="mb-1">Additional Resources:</p>
                           <ul className="list-disc list-inside space-y-1 ml-2">
                             <li>
@@ -1096,19 +1338,29 @@ export default function SettingsPage({
       )}
 
       {/* Connected Accounts - Only for Creators */}
-       {userType === "creator" && (
+      {userType === "creator" && (
         <div>
-          <div 
-           className={cn("rounded-t-2xl border-b px-6 py-4 shadow-lg",
-           isDark ? "bg-[#180438]" : "bg-white")}>
-            <CardTitle className={cn("text-2xl",
-           isDark ? "text-white" : "text-[#7F39EC]")}>
+          <div
+            className={cn(
+              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
+              isDark ? "bg-[#180438]" : "bg-white"
+            )}
+          >
+            <CardTitle
+              className={cn(
+                "text-2xl",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
               Manage Your Account
             </CardTitle>
           </div>
-          <div 
-           className={cn("rounded-b-2xl pb-4 shadow-lg",
-           isDark ? "bg-[#180438]" : "bg-white")}>
+          <div
+            className={cn(
+              "rounded-b-2xl pb-4 shadow-lg",
+              isDark ? "bg-[#180438]" : "bg-white"
+            )}
+          >
             <CardHeader>
               <CardTitle className="text-lg">Social Accounts</CardTitle>
               <CardDescription>
@@ -1238,8 +1490,8 @@ export default function SettingsPage({
                 )}
               </div>
 
-               {/* Instagram Connection Information - Display if not connected */}
-               {!instagramConnected && (
+              {/* Instagram Connection Information - Display if not connected */}
+              {!instagramConnected && (
                 <Alert
                   variant="default"
                   className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]"
@@ -1309,8 +1561,8 @@ export default function SettingsPage({
         </div>
       )}
 
-       {/* Company Profile - Only for Advertisers */}
-       {userType === "advertiser" && (
+      {/* Company Profile - Only for Advertisers */}
+      {userType === "advertiser" && (
         <div>
           <div
             className={cn(
@@ -1434,50 +1686,278 @@ export default function SettingsPage({
         </CardContent>
       </Card> */}
 
-  {/* Security - Only show for users with email authentication */}
-  {hasPassword && (
-        <div>
-          <div
-            className={cn(
-              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
-              isDark ? "bg-[#180438]" : "bg-white "
-            )}
-          >
-            <CardTitle
-              className={cn(
-                "text-2xl",
-                isDark ? "text-white" : "text-[#7F39EC]"
-              )}
-            >
-              Security
-            </CardTitle>
+      {/* Survey Section - Only for Creators who have completed the survey */}
+      {userType === "creator" && isSurveyCompleted && !isSurveyLoading && (
+        <div
+          className={cn(
+            "rounded-xl shadow-lg overflow-hidden w-full p-6 md:p-0 md:pr-4 md:pt-5",
+            isDark ? "bg-[#180438]" : "bg-white border border-purple-100"
+          )}
+        >
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between">
+            {/* Content Section */}
+            <div className="flex flex-col sm:flex-row items-center sm:items-start flex-1 w-full">
+              {/* Image */}
+              <div className="relative flex-shrink-0 flex justify-center sm:justify-start">
+                <img
+                  src="/images/survey-form.avif"
+                  alt="Survey illustration"
+                  className="h-[80px] sm:h-[100px] md:h-[110px] lg:h-[130px] object-contain"
+                />
+              </div>
+              {/* Text Content */}
+              <div className="flex-1 space-y-4 w-full sm:w-auto text-center pt-7 sm:text-left">
+                <div>
+                  <h3
+                    className={cn(
+                      "font-semibold text-base sm:text-lg mb-1",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}
+                  >
+                    Survey Completed
+                  </h3>
+                  <p
+                    className={cn(
+                      "text-xs sm:text-[12.5px] leading-relaxed",
+                      isDark ? "text-gray-300" : "text-gray-600"
+                    )}
+                  >
+                    Thank you for completing our survey! Your feedback is
+                    valuable to us and helps improve the platform. We appreciate
+                    your time and thoughtful responses.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
-          <div
-            className={cn(
-              "rounded-b-2xl shadow-lg px-2 py-5",
-              isDark ? "bg-[#180438]" : "bg-white "
-            )}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {settingsItems
+          .filter((item) => {
+            // Only show billing for advertisers
+            if (item.id === "billing" && userType !== "advertiser") {
+              return false;
+            }
+            return true;
+          })
+          .map((item) => {
+            const Icon = item.icon;
+            if (item.isLink && item.href) {
+              return (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200 hover:shadow-md",
+                    isDark
+                      ? "bg-[#180438] border border-gray-700 hover:border-purple-500"
+                      : "bg-white border border-gray-200 hover:border-purple-300"
+                  )}
+                >
+                  <div className="flex items-center gap-4">
+                    <div
+                      className={cn(
+                        "p-2 rounded-lg",
+                        isDark ? "bg-purple-900/30" : "bg-purple-100"
+                      )}
+                    >
+                      <Icon
+                        className={cn(
+                          "h-5 w-5",
+                          isDark ? "text-purple-400" : "text-purple-600"
+                        )}
+                      />
+                    </div>
+                    <span
+                      className={cn(
+                        "font-medium",
+                        isDark ? "text-white" : "text-gray-900"
+                      )}
+                    >
+                      {item.title}
+                    </span>
+                  </div>
+                  <ChevronRight
+                    className={cn(
+                      "h-5 w-5",
+                      isDark ? "text-gray-400" : "text-gray-500"
+                    )}
+                  />
+                </Link>
+              );
+            } else if (item.expandable) {
+              const isExpanded = expandedSection === item.id;
+              return (
+                <div key={item.id}>
+                  <button
+                    onClick={() => toggleSection(item.id)}
+                    className={cn(
+                      "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200 hover:shadow-md",
+                      isDark
+                        ? "bg-[#180438] border border-gray-700 hover:border-purple-500"
+                        : "bg-white border border-gray-200 hover:border-purple-300"
+                    )}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div
+                        className={cn(
+                          "p-2 rounded-lg",
+                          isDark ? "bg-purple-900/30" : "bg-purple-100"
+                        )}
+                      >
+                        <Icon
+                          className={cn(
+                            "h-5 w-5",
+                            isDark ? "text-purple-400" : "text-purple-600"
+                          )}
+                        />
+                      </div>
+                      <span
+                        className={cn(
+                          "font-medium",
+                          isDark ? "text-white" : "text-gray-900"
+                        )}
+                      >
+                        {item.title}
+                      </span>
+                    </div>
+                    <ChevronRight
+                      className={cn(
+                        "h-5 w-5 transition-transform",
+                        isExpanded ? "rotate-90" : "",
+                        isDark ? "text-gray-400" : "text-gray-500"
+                      )}
+                    />
+                  </button>
+                  {isExpanded && item.id === "email" && (
+                    <div
+                      className={cn(
+                        "mt-3 px-4 py-5 rounded-xl",
+                        isDark
+                          ? "bg-[#180438] border border-gray-700"
+                          : "bg-white border border-gray-200"
+                      )}
+                    >
+                      <Alert className="mb-4 bg-yellow-50 border-yellow-200">
+                        <AlertDescription className="text-yellow-800">
+                          <strong>Note:</strong> Email change functionality is
+                          coming soon. For now, please contact support if you
+                          need to change your email address.
+                        </AlertDescription>
+                      </Alert>
+                    </div>
+                  )}
+                </div>
+              );
+            } else if (item.isModal) {
+              return (
+                <div key={item.id}>
+                  <button
+                    onClick={() => {
+                      if (item.id === "password") {
+                        setIsPasswordModalOpen(true);
+                      } else if (item.id === "referral") {
+                        setIsReferralModalOpen(true);
+                      } else if (item.id === "billing") {
+                        setIsBillingModalOpen(true);
+                        fetchBillingDetails();
+                      }
+                    }}
+                    className={cn(
+                      "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200 hover:shadow-md",
+                      isDark
+                        ? "bg-[#180438] border border-gray-700 hover:border-purple-500"
+                        : "bg-white border border-gray-200 hover:border-purple-300"
+                    )}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div
+                        className={cn(
+                          "p-2 rounded-lg",
+                          isDark ? "bg-purple-900/30" : "bg-purple-100"
+                        )}
+                      >
+                        <Icon
+                          className={cn(
+                            "h-5 w-5",
+                            isDark ? "text-purple-400" : "text-purple-600"
+                          )}
+                        />
+                      </div>
+                      <span
+                        className={cn(
+                          "font-medium",
+                          isDark ? "text-white" : "text-gray-900"
+                        )}
+                      >
+                        {item.title}
+                      </span>
+                    </div>
+                    <ChevronRight
+                      className={cn(
+                        "h-5 w-5",
+                        isDark ? "text-gray-400" : "text-gray-500"
+                      )}
+                    />
+                  </button>
+                </div>
+              );
+            }
+            return null;
+          })}
+
+        {/* Change Password Modal */}
+        <Dialog
+          open={isPasswordModalOpen}
+          onOpenChange={setIsPasswordModalOpen}
+          isdark={isDark}
+        >
+          <DialogContent
+            className={cn("max-w-xl", isDark ? "bg-[#180438]" : "bg-white")}
           >
-            {/* <CardHeader>
-            <CardTitle>Security</CardTitle>
-            <CardDescription>
-              Update your password and security settings
-            </CardDescription>
-          </CardHeader> */}
-            <CardContent>
+            <DialogHeader>
+              <DialogTitle
+                className={cn(isDark ? "text-white" : "text-gray-900")}
+              >
+                Change Password
+              </DialogTitle>
+              <DialogDescription
+                className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+              >
+                Update your account password
+              </DialogDescription>
+            </DialogHeader>
+            {hasPassword && (
               <Alert className="mb-4 bg-[#D9C0FF26] border-[#7F39EC]">
                 <AlertDescription>
                   <strong>Multiple Sign-in Methods:</strong> You can sign in
                   with both Google and email/password.
                 </AlertDescription>
               </Alert>
+            )}
 
-              <form onSubmit={handlePasswordChange} className="space-y-4">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                await handlePasswordChange(e);
+                // Close modal after submission (success/error toast will be shown)
+                // Fields are cleared by handlePasswordChange on success
+                setTimeout(() => {
+                  setIsPasswordModalOpen(false);
+                }, 1000);
+              }}
+              className="space-y-4"
+            >
+              {hasPassword && (
                 <div className="space-y-2">
-                  <Label htmlFor="current-password">Current Password</Label>
+                  <Label htmlFor="modal-current-password">
+                    Current Password
+                  </Label>
                   <div className="relative">
                     <Input
-                      id="current-password"
+                      id="modal-current-password"
                       type={showCurrentPassword ? "text" : "password"}
                       autoComplete="current-password"
                       value={currentPassword}
@@ -1505,226 +1985,573 @@ export default function SettingsPage({
                     </button>
                   </div>
                 </div>
+              )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="new-password">New Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="new-password"
-                      type={showNewPassword ? "text" : "password"}
-                      autoComplete="new-password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Minimum 8 characters"
-                      className={cn(
-                        "pr-10",
-                        isDark
-                          ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
-                      )}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                    >
-                      {showNewPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Real-time Password Strength Meter */}
-                  <PasswordStrengthMeter
-                    password={newPassword}
-                    className="mt-3"
-                    showRequirements={true}
+              <div className="space-y-2">
+                <Label htmlFor="modal-new-password">New Password</Label>
+                <div className="relative">
+                  <Input
+                    id="modal-new-password"
+                    type={showNewPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Minimum 8 characters"
+                    className={cn(
+                      "pr-10",
+                      isDark
+                        ? "bg-[#180438] border border-gray-600"
+                        : "bg-white"
+                    )}
+                    required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showNewPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm New Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="confirm-password"
-                      type={showConfirmPassword ? "text" : "password"}
-                      autoComplete="new-password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Confirm new password"
-                      className={cn(
-                        "pr-10",
-                        isDark
-                          ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
-                      )}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowConfirmPassword(!showConfirmPassword)
-                      }
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
+                <PasswordStrengthMeter
+                  password={newPassword}
+                  className="mt-3"
+                  showRequirements={true}
+                />
+              </div>
 
-                <button
-                  className="w-full py-2.5 text-white rounded-xl bg-[#6C43D0] text-md"
+              <div className="space-y-2">
+                <Label htmlFor="modal-confirm-password">
+                  Confirm New Password
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="modal-confirm-password"
+                    type={showConfirmPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    className={cn(
+                      "pr-10",
+                      isDark
+                        ? "bg-[#180438] border border-gray-600"
+                        : "bg-white"
+                    )}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsPasswordModalOpen(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
                   type="submit"
+                  className="flex-1 bg-[#6C43D0] text-white"
                   disabled={
                     passwordChangeLoading || !newPassword || !confirmPassword
                   }
                 >
-                  {passwordChangeLoading
-                    ? "Updating Password..."
-                    : "Update Password"}
-                </button>
-              </form>
-            </CardContent>
-          </div>
-        </div>
-      )}
-      {/* Survey Section - Only for Creators who have completed the survey */}
-      {userType === "creator" && isSurveyCompleted && !isSurveyLoading && (
-        <div className={cn(
-          "rounded-xl shadow-lg overflow-hidden w-full p-6 md:p-0 md:pr-4 md:pt-5",
-          isDark ? "bg-[#180438]" : "bg-white border border-purple-100"
-        )}>
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between">
-            {/* Content Section */}
-            <div className="flex flex-col sm:flex-row items-center sm:items-start flex-1 w-full">
-              {/* Image */}
-              <div className="relative flex-shrink-0 flex justify-center sm:justify-start">
-                <img
-                  src="/images/survey-form.avif"
-                  alt="Survey illustration"
-                  className="h-[80px] sm:h-[100px] md:h-[110px] lg:h-[130px] object-contain"
-                />
+                  {passwordChangeLoading ? "Updating..." : "Update Password"}
+                </Button>
               </div>
-              {/* Text Content */}
-              <div className="flex-1 space-y-4 w-full sm:w-auto text-center pt-7 sm:text-left">
-                <div>
-                  <h3 className={cn(
-                    "font-semibold text-base sm:text-lg mb-1",
-                    isDark ? "text-white" : "text-gray-900"
-                  )}>
-                    Survey Completed
-                  </h3>
-                  <p className={cn(
-                    "text-xs sm:text-[12.5px] leading-relaxed",
-                    isDark ? "text-gray-300" : "text-gray-600"
-                  )}>
-                    Thank you for completing our survey! Your feedback is
-                    valuable to us and helps improve the platform. We appreciate
-                    your time and thoughtful responses.
-                  </p>
-                </div>
-                
-              </div>
-            </div>
-            
-          </div>
-        </div>
-      )} 
+            </form>
+          </DialogContent>
+        </Dialog>
 
-       {/* Referral Links */}
-       {username && (
-        <div
+        {/* Share Referral Links Modal */}
+        <Dialog
+          open={isReferralModalOpen}
+          onOpenChange={setIsReferralModalOpen}
+          isdark={isDark}
+        >
+          <DialogContent
+            className={cn("max-w-xl", isDark ? "bg-[#180438]" : "bg-white")}
+            onOpenAutoFocus={(e) => e.preventDefault()}
+          >
+            <DialogHeader>
+              <DialogTitle
+                className={cn(isDark ? "text-white" : "text-gray-900")}
+              >
+                Share Your Referral Links
+              </DialogTitle>
+              <DialogDescription
+                className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+              >
+                Invite others with your referral code embedded. Choose the right
+                landing page.
+              </DialogDescription>
+            </DialogHeader>
+            {username ? (
+              <div className="space-y-4">
+                {(() => {
+                  const links = buildReferralLinks();
+                  return (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>General Link</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            readOnly
+                            value={links.general}
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                            onFocus={(e) =>
+                              (e.target as HTMLInputElement).select()
+                            }
+                            onClick={(e) =>
+                              (e.target as HTMLInputElement).select()
+                            }
+                          />
+                          <Button
+                            type="button"
+                            className="bg-[#4A00BE] text-white"
+                            variant="outline"
+                            onClick={() => copyToClipboard(links.general)}
+                          >
+                            <Copy className="h-4 w-4 mr-1" />
+                            Copy General
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Creators Link</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            readOnly
+                            value={links.creators}
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="bg-[#4A00BE] text-white"
+                            onClick={() => copyToClipboard(links.creators)}
+                          >
+                            <Copy className="h-4 w-4 mr-1" />
+                            Copy Creators
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Brands Link</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            readOnly
+                            value={links.brands}
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="bg-[#4A00BE] text-white"
+                            onClick={() => copyToClipboard(links.brands)}
+                          >
+                            <Copy className="h-4 w-4 mr-1" />
+                            Copy Brands
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              <Alert className="bg-yellow-50 border-yellow-200">
+                <AlertDescription className="text-yellow-800">
+                  <strong>Note:</strong> You need to set up a username to
+                  generate referral links. Please set up your username first.
+                </AlertDescription>
+              </Alert>
+            )}
+            {/* <div className="flex justify-end pt-2">
+              <Button
+                type="button"
+                onClick={() => setIsReferralModalOpen(false)}
+                className="bg-[#6C43D0] text-white"
+              >
+                Close
+              </Button>
+            </div> */}
+          </DialogContent>
+        </Dialog>
+
+        {/* Subscription and Billing Modal */}
+        <Dialog
+          open={isBillingModalOpen}
+          onOpenChange={handleBillingModalOpen}
+          isdark={isDark}
+        >
+          <DialogContent
+            className={cn(
+              "max-w-3xl max-h-[90vh] overflow-y-auto",
+              isDark ? "bg-[#180438]" : "bg-white"
+            )}
+          >
+            <DialogHeader>
+              <DialogTitle
+                className={cn(isDark ? "text-white" : "text-gray-900")}
+              >
+                Subscription and Billing
+              </DialogTitle>
+              <DialogDescription
+                className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+              >
+                View your current subscription plan and billing details
+              </DialogDescription>
+            </DialogHeader>
+
+            {billingLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
+              </div>
+            ) : billingData?.billingDetails ? (
+              <div className="space-y-6">
+                {/* Current Plan Details */}
+                {(() => {
+                  // Get product_id from profile subscription_info
+                  const productId =
+                    (profile as AdvertiserProfile)?.subscription_info
+                      ?.product_id || "";
+
+                  const plan = productId
+                    ? getSubscriptionPlanById(productId)
+                    : null;
+
+                  if (!plan) {
+                    return (
+                      <Alert>
+                        <AlertDescription>
+                          Unable to load plan details. Please ensure your
+                          profile is loaded and try again.
+                        </AlertDescription>
+                      </Alert>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      <div
+                        className={cn(
+                          "border rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4",
+                          isDark
+                            ? "border-gray-700 bg-[#180438]"
+                            : "border-gray-200 bg-white"
+                        )}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div
+                            className={`p-4 rounded-xl bg-gradient-to-r ${getPlanColor(
+                              plan.name
+                            )} text-white shadow-lg`}
+                          >
+                            {getPlanIcon(plan.name)}
+                          </div>
+                          <div>
+                            <h3
+                              className={cn(
+                                "text-xl font-bold",
+                                isDark ? "text-white" : "text-black"
+                              )}
+                            >
+                              {plan.displayName || plan.name}
+                            </h3>
+                            <p
+                              className={cn(
+                                "text-lg font-medium",
+                                isDark ? "text-purple-400" : "text-purple-600"
+                              )}
+                            >
+                              {formatCurrencyFromCents(plan.price)}
+                              {plan.price > 0 ? "/month" : ""}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                          {getStatusBadge(
+                            billingData.billingDetails.status,
+                            billingData.billingDetails.cancelAtPeriodEnd
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Billing Period Information */}
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <CalendarDays
+                            className={cn(
+                              "h-5 w-5",
+                              isDark ? "text-white" : "text-gray-900"
+                            )}
+                          />
+                          <span
+                            className={cn(
+                              "font-semibold text-lg",
+                              isDark ? "text-white" : "text-black"
+                            )}
+                          >
+                            Billing Period
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div
+                            className={cn(
+                              "rounded-2xl p-4 shadow-sm border",
+                              isDark
+                                ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                                : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
+                            )}
+                          >
+                            <p className="text-sm mb-1">Current Period</p>
+                            <p className="font-semibold">
+                              {formatDateRange(
+                                billingData.billingDetails.currentPeriodStart,
+                                billingData.billingDetails.currentPeriodEnd
+                              )}
+                            </p>
+                          </div>
+                          <div
+                            className={cn(
+                              "rounded-2xl p-4 shadow-sm border",
+                              isDark
+                                ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                                : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
+                            )}
+                          >
+                            <p className="text-sm mb-1">Next Billing Date</p>
+                            <p className="font-semibold">
+                              {formatDate(
+                                billingData.billingDetails.nextBillingDate
+                              )}
+                            </p>
+                          </div>
+                          <div
+                            className={cn(
+                              "rounded-2xl p-4 shadow-sm border",
+                              isDark
+                                ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                                : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
+                            )}
+                          >
+                            <p className="text-sm mb-1">
+                              Days Until Next Billing
+                            </p>
+                            <p className="font-semibold">
+                              {billingData.billingDetails.daysUntilNextBilling}{" "}
+                              days
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Plan Status Information */}
+                        {billingData.billingDetails.cancelAtPeriodEnd && (
+                          <Alert
+                            className={cn(
+                              "border",
+                              isDark
+                                ? "border-red-600/40 bg-red-900/30 text-red-100"
+                                : "border-red-200 bg-red-50 text-red-900"
+                            )}
+                          >
+                            <AlertTriangle
+                              className={cn(
+                                "h-4 w-4",
+                                isDark ? "text-red-300" : "text-red-600"
+                              )}
+                            />
+                            <AlertDescription
+                              className={cn(
+                                isDark ? "text-red-100" : "text-red-900"
+                              )}
+                            >
+                              <strong>Subscription Ending:</strong> Your
+                              subscription will be canceled on{" "}
+                              {formatDate(
+                                billingData.billingDetails.nextBillingDate
+                              )}
+                              . You'll lose access to premium features after
+                              this date.
+                            </AlertDescription>
+                          </Alert>
+                        )}
+
+                        {/* Plan Features */}
+                        <div className="space-y-2">
+                          <h4
+                            className={cn(
+                              "font-semibold text-lg",
+                              isDark ? "text-white" : "text-gray-900"
+                            )}
+                          >
+                            Plan Features
+                          </h4>
+                          <div
+                            className={cn(
+                              "rounded-xl p-4 border",
+                              isDark
+                                ? "bg-[#180438] border-gray-700"
+                                : "bg-gray-50 border-gray-200"
+                            )}
+                          >
+                            <ul className="space-y-2">
+                              <li
+                                className={cn(
+                                  "flex items-center gap-2",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                <span className="text-green-500">✓</span>
+                                {plan.features.maxActiveContests} active
+                                contests
+                              </li>
+                              <li
+                                className={cn(
+                                  "flex items-center gap-2",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                <span className="text-green-500">✓</span>
+                                {plan.features.commissionPercentage}% commission
+                              </li>
+                              <li
+                                className={cn(
+                                  "flex items-center gap-2",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                <span className="text-green-500">✓</span>
+                                Up to {plan.features.maxWinnersPerContest}{" "}
+                                winners per contest
+                              </li>
+                              <li
+                                className={cn(
+                                  "flex items-center gap-2",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                <span className="text-green-500">✓</span>
+                                {plan.features.analytics} analytics
+                              </li>
+                              <li
+                                className={cn(
+                                  "flex items-center gap-2",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                <span className="text-green-500">✓</span>
+                                {plan.features.support} support
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : billingData?.message ? (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>{billingData.message}</AlertDescription>
+              </Alert>
+            ) : (
+              <Alert>
+                <AlertDescription>
+                  No subscription found. Please contact support if you believe
+                  this is an error.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* <div className="flex justify-end pt-4">
+              <Button
+                type="button"
+                onClick={() => setIsBillingModalOpen(false)}
+                className="bg-[#6C43D0] text-white"
+              >
+                Close
+              </Button>
+            </div> */}
+          </DialogContent>
+        </Dialog>
+
+        {/* Log out button */}
+        <button
+          onClick={handleSignOut}
           className={cn(
-            "rounded-xl shadow-xl",
-            isDark ? "bg-[#180438]" : "bg-white "
+            "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200 hover:shadow-md",
+            isDark
+              ? "bg-[#180438] border border-gray-700 hover:border-red-500"
+              : "bg-white border border-gray-200 hover:border-red-300"
           )}
         >
-          <CardHeader>
-            <CardTitle>Share Your Referral Links</CardTitle>
-            <CardDescription>
-              Invite others with your referral code embedded. Choose the right
-              landing page.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {(() => {
-              const links = buildReferralLinks();
-              return (
-                <div className="space-y-4">
-                  <div className="flex gap-2 items-center">
-                    <Input
-                      readOnly
-                      value={links.general}
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
-                      )}
-                    />
-                    <Button
-                      type="button"
-                      className="bg-[#4A00BE] text-white"
-                      variant="outline"
-                      onClick={() => copyToClipboard(links.general)}
-                    >
-                      <Copy className="h-4 w-4 mr-1" />
-                      Copy General
-                    </Button>
-                  </div>
-                  <div className="flex gap-2 items-center">
-                    <Input
-                      readOnly
-                      value={links.creators}
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
-                      )}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="bg-[#4A00BE] text-white"
-                      onClick={() => copyToClipboard(links.creators)}
-                    >
-                      <Copy className="h-4 w-4" />
-                      Copy Creators
-                    </Button>
-                  </div>
-                  <div className="flex gap-2 items-center">
-                    <Input
-                      readOnly
-                      value={links.brands}
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
-                      )}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="bg-[#4A00BE] text-white"
-                      onClick={() => copyToClipboard(links.brands)}
-                    >
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy Brands
-                    </Button>
-                  </div>
-                </div>
-              );
-            })()}
-          </CardContent>
-        </div>
-      )}
-
+          <div className="flex items-center gap-4">
+            <div
+              className={cn(
+                "p-2 rounded-lg",
+                isDark ? "bg-red-900/30" : "bg-red-100"
+              )}
+            >
+              <LogOut
+                className={cn(
+                  "h-5 w-5",
+                  isDark ? "text-red-400" : "text-red-600"
+                )}
+              />
+            </div>
+            <span
+              className={cn(
+                "font-medium",
+                isDark ? "text-white" : "text-gray-900"
+              )}
+            >
+              Log out
+            </span>
+          </div>
+          <ChevronRight
+            className={cn(
+              "h-5 w-5",
+              isDark ? "text-gray-400" : "text-gray-500"
+            )}
+          />
+        </button>
+      </div>
       {/* Danger Zone */}
       {/* <Card>
         <CardHeader>

@@ -21,6 +21,7 @@ import {
   X,
   Upload,
   Loader2,
+  Copy,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/utils/supabase/client";
@@ -596,6 +597,23 @@ export default function ProfilePage({
     }
   };
 
+  const handleCopyUsername = async () => {
+    if (!userData?.username) return;
+    try {
+      await navigator.clipboard.writeText(userData.username);
+      toast({
+        title: "Copied!",
+        description: "Username/referral code copied to clipboard.",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Copy Failed",
+        description: "Failed to copy to clipboard. Please try again.",
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-[76vh]">
@@ -907,6 +925,7 @@ export default function ProfilePage({
               <div className="relative w-full">
                 <label
                   htmlFor="floating"
+                 
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
@@ -917,22 +936,35 @@ export default function ProfilePage({
                   Username / Referral Code
                 </label>
                 <div
-                  className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
+                className={cn(
+                  "rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                  isDark
+                    ? "text-[#8A8A8A] border-[#8A8A8A]"
+                    : "border border-gray-300 text-gray-500"
+                )}
                 >
                   <p
                     className={cn(
-                      "text-base text-[15px] truncate min-w-0",
+                      "text-base text-[15px] truncate min-w-0 pr-8",
                       isDark ? "text-[#8A8A8A]" : "text-gray-500"
                     )}
                     title={userData.username}
                   >
                     {userData.username}
                   </p>
+                  <button
+                    type="button"
+                    onClick={handleCopyUsername}
+                    className={cn(
+                      "absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-colors",
+                      isDark
+                        ? "hover:bg-[#2a0a5a] text-[#8A8A8A] hover:text-white"
+                        : "hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                    )}
+                    title="Copy username/referral code"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
               {/* <div className="space-y-3 min-w-0">
@@ -970,7 +1002,7 @@ export default function ProfilePage({
                   )}
                 >
                   <p
-                     className={cn(
+                    className={cn(
                       "text-base text-[15px] capitalize truncate min-w-0",
                       isDark ? "text-[#8A8A8A]" : "text-gray-500"
                     )}
@@ -1191,19 +1223,19 @@ export default function ProfilePage({
       </div>
 
       {creatorProfile && (
-        <div 
+        <div
           className={cn(
             "rounded-2xl shadow-lg px-2 pb-5",
             isDark ? "bg-[#180438]" : "bg-white"
           )}
         >
-       
           <CardHeader className="mb-3">
-            <CardTitle 
-             className={cn(
-              "text-xl font-semibold",
-              isDark ? "text-white" : "text-[#7F39EC]"
-            )}>
+            <CardTitle
+              className={cn(
+                "text-xl font-semibold",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
               Creator Profile
             </CardTitle>
             <CardDescription className="text-md">
@@ -1224,16 +1256,20 @@ export default function ProfilePage({
                 >
                   Contests Participated
                 </label>
-                <div  className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                  isDark
-                    ? "text-[#8A8A8A] border-[#8A8A8A]"
-                    : "border border-gray-300 text-gray-500"
-                )}>
-                  <p className={cn(
-                    "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                    isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                  )}>
+                <div
+                  className={cn(
+                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
                     {creatorProfile.total_contests_participated}
                   </p>
                 </div>
@@ -1260,16 +1296,20 @@ export default function ProfilePage({
                 >
                   Contests Won
                 </label>
-                <div className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                  isDark
-                    ? "text-[#8A8A8A] border-[#8A8A8A]"
-                    : "border border-gray-300 text-gray-500"
-                )}>
-                  <p className={cn(
-                    "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                    isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                  )}>
+                <div
+                  className={cn(
+                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
                     {creatorProfile.total_contests_won}
                   </p>
                 </div>
@@ -1296,16 +1336,20 @@ export default function ProfilePage({
                 >
                   Total Money Won
                 </label>
-                <div className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                  isDark
-                    ? "text-[#8A8A8A] border-[#8A8A8A]"
-                    : "border border-gray-300 text-gray-500"
-                )}>
-                  <p className={cn(
-                    "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                    isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                  )}>
+                <div
+                  className={cn(
+                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
                     {formatMoney(creatorProfile.total_money_won)}
                   </p>
                 </div>
@@ -1332,16 +1376,20 @@ export default function ProfilePage({
                 >
                   Withdrawable Balance
                 </label>
-                <div className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                  isDark
-                    ? "text-[#8A8A8A] border-[#8A8A8A]"
-                    : "border border-gray-300 text-gray-500"
-                )}>
-                  <p className={cn(
-                    "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                    isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                  )}>
+                <div
+                  className={cn(
+                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
                     {formatMoney(creatorProfile.withdrawable_balance)}
                   </p>
                 </div>
@@ -1673,10 +1721,10 @@ export default function ProfilePage({
                   )}
                 >
                   <p
-                  className={cn(
-                    "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                    isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                  )}
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
                   >
                     {advertiserProfile?.subscription_info?.product_id
                       ? subscriptionPlans.find(

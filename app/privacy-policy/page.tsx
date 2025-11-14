@@ -8,8 +8,8 @@ export default function PrivacyPolicyPage() {
         {/* Header */}
         <div className="mb-12">
           <h1
-            className="text-4xl md:text-5xl font-bold whitespace-nowrap slide-up"
-            style={{ animationDelay: "1s" }}
+            className="text-4xl md:text-5xl font-bold whitespace-nowrap"
+           
           >
             <span
               style={{
