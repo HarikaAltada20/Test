@@ -36,6 +36,7 @@ import {
 import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
+import { EmailChangeModal } from "@/components/EmailChangeModal";
 
 interface UserData {
   id: string;
@@ -87,6 +88,7 @@ export default function ProfilePage({
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [referrer, setReferrer] = useState<string | null>(null);
+  const [hasNetworkError, setHasNetworkError] = useState(false);
   const supabase = createClient();
   const { toast } = useToast();
 
@@ -98,6 +100,7 @@ export default function ProfilePage({
   const [isEditingFullName, setIsEditingFullName] = useState(false);
   const [editedFullName, setEditedFullName] = useState("");
   const [fullNameError, setFullNameError] = useState<string | null>(null);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [isEditingCompanyName, setIsEditingCompanyName] = useState(false);
   const [editedCompanyName, setEditedCompanyName] = useState("");
   const [isEditingWebsiteUrl, setIsEditingWebsiteUrl] = useState(false);
@@ -145,11 +148,44 @@ export default function ProfilePage({
       setIsLoading(true);
       setUserData(null);
       setAvatarPreview(null);
+      setHasNetworkError(false);
 
       try {
         const {
           data: { user },
+          error: authError,
         } = await supabase.auth.getUser();
+
+        // Handle authentication errors
+        if (authError) {
+          console.error("Auth error fetching user:", authError);
+
+          // Check if it's a network/fetch error
+          if (
+            authError.name === "AuthRetryableFetchError" ||
+            authError.message?.includes("Failed to fetch") ||
+            authError.message?.includes("fetch")
+          ) {
+            setHasNetworkError(true);
+            toast({
+              variant: "destructive",
+              title: "Connection Error",
+              description:
+                "Unable to connect to the server. Please check your internet connection and try again.",
+            });
+            setIsLoading(false);
+            return;
+          }
+
+          // For other auth errors, show appropriate message
+          toast({
+            variant: "destructive",
+            title: "Authentication Error",
+            description: authError.message || "Please sign in again.",
+          });
+          setIsLoading(false);
+          return;
+        }
 
         if (!user) {
           console.log("No authenticated user found");
@@ -165,7 +201,25 @@ export default function ProfilePage({
 
         if (userError) {
           console.error("Error fetching user data:", userError);
-          // Don't return here, continue with what we have
+
+          // Check if it's a network/fetch error
+          if (
+            userError.message?.includes("Failed to fetch") ||
+            userError.message?.includes("fetch") ||
+            userError.message?.includes("network")
+          ) {
+            setHasNetworkError(true);
+            toast({
+              variant: "destructive",
+              title: "Connection Error",
+              description:
+                "Unable to fetch your profile data. Please check your internet connection and try again.",
+            });
+            setIsLoading(false);
+            return;
+          }
+
+          // Don't return here for other errors, continue with what we have
           if (userError.code === "PGRST116") {
             console.log("User not found in database, but authenticated");
             setIsLoading(false);
@@ -234,15 +288,46 @@ export default function ProfilePage({
             // Continue without advertiser profile
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Unexpected error in fetchUserData:", error);
+
+        // Check if it's a network/fetch error
+        if (
+          error?.name === "AuthRetryableFetchError" ||
+          error?.message?.includes("Failed to fetch") ||
+          error?.message?.includes("fetch") ||
+          error?.message?.includes("network")
+        ) {
+          setHasNetworkError(true);
+          toast({
+            variant: "destructive",
+            title: "Connection Error",
+            description:
+              "Unable to connect to the server. Please check your internet connection and try again.",
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Error Loading Profile",
+            description:
+              error?.message ||
+              "An unexpected error occurred. Please try refreshing the page.",
+          });
+        }
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchUserData();
-  }, [supabase]);
+  }, [supabase, toast]);
+
+  // Retry function for network errors
+  const handleRetry = () => {
+    setHasNetworkError(false);
+    // Trigger a re-fetch by reloading the page
+    window.location.reload();
+  };
 
   const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -510,6 +595,16 @@ export default function ProfilePage({
     }
   };
 
+  const handleEditEmail = () => {
+    setIsEmailModalOpen(true);
+  };
+
+  const handleEmailUpdated = () => {
+    // Refresh user data after email update
+    notifyProfileUpdate();
+    // The EmailOtpVerificationForm already handles the page reload
+  };
+
   const handleEditCompanyName = () => {
     setEditedCompanyName(advertiserProfile?.company_name || "");
     setIsEditingCompanyName(true);
@@ -622,12 +717,20 @@ export default function ProfilePage({
     );
   }
 
-  if (!userData) {
+  if (hasNetworkError || !userData) {
     return (
-      <div className="text-center py-10">
-        <p className="text-muted-foreground">
-          User data not available. Please try again.
-        </p>
+      <div className="flex flex-col items-center justify-center h-[76vh] space-y-4">
+        <div className="text-center space-y-4">
+          <h2 className="text-2xl font-semibold">Connection Error</h2>
+          <p className="text-muted-foreground max-w-md">
+            {hasNetworkError
+              ? "Unable to connect to the server. Please check your internet connection and try again."
+              : "User data not available. Please try again."}
+          </p>
+          <Button onClick={handleRetry} variant="default">
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
@@ -891,41 +994,44 @@ export default function ProfilePage({
               </div> */}
 
               <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Email
-                </label>
-                <div
-                  className={cn(
-                    "rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
+                {/* Display Mode: Read-only Input with Edit Button */}
+                <div className="relative flex-1">
+                  <input
+                    type="email"
+                    value={userData.email}
+                    readOnly
                     className={cn(
-                      "text-base text-[15px] truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                      "peer block w-full rounded-lg border focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-purple-500 px-3 pr-10 pt-5 pb-2 text-md cursor-default",
+                      isDark
+                        ? "bg-[#180438] border border-gray-400"
+                        : "text-[#1A1A1A] bg-gray-50 "
                     )}
-                    title={userData.email}
+                    placeholder=" "
+                  />
+                  <label
+                    htmlFor="email"
+                    className={cn(
+                      "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
+                      isDark
+                        ? "bg-[#180438] text-white"
+                        : "bg-white text-[#1A1A1A]"
+                    )}
                   >
-                    {userData.email}
-                  </p>
+                    Email
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleEditEmail}
+                    className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
 
               <div className="relative w-full">
                 <label
                   htmlFor="floating"
-                 
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
@@ -936,12 +1042,12 @@ export default function ProfilePage({
                   Username / Referral Code
                 </label>
                 <div
-                className={cn(
-                  "rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                  isDark
-                    ? "text-[#8A8A8A] border-[#8A8A8A]"
-                    : "border border-gray-300 text-gray-500"
-                )}
+                  className={cn(
+                    "rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
                 >
                   <p
                     className={cn(
@@ -1922,6 +2028,15 @@ export default function ProfilePage({
           </CardContent>
         </div>
       )}
+
+      {/* Change Email Modal */}
+      <EmailChangeModal
+        isOpen={isEmailModalOpen}
+        onClose={() => setIsEmailModalOpen(false)}
+        isDark={isDark}
+        currentEmail={userData?.email || ""}
+        onEmailUpdated={handleEmailUpdated}
+      />
     </div>
   );
 }
