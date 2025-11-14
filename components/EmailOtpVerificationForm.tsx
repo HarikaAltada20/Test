@@ -52,15 +52,7 @@ export function EmailOtpVerificationForm({
         throw new Error(verifyError.message || "Invalid verification code");
       }
 
-      // Check if verifyData contains the updated user with new email
-      let finalEmail = verifyData.user?.email || newEmail.trim();
-
-      console.log("OTP verification response:", {
-        verifyDataUser: verifyData.user?.email,
-        verifyDataSession: !!verifyData.session,
-        expectedEmail: newEmail.trim(),
-      });
-
+      // Set the session first if provided
       if (verifyData?.session) {
         const { error: sessionError } = await supabase.auth.setSession(
           verifyData.session
@@ -73,110 +65,86 @@ export function EmailOtpVerificationForm({
         }
       }
 
-      // Use the email from verifyData.user if available, as it's the most reliable
-      if (verifyData.user?.email) {
-        finalEmail = verifyData.user.email;
-        console.log("Using email from verifyData.user:", finalEmail);
-      } else {
-        // If not in verifyData, wait and retry getting the user
-        console.log("Email not in verifyData, waiting and retrying...");
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Wait a moment for the email change to propagate
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-        // Retry getting user with exponential backoff
-        let refreshedUser = null;
-        let retries = 3;
-        let delay = 500;
+      // Verify the email was actually updated in auth
+      let finalEmail = newEmail.trim();
+      let retries = 5;
+      let delay = 500;
+      let emailUpdated = false;
 
-        for (let i = 0; i < retries; i++) {
-          const {
-            data: { user },
-            error: refreshError,
-          } = await supabase.auth.getUser();
+      for (let i = 0; i < retries; i++) {
+        const {
+          data: { user },
+          error: refreshError,
+        } = await supabase.auth.getUser();
 
-          if (refreshError) {
-            console.error(
-              `Error refreshing user (attempt ${i + 1}):`,
-              refreshError
+        if (refreshError) {
+          console.error(`Error getting user (attempt ${i + 1}):`, refreshError);
+          if (i === retries - 1) {
+            throw new Error(
+              refreshError.message ||
+                "Failed to verify email change. Please try logging in with your new email."
             );
-            if (i === retries - 1) {
-              throw new Error(
-                refreshError.message ||
-                  "Failed to refresh user after email change"
-              );
-            }
-          } else if (user) {
-            refreshedUser = user;
-            if (
-              user.email &&
-              user.email.toLowerCase() === newEmail.trim().toLowerCase()
-            ) {
-              finalEmail = user.email;
-              console.log(
-                "Email updated successfully after retry:",
-                finalEmail
-              );
-              break;
-            }
           }
+        } else if (user?.email) {
+          const userEmail = user.email.toLowerCase();
+          const expectedEmail = newEmail.trim().toLowerCase();
 
-          if (i < retries - 1) {
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            delay *= 2; // Exponential backoff
+          if (userEmail === expectedEmail) {
+            finalEmail = user.email;
+            emailUpdated = true;
+            console.log("Email successfully updated in auth:", finalEmail);
+            break;
+          } else {
+            console.log(
+              `Email not yet updated (attempt ${i + 1}/${retries}):`,
+              `Expected: ${expectedEmail}, Got: ${userEmail}`
+            );
           }
         }
 
-        if (!refreshedUser) {
-          throw new Error("User session not found after email change");
-        }
-
-        // Final check - use refreshed user email if it matches, otherwise use what we have
-        if (
-          refreshedUser.email &&
-          refreshedUser.email.toLowerCase() === newEmail.trim().toLowerCase()
-        ) {
-          finalEmail = refreshedUser.email;
+        if (i < retries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay *= 1.5; // Gradual backoff
         }
       }
 
-      // Final validation - the email must match what was expected
-      // If it doesn't match, this indicates the OTP was verified for a different email
-      // This can happen if:
-      // 1. Multiple email change requests were initiated
-      // 2. The OTP code was used for a different email change
-      // 3. There's a race condition with concurrent requests
-      if (finalEmail.toLowerCase() !== newEmail.trim().toLowerCase()) {
-        console.error("Email mismatch after OTP verification:", {
-          expected: newEmail.trim(),
-          got: finalEmail,
-          verifyDataUserEmail: verifyData.user?.email,
-          verifyDataSession: !!verifyData.session,
-        });
-
-        // This is a critical error - fail the verification
+      if (!emailUpdated) {
         throw new Error(
-          `Email verification failed: The email in your account (${finalEmail}) does not match the email you're trying to change to (${newEmail.trim()}). This may happen if you have multiple email change requests in progress. Please cancel any other email change requests and try again with a fresh verification code sent to ${newEmail.trim()}.`
+          "Email change verification timed out. The email may not have been updated. Please try logging in with your new email address, or contact support if the issue persists."
         );
       }
 
+      // Update the users table to keep it in sync
       const {
         data: { user: currentUser },
       } = await supabase.auth.getUser();
 
       if (currentUser?.id) {
-        const { error } = await supabase
+        const { error: updateError } = await supabase
           .from("users")
           .update({ email: finalEmail })
           .eq("id", currentUser.id);
-        if (error) throw error;
+
+        if (updateError) {
+          console.error("Error updating users table:", updateError);
+          // Don't throw here - the auth email is already updated, which is the critical part
+          // The users table update is secondary and can be synced later
+        }
       }
 
       toast({
         title: "Email Updated Successfully",
-        description: "Your email has been successfully updated.",
+        description: `Your email has been successfully updated to ${finalEmail}. You can now log in with your new email address.`,
       });
 
       // Notify other components about the profile update
       window.dispatchEvent(new CustomEvent("profile-updated"));
+
+      // Wait a moment before reloading to ensure all updates are complete
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Refresh the page to ensure middleware sees the updated session
       window.location.reload();
