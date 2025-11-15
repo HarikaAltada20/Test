@@ -87,6 +87,7 @@ export default function ProfilePage({
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [companyProfileLoading, setCompanyProfileLoading] = useState(false);
   const [referrer, setReferrer] = useState<string | null>(null);
   const [hasNetworkError, setHasNetworkError] = useState(false);
   const supabase = createClient();
@@ -595,8 +596,67 @@ export default function ProfilePage({
     }
   };
 
-  const handleEditEmail = () => {
-    setIsEmailModalOpen(true);
+  const handleEditEmail = async () => {
+    try {
+      // Check if user has changed email in the last month
+      const {
+        data: { user: authUser },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !authUser) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to verify email change eligibility",
+        });
+        return;
+      }
+
+      // Check last email change date from user metadata
+      const lastEmailChangeAt = authUser.user_metadata?.last_email_change_at;
+      if (lastEmailChangeAt) {
+        const lastChangeDate = new Date(lastEmailChangeAt);
+        const now = new Date();
+
+        // Check if the last change was in the same calendar month and year
+        const lastMonth = lastChangeDate.getMonth();
+        const lastYear = lastChangeDate.getFullYear();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        // If same month and year, user cannot change email yet
+        if (lastMonth === currentMonth && lastYear === currentYear) {
+          // Calculate days until next month
+          const nextMonth = new Date(currentYear, currentMonth + 1, 1);
+          const daysUntilNextMonth = Math.ceil(
+            (nextMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          const nextMonthName = nextMonth.toLocaleDateString("en-US", {
+            month: "long",
+            year: "numeric",
+          });
+
+          toast({
+            variant: "destructive",
+            title: "Email Change Limit",
+            description: `You can only change your email once per month.`,
+          });
+          return;
+        }
+      }
+
+      // If eligible, open the modal
+      setIsEmailModalOpen(true);
+    } catch (error: any) {
+      console.error("Error checking email change eligibility:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          "Failed to verify email change eligibility. Please try again.",
+      });
+    }
   };
 
   const handleEmailUpdated = () => {
@@ -689,6 +749,59 @@ export default function ProfilePage({
       });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const updateCompanyProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCompanyProfileLoading(true);
+
+    try {
+      const companyName = (e.target as any).company_name.value;
+      const websiteUrl = (e.target as any).website_url.value;
+      const currentUserId = userData?.id;
+
+      if (!currentUserId) {
+        throw new Error("User ID is not available for update.");
+      }
+
+      const { data, error } = await supabase
+        .from("advertiser_profiles")
+        .update({
+          company_name: companyName,
+          website_url: websiteUrl,
+        })
+        .eq("id", currentUserId)
+        .select();
+
+      if (error) throw error;
+
+      // Update local state
+      setAdvertiserProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              company_name: companyName,
+              website_url: websiteUrl,
+            }
+          : null
+      );
+      setEditedCompanyName(companyName);
+      setEditedWebsiteUrl(websiteUrl);
+
+      toast({
+        title: "Success",
+        description: "Company profile updated successfully",
+        variant: "default",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to update company profile",
+        variant: "destructive",
+      });
+    } finally {
+      setCompanyProfileLoading(false);
     }
   };
 
@@ -1019,13 +1132,15 @@ export default function ProfilePage({
                   >
                     Email
                   </label>
-                  <button
-                    type="button"
-                    onClick={handleEditEmail}
-                    className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
+                  {userData.user_type === "creator" && (
+                    <button
+                      type="button"
+                      onClick={handleEditEmail}
+                      className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1137,6 +1252,83 @@ export default function ProfilePage({
           </CardContent>
         </div>
       </div>
+
+      {/* Company Profile - Only for Advertisers */}
+      {userData?.user_type === "advertiser" && (
+        <div>
+          <div
+            className={cn(
+              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <CardTitle
+              className={cn(
+                "text-xl",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
+              Company Profile
+            </CardTitle>
+          </div>
+          <div
+            className={cn(
+              "rounded-b-2xl shadow-lg px-2 pb-3",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <div className="px-6 py-4">
+              <CardTitle className="text-xl font-semibold">
+                Company Information
+              </CardTitle>
+              <CardDescription className="mt-2 text-md">
+                Update your company information
+              </CardDescription>
+            </div>
+            <CardContent>
+              <form onSubmit={updateCompanyProfile} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="company_name">Company Name</Label>
+                  <Input
+                    id="company_name"
+                    name="company_name"
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600 text-white"
+                        : "bg-white border border-gray-300"
+                    )}
+                    defaultValue={advertiserProfile?.company_name || ""}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="website_url">Website URL</Label>
+                  <Input
+                    id="website_url"
+                    name="website_url"
+                    type="url"
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600 text-white"
+                        : "bg-white border border-gray-300"
+                    )}
+                    defaultValue={advertiserProfile?.website_url || ""}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full rounded-xl py-2.5 bg-[#6C43D0] text-white text-md hover:bg-[#5A36B8] transition-colors"
+                  disabled={companyProfileLoading}
+                >
+                  {companyProfileLoading ? "Updating..." : "Update Profile"}
+                </button>
+              </form>
+            </CardContent>
+          </div>
+        </div>
+      )}
+
       <div
         className={cn(
           "rounded-2xl shadow-lg px-2 pb-5",

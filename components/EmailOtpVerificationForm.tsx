@@ -110,6 +110,13 @@ export function EmailOtpVerificationForm({
           const result = await response.json();
 
           if (!response.ok) {
+            // Handle monthly limit error (429 status)
+            if (response.status === 429) {
+              throw new Error(
+                result.error ||
+                  "You can only change your email once per month. Please try again later."
+              );
+            }
             throw new Error(
               result.error || "Failed to force-update email via admin API"
             );
@@ -257,7 +264,9 @@ export function EmailOtpVerificationForm({
             onClick={onBack}
             disabled={isSubmitting}
             className={cn(
-              isDark ? "border-gray-600 text-white hover:bg-[#2a0a5a]" : "text-black"
+              isDark
+                ? "border-gray-600 text-white hover:bg-[#2a0a5a]"
+                : "text-black"
             )}
           >
             Back
