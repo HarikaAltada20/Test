@@ -33,29 +33,26 @@ import { centsToDollars } from "@/lib/currency-utils";
 import { getFullRejectionDetails } from "@/lib/submission-metadata";
 import { cn } from "@/lib/utils";
 
-// Map human-readable rejection reason labels to their descriptions
+// Map human-readable rejection reason labels to their descriptions (new canonical set only)
 const REJECTION_REASON_DESCRIPTIONS: Record<string, string> = {
-  "Content Guidelines Violation":
-    "Content does not follow the contest guidelines, platform rules, or community standards",
-  "Quality Standards Not Met":
-    "Content quality, production value, or presentation does not meet the required standards",
-  "Brand Guidelines Violation":
-    "Content does not align with our brand guidelines, tone, or messaging requirements",
-  "Inappropriate Content":
+  "Contest brief or rules not followed":
+    "Submission does not follow the contest brief or rules",
+  "Terms & Conditions violation":
+    "Violates the platform or contest terms and conditions",
+  "Inappropriate content":
     "Content contains inappropriate, offensive, or unsuitable material for our platform",
-  "Copyright Issues":
+  "Copyright issue":
     "Content may violate copyright, trademark, or intellectual property rights",
-  "Technical Issues":
-    "Content has technical problems, is not accessible, or fails to load properly",
-  "Off Topic":
-    "Content is not relevant to the contest theme, brief, or specific requirements",
-  "Duplicate Content":
+  "Technical issues":
+    "Content has technical problems, is not accessible, or was deleted",
+  "Duplicate content":
     "Content appears to be duplicate or very similar to existing submissions or previous work",
-  "Incomplete Submission":
-    "Submission is incomplete, missing required elements, or appears unfinished",
-  "Other Reason":
+  "Quality standards not met":
+    "Content quality does not meet the required standards",
+  "Custom Reason":
     "Other reason not listed above - please provide specific details",
 };
+
 
 interface SubmissionsClientProps {
   initialSubmissions: SubmissionWithContest[];
@@ -87,6 +84,7 @@ export default function SubmissionsClient({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
   const [mode, setMode] = useState<"light" | "dark">("light");
+  const [brokenThumbs, setBrokenThumbs] = useState<Record<string, boolean>>({});
 
   // Read mode from data attribute
   useEffect(() => {
@@ -462,7 +460,7 @@ export default function SubmissionsClient({
             <SelectValue placeholder="Filter by Type" />
           </SelectTrigger>
           <SelectContent isDark={isDark}>
-            <SelectItem  isDark={isDark} value="all">All Types of Contests</SelectItem>
+            <SelectItem isDark={isDark} value="all">All Types of Contests</SelectItem>
             <SelectItem isDark={isDark} value="leaderboard">Leaderboard</SelectItem>
             <SelectItem isDark={isDark} value="cpm">CPM</SelectItem>
           </SelectContent>
@@ -475,7 +473,7 @@ export default function SubmissionsClient({
             <SelectValue placeholder="Filter by Platform" />
           </SelectTrigger>
           <SelectContent isDark={isDark}>
-            <SelectItem isDark={isDark}value="all">All Platforms</SelectItem>
+            <SelectItem isDark={isDark} value="all">All Platforms</SelectItem>
             <SelectItem isDark={isDark} value="youtube">YouTube</SelectItem>
             <SelectItem isDark={isDark} value="instagram">Instagram</SelectItem>
           </SelectContent>
@@ -587,12 +585,12 @@ export default function SubmissionsClient({
                   // Correctly extract the nested cpm_contest object and type it
                   const cpmConfig =
                     contest?.contest_type === "cpm" &&
-                    contest.contest_based_details &&
-                    typeof contest.contest_based_details === "object" &&
-                    contest.contest_based_details !== null &&
-                    "cpm_contest" in contest.contest_based_details
+                      contest.contest_based_details &&
+                      typeof contest.contest_based_details === "object" &&
+                      contest.contest_based_details !== null &&
+                      "cpm_contest" in contest.contest_based_details
                       ? (contest.contest_based_details
-                          .cpm_contest as unknown as CpmContestDetails)
+                        .cpm_contest as unknown as CpmContestDetails)
                       : null;
 
                   const displayStatus = getDisplayStatus(submission);
@@ -726,26 +724,57 @@ export default function SubmissionsClient({
                   return (
                     <div
                       key={submission.id}
-                     
+
                       className={cn(
-                           "rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:shadow-md transition-shadow",    
+                        "rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:shadow-md transition-shadow",
                         isDark ? "border border-gray-600" : "border border-[#D1B7F9] bg-white "
                       )}
                     >
                       <div className="flex items-center space-x-4 flex-grow">
-                        {submission.video_thumbnail_url ? (
-                          <Image
-                            src={submission.video_thumbnail_url}
-                            alt={submission.video_title || "Video thumbnail"}
-                            width={120}
-                            height={90}
-                            className="rounded object-cover aspect-video"
-                          />
-                        ) : (
-                          <div className="w-[80px] h-[45px] rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                            <Video className="h-6 w-6 text-gray-400 dark:text-gray-500" />
-                          </div>
-                        )}
+                        {(() => {
+                          const isInstagram =
+                            (submission.platform || "").toLowerCase() === "instagram";
+                          const isBroken = !!brokenThumbs[submission.id];
+                          const hasThumb = !!submission.video_thumbnail_url;
+                          const shouldShowIgPoster = isInstagram && (!hasThumb || isBroken);
+
+                          if (shouldShowIgPoster) {
+                            return (
+                              <Image
+                                src="/instagram-poster.svg"
+                                alt="Instagram content"
+                                width={120}
+                                height={90}
+                                className="rounded object-cover aspect-video"
+                                priority={false}
+                              />
+                            );
+                          }
+
+                          if (hasThumb) {
+                            return (
+                              <Image
+                                src={submission.video_thumbnail_url as string}
+                                alt={submission.video_title || "Video thumbnail"}
+                                width={120}
+                                height={90}
+                                className="rounded object-cover aspect-video"
+                                onError={() =>
+                                  setBrokenThumbs((prev) => ({
+                                    ...prev,
+                                    [submission.id]: true,
+                                  }))
+                                }
+                              />
+                            );
+                          }
+
+                          return (
+                            <div className="w-[80px] h-[45px] rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                              <Video className="h-6 w-6 text-gray-400 dark:text-gray-500" />
+                            </div>
+                          );
+                        })()}
                         <div className="flex-grow">
                           {contestId ? (
                             <Link
@@ -775,7 +804,7 @@ export default function SubmissionsClient({
                             <Badge variant="outline" className="ml-1 text-xs">
                               {submission.platform
                                 ? submission.platform.charAt(0).toUpperCase() +
-                                  submission.platform.slice(1)
+                                submission.platform.slice(1)
                                 : "N/A"}
                             </Badge>
                             {contest?.contest_type && (
@@ -793,14 +822,14 @@ export default function SubmissionsClient({
                             {isEnded &&
                               submission.contests?.post_contest_status &&
                               postContestStatusMap[
-                                submission.contests.post_contest_status
+                              submission.contests.post_contest_status
                               ] && (
                                 <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                                   Contest Stage:{" "}
                                   <span className="font-medium">
                                     {
                                       postContestStatusMap[
-                                        submission.contests.post_contest_status
+                                      submission.contests.post_contest_status
                                       ]
                                     }
                                   </span>
@@ -841,17 +870,15 @@ export default function SubmissionsClient({
                                     <p className="mt-0.5">
                                       {rejectionDetails.reason}
                                     </p>
-                                    {REJECTION_REASON_DESCRIPTIONS[
+                                    {!rejectionDetails.additionalNotes && REJECTION_REASON_DESCRIPTIONS[
                                       rejectionDetails.reason
                                     ] && (
-                                      <p className="mt-0.5 text-[11px] opacity-90">
-                                        {
-                                          REJECTION_REASON_DESCRIPTIONS[
+                                        <p className="mt-0.5 text-[11px] opacity-90">
+                                          {REJECTION_REASON_DESCRIPTIONS[
                                             rejectionDetails.reason
-                                          ]
-                                        }
-                                      </p>
-                                    )}
+                                          ]}
+                                        </p>
+                                      )}
                                     {rejectionDetails.additionalNotes && (
                                       <p className="mt-0.5">
                                         Notes:{" "}
@@ -873,11 +900,10 @@ export default function SubmissionsClient({
                               href={submission.content_link || "#"}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className={`flex items-center justify-center ${
-                                !submission.content_link
-                                  ? "pointer-events-none opacity-50"
-                                  : ""
-                              }`}
+                              className={`flex items-center justify-center ${!submission.content_link
+                                ? "pointer-events-none opacity-50"
+                                : ""
+                                }`}
                             >
                               <ExternalLink className="h-4 w-4 mr-1.5" /> View
                               Content
