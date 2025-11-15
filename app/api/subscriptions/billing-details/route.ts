@@ -109,6 +109,27 @@ export async function GET(request: NextRequest) {
 
     const daysUntilNextBilling = Math.ceil((periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
+
+    let latestInvoiceUrl: string | null = null;
+    if (subscription.id && subscription.id !== 'free-plan') {
+      try {
+        const invoices = await stripe().invoices.list({
+          subscription: subscription.id,
+          limit: 1,
+          status: 'paid',
+        });
+        
+        if (invoices.data.length > 0) {
+          const latestInvoice = invoices.data[0];
+          latestInvoiceUrl = latestInvoice.hosted_invoice_url || latestInvoice.invoice_pdf || null;
+        }
+      } catch (invoiceError) {
+        console.warn('[API] billing-details: failed to fetch latest invoice', invoiceError);
+        // Don't fail the entire request if invoice fetch fails
+      }
+    }
+
+
     const billingDetails = {
       currentPeriodStart: periodStart.toISOString(),
       currentPeriodEnd: periodEnd.toISOString(),
@@ -118,7 +139,8 @@ export async function GET(request: NextRequest) {
       cancelAtPeriodEnd,
       status,
       amount: plan?.price || 0,
-      currency: 'usd'
+      currency: 'usd',
+      latestInvoiceUrl
     };
 
     // Fetch scheduled changes from Stripe (if subscription exists)
