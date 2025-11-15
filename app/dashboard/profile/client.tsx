@@ -21,6 +21,7 @@ import {
   X,
   Upload,
   Loader2,
+  Copy,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/utils/supabase/client";
@@ -35,6 +36,7 @@ import {
 import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
+import { EmailChangeModal } from "@/components/EmailChangeModal";
 
 interface UserData {
   id: string;
@@ -85,7 +87,9 @@ export default function ProfilePage({
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [companyProfileLoading, setCompanyProfileLoading] = useState(false);
   const [referrer, setReferrer] = useState<string | null>(null);
+  const [hasNetworkError, setHasNetworkError] = useState(false);
   const supabase = createClient();
   const { toast } = useToast();
 
@@ -97,6 +101,7 @@ export default function ProfilePage({
   const [isEditingFullName, setIsEditingFullName] = useState(false);
   const [editedFullName, setEditedFullName] = useState("");
   const [fullNameError, setFullNameError] = useState<string | null>(null);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [isEditingCompanyName, setIsEditingCompanyName] = useState(false);
   const [editedCompanyName, setEditedCompanyName] = useState("");
   const [isEditingWebsiteUrl, setIsEditingWebsiteUrl] = useState(false);
@@ -144,11 +149,44 @@ export default function ProfilePage({
       setIsLoading(true);
       setUserData(null);
       setAvatarPreview(null);
+      setHasNetworkError(false);
 
       try {
         const {
           data: { user },
+          error: authError,
         } = await supabase.auth.getUser();
+
+        // Handle authentication errors
+        if (authError) {
+          console.error("Auth error fetching user:", authError);
+
+          // Check if it's a network/fetch error
+          if (
+            authError.name === "AuthRetryableFetchError" ||
+            authError.message?.includes("Failed to fetch") ||
+            authError.message?.includes("fetch")
+          ) {
+            setHasNetworkError(true);
+            toast({
+              variant: "destructive",
+              title: "Connection Error",
+              description:
+                "Unable to connect to the server. Please check your internet connection and try again.",
+            });
+            setIsLoading(false);
+            return;
+          }
+
+          // For other auth errors, show appropriate message
+          toast({
+            variant: "destructive",
+            title: "Authentication Error",
+            description: authError.message || "Please sign in again.",
+          });
+          setIsLoading(false);
+          return;
+        }
 
         if (!user) {
           console.log("No authenticated user found");
@@ -164,7 +202,25 @@ export default function ProfilePage({
 
         if (userError) {
           console.error("Error fetching user data:", userError);
-          // Don't return here, continue with what we have
+
+          // Check if it's a network/fetch error
+          if (
+            userError.message?.includes("Failed to fetch") ||
+            userError.message?.includes("fetch") ||
+            userError.message?.includes("network")
+          ) {
+            setHasNetworkError(true);
+            toast({
+              variant: "destructive",
+              title: "Connection Error",
+              description:
+                "Unable to fetch your profile data. Please check your internet connection and try again.",
+            });
+            setIsLoading(false);
+            return;
+          }
+
+          // Don't return here for other errors, continue with what we have
           if (userError.code === "PGRST116") {
             console.log("User not found in database, but authenticated");
             setIsLoading(false);
@@ -233,15 +289,46 @@ export default function ProfilePage({
             // Continue without advertiser profile
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Unexpected error in fetchUserData:", error);
+
+        // Check if it's a network/fetch error
+        if (
+          error?.name === "AuthRetryableFetchError" ||
+          error?.message?.includes("Failed to fetch") ||
+          error?.message?.includes("fetch") ||
+          error?.message?.includes("network")
+        ) {
+          setHasNetworkError(true);
+          toast({
+            variant: "destructive",
+            title: "Connection Error",
+            description:
+              "Unable to connect to the server. Please check your internet connection and try again.",
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Error Loading Profile",
+            description:
+              error?.message ||
+              "An unexpected error occurred. Please try refreshing the page.",
+          });
+        }
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchUserData();
-  }, [supabase]);
+  }, [supabase, toast]);
+
+  // Retry function for network errors
+  const handleRetry = () => {
+    setHasNetworkError(false);
+    // Trigger a re-fetch by reloading the page
+    window.location.reload();
+  };
 
   const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -509,6 +596,75 @@ export default function ProfilePage({
     }
   };
 
+  const handleEditEmail = async () => {
+    try {
+      // Check if user has changed email in the last month
+      const {
+        data: { user: authUser },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !authUser) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to verify email change eligibility",
+        });
+        return;
+      }
+
+      // Check last email change date from user metadata
+      const lastEmailChangeAt = authUser.user_metadata?.last_email_change_at;
+      if (lastEmailChangeAt) {
+        const lastChangeDate = new Date(lastEmailChangeAt);
+        const now = new Date();
+
+        // Check if the last change was in the same calendar month and year
+        const lastMonth = lastChangeDate.getMonth();
+        const lastYear = lastChangeDate.getFullYear();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        // If same month and year, user cannot change email yet
+        if (lastMonth === currentMonth && lastYear === currentYear) {
+          // Calculate days until next month
+          const nextMonth = new Date(currentYear, currentMonth + 1, 1);
+          const daysUntilNextMonth = Math.ceil(
+            (nextMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          const nextMonthName = nextMonth.toLocaleDateString("en-US", {
+            month: "long",
+            year: "numeric",
+          });
+
+          toast({
+            variant: "destructive",
+            title: "Email Change Limit",
+            description: `You can only change your email once per month.`,
+          });
+          return;
+        }
+      }
+
+      // If eligible, open the modal
+      setIsEmailModalOpen(true);
+    } catch (error: any) {
+      console.error("Error checking email change eligibility:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          "Failed to verify email change eligibility. Please try again.",
+      });
+    }
+  };
+
+  const handleEmailUpdated = () => {
+    // Refresh user data after email update
+    notifyProfileUpdate();
+    // The EmailOtpVerificationForm already handles the page reload
+  };
+
   const handleEditCompanyName = () => {
     setEditedCompanyName(advertiserProfile?.company_name || "");
     setIsEditingCompanyName(true);
@@ -596,6 +752,76 @@ export default function ProfilePage({
     }
   };
 
+  const updateCompanyProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCompanyProfileLoading(true);
+
+    try {
+      const companyName = (e.target as any).company_name.value;
+      const websiteUrl = (e.target as any).website_url.value;
+      const currentUserId = userData?.id;
+
+      if (!currentUserId) {
+        throw new Error("User ID is not available for update.");
+      }
+
+      const { data, error } = await supabase
+        .from("advertiser_profiles")
+        .update({
+          company_name: companyName,
+          website_url: websiteUrl,
+        })
+        .eq("id", currentUserId)
+        .select();
+
+      if (error) throw error;
+
+      // Update local state
+      setAdvertiserProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              company_name: companyName,
+              website_url: websiteUrl,
+            }
+          : null
+      );
+      setEditedCompanyName(companyName);
+      setEditedWebsiteUrl(websiteUrl);
+
+      toast({
+        title: "Success",
+        description: "Company profile updated successfully",
+        variant: "default",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to update company profile",
+        variant: "destructive",
+      });
+    } finally {
+      setCompanyProfileLoading(false);
+    }
+  };
+
+  const handleCopyUsername = async () => {
+    if (!userData?.username) return;
+    try {
+      await navigator.clipboard.writeText(userData.username);
+      toast({
+        title: "Copied!",
+        description: "Username/referral code copied to clipboard.",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Copy Failed",
+        description: "Failed to copy to clipboard. Please try again.",
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-[76vh]">
@@ -604,12 +830,20 @@ export default function ProfilePage({
     );
   }
 
-  if (!userData) {
+  if (hasNetworkError || !userData) {
     return (
-      <div className="text-center py-10">
-        <p className="text-muted-foreground">
-          User data not available. Please try again.
-        </p>
+      <div className="flex flex-col items-center justify-center h-[76vh] space-y-4">
+        <div className="text-center space-y-4">
+          <h2 className="text-2xl font-semibold">Connection Error</h2>
+          <p className="text-muted-foreground max-w-md">
+            {hasNetworkError
+              ? "Unable to connect to the server. Please check your internet connection and try again."
+              : "User data not available. Please try again."}
+          </p>
+          <Button onClick={handleRetry} variant="default">
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
@@ -873,34 +1107,40 @@ export default function ProfilePage({
               </div> */}
 
               <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Email
-                </label>
-                <div
-                  className={cn(
-                    "rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
+                {/* Display Mode: Read-only Input with Edit Button */}
+                <div className="relative flex-1">
+                  <input
+                    type="email"
+                    value={userData.email}
+                    readOnly
                     className={cn(
-                      "text-base text-[15px] truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                      "peer block w-full rounded-lg border focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-purple-500 px-3 pr-10 pt-5 pb-2 text-md cursor-default",
+                      isDark
+                        ? "bg-[#180438] border border-gray-400"
+                        : "text-[#1A1A1A] bg-gray-50 "
                     )}
-                    title={userData.email}
+                    placeholder=" "
+                  />
+                  <label
+                    htmlFor="email"
+                    className={cn(
+                      "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
+                      isDark
+                        ? "bg-[#180438] text-white"
+                        : "bg-white text-[#1A1A1A]"
+                    )}
                   >
-                    {userData.email}
-                  </p>
+                    Email
+                  </label>
+                  {userData.user_type === "creator" && (
+                    <button
+                      type="button"
+                      onClick={handleEditEmail}
+                      className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -918,7 +1158,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2",
+                    "rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -926,13 +1166,26 @@ export default function ProfilePage({
                 >
                   <p
                     className={cn(
-                      "text-base text-[15px] truncate min-w-0",
+                      "text-base text-[15px] truncate min-w-0 pr-8",
                       isDark ? "text-[#8A8A8A]" : "text-gray-500"
                     )}
                     title={userData.username}
                   >
                     {userData.username}
                   </p>
+                  <button
+                    type="button"
+                    onClick={handleCopyUsername}
+                    className={cn(
+                      "absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-colors",
+                      isDark
+                        ? "hover:bg-[#2a0a5a] text-[#8A8A8A] hover:text-white"
+                        : "hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                    )}
+                    title="Copy username/referral code"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
               {/* <div className="space-y-3 min-w-0">
@@ -970,7 +1223,7 @@ export default function ProfilePage({
                   )}
                 >
                   <p
-                     className={cn(
+                    className={cn(
                       "text-base text-[15px] capitalize truncate min-w-0",
                       isDark ? "text-[#8A8A8A]" : "text-gray-500"
                     )}
@@ -999,6 +1252,83 @@ export default function ProfilePage({
           </CardContent>
         </div>
       </div>
+
+      {/* Company Profile - Only for Advertisers */}
+      {userData?.user_type === "advertiser" && (
+        <div>
+          <div
+            className={cn(
+              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <CardTitle
+              className={cn(
+                "text-xl",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
+              Company Profile
+            </CardTitle>
+          </div>
+          <div
+            className={cn(
+              "rounded-b-2xl shadow-lg px-2 pb-3",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <div className="px-6 py-4">
+              <CardTitle className="text-xl font-semibold">
+                Company Information
+              </CardTitle>
+              <CardDescription className="mt-2 text-md">
+                Update your company information
+              </CardDescription>
+            </div>
+            <CardContent>
+              <form onSubmit={updateCompanyProfile} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="company_name">Company Name</Label>
+                  <Input
+                    id="company_name"
+                    name="company_name"
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600 text-white"
+                        : "bg-white border border-gray-300"
+                    )}
+                    defaultValue={advertiserProfile?.company_name || ""}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="website_url">Website URL</Label>
+                  <Input
+                    id="website_url"
+                    name="website_url"
+                    type="url"
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600 text-white"
+                        : "bg-white border border-gray-300"
+                    )}
+                    defaultValue={advertiserProfile?.website_url || ""}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full rounded-xl py-2.5 bg-[#6C43D0] text-white text-md hover:bg-[#5A36B8] transition-colors"
+                  disabled={companyProfileLoading}
+                >
+                  {companyProfileLoading ? "Updating..." : "Update Profile"}
+                </button>
+              </form>
+            </CardContent>
+          </div>
+        </div>
+      )}
+
       <div
         className={cn(
           "rounded-2xl shadow-lg px-2 pb-5",
@@ -1191,19 +1521,19 @@ export default function ProfilePage({
       </div>
 
       {creatorProfile && (
-        <div 
+        <div
           className={cn(
             "rounded-2xl shadow-lg px-2 pb-5",
             isDark ? "bg-[#180438]" : "bg-white"
           )}
         >
-       
           <CardHeader className="mb-3">
-            <CardTitle 
-             className={cn(
-              "text-xl font-semibold",
-              isDark ? "text-white" : "text-[#7F39EC]"
-            )}>
+            <CardTitle
+              className={cn(
+                "text-xl font-semibold",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
               Creator Profile
             </CardTitle>
             <CardDescription className="text-md">
@@ -1224,16 +1554,20 @@ export default function ProfilePage({
                 >
                   Contests Participated
                 </label>
-                <div  className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                  isDark
-                    ? "text-[#8A8A8A] border-[#8A8A8A]"
-                    : "border border-gray-300 text-gray-500"
-                )}>
-                  <p className={cn(
-                    "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                    isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                  )}>
+                <div
+                  className={cn(
+                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
                     {creatorProfile.total_contests_participated}
                   </p>
                 </div>
@@ -1260,16 +1594,20 @@ export default function ProfilePage({
                 >
                   Contests Won
                 </label>
-                <div className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                  isDark
-                    ? "text-[#8A8A8A] border-[#8A8A8A]"
-                    : "border border-gray-300 text-gray-500"
-                )}>
-                  <p className={cn(
-                    "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                    isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                  )}>
+                <div
+                  className={cn(
+                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
                     {creatorProfile.total_contests_won}
                   </p>
                 </div>
@@ -1296,16 +1634,20 @@ export default function ProfilePage({
                 >
                   Total Money Won
                 </label>
-                <div className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                  isDark
-                    ? "text-[#8A8A8A] border-[#8A8A8A]"
-                    : "border border-gray-300 text-gray-500"
-                )}>
-                  <p className={cn(
-                    "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                    isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                  )}>
+                <div
+                  className={cn(
+                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
                     {formatMoney(creatorProfile.total_money_won)}
                   </p>
                 </div>
@@ -1332,16 +1674,20 @@ export default function ProfilePage({
                 >
                   Withdrawable Balance
                 </label>
-                <div className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                  isDark
-                    ? "text-[#8A8A8A] border-[#8A8A8A]"
-                    : "border border-gray-300 text-gray-500"
-                )}>
-                  <p className={cn(
-                    "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                    isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                  )}>
+                <div
+                  className={cn(
+                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
                     {formatMoney(creatorProfile.withdrawable_balance)}
                   </p>
                 </div>
@@ -1673,10 +2019,10 @@ export default function ProfilePage({
                   )}
                 >
                   <p
-                  className={cn(
-                    "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                    isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                  )}
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
                   >
                     {advertiserProfile?.subscription_info?.product_id
                       ? subscriptionPlans.find(
@@ -1874,6 +2220,15 @@ export default function ProfilePage({
           </CardContent>
         </div>
       )}
+
+      {/* Change Email Modal */}
+      <EmailChangeModal
+        isOpen={isEmailModalOpen}
+        onClose={() => setIsEmailModalOpen(false)}
+        isDark={isDark}
+        currentEmail={userData?.email || ""}
+        onEmailUpdated={handleEmailUpdated}
+      />
     </div>
   );
 }
