@@ -99,7 +99,7 @@ export function EmailOtpVerificationForm({
       // This is much faster than waiting for async processing
       if (!emailUpdated) {
         try {
-          const response = await fetch("/api/account/force-update-email", {
+          const response = await fetch("/api/account/update-email", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -230,8 +230,8 @@ export function EmailOtpVerificationForm({
           className={cn(
             "text-center text-2xl tracking-widest",
             isDark
-              ? "bg-[#180438] border border-gray-600 text-white"
-              : "bg-white"
+              ? "bg-[#06021d] border border-gray-600 text-white"
+              : "bg-white text-black"
           )}
           required
         />
@@ -257,7 +257,7 @@ export function EmailOtpVerificationForm({
             onClick={onBack}
             disabled={isSubmitting}
             className={cn(
-              isDark ? "border-gray-600 text-white hover:bg-[#2a0a5a]" : ""
+              isDark ? "border-gray-600 text-white hover:bg-[#2a0a5a]" : "text-black"
             )}
           >
             Back
@@ -297,7 +297,7 @@ export function EmailOtpVerificationForm({
               Resending...
             </>
           ) : (
-            "Resend Code"
+            "Resend"
           )}
         </Button>
       </div>

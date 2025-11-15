@@ -4,7 +4,6 @@ import { useState, FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Loader2, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
@@ -30,12 +29,15 @@ export function EmailChangeForm({
   const [emailError, setEmailError] = useState<string | null>(null);
   const [showEmailPassword, setShowEmailPassword] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isResendingOtp, setIsResendingOtp] = useState(false);
+  const [isSendingNewEmailOtp, setIsSendingNewEmailOtp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [verificationMethod, setVerificationMethod] = useState<
     "password" | "otp"
   >("password");
   const [currentEmailOtpVerified, setCurrentEmailOtpVerified] = useState(false);
   const [tempEmailUsed, setTempEmailUsed] = useState<string | null>(null);
+  const [hasOtpBeenSent, setHasOtpBeenSent] = useState(false);
 
   const supabase = createClient();
   const { toast } = useToast();
@@ -92,6 +94,8 @@ export function EmailChangeForm({
 
       console.log("Email change OTP sent successfully to:", currentEmail);
       console.log("Temp email used:", tempEmail);
+
+      setHasOtpBeenSent(true);
 
       toast({
         title: "Verification Code Sent",
@@ -215,7 +219,7 @@ export function EmailChangeForm({
 
   const handleResendCurrentEmailOtp = async () => {
     setEmailError(null);
-    setIsSendingOtp(true);
+    setIsResendingOtp(true);
     try {
       // Resend OTP using updateUser to trigger email_change template
       // Use the same approach as handleSendCurrentEmailOtp
@@ -271,7 +275,7 @@ export function EmailChangeForm({
         description: error.message || "Failed to resend verification code.",
       });
     } finally {
-      setIsSendingOtp(false);
+      setIsResendingOtp(false);
     }
   };
 
@@ -300,7 +304,7 @@ export function EmailChangeForm({
       return;
     }
 
-    setIsSendingOtp(true);
+    setIsSendingNewEmailOtp(true);
     try {
       // Validate that new email is actually different from current email
       const trimmedNewEmail = newEmail.trim();
@@ -343,7 +347,7 @@ export function EmailChangeForm({
           "Failed to send verification code. Please try again.",
       });
     } finally {
-      setIsSendingOtp(false);
+      setIsSendingNewEmailOtp(false);
     }
   };
 
@@ -372,7 +376,7 @@ export function EmailChangeForm({
       return;
     }
 
-    setIsSendingOtp(true);
+    setIsSendingNewEmailOtp(true);
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: currentEmail,
@@ -413,7 +417,7 @@ export function EmailChangeForm({
           "Failed to send verification code. Please try again.",
       });
     } finally {
-      setIsSendingOtp(false);
+      setIsSendingNewEmailOtp(false);
     }
   };
 
@@ -428,6 +432,221 @@ export function EmailChangeForm({
       }
       className="space-y-4"
     >
+      {/* Verification Method Selection */}
+      <div className="space-y-2">
+        {/* <Label className={cn(isDark ? "text-white" : "text-gray-900")}>
+          Verify Current Email
+        </Label> */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+          <Label
+            className={cn(
+              "text-sm font-medium flex-shrink-0",
+              isDark ? "text-white" : "text-gray-900"
+            )}
+          >
+            {verificationMethod === "password"
+              ? "Enter current password"
+              : "Enter verification code"}
+          </Label>
+          <div className="flex justify-end">
+            <div
+              className={cn(
+                "inline-flex items-center gap-0.5 sm:gap-1 rounded-lg sm:rounded-xl p-0.5 overflow-x-auto whitespace-nowrap shadow-inner flex-shrink-0",
+                isDark
+                  ? "border border-gray-600 bg-transparent"
+                  : "border-2 border-gray-200 bg-white"
+              )}
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant={
+                  verificationMethod === "password" ? "default" : "ghost"
+                }
+                className={
+                  verificationMethod === "password"
+                    ? "shadow-lg hover:shadow-xl transition-all duration-300 font-bold bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-xs sm:text-sm px-1.5 sm:px-3 py-1 flex-shrink-0"
+                    : cn(
+                        "transition-all duration-300 font-semibold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1 flex-shrink-0",
+                        isDark
+                          ? "text-gray-200 hover:text-violet-300 hover:bg-violet-900/20"
+                          : "text-gray-600 hover:text-violet-600 hover:bg-violet-50/50"
+                      )
+                }
+                onClick={() => setVerificationMethod("password")}
+              >
+                Password
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={verificationMethod === "otp" ? "default" : "ghost"}
+                className={
+                  verificationMethod === "otp"
+                    ? "bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-purple-700/30 font-bold text-xs sm:text-sm px-1.5 sm:px-3 py-1 flex-shrink-0"
+                    : cn(
+                        "transition-all duration-300 font-semibold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1 flex-shrink-0",
+                        isDark
+                          ? "text-pink-300 hover:text-pink-200 hover:bg-pink-900/20"
+                          : "text-pink-600 hover:text-pink-700 hover:bg-pink-50"
+                      )
+                }
+                onClick={() => setVerificationMethod("otp")}
+              >
+                OTP
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Password Input */}
+        {verificationMethod === "password" && (
+          <div className="relative mt-2">
+            <Input
+              id="email-password"
+              type={showEmailPassword ? "text" : "password"}
+              autoComplete="current-password"
+              value={emailPassword}
+              onChange={(e) => setEmailPassword(e.target.value)}
+              placeholder="Enter current password"
+              className={cn(
+                "pr-10",
+                isDark
+                  ? "bg-[#06021d] border border-gray-600 text-white"
+                  : "bg-white text-black"
+              )}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowEmailPassword(!showEmailPassword)}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              {showEmailPassword ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* OTP Input */}
+        {verificationMethod === "otp" && (
+          <div className="mt-2">
+            {!currentEmailOtpVerified ? (
+              <div className="space-y-2">
+                <p
+                  className={cn(
+                    "text-xs mb-2",
+                    isDark ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  We'll send a code to: {currentEmail}
+                </p>
+                <div className="flex gap-2 w-full items-center">
+                  <Input
+                    id="current-email-otp"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={currentEmailOtp}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, "");
+                      if (value.length <= 6) {
+                        setCurrentEmailOtp(value);
+                      }
+                    }}
+                    placeholder="000000"
+                    className={cn(
+                      "text-center text-xl tracking-widest flex-1",
+                      isDark
+                        ? "bg-[#06021d] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleSendCurrentEmailOtp}
+                    disabled={isSendingOtp}
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "whitespace-nowrap",
+                      isDark
+                        ? "bg-green-600 hover:bg-green-700 border-green-600 text-white"
+                        : "bg-green-600 hover:bg-green-700 border-green-600 text-white"
+                    )}
+                  >
+                    {isSendingOtp ? (
+                      <>
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        Sending...
+                      </>
+                    ) : hasOtpBeenSent ? (
+                      "Resend"
+                    ) : (
+                      "OTP"
+                    )}
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={
+                      isSubmitting ||
+                      !currentEmailOtp ||
+                      currentEmailOtp.length !== 6
+                    }
+                    size="sm"
+                    className={cn(
+                      "text-xs sm:text-sm whitespace-nowrap",
+                      isDark
+                        ? "bg-[#7F39EC] hover:bg-[#6B2FC7] text-white"
+                        : "bg-[#7F39EC] hover:bg-[#6B2FC7] text-white"
+                    )}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        Verifying...
+                      </>
+                    ) : (
+                      "Verify"
+                    )}
+                  </Button>
+                </div>
+                <p
+                  className={cn(
+                    "text-xs text-center mt-2",
+                    isDark ? "text-gray-400" : "text-gray-500"
+                  )}
+                >
+                  Enter the 6-digit code sent to {currentEmail}
+                </p>
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  "rounded-lg p-2 border",
+                  isDark
+                    ? "bg-green-900/20 border-green-800"
+                    : "bg-green-50 border-green-200"
+                )}
+              >
+                <p
+                  className={cn(
+                    "text-xs",
+                    isDark ? "text-green-300" : "text-green-700"
+                  )}
+                >
+                  ✓ Current email verified
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* New Email Field */}
       <div className="space-y-2">
         <Label
@@ -443,10 +662,11 @@ export function EmailChangeForm({
           value={newEmail}
           onChange={(e) => setNewEmail(e.target.value)}
           placeholder="example@email.com"
+          disabled={verificationMethod === "otp" && !currentEmailOtpVerified}
           className={cn(
             isDark
-              ? "bg-[#180438] border border-gray-600 text-white"
-              : "bg-white"
+              ? "bg-[#06021d] border border-gray-600 text-white"
+              : "bg-white text-black"
           )}
           required
         />
@@ -467,197 +687,14 @@ export function EmailChangeForm({
           value={confirmEmail}
           onChange={(e) => setConfirmEmail(e.target.value)}
           placeholder="example@email.com"
+          disabled={verificationMethod === "otp" && !currentEmailOtpVerified}
           className={cn(
             isDark
-              ? "bg-[#180438] border border-gray-600 text-white"
-              : "bg-white"
+              ? "bg-[#06021d] border border-gray-600 text-white"
+              : "bg-white text-black"
           )}
           required
         />
-      </div>
-
-      {/* Verification Method Tabs */}
-      <div className="space-y-2">
-        <Label className={cn(isDark ? "text-white" : "text-gray-900")}>
-          Verify Current Email
-        </Label>
-        <Tabs
-          value={verificationMethod}
-          onValueChange={(value) =>
-            setVerificationMethod(value as "password" | "otp")
-          }
-          className="w-full"
-        >
-          <TabsList
-            className={cn(
-              "grid w-full grid-cols-2 h-8",
-              isDark ? "bg-[#2a0a5a]" : ""
-            )}
-          >
-            <TabsTrigger value="password" className="text-xs py-1 px-2">
-              Password
-            </TabsTrigger>
-            <TabsTrigger value="otp" className="text-xs py-1 px-2">
-              OTP
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="password" className="mt-2">
-            <div className="relative">
-              <Input
-                id="email-password"
-                type={showEmailPassword ? "text" : "password"}
-                autoComplete="current-password"
-                value={emailPassword}
-                onChange={(e) => setEmailPassword(e.target.value)}
-                placeholder="Enter current password"
-                className={cn(
-                  "pr-10",
-                  isDark
-                    ? "bg-[#180438] border border-gray-600 text-white"
-                    : "bg-white"
-                )}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowEmailPassword(!showEmailPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                {showEmailPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="otp" className="mt-2">
-            {!currentEmailOtpVerified ? (
-              <div className="space-y-2">
-                <p
-                  className={cn(
-                    "text-xs mb-2",
-                    isDark ? "text-gray-400" : "text-gray-600"
-                  )}
-                >
-                  We'll send a code to: {currentEmail}
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    id="current-email-otp"
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={currentEmailOtp}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, "");
-                      if (value.length <= 6) {
-                        setCurrentEmailOtp(value);
-                      }
-                    }}
-                    placeholder="000000"
-                    className={cn(
-                      "text-center text-xl tracking-widest flex-1",
-                      isDark
-                        ? "bg-[#180438] border border-gray-600 text-white"
-                        : "bg-white"
-                    )}
-                    required
-                  />
-                  <Button
-                    type="button"
-                    onClick={handleSendCurrentEmailOtp}
-                    disabled={isSendingOtp}
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      "whitespace-nowrap",
-                      isDark
-                        ? "border-gray-600 text-white hover:bg-[#2a0a5a]"
-                        : ""
-                    )}
-                  >
-                    {isSendingOtp ? (
-                      <>
-                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      "Send Code"
-                    )}
-                  </Button>
-                </div>
-                <p
-                  className={cn(
-                    "text-xs text-center",
-                    isDark ? "text-gray-400" : "text-gray-500"
-                  )}
-                >
-                  Enter the 6-digit code sent to {currentEmail}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={handleResendCurrentEmailOtp}
-                    disabled={isSendingOtp || isSubmitting}
-                    className={cn(
-                      "text-xs flex-1",
-                      isDark
-                        ? "text-gray-400 hover:text-white"
-                        : "text-gray-600"
-                    )}
-                  >
-                    {isSendingOtp ? (
-                      <>
-                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                        Resending...
-                      </>
-                    ) : (
-                      "Resend Code"
-                    )}
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={
-                      isSubmitting ||
-                      !currentEmailOtp ||
-                      currentEmailOtp.length !== 6
-                    }
-                    className={cn(
-                      "text-xs flex-1",
-                      isDark
-                        ? "bg-[#7F39EC] hover:bg-[#6B2FC7] text-white"
-                        : "bg-[#7F39EC] hover:bg-[#6B2FC7] text-white"
-                    )}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                        Verifying...
-                      </>
-                    ) : (
-                      "Verify"
-                    )}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-lg p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                <p
-                  className={cn(
-                    "text-xs",
-                    isDark ? "text-green-300" : "text-green-700"
-                  )}
-                >
-                  ✓ Current email verified
-                </p>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
       </div>
 
       {/* Error Message */}
@@ -669,9 +706,14 @@ export function EmailChangeForm({
           type="button"
           variant="outline"
           onClick={onCancel}
-          disabled={isSendingOtp || isSubmitting}
+          disabled={
+            isSendingOtp ||
+            isResendingOtp ||
+            isSendingNewEmailOtp ||
+            isSubmitting
+          }
           className={cn(
-            isDark ? "border-gray-600 text-white hover:bg-[#2a0a5a]" : ""
+            isDark ? "border-gray-600 text-white hover:bg-[#2a0a5a]" : "text-black"
           )}
         >
           Cancel
@@ -679,7 +721,7 @@ export function EmailChangeForm({
         <Button
           type="submit"
           disabled={
-            isSendingOtp ||
+            isSendingNewEmailOtp ||
             isSubmitting ||
             (verificationMethod === "password" && !emailPassword) ||
             (verificationMethod === "otp" && !currentEmailOtpVerified)
@@ -690,17 +732,13 @@ export function EmailChangeForm({
               : "bg-[#7F39EC] hover:bg-[#6B2FC7] text-white"
           )}
         >
-          {isSendingOtp ? (
+          {isSendingNewEmailOtp ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Sending Code...
             </>
-          ) : verificationMethod === "otp" && !currentEmailOtpVerified ? (
-            "Verify Current Email First"
-          ) : verificationMethod === "password" ? (
-            "Verify Password & Send Code to New Email"
           ) : (
-            "Send Code to New Email"
+            "Verify Email"
           )}
         </Button>
       </div>
