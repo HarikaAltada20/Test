@@ -41,6 +41,16 @@ export function EmailOtpVerificationForm({
 
     setIsSubmitting(true);
     try {
+      // Capture the user's current email BEFORE we start the OTP verification flow.
+      // This allows us to correctly log old_email -> new_email transitions even when
+      // the standard Supabase OTP flow updates the email without hitting our admin API.
+      const {
+        data: { user: userBefore },
+      } = await supabase.auth.getUser();
+      const originalEmail = userBefore?.email || null;
+
+      let usedForceUpdate = false;
+
       const { data: verifyData, error: verifyError } =
         await supabase.auth.verifyOtp({
           email: newEmail.trim(),
@@ -125,6 +135,7 @@ export function EmailOtpVerificationForm({
           if (result.email) {
             finalEmail = result.email;
             emailUpdated = true;
+            usedForceUpdate = true;
 
             // Refresh the session to get the updated user data
             await supabase.auth.refreshSession();
@@ -156,6 +167,33 @@ export function EmailOtpVerificationForm({
           console.error("Error syncing users table:", updateError);
           // Don't throw - auth email is updated which is critical
         }
+      }
+
+      // Best-effort logging of the email change for audit purposes.
+      // If the force-update path was used, the API route already logged the change.
+      // If the normal OTP flow handled the change, we call the API in log-only mode.
+      try {
+        if (
+          !usedForceUpdate &&
+          originalEmail &&
+          finalEmail &&
+          originalEmail.toLowerCase() !== finalEmail.toLowerCase()
+        ) {
+          await fetch("/api/account/update-email", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              newEmail: finalEmail,
+              oldEmail: originalEmail,
+              logOnly: true,
+            }),
+          });
+        }
+      } catch (logError) {
+        console.error("Error logging email change:", logError);
+        // Don't surface this to the user – email has already been updated.
       }
 
       toast({
