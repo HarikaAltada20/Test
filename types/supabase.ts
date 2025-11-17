@@ -149,6 +149,8 @@ export interface Database {
           total_money_won: number;
           withdrawable_balance: number;
           total_views: number;
+          type_of_content: Json | null;
+          other_type_of_content: Json | null;
         };
         Insert: {
           id: string;
@@ -160,6 +162,8 @@ export interface Database {
           total_money_won?: number;
           withdrawable_balance?: number;
           total_views?: number;
+          type_of_content?: Json | null;
+          other_type_of_content?: Json | null;
         };
         Update: {
           id?: string;
@@ -171,6 +175,8 @@ export interface Database {
           total_money_won?: number;
           withdrawable_balance?: number;
           total_views?: number;
+          type_of_content?: Json | null;
+          other_type_of_content?: Json | null;
         };
       };
       subscriptions: {

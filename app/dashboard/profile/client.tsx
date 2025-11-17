@@ -48,6 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface UserData {
   id: string;
@@ -75,6 +76,8 @@ interface CreatorProfile {
   city?: string | null;
   address?: string | null;
   languages?: string[] | null;
+  type_of_content?: string[] | null;
+  other_type_of_content?: string[] | null;
 }
 
 interface AdvertiserProfile {
@@ -98,6 +101,21 @@ interface EmailChangeLog {
   new_email: string;
   changed_at: string;
 }
+
+// Content type categories (same as used in contest creation)
+const CONTENT_TYPE_CATEGORIES = [
+  { value: "crypto-financial", label: "Crypto/Financial" },
+  { value: "education", label: "Education" },
+  { value: "dating", label: "Dating" },
+  { value: "food-drink", label: "Food & Drink" },
+  { value: "games-toys", label: "Games & Toys" },
+  { value: "health-wellness", label: "Health & Wellness" },
+  { value: "home-living", label: "Home & Living" },
+  { value: "pets-animals", label: "Pets & Animals" },
+  { value: "sports-outdoors", label: "Sports & Outdoors" },
+  { value: "technology", label: "Technology" },
+  { value: "other", label: "Other" },
+] as const;
 
 export default function ProfilePage({
   user,
@@ -143,6 +161,11 @@ export default function ProfilePage({
   const [editedAddress, setEditedAddress] = useState("");
   const [editedLanguages, setEditedLanguages] = useState<string[]>([]);
   const [languageInput, setLanguageInput] = useState("");
+  const [editedContentTypesCreated, setEditedContentTypesCreated] = useState<
+    string[]
+  >([]);
+  const [editedInterestedContentTypes, setEditedInterestedContentTypes] =
+    useState<string[]>([]);
 
   // Country, state, city codes for cascading dropdowns
   const [selectedCountryCode, setSelectedCountryCode] = useState<string>("");
@@ -338,6 +361,17 @@ export default function ProfilePage({
               setEditedCity(profile.city || "");
               setEditedAddress(profile.address || "");
               setEditedLanguages(profile.languages || []);
+              // Handle JSONB fields - they come as JSON but we treat them as string arrays
+              const typeOfContent = profile.type_of_content as string[] | null;
+              const otherTypeOfContent = profile.other_type_of_content as
+                | string[]
+                | null;
+              setEditedContentTypesCreated(
+                Array.isArray(typeOfContent) ? typeOfContent : []
+              );
+              setEditedInterestedContentTypes(
+                Array.isArray(otherTypeOfContent) ? otherTypeOfContent : []
+              );
 
               // Find country code from country name
               if (profile.country) {
@@ -940,7 +974,11 @@ export default function ProfilePage({
       editedCity !== (creatorProfile.city || "") ||
       editedAddress !== (creatorProfile.address || "") ||
       JSON.stringify(editedLanguages.sort()) !==
-        JSON.stringify((creatorProfile.languages || []).sort())
+        JSON.stringify((creatorProfile.languages || []).sort()) ||
+      JSON.stringify(editedContentTypesCreated.sort()) !==
+        JSON.stringify((creatorProfile.type_of_content || []).sort()) ||
+      JSON.stringify(editedInterestedContentTypes.sort()) !==
+        JSON.stringify((creatorProfile.other_type_of_content || []).sort())
     );
   };
 
@@ -980,6 +1018,24 @@ export default function ProfilePage({
       ) {
         updateData.languages =
           editedLanguages.length > 0 ? editedLanguages : null;
+      }
+      if (
+        JSON.stringify(editedContentTypesCreated.sort()) !==
+        JSON.stringify((creatorProfile.type_of_content || []).sort())
+      ) {
+        updateData.type_of_content =
+          editedContentTypesCreated.length > 0
+            ? editedContentTypesCreated
+            : null;
+      }
+      if (
+        JSON.stringify(editedInterestedContentTypes.sort()) !==
+        JSON.stringify((creatorProfile.other_type_of_content || []).sort())
+      ) {
+        updateData.other_type_of_content =
+          editedInterestedContentTypes.length > 0
+            ? editedInterestedContentTypes
+            : null;
       }
 
       if (Object.keys(updateData).length === 0) {
@@ -2105,6 +2161,177 @@ export default function ProfilePage({
                         ))}
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Type of content I create - Max 3 selections */}
+                <div className="relative w-full col-span-1 sm:col-span-2">
+                  <div className="space-y-3">
+                    <label
+                      className={cn(
+                        "text-sm font-medium block",
+                        isDark ? "text-white" : "text-[#1A1A1A]"
+                      )}
+                    >
+                      Type of content I create{" "}
+                      <span className="text-xs text-gray-500">
+                        (Select up to 3)
+                      </span>
+                    </label>
+                    <div
+                      className={cn(
+                        "rounded-lg border p-4 space-y-3",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
+                      )}
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {CONTENT_TYPE_CATEGORIES.map((category) => {
+                          const isChecked = editedContentTypesCreated.includes(
+                            category.value
+                          );
+                          const isDisabled =
+                            !isChecked && editedContentTypesCreated.length >= 3;
+                          return (
+                            <div
+                              key={category.value}
+                              className="flex items-center space-x-2"
+                            >
+                              <Checkbox
+                                id={`content-created-${category.value}`}
+                                checked={isChecked}
+                                disabled={isDisabled || isSubmitting}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    if (editedContentTypesCreated.length < 3) {
+                                      setEditedContentTypesCreated([
+                                        ...editedContentTypesCreated,
+                                        category.value,
+                                      ]);
+                                    }
+                                  } else {
+                                    setEditedContentTypesCreated(
+                                      editedContentTypesCreated.filter(
+                                        (v) => v !== category.value
+                                      )
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  isDark
+                                    ? "border-gray-400 data-[state=checked]:bg-purple-600"
+                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                )}
+                              />
+                              <label
+                                htmlFor={`content-created-${category.value}`}
+                                className={cn(
+                                  "text-sm font-normal cursor-pointer",
+                                  isDisabled
+                                    ? "opacity-50 cursor-not-allowed"
+                                    : "cursor-pointer",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                {category.label}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {editedContentTypesCreated.length > 0 && (
+                        <p
+                          className={cn(
+                            "text-xs mt-2",
+                            isDark ? "text-gray-400" : "text-gray-500"
+                          )}
+                        >
+                          {editedContentTypesCreated.length} of 3 selected
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Other type of content I am interested in - Unlimited selections */}
+                <div className="relative w-full col-span-1 sm:col-span-2">
+                  <div className="space-y-3">
+                    <label
+                      className={cn(
+                        "text-sm font-medium block",
+                        isDark ? "text-white" : "text-[#1A1A1A]"
+                      )}
+                    >
+                      Other type of content I am interested in to create content
+                    </label>
+                    <div
+                      className={cn(
+                        "rounded-lg border p-4 space-y-3",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
+                      )}
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {CONTENT_TYPE_CATEGORIES.map((category) => {
+                          const isChecked =
+                            editedInterestedContentTypes.includes(
+                              category.value
+                            );
+                          return (
+                            <div
+                              key={category.value}
+                              className="flex items-center space-x-2"
+                            >
+                              <Checkbox
+                                id={`content-interested-${category.value}`}
+                                checked={isChecked}
+                                disabled={isSubmitting}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setEditedInterestedContentTypes([
+                                      ...editedInterestedContentTypes,
+                                      category.value,
+                                    ]);
+                                  } else {
+                                    setEditedInterestedContentTypes(
+                                      editedInterestedContentTypes.filter(
+                                        (v) => v !== category.value
+                                      )
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  isDark
+                                    ? "border-gray-400 data-[state=checked]:bg-purple-600"
+                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                )}
+                              />
+                              <label
+                                htmlFor={`content-interested-${category.value}`}
+                                className={cn(
+                                  "text-sm font-normal cursor-pointer",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                {category.label}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {editedInterestedContentTypes.length > 0 && (
+                        <p
+                          className={cn(
+                            "text-xs mt-2",
+                            isDark ? "text-gray-400" : "text-gray-500"
+                          )}
+                        >
+                          {editedInterestedContentTypes.length} selected
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
