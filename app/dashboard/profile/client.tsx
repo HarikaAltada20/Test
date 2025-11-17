@@ -49,6 +49,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import ISO6391 from "iso-639-1";
 
 interface UserData {
   id: string;
@@ -76,8 +83,15 @@ interface CreatorProfile {
   city?: string | null;
   address?: string | null;
   languages?: string[] | null;
-  type_of_content?: string[] | null;
-  other_type_of_content?: string[] | null;
+  type_of_content?:
+    | Array<{ category: string; subcategory: string }>
+    | string[]
+    | null;
+  other_type_of_content?:
+    | Array<{ category: string; subcategory: string }>
+    | string[]
+    | null;
+  has_claimed_profile_reward?: boolean;
 }
 
 interface AdvertiserProfile {
@@ -102,19 +116,252 @@ interface EmailChangeLog {
   changed_at: string;
 }
 
-// Content type categories (same as used in contest creation)
+// Content type categories with subcategories
 const CONTENT_TYPE_CATEGORIES = [
-  { value: "crypto-financial", label: "Crypto/Financial" },
-  { value: "education", label: "Education" },
-  { value: "dating", label: "Dating" },
-  { value: "food-drink", label: "Food & Drink" },
-  { value: "games-toys", label: "Games & Toys" },
-  { value: "health-wellness", label: "Health & Wellness" },
-  { value: "home-living", label: "Home & Living" },
-  { value: "pets-animals", label: "Pets & Animals" },
-  { value: "sports-outdoors", label: "Sports & Outdoors" },
-  { value: "technology", label: "Technology" },
-  { value: "other", label: "Other" },
+  {
+    id: "beauty",
+    name: "Beauty",
+    subcategories: [
+      "Skincare",
+      "Makeup",
+      "Haircare",
+      "Fragrance",
+      "Nail Art",
+      "Men's Grooming",
+      "K-Beauty",
+    ],
+  },
+  {
+    id: "fashion",
+    name: "Fashion",
+    subcategories: [
+      "Outfits",
+      "Streetwear",
+      "Luxury",
+      "Athleisure",
+      "Accessories",
+      "Footwear",
+      "Sustainable Fashion",
+    ],
+  },
+  {
+    id: "fitness",
+    name: "Fitness",
+    subcategories: [
+      "Gym Workouts",
+      "Home Workouts",
+      "Yoga & Pilates",
+      "Running",
+      "Nutrition",
+      "Supplements",
+      "Crossfit",
+    ],
+  },
+  {
+    id: "food",
+    name: "Food",
+    subcategories: [
+      "Recipes",
+      "Restaurant Reviews",
+      "Street Food",
+      "Desserts",
+      "Beverages (Coffee/Tea)",
+      "Vegan & Plant-based",
+      "Product Taste Tests",
+    ],
+  },
+  {
+    id: "gaming",
+    name: "Gaming",
+    subcategories: [
+      "Mobile Games",
+      "Console / PC Games",
+      "Esports",
+      "Walkthroughs / Let's Play",
+      "Game Reviews",
+      "Game Tips & Tricks",
+      "Live Streaming",
+    ],
+  },
+  {
+    id: "tech",
+    name: "Tech",
+    subcategories: [
+      "Smartphones",
+      "Laptops & PCs",
+      "Smart Home",
+      "Wearables",
+      "Apps",
+      "Software & SaaS",
+      "Gadget Reviews",
+    ],
+  },
+  {
+    id: "finance",
+    name: "Finance",
+    subcategories: [
+      "Personal Finance",
+      "Investing",
+      "Crypto",
+      "Fintech Apps",
+      "Money Saving Tips",
+      "Tax & Accounting",
+    ],
+  },
+  {
+    id: "travel",
+    name: "Travel",
+    subcategories: [
+      "Travel Vlogs",
+      "Budget Travel",
+      "Luxury Travel",
+      "Hotel Reviews",
+      "Local Guides",
+      "Travel Gear",
+    ],
+  },
+  {
+    id: "home_decor",
+    name: "Home & Decor",
+    subcategories: [
+      "Interior Design",
+      "DIY Projects",
+      "Organization Hacks",
+      "Cleaning Tips",
+      "Home Appliances",
+      "Small Space Ideas",
+    ],
+  },
+  {
+    id: "education",
+    name: "Education",
+    subcategories: [
+      "Study Tips",
+      "Course Reviews",
+      "Skill Tutorials",
+      "Language Learning",
+      "Career Advice",
+      "Exam Prep",
+    ],
+  },
+  {
+    id: "art_diy",
+    name: "Art & DIY",
+    subcategories: [
+      "Painting",
+      "Drawing",
+      "Crafts",
+      "Prints & Merch",
+      "Handmade Products",
+      "Design Tutorials",
+    ],
+  },
+  {
+    id: "parenting",
+    name: "Parenting",
+    subcategories: [
+      "Baby Care",
+      "Toddler Activities",
+      "Kids Education",
+      "Parenting Tips",
+      "Product Reviews for Parents",
+    ],
+  },
+  {
+    id: "sports",
+    name: "Sports",
+    subcategories: [
+      "Football / Soccer",
+      "Basketball",
+      "Cricket",
+      "Running & Training",
+      "Cycling",
+      "Outdoor Adventure",
+    ],
+  },
+  {
+    id: "auto",
+    name: "Auto",
+    subcategories: [
+      "Cars",
+      "Bikes",
+      "Electric Vehicles (EVs)",
+      "Auto Accessories",
+      "Car Reviews",
+      "Maintenance Tips",
+    ],
+  },
+  {
+    id: "pets",
+    name: "Pets",
+    subcategories: [
+      "Pet Care",
+      "Pet Training",
+      "Pet Food & Products",
+      "Funny Pet Videos",
+      "Pet Health",
+    ],
+  },
+  {
+    id: "business",
+    name: "Business",
+    subcategories: [
+      "Startups",
+      "SaaS & Tools",
+      "Productivity",
+      "Marketing Tips",
+      "Side Hustles",
+    ],
+  },
+  {
+    id: "entertainment",
+    name: "Entertainment",
+    subcategories: [
+      "Comedy",
+      "Drama",
+      "Romance",
+      "Horror",
+      "Emotional / Sad",
+      "Memes",
+      "Reaction Videos",
+      "Sketches / Skits",
+      "Parodies",
+      "Trailers & Reviews",
+    ],
+  },
+  {
+    id: "music_dance",
+    name: "Music & Dance",
+    subcategories: [
+      "Covers",
+      "Original Music",
+      "Music Production",
+      "Dance Choreography",
+      "Instrument Tutorials",
+    ],
+  },
+  {
+    id: "photo_video",
+    name: "Photography & Video",
+    subcategories: [
+      "Camera Gear",
+      "Editing Tutorials",
+      "Cinematography",
+      "Mobile Filmmaking",
+      "Lighting & Sound",
+    ],
+  },
+  {
+    id: "sustainability",
+    name: "Sustainability",
+    subcategories: [
+      "Eco Products",
+      "Zero Waste",
+      "Sustainable Fashion",
+      "Green Tech",
+      "Upcycling",
+    ],
+  },
 ] as const;
 
 export default function ProfilePage({
@@ -134,6 +381,7 @@ export default function ProfilePage({
   const [companyProfileLoading, setCompanyProfileLoading] = useState(false);
   const [referrer, setReferrer] = useState<string | null>(null);
   const [hasNetworkError, setHasNetworkError] = useState(false);
+  const [hasReceivedProfileBonus, setHasReceivedProfileBonus] = useState(false);
   const supabase = createClient();
   const { toast } = useToast();
 
@@ -161,11 +409,13 @@ export default function ProfilePage({
   const [editedAddress, setEditedAddress] = useState("");
   const [editedLanguages, setEditedLanguages] = useState<string[]>([]);
   const [languageInput, setLanguageInput] = useState("");
+  // Type of content I create: stores category IDs (max 3)
   const [editedContentTypesCreated, setEditedContentTypesCreated] = useState<
     string[]
   >([]);
+  // Other type of content: stores {category, subcategory} pairs for selected categories
   const [editedInterestedContentTypes, setEditedInterestedContentTypes] =
-    useState<string[]>([]);
+    useState<Array<{ category: string; subcategory: string }>>([]);
 
   // Country, state, city codes for cascading dropdowns
   const [selectedCountryCode, setSelectedCountryCode] = useState<string>("");
@@ -361,16 +611,110 @@ export default function ProfilePage({
               setEditedCity(profile.city || "");
               setEditedAddress(profile.address || "");
               setEditedLanguages(profile.languages || []);
-              // Handle JSONB fields - they come as JSON but we treat them as string arrays
-              const typeOfContent = profile.type_of_content as string[] | null;
-              const otherTypeOfContent = profile.other_type_of_content as
+              // Handle JSONB fields
+              // type_of_content: stores category IDs (string[])
+              // other_type_of_content: stores {category, subcategory} pairs
+              const typeOfContent = profile.type_of_content as
+                | Array<{ category: string; subcategory: string }>
                 | string[]
                 | null;
-              setEditedContentTypesCreated(
-                Array.isArray(typeOfContent) ? typeOfContent : []
-              );
+              const otherTypeOfContent = profile.other_type_of_content as
+                | Array<{ category: string; subcategory: string }>
+                | string[]
+                | null;
+
+              // Convert type_of_content to category IDs
+              const convertToCategoryIds = (data: any): string[] => {
+                if (!data || !Array.isArray(data)) return [];
+                // If it's already string array (category IDs), return as is
+                if (data.length > 0 && typeof data[0] === "string") {
+                  // Check if they're category IDs or old format strings
+                  const categoryIds: string[] = [];
+                  (data as string[]).forEach((value) => {
+                    // Check if it's a valid category ID
+                    const isCategoryId = CONTENT_TYPE_CATEGORIES.some(
+                      (cat) => cat.id === value
+                    );
+                    if (isCategoryId) {
+                      categoryIds.push(value);
+                    } else {
+                      // Old format - try to find matching category
+                      const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+                        cat.subcategories.some(
+                          (sub) =>
+                            sub.toLowerCase().includes(value.toLowerCase()) ||
+                            value.toLowerCase().includes(cat.id.toLowerCase())
+                        )
+                      );
+                      if (category && !categoryIds.includes(category.id)) {
+                        categoryIds.push(category.id);
+                      }
+                    }
+                  });
+                  return categoryIds;
+                }
+                // If it's objects with category+subcategory, extract unique category IDs
+                if (
+                  data.length > 0 &&
+                  typeof data[0] === "object" &&
+                  "category" in data[0]
+                ) {
+                  const categoryIds = new Set<string>();
+                  (
+                    data as Array<{ category: string; subcategory?: string }>
+                  ).forEach((item) => {
+                    categoryIds.add(item.category);
+                  });
+                  return Array.from(categoryIds);
+                }
+                return [];
+              };
+
+              // Convert other_type_of_content to {category, subcategory} format
+              const convertToSubcategoryFormat = (
+                data: any
+              ): Array<{ category: string; subcategory: string }> => {
+                if (!data || !Array.isArray(data)) return [];
+                // Check if already in new format
+                if (
+                  data.length > 0 &&
+                  typeof data[0] === "object" &&
+                  "category" in data[0] &&
+                  "subcategory" in data[0]
+                ) {
+                  return data as Array<{
+                    category: string;
+                    subcategory: string;
+                  }>;
+                }
+                // Old format - convert string array to objects
+                const result: Array<{ category: string; subcategory: string }> =
+                  [];
+                (data as string[]).forEach((oldValue) => {
+                  const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+                    cat.subcategories.some(
+                      (sub) =>
+                        sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                        oldValue.toLowerCase().includes(cat.id.toLowerCase())
+                    )
+                  );
+                  if (category) {
+                    const subcategory =
+                      category.subcategories.find((sub) =>
+                        sub.toLowerCase().includes(oldValue.toLowerCase())
+                      ) || category.subcategories[0];
+                    result.push({
+                      category: category.id,
+                      subcategory: subcategory,
+                    });
+                  }
+                });
+                return result;
+              };
+
+              setEditedContentTypesCreated(convertToCategoryIds(typeOfContent));
               setEditedInterestedContentTypes(
-                Array.isArray(otherTypeOfContent) ? otherTypeOfContent : []
+                convertToSubcategoryFormat(otherTypeOfContent)
               );
 
               // Find country code from country name
@@ -390,6 +734,11 @@ export default function ProfilePage({
                     }
                   }
                 }
+              }
+
+              // Check if user has already claimed profile update bonus
+              if (profile.has_claimed_profile_reward) {
+                setHasReceivedProfileBonus(true);
               }
             }
           } catch (profileError) {
@@ -947,13 +1296,18 @@ export default function ProfilePage({
     }
   };
 
+  // Get all languages from ISO6391
+  const allLanguages = ISO6391.getAllNames().sort();
+
   // Helper functions for languages
-  const handleAddLanguage = () => {
+  const handleAddLanguage = (languageName?: string) => {
+    const languageToAdd = languageName || languageInput.trim();
     if (
-      languageInput.trim() &&
-      !editedLanguages.includes(languageInput.trim())
+      languageToAdd &&
+      !editedLanguages.includes(languageToAdd) &&
+      editedLanguages.length < 5
     ) {
-      setEditedLanguages([...editedLanguages, languageInput.trim()]);
+      setEditedLanguages([...editedLanguages, languageToAdd]);
       setLanguageInput("");
     }
   };
@@ -962,9 +1316,108 @@ export default function ProfilePage({
     setEditedLanguages(editedLanguages.filter((lang) => lang !== language));
   };
 
+  // Helper to normalize subcategory arrays for comparison
+  const normalizeSubcategories = (
+    arr: Array<{ category: string; subcategory: string }>
+  ) => {
+    return arr
+      .map((item) => `${item.category}:${item.subcategory}`)
+      .sort()
+      .join(",");
+  };
+
   // Check if profile has changes
   const hasProfileChanges = () => {
     if (!creatorProfile) return false;
+
+    const currentTypeOfContent = creatorProfile.type_of_content as
+      | Array<{ category: string; subcategory: string }>
+      | string[]
+      | null;
+    const currentOtherTypeOfContent = creatorProfile.other_type_of_content as
+      | Array<{ category: string; subcategory: string }>
+      | string[]
+      | null;
+
+    // Convert current type_of_content to category IDs for comparison
+    const convertToCategoryIds = (data: any): string => {
+      if (!data || !Array.isArray(data)) return "";
+      // If it's already string array (category IDs), return sorted
+      if (data.length > 0 && typeof data[0] === "string") {
+        const categoryIds: string[] = [];
+        (data as string[]).forEach((value) => {
+          const isCategoryId = CONTENT_TYPE_CATEGORIES.some(
+            (cat) => cat.id === value
+          );
+          if (isCategoryId) {
+            categoryIds.push(value);
+          } else {
+            // Old format - find matching category
+            const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+              cat.subcategories.some(
+                (sub) =>
+                  sub.toLowerCase().includes(value.toLowerCase()) ||
+                  value.toLowerCase().includes(cat.id.toLowerCase())
+              )
+            );
+            if (category && !categoryIds.includes(category.id)) {
+              categoryIds.push(category.id);
+            }
+          }
+        });
+        return categoryIds.sort().join(",");
+      }
+      // If it's objects, extract unique category IDs
+      if (
+        data.length > 0 &&
+        typeof data[0] === "object" &&
+        "category" in data[0]
+      ) {
+        const categoryIds = new Set<string>();
+        (data as Array<{ category: string; subcategory?: string }>).forEach(
+          (item) => {
+            categoryIds.add(item.category);
+          }
+        );
+        return Array.from(categoryIds).sort().join(",");
+      }
+      return "";
+    };
+
+    // Convert current other_type_of_content to normalized format
+    const convertSubcategories = (data: any): string => {
+      if (!data || !Array.isArray(data)) return "";
+      if (
+        data.length > 0 &&
+        typeof data[0] === "object" &&
+        "category" in data[0] &&
+        "subcategory" in data[0]
+      ) {
+        return normalizeSubcategories(
+          data as Array<{ category: string; subcategory: string }>
+        );
+      }
+      // Old format - convert
+      const converted: Array<{ category: string; subcategory: string }> = [];
+      (data as string[]).forEach((oldValue) => {
+        const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+          cat.subcategories.some(
+            (sub) =>
+              sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+              oldValue.toLowerCase().includes(cat.id.toLowerCase())
+          )
+        );
+        if (category) {
+          const subcategory =
+            category.subcategories.find((sub) =>
+              sub.toLowerCase().includes(oldValue.toLowerCase())
+            ) || category.subcategories[0];
+          converted.push({ category: category.id, subcategory: subcategory });
+        }
+      });
+      return normalizeSubcategories(converted);
+    };
+
     return (
       editedPhone !== (creatorProfile.phone_number || "") ||
       editedDateOfBirth !== (creatorProfile.date_of_birth || "") ||
@@ -976,9 +1429,9 @@ export default function ProfilePage({
       JSON.stringify(editedLanguages.sort()) !==
         JSON.stringify((creatorProfile.languages || []).sort()) ||
       JSON.stringify(editedContentTypesCreated.sort()) !==
-        JSON.stringify((creatorProfile.type_of_content || []).sort()) ||
-      JSON.stringify(editedInterestedContentTypes.sort()) !==
-        JSON.stringify((creatorProfile.other_type_of_content || []).sort())
+        convertToCategoryIds(currentTypeOfContent) ||
+      normalizeSubcategories(editedInterestedContentTypes) !==
+        convertSubcategories(currentOtherTypeOfContent)
     );
   };
 
@@ -987,6 +1440,18 @@ export default function ProfilePage({
     if (!userData || !creatorProfile || !hasProfileChanges()) {
       return;
     }
+
+    // Check if user has already received the bonus - if so, prevent editing
+    if (hasReceivedProfileBonus) {
+      toast({
+        variant: "destructive",
+        title: "Editing Disabled",
+        description:
+          "You have already received the profile update bonus. Profile editing is no longer available.",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const updateData: any = {};
@@ -1019,9 +1484,94 @@ export default function ProfilePage({
         updateData.languages =
           editedLanguages.length > 0 ? editedLanguages : null;
       }
+      // Compare content types
+      const currentTypeOfContent = creatorProfile.type_of_content as
+        | Array<{ category: string; subcategory: string }>
+        | string[]
+        | null;
+      const currentOtherTypeOfContent = creatorProfile.other_type_of_content as
+        | Array<{ category: string; subcategory: string }>
+        | string[]
+        | null;
+
+      // Convert current type_of_content to category IDs for comparison
+      const convertToCategoryIds = (data: any): string => {
+        if (!data || !Array.isArray(data)) return "";
+        if (data.length > 0 && typeof data[0] === "string") {
+          const categoryIds: string[] = [];
+          (data as string[]).forEach((value) => {
+            const isCategoryId = CONTENT_TYPE_CATEGORIES.some(
+              (cat) => cat.id === value
+            );
+            if (isCategoryId) {
+              categoryIds.push(value);
+            } else {
+              const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+                cat.subcategories.some(
+                  (sub) =>
+                    sub.toLowerCase().includes(value.toLowerCase()) ||
+                    value.toLowerCase().includes(cat.id.toLowerCase())
+                )
+              );
+              if (category && !categoryIds.includes(category.id)) {
+                categoryIds.push(category.id);
+              }
+            }
+          });
+          return categoryIds.sort().join(",");
+        }
+        if (
+          data.length > 0 &&
+          typeof data[0] === "object" &&
+          "category" in data[0]
+        ) {
+          const categoryIds = new Set<string>();
+          (data as Array<{ category: string; subcategory?: string }>).forEach(
+            (item) => {
+              categoryIds.add(item.category);
+            }
+          );
+          return Array.from(categoryIds).sort().join(",");
+        }
+        return "";
+      };
+
+      // Convert current other_type_of_content to normalized format
+      const convertSubcategories = (data: any): string => {
+        if (!data || !Array.isArray(data)) return "";
+        if (
+          data.length > 0 &&
+          typeof data[0] === "object" &&
+          "category" in data[0] &&
+          "subcategory" in data[0]
+        ) {
+          return normalizeSubcategories(
+            data as Array<{ category: string; subcategory: string }>
+          );
+        }
+        const converted: Array<{ category: string; subcategory: string }> = [];
+        (data as string[]).forEach((oldValue) => {
+          const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+            cat.subcategories.some(
+              (sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                oldValue.toLowerCase().includes(cat.id.toLowerCase())
+            )
+          );
+          if (category) {
+            const subcategory =
+              category.subcategories.find((sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase())
+              ) || category.subcategories[0];
+            converted.push({ category: category.id, subcategory: subcategory });
+          }
+        });
+        return normalizeSubcategories(converted);
+      };
+
       if (
         JSON.stringify(editedContentTypesCreated.sort()) !==
-        JSON.stringify((creatorProfile.type_of_content || []).sort())
+        convertToCategoryIds(currentTypeOfContent)
       ) {
         updateData.type_of_content =
           editedContentTypesCreated.length > 0
@@ -1029,8 +1579,8 @@ export default function ProfilePage({
             : null;
       }
       if (
-        JSON.stringify(editedInterestedContentTypes.sort()) !==
-        JSON.stringify((creatorProfile.other_type_of_content || []).sort())
+        normalizeSubcategories(editedInterestedContentTypes) !==
+        convertSubcategories(currentOtherTypeOfContent)
       ) {
         updateData.other_type_of_content =
           editedInterestedContentTypes.length > 0
@@ -1043,6 +1593,14 @@ export default function ProfilePage({
         return;
       }
 
+      // Check if user has already claimed the bonus before giving it
+      if (creatorProfile.has_claimed_profile_reward) {
+        // Should not reach here due to early return check, but just in case
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Update the profile first
       const { error } = await supabase
         .from("creator_profiles")
         .update(updateData)
@@ -1050,14 +1608,40 @@ export default function ProfilePage({
 
       if (error) throw error;
 
+      // Claim the bonus via API route
+      const bonusResponse = await fetch("/api/profile/claim-update-bonus", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const bonusData = await bonusResponse.json();
+
+      if (bonusResponse.ok && bonusData.success) {
+        setHasReceivedProfileBonus(true);
+        toast({
+          title: "Profile Updated & Bonus Received!",
+          description:
+            "Your profile has been updated and you've received a $0.50 bonus!",
+        });
+      } else {
+        console.error("Failed to credit bonus:", bonusData.error);
+        toast({
+          title: "Profile Updated",
+          description:
+            "Your profile has been updated, but there was an issue crediting the bonus.",
+        });
+      }
+
       // Update local state
-      setCreatorProfile((prev) => (prev ? { ...prev, ...updateData } : null));
+      setCreatorProfile((prev) =>
+        prev
+          ? { ...prev, ...updateData, has_claimed_profile_reward: true }
+          : null
+      );
 
       notifyProfileUpdate();
-      toast({
-        title: "Profile Updated",
-        description: "Your profile information has been successfully updated.",
-      });
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -1579,7 +2163,7 @@ export default function ProfilePage({
                       onChange={(value: string | undefined) =>
                         setEditedPhone(value || "")
                       }
-                      disabled={isSubmitting}
+                      disabled={hasReceivedProfileBonus || isSubmitting}
                       className="custom-phone-input"
                       style={
                         {
@@ -1603,7 +2187,7 @@ export default function ProfilePage({
                       type="date"
                       value={editedDateOfBirth}
                       onChange={(e) => setEditedDateOfBirth(e.target.value)}
-                      disabled={isSubmitting}
+                      disabled={hasReceivedProfileBonus || isSubmitting}
                       className={cn(
                         "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300",
                         isDark
@@ -1640,7 +2224,7 @@ export default function ProfilePage({
                       id="gender"
                       value={editedGender}
                       onChange={(e) => setEditedGender(e.target.value)}
-                      disabled={isSubmitting}
+                      disabled={hasReceivedProfileBonus || isSubmitting}
                       className={cn(
                         "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300",
                         isDark
@@ -1684,8 +2268,12 @@ export default function ProfilePage({
                     <label
                       htmlFor="country"
                       className={cn(
-                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 bg-white px-1",
-                        isDark
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1 z-10",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-white"
+                            : "bg-white text-[#1A1A1A]"
+                          : isDark
                           ? "bg-[#180438] text-white"
                           : "bg-white text-[#1A1A1A]"
                       )}
@@ -1717,14 +2305,18 @@ export default function ProfilePage({
                           setCitySearch("");
                         }
                       }}
-                      disabled={isSubmitting}
+                      disabled={hasReceivedProfileBonus || isSubmitting}
                     >
                       <SelectTrigger
                         id="country"
                         isDark={isDark}
                         className={cn(
                           "h-12 w-full text-[14px] transition-colors duration-200",
-                          isDark
+                          hasReceivedProfileBonus || isSubmitting
+                            ? isDark
+                              ? "bg-transparent border-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                              : "bg-transparent border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+                            : isDark
                             ? "bg-[#180438] text-white border-gray-300 hover:bg-gray-700 hover:border-gray-500"
                             : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
                         )}
@@ -1798,8 +2390,12 @@ export default function ProfilePage({
                     <label
                       htmlFor="state"
                       className={cn(
-                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 bg-white px-1",
-                        isDark
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1 z-10",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-white"
+                            : "bg-white text-[#1A1A1A]"
+                          : isDark
                           ? "bg-[#180438] text-white"
                           : "bg-white text-[#1A1A1A]"
                       )}
@@ -1828,14 +2424,18 @@ export default function ProfilePage({
                           setCitySearch("");
                         }
                       }}
-                      disabled={isSubmitting}
+                      disabled={hasReceivedProfileBonus || isSubmitting}
                     >
                       <SelectTrigger
                         id="state"
                         isDark={isDark}
                         className={cn(
                           "h-12 w-full text-[14px] transition-colors duration-200",
-                          isDark
+                          hasReceivedProfileBonus || isSubmitting
+                            ? isDark
+                              ? "bg-transparent border-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                              : "bg-transparent border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+                            : isDark
                             ? "bg-[#180438] text-white border-gray-300 hover:bg-gray-700 hover:border-gray-500"
                             : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
                         )}
@@ -1932,8 +2532,12 @@ export default function ProfilePage({
                     <label
                       htmlFor="city"
                       className={cn(
-                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 bg-white px-1",
-                        isDark
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1 z-10",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-white"
+                            : "bg-white text-[#1A1A1A]"
+                          : isDark
                           ? "bg-[#180438] text-white"
                           : "bg-white text-[#1A1A1A]"
                       )}
@@ -1951,14 +2555,18 @@ export default function ProfilePage({
                           setCitySearch("");
                         }
                       }}
-                      disabled={isSubmitting}
+                      disabled={hasReceivedProfileBonus || isSubmitting}
                     >
                       <SelectTrigger
                         id="city"
                         isDark={isDark}
                         className={cn(
                           "h-12 w-full text-[14px] transition-colors duration-200",
-                          isDark
+                          hasReceivedProfileBonus || isSubmitting
+                            ? isDark
+                              ? "bg-transparent border-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                              : "bg-transparent border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+                            : isDark
                             ? "bg-[#180438] text-white border-gray-300 hover:bg-gray-700 hover:border-gray-500"
                             : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
                         )}
@@ -2066,7 +2674,7 @@ export default function ProfilePage({
                       id="address"
                       value={editedAddress}
                       onChange={(e) => setEditedAddress(e.target.value)}
-                      disabled={isSubmitting}
+                      disabled={hasReceivedProfileBonus || isSubmitting}
                       placeholder=" "
                       rows={3}
                       className={cn(
@@ -2095,46 +2703,76 @@ export default function ProfilePage({
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="relative flex-1">
-                        <input
-                          id="languageInput"
-                          type="text"
-                          value={languageInput}
-                          onChange={(e) => setLanguageInput(e.target.value)}
-                          onKeyPress={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              handleAddLanguage();
-                            }
-                          }}
-                          placeholder="Enter a language"
+                        <Label
+                          htmlFor="languageSelect"
                           className={cn(
-                            "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300",
-                            isDark
-                              ? "bg-[#180438] text-white border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                              : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                          )}
-                        />
-                        <label
-                          htmlFor="languageInput"
-                          className={cn(
-                            "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 bg-white px-1",
-                            isDark
-                              ? "bg-[#180438] text-white"
-                              : "bg-white text-[#1A1A1A]"
+                            "block mb-2 text-sm font-medium",
+                            isDark ? "text-white" : "text-[#1A1A1A]"
                           )}
                         >
-                          My Languages
-                        </label>
+                          My Languages{" "}
+                          <span className="text-xs font-normal opacity-70">
+                            ({editedLanguages.length}/5)
+                          </span>
+                        </Label>
+                        <Select
+                          value={languageInput || undefined}
+                          onValueChange={(value) => {
+                            handleAddLanguage(value);
+                          }}
+                          disabled={
+                            hasReceivedProfileBonus ||
+                            isSubmitting ||
+                            editedLanguages.length >= 5
+                          }
+                        >
+                          <SelectTrigger
+                            id="languageSelect"
+                            className={cn(
+                              "w-full text-[14px]",
+                              isDark
+                                ? "bg-[#180438] text-white border-gray-300"
+                                : "bg-white text-gray-900 border-gray-300"
+                            )}
+                          >
+                            <SelectValue placeholder="Select a language" />
+                          </SelectTrigger>
+                          <SelectContent
+                            className={cn(
+                              "max-h-[300px]",
+                              isDark
+                                ? "bg-[#180438] text-white"
+                                : "bg-white text-gray-900"
+                            )}
+                          >
+                            {allLanguages.map((language) => (
+                              <SelectItem
+                                key={language}
+                                value={language}
+                                disabled={editedLanguages.includes(language)}
+                                className={cn(
+                                  isDark
+                                    ? "hover:bg-purple-900/30"
+                                    : "hover:bg-purple-50"
+                                )}
+                              >
+                                {language}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {editedLanguages.length >= 5 && (
+                          <p
+                            className={cn(
+                              "mt-1 text-xs",
+                              isDark ? "text-yellow-400" : "text-yellow-600"
+                            )}
+                          >
+                            Maximum of 5 languages reached. Remove a language to
+                            add another.
+                          </p>
+                        )}
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleAddLanguage}
-                        disabled={!languageInput.trim() || isSubmitting}
-                      >
-                        Add
-                      </Button>
                     </div>
                     {editedLanguages.length > 0 && (
                       <div className="flex flex-wrap gap-2">
@@ -2153,7 +2791,7 @@ export default function ProfilePage({
                               type="button"
                               onClick={() => handleRemoveLanguage(lang)}
                               className="ml-1 hover:text-red-500"
-                              disabled={isSubmitting}
+                              disabled={hasReceivedProfileBonus || isSubmitting}
                             >
                               <X className="h-3 w-3" />
                             </button>
@@ -2164,7 +2802,7 @@ export default function ProfilePage({
                   </div>
                 </div>
 
-                {/* Type of content I create - Max 3 selections */}
+                {/* Type of content I create - Max 3 category selections */}
                 <div className="relative w-full col-span-1 sm:col-span-2">
                   <div className="space-y-3">
                     <label
@@ -2173,7 +2811,7 @@ export default function ProfilePage({
                         isDark ? "text-white" : "text-[#1A1A1A]"
                       )}
                     >
-                      Type of content I create{" "}
+                      Category{" "}
                       <span className="text-xs text-gray-500">
                         (Select up to 3)
                       </span>
@@ -2189,31 +2827,41 @@ export default function ProfilePage({
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {CONTENT_TYPE_CATEGORIES.map((category) => {
                           const isChecked = editedContentTypesCreated.includes(
-                            category.value
+                            category.id
                           );
                           const isDisabled =
                             !isChecked && editedContentTypesCreated.length >= 3;
                           return (
                             <div
-                              key={category.value}
+                              key={category.id}
                               className="flex items-center space-x-2"
                             >
                               <Checkbox
-                                id={`content-created-${category.value}`}
+                                id={`content-created-${category.id}`}
                                 checked={isChecked}
-                                disabled={isDisabled || isSubmitting}
+                                disabled={
+                                  hasReceivedProfileBonus ||
+                                  isDisabled ||
+                                  isSubmitting
+                                }
                                 onCheckedChange={(checked) => {
                                   if (checked) {
                                     if (editedContentTypesCreated.length < 3) {
                                       setEditedContentTypesCreated([
                                         ...editedContentTypesCreated,
-                                        category.value,
+                                        category.id,
                                       ]);
                                     }
                                   } else {
+                                    // Remove category and all its subcategories from interested list
                                     setEditedContentTypesCreated(
                                       editedContentTypesCreated.filter(
-                                        (v) => v !== category.value
+                                        (id) => id !== category.id
+                                      )
+                                    );
+                                    setEditedInterestedContentTypes(
+                                      editedInterestedContentTypes.filter(
+                                        (item) => item.category !== category.id
                                       )
                                     );
                                   }
@@ -2225,16 +2873,16 @@ export default function ProfilePage({
                                 )}
                               />
                               <label
-                                htmlFor={`content-created-${category.value}`}
+                                htmlFor={`content-created-${category.id}`}
                                 className={cn(
-                                  "text-sm font-normal cursor-pointer",
+                                  "text-sm font-normal",
                                   isDisabled
                                     ? "opacity-50 cursor-not-allowed"
                                     : "cursor-pointer",
                                   isDark ? "text-gray-300" : "text-gray-700"
                                 )}
                               >
-                                {category.label}
+                                {category.name}
                               </label>
                             </div>
                           );
@@ -2254,7 +2902,7 @@ export default function ProfilePage({
                   </div>
                 </div>
 
-                {/* Other type of content I am interested in - Unlimited selections */}
+                {/* Other type of content I am interested in - Subcategories of selected categories */}
                 <div className="relative w-full col-span-1 sm:col-span-2">
                   <div className="space-y-3">
                     <label
@@ -2263,7 +2911,12 @@ export default function ProfilePage({
                         isDark ? "text-white" : "text-[#1A1A1A]"
                       )}
                     >
-                      Other type of content I am interested in to create content
+                      Subcategories
+                      {editedContentTypesCreated.length === 0 && (
+                        <span className="text-xs text-gray-500 ml-2">
+                          (Select categories above first)
+                        </span>
+                      )}
                     </label>
                     <div
                       className={cn(
@@ -2273,63 +2926,123 @@ export default function ProfilePage({
                           : "bg-white border-gray-300"
                       )}
                     >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {CONTENT_TYPE_CATEGORIES.map((category) => {
-                          const isChecked =
-                            editedInterestedContentTypes.includes(
-                              category.value
-                            );
-                          return (
-                            <div
-                              key={category.value}
-                              className="flex items-center space-x-2"
-                            >
-                              <Checkbox
-                                id={`content-interested-${category.value}`}
-                                checked={isChecked}
-                                disabled={isSubmitting}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setEditedInterestedContentTypes([
-                                      ...editedInterestedContentTypes,
-                                      category.value,
-                                    ]);
-                                  } else {
-                                    setEditedInterestedContentTypes(
-                                      editedInterestedContentTypes.filter(
-                                        (v) => v !== category.value
-                                      )
-                                    );
-                                  }
-                                }}
-                                className={cn(
-                                  isDark
-                                    ? "border-gray-400 data-[state=checked]:bg-purple-600"
-                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
-                                )}
-                              />
-                              <label
-                                htmlFor={`content-interested-${category.value}`}
-                                className={cn(
-                                  "text-sm font-normal cursor-pointer",
-                                  isDark ? "text-gray-300" : "text-gray-700"
-                                )}
-                              >
-                                {category.label}
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {editedInterestedContentTypes.length > 0 && (
+                      {editedContentTypesCreated.length === 0 ? (
                         <p
                           className={cn(
-                            "text-xs mt-2",
+                            "text-sm text-center py-4",
                             isDark ? "text-gray-400" : "text-gray-500"
                           )}
                         >
-                          {editedInterestedContentTypes.length} selected
+                          Please select at least one category above to see
+                          subcategories
                         </p>
+                      ) : (
+                        <>
+                          <Accordion type="multiple" className="w-full">
+                            {CONTENT_TYPE_CATEGORIES.filter((category) =>
+                              editedContentTypesCreated.includes(category.id)
+                            ).map((category) => {
+                              return (
+                                <AccordionItem
+                                  key={category.id}
+                                  value={category.id}
+                                  className="border-b border-gray-200 dark:border-gray-700"
+                                >
+                                  <AccordionTrigger
+                                    className={cn(
+                                      "text-sm font-medium hover:no-underline py-3",
+                                      isDark ? "text-gray-300" : "text-gray-700"
+                                    )}
+                                  >
+                                    {category.name}
+                                  </AccordionTrigger>
+                                  <AccordionContent className="pt-2 pb-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {category.subcategories.map(
+                                        (subcategory) => {
+                                          const isChecked =
+                                            editedInterestedContentTypes.some(
+                                              (item) =>
+                                                item.category === category.id &&
+                                                item.subcategory === subcategory
+                                            );
+                                          return (
+                                            <div
+                                              key={`${category.id}-${subcategory}`}
+                                              className="flex items-center space-x-2"
+                                            >
+                                              <Checkbox
+                                                id={`content-interested-${category.id}-${subcategory}`}
+                                                checked={isChecked}
+                                                disabled={
+                                                  hasReceivedProfileBonus ||
+                                                  isSubmitting
+                                                }
+                                                onCheckedChange={(checked) => {
+                                                  if (checked) {
+                                                    setEditedInterestedContentTypes(
+                                                      [
+                                                        ...editedInterestedContentTypes,
+                                                        {
+                                                          category: category.id,
+                                                          subcategory:
+                                                            subcategory,
+                                                        },
+                                                      ]
+                                                    );
+                                                  } else {
+                                                    setEditedInterestedContentTypes(
+                                                      editedInterestedContentTypes.filter(
+                                                        (item) =>
+                                                          !(
+                                                            item.category ===
+                                                              category.id &&
+                                                            item.subcategory ===
+                                                              subcategory
+                                                          )
+                                                      )
+                                                    );
+                                                  }
+                                                }}
+                                                className={cn(
+                                                  isDark
+                                                    ? "border-gray-400 data-[state=checked]:bg-purple-600"
+                                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                                )}
+                                              />
+                                              <label
+                                                htmlFor={`content-interested-${category.id}-${subcategory}`}
+                                                className={cn(
+                                                  "text-sm font-normal cursor-pointer",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                {subcategory}
+                                              </label>
+                                            </div>
+                                          );
+                                        }
+                                      )}
+                                    </div>
+                                  </AccordionContent>
+                                </AccordionItem>
+                              );
+                            })}
+                          </Accordion>
+                          {editedInterestedContentTypes.length > 0 && (
+                            <p
+                              className={cn(
+                                "text-xs mt-2",
+                                isDark ? "text-gray-400" : "text-gray-500"
+                              )}
+                            >
+                              {editedInterestedContentTypes.length}{" "}
+                              subcategories selected
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -2338,28 +3051,35 @@ export default function ProfilePage({
 
               {/* Save Changes Button */}
               <div className="flex justify-end pt-4">
-                <Button
-                  onClick={handleSaveProfileChanges}
-                  disabled={!hasProfileChanges() || isSubmitting}
-                  className={cn(
-                    "px-6 py-2",
-                    isDark
-                      ? "bg-purple-600 hover:bg-purple-700"
-                      : "bg-[#7F39EC] hover:bg-[#6C43D0]"
-                  )}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Changes
-                    </>
-                  )}
-                </Button>
+                {hasReceivedProfileBonus ? (
+                  <div className="text-sm text-muted-foreground italic">
+                    Profile editing is disabled after receiving the update
+                    bonus.
+                  </div>
+                ) : (
+                  <Button
+                    onClick={handleSaveProfileChanges}
+                    disabled={!hasProfileChanges() || isSubmitting}
+                    className={cn(
+                      "px-6 py-2",
+                      isDark
+                        ? "bg-purple-600 hover:bg-purple-700"
+                        : "bg-[#7F39EC] hover:bg-[#6C43D0]"
+                    )}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </div>

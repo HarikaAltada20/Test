@@ -151,6 +151,7 @@ export interface Database {
           total_views: number;
           type_of_content: Json | null;
           other_type_of_content: Json | null;
+          has_claimed_profile_reward: boolean;
         };
         Insert: {
           id: string;
@@ -164,6 +165,7 @@ export interface Database {
           total_views?: number;
           type_of_content?: Json | null;
           other_type_of_content?: Json | null;
+          has_claimed_profile_reward?: boolean;
         };
         Update: {
           id?: string;
@@ -177,6 +179,7 @@ export interface Database {
           total_views?: number;
           type_of_content?: Json | null;
           other_type_of_content?: Json | null;
+          has_claimed_profile_reward?: boolean;
         };
       };
       subscriptions: {
