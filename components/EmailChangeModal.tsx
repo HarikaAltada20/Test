@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,8 @@ interface EmailChangeModalProps {
   onEmailUpdated: () => void;
 }
 
+const STORAGE_KEY = "emailChangeModalState";
+
 export function EmailChangeModal({
   isOpen,
   onClose,
@@ -30,10 +32,66 @@ export function EmailChangeModal({
   const [showOtpStep, setShowOtpStep] = useState(false);
   const [newEmail, setNewEmail] = useState("");
 
+  // Restore state from localStorage when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const storedState = localStorage.getItem(STORAGE_KEY);
+      if (storedState) {
+        try {
+          const parsed = JSON.parse(storedState);
+          // Only restore if the current email matches (to prevent stale state)
+          if (
+            parsed.currentEmail === currentEmail &&
+            parsed.newEmail &&
+            parsed.showOtpStep
+          ) {
+            setNewEmail(parsed.newEmail);
+            setShowOtpStep(true);
+          } else {
+            // Clear stale state
+            localStorage.removeItem(STORAGE_KEY);
+          }
+        } catch (e) {
+          // Invalid stored state, clear it
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+    }
+  }, [isOpen, currentEmail]);
+
+  // Save state to localStorage when moving to step 2
+  const handleEmailEntered = (email: string) => {
+    setNewEmail(email);
+    setShowOtpStep(true);
+    // Persist state to localStorage
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        currentEmail,
+        newEmail: email,
+        showOtpStep: true,
+      })
+    );
+  };
+
   const handleClose = () => {
+    // Don't clear state on close - keep it for next time
+    onClose();
+  };
+
+  const handleVerified = () => {
+    // Clear stored state on successful verification
+    localStorage.removeItem(STORAGE_KEY);
     setShowOtpStep(false);
     setNewEmail("");
     onClose();
+    onEmailUpdated();
+  };
+
+  const handleBack = () => {
+    // Clear stored state when going back to step 1
+    localStorage.removeItem(STORAGE_KEY);
+    setShowOtpStep(false);
   };
 
   return (
@@ -56,21 +114,15 @@ export function EmailChangeModal({
           <EmailChangeForm
             isDark={isDark}
             currentEmail={currentEmail}
-            onEmailEntered={(email) => {
-              setNewEmail(email);
-              setShowOtpStep(true);
-            }}
+            onEmailEntered={handleEmailEntered}
             onCancel={handleClose}
           />
         ) : (
           <EmailOtpVerificationForm
             isDark={isDark}
             newEmail={newEmail}
-            onVerified={() => {
-              handleClose();
-              onEmailUpdated();
-            }}
-            onBack={() => setShowOtpStep(false)}
+            onVerified={handleVerified}
+            onBack={handleBack}
           />
         )}
       </DialogContent>

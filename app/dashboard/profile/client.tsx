@@ -73,6 +73,13 @@ interface AdvertiserProfile {
   } | null;
 }
 
+interface EmailChangeLog {
+  id: string;
+  old_email: string;
+  new_email: string;
+  changed_at: string;
+}
+
 export default function ProfilePage({
   user,
 }: {
@@ -114,6 +121,7 @@ export default function ProfilePage({
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<"light" | "dark">("light");
+  const [emailChangeLogs, setEmailChangeLogs] = useState<EmailChangeLog[]>([]);
 
   // Read mode from data attribute
   useEffect(() => {
@@ -254,6 +262,22 @@ export default function ProfilePage({
             console.warn("Error fetching referrer data:", referrerError);
             // Continue without referrer data
           }
+        }
+
+        // Load recent email change logs for this user (best-effort)
+        try {
+          const { data: logs, error: logsError } = await supabase
+            .from("email_change_logs")
+            .select("id, old_email, new_email, changed_at")
+            .eq("user_id", userData.id)
+            .order("changed_at", { ascending: false })
+            .limit(5);
+
+          if (!logsError && logs) {
+            setEmailChangeLogs(logs as EmailChangeLog[]);
+          }
+        } catch (logsErr) {
+          console.warn("Error fetching email change logs:", logsErr);
         }
 
         if (userData.user_type === "creator") {
@@ -1144,6 +1168,8 @@ export default function ProfilePage({
                 </div>
               </div>
 
+             
+
               <div className="relative w-full">
                 <label
                   htmlFor="floating"
@@ -1254,7 +1280,7 @@ export default function ProfilePage({
       </div>
 
       {/* Company Profile - Only for Advertisers */}
-      {userData?.user_type === "advertiser" && (
+      {/* {userData?.user_type === "advertiser" && (
         <div>
           <div
             className={cn(
@@ -1327,7 +1353,7 @@ export default function ProfilePage({
             </CardContent>
           </div>
         </div>
-      )}
+      )} */}
 
       <div
         className={cn(

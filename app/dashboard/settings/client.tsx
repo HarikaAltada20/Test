@@ -469,8 +469,7 @@ export default function SettingsPage({
     load();
   }, [user, supabase]);
 
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePasswordChange = async () => {
     setPasswordChangeLoading(true);
 
     try {
@@ -518,6 +517,7 @@ export default function SettingsPage({
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      return true;
     } catch (err: any) {
       toast({
         title: "Error",
@@ -528,6 +528,7 @@ export default function SettingsPage({
             : "Failed to set password"),
         variant: "destructive",
       });
+      return false;
     } finally {
       setPasswordChangeLoading(false);
     }
@@ -1786,12 +1787,13 @@ export default function SettingsPage({
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                await handlePasswordChange(e);
-                // Close modal after submission (success/error toast will be shown)
-                // Fields are cleared by handlePasswordChange on success
-                setTimeout(() => {
-                  setIsPasswordModalOpen(false);
-                }, 1000);
+                const success = await handlePasswordChange();
+                // Only close modal on success; on error, keep it open so user can fix input
+                if (success) {
+                  setTimeout(() => {
+                    setIsPasswordModalOpen(false);
+                  }, 1000);
+                }
               }}
               className="space-y-4"
             >
