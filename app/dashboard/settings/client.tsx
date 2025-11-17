@@ -1622,7 +1622,7 @@ export default function SettingsPage({
                       : "bg-white border border-gray-300 hover:border-purple-300"
                   )}
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 flex-1">
                     <div
                       className={cn(
                         "p-2 rounded-lg",
@@ -1636,14 +1636,27 @@ export default function SettingsPage({
                         )}
                       />
                     </div>
-                    <span
-                      className={cn(
-                        "font-medium",
-                        isDark ? "text-white" : "text-gray-900"
+                    <div className="flex flex-col flex-1">
+                      <span
+                        className={cn(
+                          "font-medium",
+                          isDark ? "text-white" : "text-gray-900"
+                        )}
+                      >
+                        {item.title}
+                      </span>
+                      {item.id === "profile" && (
+                        <p
+                          className={cn(
+                            "text-xs mt-1",
+                            isDark ? "text-purple-300" : "text-purple-600"
+                          )}
+                        >
+                          💰 When you fill your complete profile, we give you a
+                          $0.50 bonus!
+                        </p>
                       )}
-                    >
-                      {item.title}
-                    </span>
+                    </div>
                   </div>
                   <ChevronRight
                     className={cn(

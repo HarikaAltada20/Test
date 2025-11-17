@@ -22,6 +22,7 @@ import {
   Upload,
   Loader2,
   Copy,
+  Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/utils/supabase/client";
@@ -37,6 +38,16 @@ import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import { EmailChangeModal } from "@/components/EmailChangeModal";
+import PhoneInput from "react-phone-number-input";
+import "react-phone-number-input/style.css";
+import { Country, State, City } from "country-state-city";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface UserData {
   id: string;
@@ -56,6 +67,14 @@ interface CreatorProfile {
   total_contests_won: number;
   total_money_won: number;
   withdrawable_balance: number;
+  phone_number?: string | null;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  country?: string | null;
+  state?: string | null;
+  city?: string | null;
+  address?: string | null;
+  languages?: string[] | null;
 }
 
 interface AdvertiserProfile {
@@ -113,6 +132,26 @@ export default function ProfilePage({
   const [editedCompanyName, setEditedCompanyName] = useState("");
   const [isEditingWebsiteUrl, setIsEditingWebsiteUrl] = useState(false);
   const [editedWebsiteUrl, setEditedWebsiteUrl] = useState("");
+
+  // New profile fields state - directly editable
+  const [editedPhone, setEditedPhone] = useState("");
+  const [editedDateOfBirth, setEditedDateOfBirth] = useState("");
+  const [editedGender, setEditedGender] = useState("");
+  const [editedCountry, setEditedCountry] = useState("");
+  const [editedState, setEditedState] = useState("");
+  const [editedCity, setEditedCity] = useState("");
+  const [editedAddress, setEditedAddress] = useState("");
+  const [editedLanguages, setEditedLanguages] = useState<string[]>([]);
+  const [languageInput, setLanguageInput] = useState("");
+
+  // Country, state, city codes for cascading dropdowns
+  const [selectedCountryCode, setSelectedCountryCode] = useState<string>("");
+  const [selectedStateCode, setSelectedStateCode] = useState<string>("");
+
+  // Search terms for dropdowns
+  const [countrySearch, setCountrySearch] = useState<string>("");
+  const [stateSearch, setStateSearch] = useState<string>("");
+  const [citySearch, setCitySearch] = useState<string>("");
 
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(
@@ -290,6 +329,34 @@ export default function ProfilePage({
 
             if (!profileError && profile) {
               setCreatorProfile(profile as CreatorProfile);
+              // Initialize the new profile fields
+              setEditedPhone(profile.phone_number || "");
+              setEditedDateOfBirth(profile.date_of_birth || "");
+              setEditedGender(profile.gender || "");
+              setEditedCountry(profile.country || "");
+              setEditedState(profile.state || "");
+              setEditedCity(profile.city || "");
+              setEditedAddress(profile.address || "");
+              setEditedLanguages(profile.languages || []);
+
+              // Find country code from country name
+              if (profile.country) {
+                const country = Country.getAllCountries().find(
+                  (c) => c.name === profile.country
+                );
+                if (country) {
+                  setSelectedCountryCode(country.isoCode);
+                  // Find state code from state name
+                  if (profile.state) {
+                    const state = State.getStatesOfCountry(
+                      country.isoCode
+                    ).find((s) => s.name === profile.state);
+                    if (state) {
+                      setSelectedStateCode(state.isoCode);
+                    }
+                  }
+                }
+              }
             }
           } catch (profileError) {
             console.warn("Error fetching creator profile:", profileError);
@@ -846,6 +913,106 @@ export default function ProfilePage({
     }
   };
 
+  // Helper functions for languages
+  const handleAddLanguage = () => {
+    if (
+      languageInput.trim() &&
+      !editedLanguages.includes(languageInput.trim())
+    ) {
+      setEditedLanguages([...editedLanguages, languageInput.trim()]);
+      setLanguageInput("");
+    }
+  };
+
+  const handleRemoveLanguage = (language: string) => {
+    setEditedLanguages(editedLanguages.filter((lang) => lang !== language));
+  };
+
+  // Check if profile has changes
+  const hasProfileChanges = () => {
+    if (!creatorProfile) return false;
+    return (
+      editedPhone !== (creatorProfile.phone_number || "") ||
+      editedDateOfBirth !== (creatorProfile.date_of_birth || "") ||
+      editedGender !== (creatorProfile.gender || "") ||
+      editedCountry !== (creatorProfile.country || "") ||
+      editedState !== (creatorProfile.state || "") ||
+      editedCity !== (creatorProfile.city || "") ||
+      editedAddress !== (creatorProfile.address || "") ||
+      JSON.stringify(editedLanguages.sort()) !==
+        JSON.stringify((creatorProfile.languages || []).sort())
+    );
+  };
+
+  // Save all profile changes at once
+  const handleSaveProfileChanges = async () => {
+    if (!userData || !creatorProfile || !hasProfileChanges()) {
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const updateData: any = {};
+
+      if (editedPhone !== (creatorProfile.phone_number || "")) {
+        updateData.phone_number = editedPhone.trim() || null;
+      }
+      if (editedDateOfBirth !== (creatorProfile.date_of_birth || "")) {
+        updateData.date_of_birth = editedDateOfBirth.trim() || null;
+      }
+      if (editedGender !== (creatorProfile.gender || "")) {
+        updateData.gender = editedGender.trim() || null;
+      }
+      if (editedCountry !== (creatorProfile.country || "")) {
+        updateData.country = editedCountry.trim() || null;
+      }
+      if (editedState !== (creatorProfile.state || "")) {
+        updateData.state = editedState.trim() || null;
+      }
+      if (editedCity !== (creatorProfile.city || "")) {
+        updateData.city = editedCity.trim() || null;
+      }
+      if (editedAddress !== (creatorProfile.address || "")) {
+        updateData.address = editedAddress.trim() || null;
+      }
+      if (
+        JSON.stringify(editedLanguages.sort()) !==
+        JSON.stringify((creatorProfile.languages || []).sort())
+      ) {
+        updateData.languages =
+          editedLanguages.length > 0 ? editedLanguages : null;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        setIsSubmitting(false);
+        return;
+      }
+
+      const { error } = await supabase
+        .from("creator_profiles")
+        .update(updateData)
+        .eq("id", userData.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setCreatorProfile((prev) => (prev ? { ...prev, ...updateData } : null));
+
+      notifyProfileUpdate();
+      toast({
+        title: "Profile Updated",
+        description: "Your profile information has been successfully updated.",
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Update Failed",
+        description: error.message,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-[76vh]">
@@ -1168,8 +1335,6 @@ export default function ProfilePage({
                 </div>
               </div>
 
-             
-
               <div className="relative w-full">
                 <label
                   htmlFor="floating"
@@ -1274,10 +1439,705 @@ export default function ProfilePage({
                   </span>
                 </div>
               </div> */}
+
+              {/* Profile fields moved to separate card below */}
             </div>
           </CardContent>
+          {/* <div className="px-6 pb-4">
+            <div
+              className={cn(
+                "rounded-lg border p-4",
+                isDark
+                  ? "bg-[#2a0a5a] border-purple-500/30"
+                  : "bg-purple-50 border-purple-200"
+              )}
+            >
+              <p
+                className={cn(
+                  "text-sm font-medium",
+                  isDark ? "text-purple-200" : "text-purple-700"
+                )}
+              >
+                💰 When you fill your complete profile, we give you a $0.50
+                bonus!
+              </p>
+            </div>
+          </div> */}
         </div>
       </div>
+
+      {/* Creator Profile Details - Only for Creators */}
+      {userData.user_type === "creator" && creatorProfile && (
+        <div>
+          <div
+            className={cn(
+              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <CardTitle
+              className={cn(
+                "text-xl",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
+              Profile Details
+            </CardTitle>
+          </div>
+          <div
+            className={cn(
+              "rounded-b-2xl shadow-lg px-2 pb-4",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <div className="px-6 pt-4 pb-6">
+              <CardTitle className="text-xl font-semibold">
+                Personal Information
+              </CardTitle>
+              <CardDescription className="mt-2 text-md">
+                Update your personal details. Click "Save Changes" to save all
+                updates.
+              </CardDescription>
+            </div>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-10">
+                {/* Phone Number */}
+                <div className="relative w-full">
+                  <div className="relative flex-1">
+                    <label
+                      htmlFor="phone"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 z-10 px-1 pointer-events-none",
+                        isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      Phone Number
+                    </label>
+                    <PhoneInput
+                      id="phone"
+                      international
+                      defaultCountry="IN"
+                      value={editedPhone}
+                      onChange={(value: string | undefined) =>
+                        setEditedPhone(value || "")
+                      }
+                      disabled={isSubmitting}
+                      className="custom-phone-input"
+                      style={
+                        {
+                          "--PhoneInputCountryFlag-height": "1.2em",
+                          "--PhoneInputCountryFlag-borderWidth": "0",
+                        } as React.CSSProperties
+                      }
+                      numberInputProps={{
+                        className: "peer",
+                        placeholder: " ",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Date of Birth */}
+                <div className="relative w-full">
+                  <div className="relative flex-1">
+                    <input
+                      id="dateOfBirth"
+                      type="date"
+                      value={editedDateOfBirth}
+                      onChange={(e) => setEditedDateOfBirth(e.target.value)}
+                      disabled={isSubmitting}
+                      className={cn(
+                        "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300",
+                        isDark
+                          ? "bg-[#180438] text-white border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                          : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                      )}
+                    />
+                    <label
+                      htmlFor="dateOfBirth"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 bg-white px-1",
+                        isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      Date of Birth
+                    </label>
+                  </div>
+                  <p
+                    className={cn(
+                      "mt-1 text-sm",
+                      isDark ? "text-gray-400" : "text-gray-500"
+                    )}
+                  >
+                    This can be set only once and cannot be changed later
+                  </p>
+                </div>
+
+                {/* Gender */}
+                <div className="relative w-full">
+                  <div className="relative flex-1">
+                    <select
+                      id="gender"
+                      value={editedGender}
+                      onChange={(e) => setEditedGender(e.target.value)}
+                      disabled={isSubmitting}
+                      className={cn(
+                        "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300",
+                        isDark
+                          ? "bg-[#180438] text-white border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                          : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                      )}
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      {/* <option value="Other">Other</option>
+                      <option value="Prefer not to say">
+                        Prefer not to say
+                      </option> */}
+                    </select>
+                    <label
+                      htmlFor="gender"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 bg-white px-1",
+                        isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      Gender
+                    </label>
+                  </div>
+                  <p
+                    className={cn(
+                      "mt-1 text-sm",
+                      isDark ? "text-gray-400" : "text-gray-500"
+                    )}
+                  >
+                    This can be set only once and cannot be changed later
+                  </p>
+                </div>
+
+                {/* Country */}
+                <div className="relative w-full">
+                  <div className="relative flex-1">
+                    <label
+                      htmlFor="country"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 bg-white px-1",
+                        isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      Country
+                    </label>
+                    <Select
+                      value={selectedCountryCode}
+                      onValueChange={(value) => {
+                        if (value === "__clear__") {
+                          setSelectedCountryCode("");
+                          setEditedCountry("");
+                          setSelectedStateCode("");
+                          setEditedState("");
+                          setEditedCity("");
+                          setCountrySearch("");
+                          setStateSearch("");
+                          setCitySearch("");
+                        } else {
+                          setSelectedCountryCode(value);
+                          const country = Country.getCountryByCode(value);
+                          setEditedCountry(country?.name || "");
+                          // Reset state and city when country changes
+                          setSelectedStateCode("");
+                          setEditedState("");
+                          setEditedCity("");
+                          setCountrySearch("");
+                          setStateSearch("");
+                          setCitySearch("");
+                        }
+                      }}
+                      disabled={isSubmitting}
+                    >
+                      <SelectTrigger
+                        id="country"
+                        isDark={isDark}
+                        className={cn(
+                          "h-12 w-full text-[14px] transition-colors duration-200",
+                          isDark
+                            ? "bg-[#180438] text-white border-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                            : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+                        )}
+                      >
+                        <SelectValue placeholder="Select Country" />
+                      </SelectTrigger>
+                      <SelectContent isDark={isDark}>
+                        <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                              type="text"
+                              placeholder="Search country..."
+                              value={countrySearch}
+                              onChange={(e) => setCountrySearch(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                              className={cn(
+                                "pl-8 h-9 text-sm",
+                                isDark
+                                  ? "bg-[#180438] text-white border-gray-600"
+                                  : "bg-white text-gray-900 border-gray-300"
+                              )}
+                            />
+                          </div>
+                        </div>
+                        {selectedCountryCode && (
+                          <SelectItem
+                            value="__clear__"
+                            isDark={isDark}
+                            className="text-red-500 hover:text-red-600 focus:text-red-600"
+                          >
+                            <div className="flex items-center gap-2">
+                              <X className="h-4 w-4" />
+                              <span>Clear Selection</span>
+                            </div>
+                          </SelectItem>
+                        )}
+                        {Country.getAllCountries()
+                          .filter((country) =>
+                            country.name
+                              .toLowerCase()
+                              .includes(countrySearch.toLowerCase())
+                          )
+                          .map((country) => (
+                            <SelectItem
+                              key={country.isoCode}
+                              value={country.isoCode}
+                              isDark={isDark}
+                            >
+                              {country.name}
+                            </SelectItem>
+                          ))}
+                        {Country.getAllCountries().filter((country) =>
+                          country.name
+                            .toLowerCase()
+                            .includes(countrySearch.toLowerCase())
+                        ).length === 0 && (
+                          <div className="px-2 py-1.5 text-sm text-gray-500">
+                            No countries found
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* State */}
+                <div className="relative w-full">
+                  <div className="relative flex-1">
+                    <label
+                      htmlFor="state"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 bg-white px-1",
+                        isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      State
+                    </label>
+                    <Select
+                      value={selectedStateCode}
+                      onValueChange={(value) => {
+                        if (value === "__clear__") {
+                          setSelectedStateCode("");
+                          setEditedState("");
+                          setEditedCity("");
+                          setStateSearch("");
+                          setCitySearch("");
+                        } else {
+                          setSelectedStateCode(value);
+                          const state = State.getStateByCodeAndCountry(
+                            value,
+                            selectedCountryCode
+                          );
+                          setEditedState(state?.name || "");
+                          // Reset city when state changes
+                          setEditedCity("");
+                          setStateSearch("");
+                          setCitySearch("");
+                        }
+                      }}
+                      disabled={isSubmitting}
+                    >
+                      <SelectTrigger
+                        id="state"
+                        isDark={isDark}
+                        className={cn(
+                          "h-12 w-full text-[14px] transition-colors duration-200",
+                          isDark
+                            ? "bg-[#180438] text-white border-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                            : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+                        )}
+                      >
+                        <SelectValue
+                          placeholder={
+                            selectedCountryCode
+                              ? State.getStatesOfCountry(selectedCountryCode)
+                                  .length === 0
+                                ? "No States Available"
+                                : "Select State"
+                              : "Select Country First"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent isDark={isDark}>
+                        {selectedCountryCode && (
+                          <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+                            <div className="relative">
+                              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                              <Input
+                                type="text"
+                                placeholder="Search state..."
+                                value={stateSearch}
+                                onChange={(e) => setStateSearch(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                className={cn(
+                                  "pl-8 h-9 text-sm",
+                                  isDark
+                                    ? "bg-[#180438] text-white border-gray-600"
+                                    : "bg-white text-gray-900 border-gray-300"
+                                )}
+                              />
+                            </div>
+                          </div>
+                        )}
+                        {selectedStateCode && (
+                          <SelectItem
+                            value="__clear__"
+                            isDark={isDark}
+                            className="text-red-500 hover:text-red-600 focus:text-red-600"
+                          >
+                            <div className="flex items-center gap-2">
+                              <X className="h-4 w-4" />
+                              <span>Clear Selection</span>
+                            </div>
+                          </SelectItem>
+                        )}
+                        {selectedCountryCode &&
+                        State.getStatesOfCountry(selectedCountryCode).length >
+                          0 ? (
+                          State.getStatesOfCountry(selectedCountryCode)
+                            .filter((state) =>
+                              state.name
+                                .toLowerCase()
+                                .includes(stateSearch.toLowerCase())
+                            )
+                            .map((state) => (
+                              <SelectItem
+                                key={state.isoCode}
+                                value={state.isoCode}
+                                isDark={isDark}
+                              >
+                                {state.name}
+                              </SelectItem>
+                            ))
+                        ) : selectedCountryCode ? (
+                          <div className="px-2 py-1.5 text-sm text-gray-500">
+                            No states available for this country
+                          </div>
+                        ) : null}
+                        {selectedCountryCode &&
+                          State.getStatesOfCountry(selectedCountryCode).length >
+                            0 &&
+                          State.getStatesOfCountry(selectedCountryCode).filter(
+                            (state) =>
+                              state.name
+                                .toLowerCase()
+                                .includes(stateSearch.toLowerCase())
+                          ).length === 0 && (
+                            <div className="px-2 py-1.5 text-sm text-gray-500">
+                              No states found
+                            </div>
+                          )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* City */}
+                <div className="relative w-full">
+                  <div className="relative flex-1">
+                    <label
+                      htmlFor="city"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 bg-white px-1",
+                        isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      City
+                    </label>
+                    <Select
+                      value={editedCity}
+                      onValueChange={(value) => {
+                        if (value === "__clear__") {
+                          setEditedCity("");
+                          setCitySearch("");
+                        } else {
+                          setEditedCity(value);
+                          setCitySearch("");
+                        }
+                      }}
+                      disabled={isSubmitting}
+                    >
+                      <SelectTrigger
+                        id="city"
+                        isDark={isDark}
+                        className={cn(
+                          "h-12 w-full text-[14px] transition-colors duration-200",
+                          isDark
+                            ? "bg-[#180438] text-white border-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                            : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+                        )}
+                      >
+                        <SelectValue
+                          placeholder={
+                            !selectedCountryCode
+                              ? "Select Country First"
+                              : selectedStateCode
+                              ? "Select City"
+                              : State.getStatesOfCountry(selectedCountryCode)
+                                  .length === 0
+                              ? "Select City"
+                              : "Select State First"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent isDark={isDark}>
+                        {selectedCountryCode &&
+                          (selectedStateCode ||
+                            State.getStatesOfCountry(selectedCountryCode)
+                              .length === 0) && (
+                            <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+                              <div className="relative">
+                                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Input
+                                  type="text"
+                                  placeholder="Search city..."
+                                  value={citySearch}
+                                  onChange={(e) =>
+                                    setCitySearch(e.target.value)
+                                  }
+                                  onClick={(e) => e.stopPropagation()}
+                                  onKeyDown={(e) => e.stopPropagation()}
+                                  className={cn(
+                                    "pl-8 h-9 text-sm",
+                                    isDark
+                                      ? "bg-[#180438] text-white border-gray-600"
+                                      : "bg-white text-gray-900 border-gray-300"
+                                  )}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        {editedCity && (
+                          <SelectItem
+                            value="__clear__"
+                            isDark={isDark}
+                            className="text-red-500 hover:text-red-600 focus:text-red-600"
+                          >
+                            <div className="flex items-center gap-2">
+                              <X className="h-4 w-4" />
+                              <span>Clear Selection</span>
+                            </div>
+                          </SelectItem>
+                        )}
+                        {selectedCountryCode &&
+                        (selectedStateCode ||
+                          State.getStatesOfCountry(selectedCountryCode)
+                            .length === 0)
+                          ? (() => {
+                              const cities = selectedStateCode
+                                ? City.getCitiesOfState(
+                                    selectedCountryCode,
+                                    selectedStateCode
+                                  )
+                                : City.getCitiesOfCountry(selectedCountryCode);
+                              const filteredCities = cities
+                                ? cities.filter((city) =>
+                                    city.name
+                                      .toLowerCase()
+                                      .includes(citySearch.toLowerCase())
+                                  )
+                                : [];
+                              return filteredCities.length > 0 ? (
+                                filteredCities.map((city) => (
+                                  <SelectItem
+                                    key={`${city.name}-${city.stateCode || ""}`}
+                                    value={city.name}
+                                    isDark={isDark}
+                                  >
+                                    {city.name}
+                                  </SelectItem>
+                                ))
+                              ) : cities && cities.length > 0 ? (
+                                <div className="px-2 py-1.5 text-sm text-gray-500">
+                                  No cities found
+                                </div>
+                              ) : (
+                                <div className="px-2 py-1.5 text-sm text-gray-500">
+                                  No cities available
+                                </div>
+                              );
+                            })()
+                          : null}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Address */}
+                <div className="relative w-full col-span-1 sm:col-span-2">
+                  <div className="relative flex-1">
+                    <textarea
+                      id="address"
+                      value={editedAddress}
+                      onChange={(e) => setEditedAddress(e.target.value)}
+                      disabled={isSubmitting}
+                      placeholder=" "
+                      rows={3}
+                      className={cn(
+                        "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300 resize-none",
+                        isDark
+                          ? "bg-[#180438] text-white border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                          : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                      )}
+                    />
+                    <label
+                      htmlFor="address"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 bg-white px-1",
+                        isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      House/Flat Address
+                    </label>
+                  </div>
+                </div>
+
+                {/* Languages */}
+                <div className="relative w-full col-span-1 sm:col-span-2">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="relative flex-1">
+                        <input
+                          id="languageInput"
+                          type="text"
+                          value={languageInput}
+                          onChange={(e) => setLanguageInput(e.target.value)}
+                          onKeyPress={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddLanguage();
+                            }
+                          }}
+                          placeholder="Enter a language"
+                          className={cn(
+                            "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300",
+                            isDark
+                              ? "bg-[#180438] text-white border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                              : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                          )}
+                        />
+                        <label
+                          htmlFor="languageInput"
+                          className={cn(
+                            "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 bg-white px-1",
+                            isDark
+                              ? "bg-[#180438] text-white"
+                              : "bg-white text-[#1A1A1A]"
+                          )}
+                        >
+                          My Languages
+                        </label>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddLanguage}
+                        disabled={!languageInput.trim() || isSubmitting}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                    {editedLanguages.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {editedLanguages.map((lang, index) => (
+                          <span
+                            key={index}
+                            className={cn(
+                              "inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm",
+                              isDark
+                                ? "bg-purple-900/30 text-purple-200 border border-purple-700"
+                                : "bg-purple-100 text-purple-800 border border-purple-300"
+                            )}
+                          >
+                            {lang}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveLanguage(lang)}
+                              className="ml-1 hover:text-red-500"
+                              disabled={isSubmitting}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Save Changes Button */}
+              <div className="flex justify-end pt-4">
+                <Button
+                  onClick={handleSaveProfileChanges}
+                  disabled={!hasProfileChanges() || isSubmitting}
+                  className={cn(
+                    "px-6 py-2",
+                    isDark
+                      ? "bg-purple-600 hover:bg-purple-700"
+                      : "bg-[#7F39EC] hover:bg-[#6C43D0]"
+                  )}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-4 w-4" />
+                      Save Changes
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </div>
+        </div>
+      )}
 
       {/* Company Profile - Only for Advertisers */}
       {/* {userData?.user_type === "advertiser" && (

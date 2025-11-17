@@ -474,6 +474,97 @@ body {
   }
 }
 
+/* Phone Input Styling */
+.custom-phone-input {
+  display: flex;
+  align-items: center;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  background-color: white;
+  padding-top: 1.2rem;
+  padding-bottom: 0.7rem;
+  padding-left: 0.625rem;
+  padding-right: 0.625rem;
+  transition: all 0.3s;
+}
+
+.custom-phone-input:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f6;
+}
+
+.custom-phone-input .PhoneInputCountry {
+  margin-right: 0.5rem;
+  padding-right: 0.5rem;
+  border-right: 1px solid #e5e7eb;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+.custom-phone-input .PhoneInputCountryIcon {
+  width: 1.5em;
+  height: 1.2em;
+  border-radius: 0.125rem;
+}
+
+.custom-phone-input .PhoneInputCountrySelect {
+  margin-left: 0.25rem;
+  background: transparent;
+  border: none;
+  color: #1a1a1a;
+  font-size: 0.875rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.custom-phone-input .PhoneInputCountrySelect:focus {
+  outline: none;
+}
+
+.custom-phone-input .PhoneInputInput {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #1a1a1a;
+  font-size: 0.875rem;
+  padding: 0;
+  height: auto;
+  line-height: 1.5;
+}
+
+.custom-phone-input .PhoneInputInput::placeholder {
+  color: #9ca3af;
+  opacity: 0.5;
+}
+
+.custom-phone-input .PhoneInputInput:focus {
+  outline: none;
+}
+
+/* Dark mode Phone Input */
+[data-theme="dark"] .custom-phone-input,
+.dark .custom-phone-input {
+  border-color: #d1d5db;
+  background-color: #180438;
+}
+
+[data-theme="dark"] .custom-phone-input .PhoneInputCountry,
+.dark .custom-phone-input .PhoneInputCountry {
+  border-right-color: #6b7280;
+}
+
+[data-theme="dark"] .custom-phone-input .PhoneInputCountrySelect,
+.dark .custom-phone-input .PhoneInputCountrySelect {
+  color: white;
+}
+
+[data-theme="dark"] .custom-phone-input .PhoneInputInput,
+.dark .custom-phone-input .PhoneInputInput {
+  color: white;
+}
+
 @media (min-width: 1000px) and (max-width: 1100px) {
   .custom-max-w {
     max-width: 850px !important;
