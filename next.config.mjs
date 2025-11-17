@@ -37,11 +37,6 @@ const nextConfig = {
       { protocol: 'https', hostname: 'graph.instagram.com' },
     ],
   },
-  experimental: {
-    webpackBuildWorker: true,
-    parallelServerBuildTraces: true,
-    parallelServerCompiles: true,
-  },
   webpack: (config, { isServer }) => {
     // The 'net', 'http', and other Node.js modules are needed by googleapis
     // but are not available in the browser, so we need to provide empty equivalents
