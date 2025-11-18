@@ -1460,6 +1460,37 @@ export default function ProfilePage({
         updateData.phone_number = editedPhone.trim() || null;
       }
       if (editedDateOfBirth !== (creatorProfile.date_of_birth || "")) {
+        // Validate date of birth: cannot be in future or of same year
+        if (editedDateOfBirth.trim()) {
+          const selectedDate = new Date(editedDateOfBirth.trim());
+          selectedDate.setHours(0, 0, 0, 0); // Normalize to midnight
+          const today = new Date();
+          today.setHours(0, 0, 0, 0); // Normalize to midnight
+          const currentYear = today.getFullYear();
+          const selectedYear = selectedDate.getFullYear();
+
+          // Check if date is in the future
+          if (selectedDate > today) {
+            toast({
+              variant: "destructive",
+              title: "Invalid Date",
+              description: "Date of birth cannot be in the future.",
+            });
+            setIsSubmitting(false);
+            return;
+          }
+
+          // Check if date is in the current year
+          if (selectedYear === currentYear) {
+            toast({
+              variant: "destructive",
+              title: "Invalid Date",
+              description: "Date of birth cannot be in the current year.",
+            });
+            setIsSubmitting(false);
+            return;
+          }
+        }
         updateData.date_of_birth = editedDateOfBirth.trim() || null;
       }
       if (editedGender !== (creatorProfile.gender || "")) {
@@ -2187,6 +2218,11 @@ export default function ProfilePage({
                       type="date"
                       value={editedDateOfBirth}
                       onChange={(e) => setEditedDateOfBirth(e.target.value)}
+                      max={(() => {
+                        const today = new Date();
+                        const lastYear = today.getFullYear() - 1;
+                        return `${lastYear}-12-31`;
+                      })()}
                       disabled={hasReceivedProfileBonus || isSubmitting}
                       className={cn(
                         "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300",

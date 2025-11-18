@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { creditCreatorWithdrawableBalance } from "@/lib/payment-utils";
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,10 +13,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Check if user is a creator
+    // Check if user is a creator and get current other_earnings
     const { data: userRow, error: userErr } = await supabase
       .from("users")
-      .select("user_type")
+      .select("user_type, other_earnings")
       .eq("id", user.id)
       .single();
 
@@ -54,21 +53,46 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Credit the $0.50 bonus
-    const bonusResult = await creditCreatorWithdrawableBalance(
-      user.id,
-      50, // $0.50 in cents
-      "Profile update bonus",
+    // Credit the $0.50 bonus using the same RPC as survey bonus
+    const cashCredited = 50; // $0.50 in cents
+    const description = `Profile update bonus credited`;
+    const remarks = "profile_update_bonus";
+
+    const { data: creditRes, error: rpcErr } = await supabase.rpc(
+      "credit_creator_cash_atomic",
       {
-        remarks: "profile_update_bonus",
+        p_user_id: user.id,
+        p_amount_cents: cashCredited,
+        p_description: description,
+        p_remarks: remarks,
       }
     );
 
-    if (!bonusResult.success) {
+    if (rpcErr || !creditRes) {
       return NextResponse.json(
-        { error: bonusResult.error || "Failed to credit bonus" },
+        {
+          error:
+            "Failed to credit profile update bonus: " +
+            (rpcErr?.message || "Unknown error"),
+        },
         { status: 500 }
       );
+    }
+
+    // Also increment other_earnings in users table
+    const { error: otherEarningsErr } = await supabase
+      .from("users")
+      .update({
+        other_earnings: ((userRow as any).other_earnings || 0) + cashCredited,
+      })
+      .eq("id", user.id);
+
+    if (otherEarningsErr) {
+      console.warn(
+        "Failed to update other_earnings:",
+        otherEarningsErr.message
+      );
+      // Don't fail the request since bonus was already credited
     }
 
     // Mark reward as claimed
@@ -84,8 +108,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      cash_cents: 50,
-      newBalance: bonusResult.newBalance,
+      cash_cents: cashCredited,
       message: "Profile update bonus claimed successfully!",
     });
   } catch (e: any) {
