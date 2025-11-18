@@ -55,6 +55,14 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import ISO6391 from "iso-639-1";
 
 interface UserData {
@@ -83,14 +91,15 @@ interface CreatorProfile {
   city?: string | null;
   address?: string | null;
   languages?: string[] | null;
-  type_of_content?:
+  categories?:
     | Array<{ category: string; subcategory: string }>
     | string[]
     | null;
-  other_type_of_content?:
+  subcategories?:
     | Array<{ category: string; subcategory: string }>
     | string[]
     | null;
+  interests?: string[] | null;
   has_claimed_profile_reward?: boolean;
 }
 
@@ -364,6 +373,76 @@ const CONTENT_TYPE_CATEGORIES = [
   },
 ] as const;
 
+// Interests list
+const INTERESTS = [
+  "Beauty",
+  "Skincare",
+  "Makeup",
+  "Haircare",
+  "Grooming",
+  "Fashion",
+  "Outfits",
+  "Streetwear",
+  "Accessories",
+  "Footwear",
+  "Fitness",
+  "Workouts",
+  "Yoga",
+  "Healthy Living",
+  "Food",
+  "Cooking",
+  "Recipes",
+  "Food Reviews",
+  "Gaming",
+  "Mobile Games",
+  "PC/Console Games",
+  "Esports",
+  "Tech",
+  "Apps",
+  "Gadgets",
+  "Tech Reviews",
+  "Finance",
+  "Investing",
+  "Crypto",
+  "Money Tips",
+  "Travel",
+  "Travel Vlogs",
+  "Hotels",
+  "Local Guides",
+  "Home & Decor",
+  "DIY",
+  "Cleaning Hacks",
+  "Education",
+  "Study Tips",
+  "Career Advice",
+  "Art & Craft",
+  "Drawing",
+  "Handmade",
+  "Parenting",
+  "Kids Activities",
+  "Sports",
+  "Training",
+  "Cycling",
+  "Automobile",
+  "Cars",
+  "Bikes",
+  "Pets",
+  "Pet Care",
+  "Business",
+  "Startups",
+  "Entertainment",
+  "Comedy",
+  "Memes",
+  "Reactions",
+  "Music & Dance",
+  "Singing",
+  "Dancing",
+  "Photo & Video",
+  "Editing",
+  "Sustainability",
+  "Eco Friendly",
+] as const;
+
 export default function ProfilePage({
   user,
 }: {
@@ -394,6 +473,8 @@ export default function ProfilePage({
   const [editedFullName, setEditedFullName] = useState("");
   const [fullNameError, setFullNameError] = useState<string | null>(null);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [isCompleteProfileModalOpen, setIsCompleteProfileModalOpen] =
+    useState(false);
   const [isEditingCompanyName, setIsEditingCompanyName] = useState(false);
   const [editedCompanyName, setEditedCompanyName] = useState("");
   const [isEditingWebsiteUrl, setIsEditingWebsiteUrl] = useState(false);
@@ -416,6 +497,8 @@ export default function ProfilePage({
   // Other type of content: stores {category, subcategory} pairs for selected categories
   const [editedInterestedContentTypes, setEditedInterestedContentTypes] =
     useState<Array<{ category: string; subcategory: string }>>([]);
+  // Interests: stores array of interest strings
+  const [editedInterests, setEditedInterests] = useState<string[]>([]);
 
   // Country, state, city codes for cascading dropdowns
   const [selectedCountryCode, setSelectedCountryCode] = useState<string>("");
@@ -612,18 +695,18 @@ export default function ProfilePage({
               setEditedAddress(profile.address || "");
               setEditedLanguages(profile.languages || []);
               // Handle JSONB fields
-              // type_of_content: stores category IDs (string[])
-              // other_type_of_content: stores {category, subcategory} pairs
-              const typeOfContent = profile.type_of_content as
+              // categories: stores category IDs (string[])
+              // subcategories: stores {category, subcategory} pairs
+              const typeOfContent = profile.categories as
                 | Array<{ category: string; subcategory: string }>
                 | string[]
                 | null;
-              const otherTypeOfContent = profile.other_type_of_content as
+              const otherTypeOfContent = profile.subcategories as
                 | Array<{ category: string; subcategory: string }>
                 | string[]
                 | null;
 
-              // Convert type_of_content to category IDs
+              // Convert categories to category IDs
               const convertToCategoryIds = (data: any): string[] => {
                 if (!data || !Array.isArray(data)) return [];
                 // If it's already string array (category IDs), return as is
@@ -670,7 +753,7 @@ export default function ProfilePage({
                 return [];
               };
 
-              // Convert other_type_of_content to {category, subcategory} format
+              // Convert subcategories to {category, subcategory} format
               const convertToSubcategoryFormat = (
                 data: any
               ): Array<{ category: string; subcategory: string }> => {
@@ -716,6 +799,7 @@ export default function ProfilePage({
               setEditedInterestedContentTypes(
                 convertToSubcategoryFormat(otherTypeOfContent)
               );
+              setEditedInterests((profile.interests as string[]) || []);
 
               // Find country code from country name
               if (profile.country) {
@@ -1326,20 +1410,38 @@ export default function ProfilePage({
       .join(",");
   };
 
+  // Check if all required profile fields are filled
+  const isProfileComplete = () => {
+    if (!creatorProfile) return false;
+
+    return (
+      editedPhone.trim() !== "" &&
+      editedDateOfBirth.trim() !== "" &&
+      editedGender.trim() !== "" &&
+      editedCountry.trim() !== "" &&
+      editedState.trim() !== "" &&
+      editedCity.trim() !== "" &&
+      editedAddress.trim() !== "" &&
+      editedLanguages.length > 0 &&
+      editedContentTypesCreated.length > 0 &&
+      editedInterestedContentTypes.length > 0
+    );
+  };
+
   // Check if profile has changes
   const hasProfileChanges = () => {
     if (!creatorProfile) return false;
 
-    const currentTypeOfContent = creatorProfile.type_of_content as
+    const currentTypeOfContent = creatorProfile.categories as
       | Array<{ category: string; subcategory: string }>
       | string[]
       | null;
-    const currentOtherTypeOfContent = creatorProfile.other_type_of_content as
+    const currentOtherTypeOfContent = creatorProfile.subcategories as
       | Array<{ category: string; subcategory: string }>
       | string[]
       | null;
 
-    // Convert current type_of_content to category IDs for comparison
+    // Convert current categories to category IDs for comparison
     const convertToCategoryIds = (data: any): string => {
       if (!data || !Array.isArray(data)) return "";
       // If it's already string array (category IDs), return sorted
@@ -1384,7 +1486,7 @@ export default function ProfilePage({
       return "";
     };
 
-    // Convert current other_type_of_content to normalized format
+    // Convert current subcategories to normalized format
     const convertSubcategories = (data: any): string => {
       if (!data || !Array.isArray(data)) return "";
       if (
@@ -1431,12 +1533,14 @@ export default function ProfilePage({
       JSON.stringify(editedContentTypesCreated.sort()) !==
         convertToCategoryIds(currentTypeOfContent) ||
       normalizeSubcategories(editedInterestedContentTypes) !==
-        convertSubcategories(currentOtherTypeOfContent)
+        convertSubcategories(currentOtherTypeOfContent) ||
+      JSON.stringify(editedInterests.sort()) !==
+        JSON.stringify((creatorProfile.interests || []).sort())
     );
   };
 
-  // Save all profile changes at once
-  const handleSaveProfileChanges = async () => {
+  // Save profile changes without claiming bonus
+  const handleSaveProfileChanges = async (claimBonus: boolean = false) => {
     if (!userData || !creatorProfile || !hasProfileChanges()) {
       return;
     }
@@ -1516,16 +1620,16 @@ export default function ProfilePage({
           editedLanguages.length > 0 ? editedLanguages : null;
       }
       // Compare content types
-      const currentTypeOfContent = creatorProfile.type_of_content as
+      const currentTypeOfContent = creatorProfile.categories as
         | Array<{ category: string; subcategory: string }>
         | string[]
         | null;
-      const currentOtherTypeOfContent = creatorProfile.other_type_of_content as
+      const currentOtherTypeOfContent = creatorProfile.subcategories as
         | Array<{ category: string; subcategory: string }>
         | string[]
         | null;
 
-      // Convert current type_of_content to category IDs for comparison
+      // Convert current categories to category IDs for comparison
       const convertToCategoryIds = (data: any): string => {
         if (!data || !Array.isArray(data)) return "";
         if (data.length > 0 && typeof data[0] === "string") {
@@ -1567,7 +1671,7 @@ export default function ProfilePage({
         return "";
       };
 
-      // Convert current other_type_of_content to normalized format
+      // Convert current subcategories to normalized format
       const convertSubcategories = (data: any): string => {
         if (!data || !Array.isArray(data)) return "";
         if (
@@ -1604,7 +1708,7 @@ export default function ProfilePage({
         JSON.stringify(editedContentTypesCreated.sort()) !==
         convertToCategoryIds(currentTypeOfContent)
       ) {
-        updateData.type_of_content =
+        updateData.categories =
           editedContentTypesCreated.length > 0
             ? editedContentTypesCreated
             : null;
@@ -1613,10 +1717,17 @@ export default function ProfilePage({
         normalizeSubcategories(editedInterestedContentTypes) !==
         convertSubcategories(currentOtherTypeOfContent)
       ) {
-        updateData.other_type_of_content =
+        updateData.subcategories =
           editedInterestedContentTypes.length > 0
             ? editedInterestedContentTypes
             : null;
+      }
+      if (
+        JSON.stringify(editedInterests.sort()) !==
+        JSON.stringify((creatorProfile.interests || []).sort())
+      ) {
+        updateData.interests =
+          editedInterests.length > 0 ? editedInterests : null;
       }
 
       if (Object.keys(updateData).length === 0) {
@@ -1639,38 +1750,58 @@ export default function ProfilePage({
 
       if (error) throw error;
 
-      // Claim the bonus via API route
-      const bonusResponse = await fetch("/api/profile/claim-update-bonus", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      const bonusData = await bonusResponse.json();
-
-      if (bonusResponse.ok && bonusData.success) {
-        setHasReceivedProfileBonus(true);
-        toast({
-          title: "Profile Updated & Bonus Received!",
-          description:
-            "Your profile has been updated and you've received a $0.50 bonus!",
+      // Only claim bonus if requested
+      if (claimBonus) {
+        // Claim the bonus via API route
+        const bonusResponse = await fetch("/api/profile/claim-update-bonus", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
         });
+
+        const bonusData = await bonusResponse.json();
+
+        if (bonusResponse.ok && bonusData.success) {
+          setHasReceivedProfileBonus(true);
+          toast({
+            title: "Profile Completed & Bonus Received!",
+            description:
+              "Your profile has been completed and you've received a $0.50 bonus! You can no longer edit your profile.",
+          });
+
+          // Update local state with bonus claimed
+          setCreatorProfile((prev) =>
+            prev
+              ? { ...prev, ...updateData, has_claimed_profile_reward: true }
+              : null
+          );
+        } else {
+          console.error("Failed to credit bonus:", bonusData.error);
+          toast({
+            title: "Profile Updated",
+            description:
+              "Your profile has been updated, but there was an issue crediting the bonus.",
+          });
+
+          // Update local state without bonus claimed
+          setCreatorProfile((prev) =>
+            prev ? { ...prev, ...updateData } : null
+          );
+        }
       } else {
-        console.error("Failed to credit bonus:", bonusData.error);
+        // Just update without claiming bonus
+        const isComplete = isProfileComplete();
         toast({
           title: "Profile Updated",
-          description:
-            "Your profile has been updated, but there was an issue crediting the bonus.",
+          description: isComplete
+            ? "Your profile has been updated successfully. Complete your profile to claim the $0.50 bonus!"
+            : "Your profile has been updated successfully. Fill all details to get the $0.50 bonus reward!",
         });
-      }
 
-      // Update local state
-      setCreatorProfile((prev) =>
-        prev
-          ? { ...prev, ...updateData, has_claimed_profile_reward: true }
-          : null
-      );
+        // Update local state
+        setCreatorProfile((prev) => (prev ? { ...prev, ...updateData } : null));
+      }
 
       notifyProfileUpdate();
     } catch (error: any) {
@@ -1682,6 +1813,36 @@ export default function ProfilePage({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Handle save button click - check if profile is complete and show modal
+  const handleSaveClick = () => {
+    if (!hasProfileChanges()) {
+      return;
+    }
+
+    // Check if profile is complete
+    if (isProfileComplete() && !hasReceivedProfileBonus) {
+      // Show confirmation modal
+      setIsCompleteProfileModalOpen(true);
+    } else {
+      // Check if profile is incomplete and show appropriate message
+      if (!isProfileComplete() && !hasReceivedProfileBonus) {
+        toast({
+          title: "Profile Incomplete",
+          description:
+            "Please fill all required details to complete your profile and claim the $0.50 bonus!",
+        });
+      }
+      // Save without claiming bonus
+      handleSaveProfileChanges(false);
+    }
+  };
+
+  // Handle confirmed save with bonus claim
+  const handleConfirmCompleteProfile = async () => {
+    setIsCompleteProfileModalOpen(false);
+    await handleSaveProfileChanges(true);
   };
 
   if (isLoading) {
@@ -3083,6 +3244,86 @@ export default function ProfilePage({
                     </div>
                   </div>
                 </div>
+
+                {/* Interests */}
+                <div className="relative w-full col-span-1 sm:col-span-2">
+                  <div className="space-y-3">
+                    <label
+                      className={cn(
+                        "text-sm font-medium block",
+                        isDark ? "text-white" : "text-[#1A1A1A]"
+                      )}
+                    >
+                      Interests
+                    </label>
+                    <div
+                      className={cn(
+                        "rounded-lg border p-4 space-y-3",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
+                      )}
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {INTERESTS.map((interest) => {
+                          const isChecked = editedInterests.includes(interest);
+                          return (
+                            <div
+                              key={interest}
+                              className="flex items-center space-x-2"
+                            >
+                              <Checkbox
+                                id={`interest-${interest}`}
+                                checked={isChecked}
+                                disabled={
+                                  hasReceivedProfileBonus || isSubmitting
+                                }
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setEditedInterests([
+                                      ...editedInterests,
+                                      interest,
+                                    ]);
+                                  } else {
+                                    setEditedInterests(
+                                      editedInterests.filter(
+                                        (item) => item !== interest
+                                      )
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  isDark
+                                    ? "border-gray-400 data-[state=checked]:bg-purple-600"
+                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                )}
+                              />
+                              <label
+                                htmlFor={`interest-${interest}`}
+                                className={cn(
+                                  "text-sm font-normal cursor-pointer",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                {interest}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {editedInterests.length > 0 && (
+                        <p
+                          className={cn(
+                            "text-xs mt-2",
+                            isDark ? "text-gray-400" : "text-gray-500"
+                          )}
+                        >
+                          {editedInterests.length} interests selected
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Save Changes Button */}
@@ -3094,7 +3335,7 @@ export default function ProfilePage({
                   </div>
                 ) : (
                   <Button
-                    onClick={handleSaveProfileChanges}
+                    onClick={handleSaveClick}
                     disabled={!hasProfileChanges() || isSubmitting}
                     className={cn(
                       "px-6 py-2",
@@ -4089,6 +4330,105 @@ export default function ProfilePage({
           </CardContent>
         </div>
       )}
+
+      {/* Complete Profile Confirmation Modal */}
+      <Dialog
+        open={isCompleteProfileModalOpen}
+        onOpenChange={setIsCompleteProfileModalOpen}
+        isdark={isDark}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-900")}
+            >
+              Complete Your Profile?
+            </DialogTitle>
+            {/* <DialogDescription
+              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            >
+              By completing your profile, you'll receive a $0.50 bonus.
+            </DialogDescription> */}
+            <div
+              className={cn(
+                "mt-3 p-3 rounded-lg border",
+                isDark
+                  ? "bg-yellow-900/20 border-yellow-700 text-yellow-200"
+                  : "bg-yellow-50 border-yellow-200 text-yellow-800"
+              )}
+            >
+              <p className="text-sm font-medium">
+                ⚠️ Once you claim the $0.50 bonus, you won't be able to make
+                further edits to your profile.
+              </p>
+            </div>
+          </DialogHeader>
+          {/* <div
+            className={cn(
+              "py-4 space-y-2",
+              isDark ? "text-gray-300" : "text-gray-700"
+            )}
+          >
+            <p className="text-sm font-medium">Are you sure you want to:</p>
+            <ul className="text-sm list-disc list-inside space-y-1 ml-2">
+              <li>Complete your profile and claim the $0.50 bonus?</li>
+              <li>Lock your profile from further editing?</li>
+            </ul>
+          </div> */}
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsCompleteProfileModalOpen(false);
+                // Save without claiming bonus
+                handleSaveProfileChanges(false);
+              }}
+              disabled={isSubmitting}
+              className={cn(
+                "w-full sm:w-auto",
+                isDark
+                  ? "border-gray-600 text-gray-300 hover:bg-gray-800"
+                  : "border-gray-300"
+              )}
+            >
+              Save Without Completing
+            </Button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              {/* <Button
+                variant="outline"
+                onClick={() => setIsCompleteProfileModalOpen(false)}
+                disabled={isSubmitting}
+                className={cn(
+                  isDark
+                    ? "border-gray-600 text-gray-300 hover:bg-gray-800"
+                    : "border-gray-300"
+                )}
+              >
+                Cancel
+              </Button> */}
+              <Button
+                onClick={handleConfirmCompleteProfile}
+                disabled={isSubmitting}
+                className={cn(
+                  "px-6",
+                  isDark
+                    ? "bg-purple-600 hover:bg-purple-700"
+                    : "bg-[#7F39EC] hover:bg-[#6C43D0]"
+                )}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Completing...
+                  </>
+                ) : (
+                  "Complete & Claim Bonus"
+                )}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Change Email Modal */}
       <EmailChangeModal

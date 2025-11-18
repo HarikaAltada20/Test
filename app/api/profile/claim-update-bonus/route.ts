@@ -95,10 +95,13 @@ export async function POST(request: NextRequest) {
       // Don't fail the request since bonus was already credited
     }
 
-    // Mark reward as claimed
+    // Mark reward as claimed with timestamp
     const { error: updateErr } = await supabase
       .from("creator_profiles")
-      .update({ has_claimed_profile_reward: true })
+      .update({
+        has_claimed_profile_reward: true,
+        profile_reward_claimed_at: new Date().toISOString(),
+      })
       .eq("id", user.id);
 
     if (updateErr) {
