@@ -373,75 +373,114 @@ const CONTENT_TYPE_CATEGORIES = [
   },
 ] as const;
 
-// Interests list
-const INTERESTS = [
-  "Beauty",
-  "Skincare",
-  "Makeup",
-  "Haircare",
-  "Grooming",
-  "Fashion",
-  "Outfits",
-  "Streetwear",
-  "Accessories",
-  "Footwear",
-  "Fitness",
-  "Workouts",
-  "Yoga",
-  "Healthy Living",
-  "Food",
-  "Cooking",
-  "Recipes",
-  "Food Reviews",
-  "Gaming",
-  "Mobile Games",
-  "PC/Console Games",
-  "Esports",
-  "Tech",
-  "Apps",
-  "Gadgets",
-  "Tech Reviews",
-  "Finance",
-  "Investing",
-  "Crypto",
-  "Money Tips",
-  "Travel",
-  "Travel Vlogs",
-  "Hotels",
-  "Local Guides",
-  "Home & Decor",
-  "DIY",
-  "Cleaning Hacks",
-  "Education",
-  "Study Tips",
-  "Career Advice",
-  "Art & Craft",
-  "Drawing",
-  "Handmade",
-  "Parenting",
-  "Kids Activities",
-  "Sports",
-  "Training",
-  "Cycling",
-  "Automobile",
-  "Cars",
-  "Bikes",
-  "Pets",
-  "Pet Care",
-  "Business",
-  "Startups",
-  "Entertainment",
-  "Comedy",
-  "Memes",
-  "Reactions",
-  "Music & Dance",
-  "Singing",
-  "Dancing",
-  "Photo & Video",
-  "Editing",
-  "Sustainability",
-  "Eco Friendly",
+// Interests organized by categories (similar to subcategories structure)
+const INTEREST_CATEGORIES = [
+  {
+    id: "beauty",
+    name: "Beauty",
+    interests: ["Beauty", "Skincare", "Makeup", "Haircare", "Grooming"],
+  },
+  {
+    id: "fashion",
+    name: "Fashion",
+    interests: ["Fashion", "Outfits", "Streetwear", "Accessories", "Footwear"],
+  },
+  {
+    id: "fitness",
+    name: "Fitness",
+    interests: ["Fitness", "Workouts", "Yoga", "Healthy Living"],
+  },
+  {
+    id: "food",
+    name: "Food",
+    interests: ["Food", "Cooking", "Recipes", "Food Reviews"],
+  },
+  {
+    id: "gaming",
+    name: "Gaming",
+    interests: ["Gaming", "Mobile Games", "PC/Console Games", "Esports"],
+  },
+  {
+    id: "tech",
+    name: "Tech",
+    interests: ["Tech", "Apps", "Gadgets", "Tech Reviews"],
+  },
+  {
+    id: "finance",
+    name: "Finance",
+    interests: ["Finance", "Investing", "Crypto", "Money Tips"],
+  },
+  {
+    id: "travel",
+    name: "Travel",
+    interests: ["Travel", "Travel Vlogs", "Hotels", "Local Guides"],
+  },
+  {
+    id: "home_decor",
+    name: "Home & Decor",
+    interests: ["Home & Decor", "DIY", "Cleaning Hacks"],
+  },
+  {
+    id: "education",
+    name: "Education",
+    interests: ["Education", "Study Tips", "Career Advice"],
+  },
+  {
+    id: "art_craft",
+    name: "Art & Craft",
+    interests: ["Art & Craft", "Drawing", "Handmade"],
+  },
+  {
+    id: "parenting",
+    name: "Parenting",
+    interests: ["Parenting", "Kids Activities"],
+  },
+  {
+    id: "sports",
+    name: "Sports",
+    interests: ["Sports", "Training", "Cycling"],
+  },
+  {
+    id: "automobile",
+    name: "Automobile",
+    interests: ["Automobile", "Cars", "Bikes"],
+  },
+  {
+    id: "pets",
+    name: "Pets",
+    interests: ["Pets", "Pet Care"],
+  },
+  {
+    id: "business",
+    name: "Business",
+    interests: ["Business", "Startups"],
+  },
+  {
+    id: "entertainment",
+    name: "Entertainment",
+    interests: ["Entertainment", "Comedy", "Memes", "Reactions"],
+  },
+  {
+    id: "music_dance",
+    name: "Music & Dance",
+    interests: ["Music & Dance", "Singing", "Dancing"],
+  },
+  {
+    id: "photo_video",
+    name: "Photo & Video",
+    interests: ["Photo & Video", "Editing"],
+  },
+  {
+    id: "sustainability",
+    name: "Sustainability",
+    interests: ["Sustainability", "Eco Friendly"],
+  },
 ] as const;
+
+// Flat list of all interests for backward compatibility
+const INTERESTS = INTEREST_CATEGORIES.flatMap(
+  (category) => category.interests
+) as readonly string[];
 
 export default function ProfilePage({
   user,
@@ -1560,8 +1599,10 @@ export default function ProfilePage({
     try {
       const updateData: any = {};
 
-      if (editedPhone !== (creatorProfile.phone_number || "")) {
-        updateData.phone_number = editedPhone.trim() || null;
+      // Use edited phone number
+      const phoneToSave = editedPhone;
+      if (phoneToSave !== (creatorProfile.phone_number || "")) {
+        updateData.phone_number = phoneToSave.trim() || null;
       }
       if (editedDateOfBirth !== (creatorProfile.date_of_birth || "")) {
         // Validate date of birth: cannot be in future or of same year
@@ -1753,7 +1794,7 @@ export default function ProfilePage({
       // Only claim bonus if requested
       if (claimBonus) {
         // Claim the bonus via API route
-        const bonusResponse = await fetch("/api/profile/claim-update-bonus", {
+        const bonusResponse = await fetch("/api/profile/claim-bonus", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1826,15 +1867,7 @@ export default function ProfilePage({
       // Show confirmation modal
       setIsCompleteProfileModalOpen(true);
     } else {
-      // Check if profile is incomplete and show appropriate message
-      if (!isProfileComplete() && !hasReceivedProfileBonus) {
-        toast({
-          title: "Profile Incomplete",
-          description:
-            "Please fill all required details to complete your profile and claim the $0.50 bonus!",
-        });
-      }
-      // Save without claiming bonus
+      // Save without claiming bonus (toast message will be shown in handleSaveProfileChanges)
       handleSaveProfileChanges(false);
     }
   };
@@ -2348,6 +2381,7 @@ export default function ProfilePage({
                       Phone Number
                     </label>
                     <PhoneInput
+                      key={`phone-input-${isDark ? "dark" : "light"}`}
                       id="phone"
                       international
                       defaultCountry="IN"
@@ -2356,16 +2390,28 @@ export default function ProfilePage({
                         setEditedPhone(value || "")
                       }
                       disabled={hasReceivedProfileBonus || isSubmitting}
-                      className="custom-phone-input"
+                      className={cn(
+                        "custom-phone-input",
+                        isDark
+                          ? "bg-[#180438] text-white border-gray-300"
+                          : "bg-white text-gray-900 border-gray-300"
+                      )}
                       style={
                         {
                           "--PhoneInputCountryFlag-height": "1.2em",
                           "--PhoneInputCountryFlag-borderWidth": "0",
+                          backgroundColor: isDark ? "#180438" : "white",
+                          color: isDark ? "white" : "#1a1a1a",
+                          borderColor: "#d1d5db",
                         } as React.CSSProperties
                       }
                       numberInputProps={{
                         className: "peer",
                         placeholder: " ",
+                        style: {
+                          color: isDark ? "white" : "#1a1a1a",
+                          backgroundColor: "transparent",
+                        },
                       }}
                     />
                   </div>
@@ -2511,10 +2557,10 @@ export default function ProfilePage({
                           "h-12 w-full text-[14px] transition-colors duration-200",
                           hasReceivedProfileBonus || isSubmitting
                             ? isDark
-                              ? "bg-transparent border-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                              ? "bg-transparent border-gray-300 hover:bg-[#180438]/50 hover:border-gray-500"
                               : "bg-transparent border-gray-300 hover:bg-gray-50 hover:border-gray-400"
                             : isDark
-                            ? "bg-[#180438] text-white border-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                            ? "bg-[#180438] text-white border-gray-300 hover:bg-[#180438]/50 hover:border-gray-500"
                             : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
                         )}
                       >
@@ -2630,10 +2676,10 @@ export default function ProfilePage({
                           "h-12 w-full text-[14px] transition-colors duration-200",
                           hasReceivedProfileBonus || isSubmitting
                             ? isDark
-                              ? "bg-transparent border-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                              ? "bg-transparent border-gray-300 hover:bg-[#180438]/50 hover:border-gray-500"
                               : "bg-transparent border-gray-300 hover:bg-gray-50 hover:border-gray-400"
                             : isDark
-                            ? "bg-[#180438] text-white border-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                            ? "bg-[#180438] text-white border-gray-300 hover:bg-[#180438]/50 hover:border-gray-500"
                             : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
                         )}
                       >
@@ -2761,10 +2807,10 @@ export default function ProfilePage({
                           "h-12 w-full text-[14px] transition-colors duration-200",
                           hasReceivedProfileBonus || isSubmitting
                             ? isDark
-                              ? "bg-transparent border-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                              ? "bg-transparent border-gray-300 hover:bg-[#180438]/50  hover:border-gray-500"
                               : "bg-transparent border-gray-300 hover:bg-gray-50 hover:border-gray-400"
                             : isDark
-                            ? "bg-[#180438] text-white border-gray-300 hover:bg-gray-700 hover:border-gray-500"
+                            ? "bg-[#180438] text-white border-gray-300 hover:bg-[#180438]/50  hover:border-gray-500"
                             : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
                         )}
                       >
@@ -2903,7 +2949,7 @@ export default function ProfilePage({
                         <Label
                           htmlFor="languageSelect"
                           className={cn(
-                            "block mb-2 text-sm font-medium",
+                            "block mb-2 text-[14px] font-medium",
                             isDark ? "text-white" : "text-[#1A1A1A]"
                           )}
                         >
@@ -3004,7 +3050,7 @@ export default function ProfilePage({
                   <div className="space-y-3">
                     <label
                       className={cn(
-                        "text-sm font-medium block",
+                        "text-sm text-[14px] font-medium block",
                         isDark ? "text-white" : "text-[#1A1A1A]"
                       )}
                     >
@@ -3065,7 +3111,7 @@ export default function ProfilePage({
                                 }}
                                 className={cn(
                                   isDark
-                                    ? "border-gray-400 data-[state=checked]:bg-purple-600"
+                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
                                     : "border-gray-400 data-[state=checked]:bg-purple-600"
                                 )}
                               />
@@ -3104,7 +3150,7 @@ export default function ProfilePage({
                   <div className="space-y-3">
                     <label
                       className={cn(
-                        "text-sm font-medium block",
+                        "text-[14px] font-medium block",
                         isDark ? "text-white" : "text-[#1A1A1A]"
                       )}
                     >
@@ -3203,7 +3249,7 @@ export default function ProfilePage({
                                                 }}
                                                 className={cn(
                                                   isDark
-                                                    ? "border-gray-400 data-[state=checked]:bg-purple-600"
+                                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
                                                     : "border-gray-400 data-[state=checked]:bg-purple-600"
                                                 )}
                                               />
@@ -3250,7 +3296,7 @@ export default function ProfilePage({
                   <div className="space-y-3">
                     <label
                       className={cn(
-                        "text-sm font-medium block",
+                        "text-[14px] font-medium block",
                         isDark ? "text-white" : "text-[#1A1A1A]"
                       )}
                     >
@@ -3264,7 +3310,7 @@ export default function ProfilePage({
                           : "bg-white border-gray-300"
                       )}
                     >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         {INTERESTS.map((interest) => {
                           const isChecked = editedInterests.includes(interest);
                           return (
@@ -3294,7 +3340,7 @@ export default function ProfilePage({
                                 }}
                                 className={cn(
                                   isDark
-                                    ? "border-gray-400 data-[state=checked]:bg-purple-600"
+                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
                                     : "border-gray-400 data-[state=checked]:bg-purple-600"
                                 )}
                               />
@@ -3351,7 +3397,7 @@ export default function ProfilePage({
                       </>
                     ) : (
                       <>
-                        <Save className="mr-2 h-4 w-4" />
+                        <Save className="h-4 w-4" />
                         Save Changes
                       </>
                     )}
@@ -4349,19 +4395,15 @@ export default function ProfilePage({
             >
               By completing your profile, you'll receive a $0.50 bonus.
             </DialogDescription> */}
-            <div
+            <p
               className={cn(
-                "mt-3 p-3 rounded-lg border",
-                isDark
-                  ? "bg-yellow-900/20 border-yellow-700 text-yellow-200"
-                  : "bg-yellow-50 border-yellow-200 text-yellow-800"
+                "py-3 text-md font-medium",
+                isDark ? "text-white" : "text-gray-900"
               )}
             >
-              <p className="text-sm font-medium">
-                ⚠️ Once you claim the $0.50 bonus, you won't be able to make
-                further edits to your profile.
-              </p>
-            </div>
+              ⚠️ Once you claim the $0.50 bonus, you won't be able to make
+              further edits to your profile.
+            </p>
           </DialogHeader>
           {/* <div
             className={cn(
@@ -4375,7 +4417,7 @@ export default function ProfilePage({
               <li>Lock your profile from further editing?</li>
             </ul>
           </div> */}
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+          <DialogFooter className="flex flex-col sm:flex-row justify-end gap-2">
             <Button
               variant="outline"
               onClick={() => {
@@ -4388,10 +4430,10 @@ export default function ProfilePage({
                 "w-full sm:w-auto",
                 isDark
                   ? "border-gray-600 text-gray-300 hover:bg-gray-800"
-                  : "border-gray-300"
+                  : "border-gray-300 text-gray-900"
               )}
             >
-              Save Without Completing
+              Save
             </Button>
             <div className="flex gap-2 w-full sm:w-auto">
               {/* <Button

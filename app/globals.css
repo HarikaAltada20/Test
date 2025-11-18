@@ -493,6 +493,13 @@ body {
   box-shadow: 0 0 0 1px #3b82f6;
 }
 
+[data-theme="dark"] .custom-phone-input:focus-within,
+[data-mode="dark"] .custom-phone-input:focus-within,
+.dark .custom-phone-input:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f6;
+}
+
 .custom-phone-input .PhoneInputCountry {
   margin-right: 0.5rem;
   padding-right: 0.5rem;
@@ -545,22 +552,26 @@ body {
 
 /* Dark mode Phone Input */
 [data-theme="dark"] .custom-phone-input,
+[data-mode="dark"] .custom-phone-input,
 .dark .custom-phone-input {
   border-color: #d1d5db;
   background-color: #180438;
 }
 
 [data-theme="dark"] .custom-phone-input .PhoneInputCountry,
+[data-mode="dark"] .custom-phone-input .PhoneInputCountry,
 .dark .custom-phone-input .PhoneInputCountry {
   border-right-color: #6b7280;
 }
 
 [data-theme="dark"] .custom-phone-input .PhoneInputCountrySelect,
+[data-mode="dark"] .custom-phone-input .PhoneInputCountrySelect,
 .dark .custom-phone-input .PhoneInputCountrySelect {
   color: white;
 }
 
 [data-theme="dark"] .custom-phone-input .PhoneInputInput,
+[data-mode="dark"] .custom-phone-input .PhoneInputInput,
 .dark .custom-phone-input .PhoneInputInput {
   color: white;
 }
