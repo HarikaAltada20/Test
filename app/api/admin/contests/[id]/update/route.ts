@@ -38,6 +38,10 @@ export async function POST(
       "contest_type",
       "contest_based_details",
       "thumbnail_url",
+      // Categories, subcategories, and interests
+      "categories",
+      "subcategories",
+      "interests",
       // New features (2025-10-01)
       "multiple_submissions_enabled",
       "max_submissions_per_creator",

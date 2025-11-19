@@ -36,6 +36,8 @@ import {
   File,
   CheckCircle2,
   Loader2,
+  ChevronDown,
+  RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
@@ -77,12 +79,375 @@ import {
   CollapsibleTrigger,
   CollapsibleContent,
 } from "@/components/ui/collapsible";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { formatName } from "@/lib/name-utils";
 
 // Dynamically import the Novel editor
 const NovelEditor = dynamic(() => import("@/components/novel-editor"), {
   ssr: false,
 });
+
+// Content type categories with subcategories
+const CONTENT_TYPE_CATEGORIES = [
+  {
+    id: "beauty",
+    name: "Beauty",
+    subcategories: [
+      "Skincare",
+      "Makeup",
+      "Haircare",
+      "Fragrance",
+      "Nail Art",
+      "Men's Grooming",
+      "K-Beauty",
+    ],
+  },
+  {
+    id: "fashion",
+    name: "Fashion",
+    subcategories: [
+      "Outfits",
+      "Streetwear",
+      "Luxury",
+      "Athleisure",
+      "Accessories",
+      "Footwear",
+      "Sustainable Fashion",
+    ],
+  },
+  {
+    id: "fitness",
+    name: "Fitness",
+    subcategories: [
+      "Gym Workouts",
+      "Home Workouts",
+      "Yoga & Pilates",
+      "Running",
+      "Nutrition",
+      "Supplements",
+      "Crossfit",
+    ],
+  },
+  {
+    id: "food",
+    name: "Food",
+    subcategories: [
+      "Recipes",
+      "Restaurant Reviews",
+      "Street Food",
+      "Desserts",
+      "Beverages (Coffee/Tea)",
+      "Vegan & Plant-based",
+      "Product Taste Tests",
+    ],
+  },
+  {
+    id: "gaming",
+    name: "Gaming",
+    subcategories: [
+      "Mobile Games",
+      "Console / PC Games",
+      "Esports",
+      "Walkthroughs / Let's Play",
+      "Game Reviews",
+      "Game Tips & Tricks",
+      "Live Streaming",
+    ],
+  },
+  {
+    id: "tech",
+    name: "Tech",
+    subcategories: [
+      "Smartphones",
+      "Laptops & PCs",
+      "Smart Home",
+      "Wearables",
+      "Apps",
+      "Software & SaaS",
+      "Gadget Reviews",
+    ],
+  },
+  {
+    id: "finance",
+    name: "Finance",
+    subcategories: [
+      "Personal Finance",
+      "Investing",
+      "Crypto",
+      "Fintech Apps",
+      "Money Saving Tips",
+      "Tax & Accounting",
+    ],
+  },
+  {
+    id: "travel",
+    name: "Travel",
+    subcategories: [
+      "Travel Vlogs",
+      "Budget Travel",
+      "Luxury Travel",
+      "Hotel Reviews",
+      "Local Guides",
+      "Travel Gear",
+    ],
+  },
+  {
+    id: "home_decor",
+    name: "Home & Decor",
+    subcategories: [
+      "Interior Design",
+      "DIY Projects",
+      "Organization Hacks",
+      "Cleaning Tips",
+      "Home Appliances",
+      "Small Space Ideas",
+    ],
+  },
+  {
+    id: "education",
+    name: "Education",
+    subcategories: [
+      "Study Tips",
+      "Course Reviews",
+      "Skill Tutorials",
+      "Language Learning",
+      "Career Advice",
+      "Exam Prep",
+    ],
+  },
+  {
+    id: "art_diy",
+    name: "Art & DIY",
+    subcategories: [
+      "Painting",
+      "Drawing",
+      "Crafts",
+      "Prints & Merch",
+      "Handmade Products",
+      "Design Tutorials",
+    ],
+  },
+  {
+    id: "parenting",
+    name: "Parenting",
+    subcategories: [
+      "Baby Care",
+      "Toddler Activities",
+      "Kids Education",
+      "Parenting Tips",
+      "Product Reviews for Parents",
+    ],
+  },
+  {
+    id: "sports",
+    name: "Sports",
+    subcategories: [
+      "Football / Soccer",
+      "Basketball",
+      "Cricket",
+      "Running & Training",
+      "Cycling",
+      "Outdoor Adventure",
+    ],
+  },
+  {
+    id: "auto",
+    name: "Auto",
+    subcategories: [
+      "Cars",
+      "Bikes",
+      "Electric Vehicles (EVs)",
+      "Auto Accessories",
+      "Car Reviews",
+      "Maintenance Tips",
+    ],
+  },
+  {
+    id: "pets",
+    name: "Pets",
+    subcategories: [
+      "Pet Care",
+      "Pet Training",
+      "Pet Food & Products",
+      "Funny Pet Videos",
+      "Pet Health",
+    ],
+  },
+  {
+    id: "business",
+    name: "Business",
+    subcategories: [
+      "Startups",
+      "SaaS & Tools",
+      "Productivity",
+      "Marketing Tips",
+      "Side Hustles",
+    ],
+  },
+  {
+    id: "entertainment",
+    name: "Entertainment",
+    subcategories: [
+      "Comedy",
+      "Drama",
+      "Romance",
+      "Horror",
+      "Emotional / Sad",
+      "Memes",
+      "Reaction Videos",
+      "Sketches / Skits",
+      "Parodies",
+      "Trailers & Reviews",
+    ],
+  },
+  {
+    id: "music_dance",
+    name: "Music & Dance",
+    subcategories: [
+      "Covers",
+      "Original Music",
+      "Music Production",
+      "Dance Choreography",
+      "Instrument Tutorials",
+    ],
+  },
+  {
+    id: "photo_video",
+    name: "Photography & Video",
+    subcategories: [
+      "Camera Gear",
+      "Editing Tutorials",
+      "Cinematography",
+      "Mobile Filmmaking",
+      "Lighting & Sound",
+    ],
+  },
+  {
+    id: "sustainability",
+    name: "Sustainability",
+    subcategories: [
+      "Eco Products",
+      "Zero Waste",
+      "Sustainable Fashion",
+      "Green Tech",
+      "Upcycling",
+    ],
+  },
+] as const;
+
+// Interests organized by categories (similar to subcategories structure)
+const INTEREST_CATEGORIES = [
+  {
+    id: "beauty",
+    name: "Beauty",
+    interests: ["Beauty", "Skincare", "Makeup", "Haircare", "Grooming"],
+  },
+  {
+    id: "fashion",
+    name: "Fashion",
+    interests: ["Fashion", "Outfits", "Streetwear", "Accessories", "Footwear"],
+  },
+  {
+    id: "fitness",
+    name: "Fitness",
+    interests: ["Fitness", "Workouts", "Yoga", "Healthy Living"],
+  },
+  {
+    id: "food",
+    name: "Food",
+    interests: ["Food", "Cooking", "Recipes", "Food Reviews"],
+  },
+  {
+    id: "gaming",
+    name: "Gaming",
+    interests: ["Gaming", "Mobile Games", "PC/Console Games", "Esports"],
+  },
+  {
+    id: "tech",
+    name: "Tech",
+    interests: ["Tech", "Apps", "Gadgets", "Tech Reviews"],
+  },
+  {
+    id: "finance",
+    name: "Finance",
+    interests: ["Finance", "Investing", "Crypto", "Money Tips"],
+  },
+  {
+    id: "travel",
+    name: "Travel",
+    interests: ["Travel", "Travel Vlogs", "Hotels", "Local Guides"],
+  },
+  {
+    id: "home_decor",
+    name: "Home & Decor",
+    interests: ["Home & Decor", "DIY", "Cleaning Hacks"],
+  },
+  {
+    id: "education",
+    name: "Education",
+    interests: ["Education", "Study Tips", "Career Advice"],
+  },
+  {
+    id: "art_craft",
+    name: "Art & Craft",
+    interests: ["Art & Craft", "Drawing", "Handmade"],
+  },
+  {
+    id: "parenting",
+    name: "Parenting",
+    interests: ["Parenting", "Kids Activities"],
+  },
+  {
+    id: "sports",
+    name: "Sports",
+    interests: ["Sports", "Training", "Cycling"],
+  },
+  {
+    id: "automobile",
+    name: "Automobile",
+    interests: ["Automobile", "Cars", "Bikes"],
+  },
+  {
+    id: "pets",
+    name: "Pets",
+    interests: ["Pets", "Pet Care"],
+  },
+  {
+    id: "business",
+    name: "Business",
+    interests: ["Business", "Startups"],
+  },
+  {
+    id: "entertainment",
+    name: "Entertainment",
+    interests: ["Entertainment", "Comedy", "Memes", "Reactions"],
+  },
+  {
+    id: "music_dance",
+    name: "Music & Dance",
+    interests: ["Music & Dance", "Singing", "Dancing"],
+  },
+  {
+    id: "photo_video",
+    name: "Photo & Video",
+    interests: ["Photo & Video", "Editing"],
+  },
+  {
+    id: "sustainability",
+    name: "Sustainability",
+    interests: ["Sustainability", "Eco Friendly"],
+  },
+] as const;
+
+// Flat list of all interests for backward compatibility
+const INTERESTS = INTEREST_CATEGORIES.flatMap(
+  (category) => category.interests
+) as readonly string[];
 
 type PlanFeatures = {
   maxActiveContests: number;
@@ -160,6 +525,13 @@ type ContestData = {
   content_type?: "ugc" | "clipping" | "other" | null;
   bonus_details?: { description_html?: string; description_json?: any } | null;
   max_earnings_per_creator?: number | null; // Per-contest cap (in cents)
+  // Categories, subcategories, and interests
+  categories?: string[] | null;
+  subcategories?:
+    | Array<{ category: string; subcategory: string }>
+    | Record<string, string[]>
+    | null;
+  interests?: string[] | null;
 };
 
 export default function EditContestPage({
@@ -202,6 +574,15 @@ export default function EditContestPage({
   // Common contest fields
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<string>("technology"); // Or consider platform if that's more accurate
+  // Categories, subcategories, and interests state
+  const [contestCategories, setContestCategories] = useState<string[]>([]);
+  const [contestSubcategories, setContestSubcategories] = useState<
+    Array<{ category: string; subcategory: string }>
+  >([]);
+  const [contestInterests, setContestInterests] = useState<string[]>([]);
+  const [categoriesOpen, setCategoriesOpen] = useState(true); // Categories expanded by default
+  const [subcategoriesOpen, setSubcategoriesOpen] = useState(false);
+  const [interestsOpen, setInterestsOpen] = useState(false);
   const [briefHtml, setBriefHtml] = useState("");
   const [briefJson, setBriefJson] = useState<any>(null);
   const [rulesHtml, setRulesHtml] = useState("");
@@ -798,6 +1179,40 @@ export default function EditContestPage({
                 (data.max_earnings_per_creator / 100).toString()
               );
             }
+
+            // Load categories, subcategories, and interests
+            if (data.categories && Array.isArray(data.categories)) {
+              setContestCategories(data.categories);
+            }
+            // Handle subcategories - can be grouped object format or flat array format
+            if (data.subcategories) {
+              if (Array.isArray(data.subcategories)) {
+                // Flat array format: [{ category: "beauty", subcategory: "Skincare" }, ...]
+                setContestSubcategories(data.subcategories);
+              } else if (
+                typeof data.subcategories === "object" &&
+                data.subcategories !== null
+              ) {
+                // Grouped object format: { "beauty": ["Skincare", "Makeup"], ... }
+                const grouped = data.subcategories as Record<string, string[]>;
+                const flatArray: Array<{
+                  category: string;
+                  subcategory: string;
+                }> = [];
+                Object.keys(grouped).forEach((catId) => {
+                  const subcats = grouped[catId];
+                  if (Array.isArray(subcats)) {
+                    subcats.forEach((subcat) => {
+                      flatArray.push({ category: catId, subcategory: subcat });
+                    });
+                  }
+                });
+                setContestSubcategories(flatArray);
+              }
+            }
+            if (data.interests && Array.isArray(data.interests)) {
+              setContestInterests(data.interests);
+            }
           }
         } else {
           setError(
@@ -1299,6 +1714,23 @@ export default function EditContestPage({
 
     // Only include content fields if not in datesOnly mode
     if (!datesOnly) {
+      // Helper function to process and group subcategories by category
+      const processSubcategories = (
+        subcategories: Array<{ category: string; subcategory: string }>
+      ) => {
+        if (!subcategories || subcategories.length === 0) return null;
+        const grouped: Record<string, string[]> = {};
+        subcategories.forEach((item) => {
+          if (!grouped[item.category]) {
+            grouped[item.category] = [];
+          }
+          if (!grouped[item.category].includes(item.subcategory)) {
+            grouped[item.category].push(item.subcategory);
+          }
+        });
+        return Object.keys(grouped).length > 0 ? grouped : null;
+      };
+
       updatePayload = {
         title,
         category,
@@ -1310,6 +1742,11 @@ export default function EditContestPage({
           (link) => link.url.trim() !== ""
         ),
         tracking_links: trackingLinks.filter((link) => link.url.trim() !== ""),
+        // Categories, subcategories, and interests
+        categories: contestCategories.length > 0 ? contestCategories : null,
+        subcategories: processSubcategories(contestSubcategories),
+        interests:
+          contestInterests.length > 0 ? [...new Set(contestInterests)] : null, // Remove duplicate interests
       };
     }
 
@@ -1717,6 +2154,16 @@ export default function EditContestPage({
         updatePayload.resources = resources;
       }
 
+      // Debug: Log the update payload
+      console.log("📤 Update payload being sent:", {
+        categories: updatePayload.categories,
+        subcategories: updatePayload.subcategories,
+        interests: updatePayload.interests,
+        hasCategories: !!updatePayload.categories,
+        hasSubcategories: !!updatePayload.subcategories,
+        hasInterests: !!updatePayload.interests,
+      });
+
       // For admins, call a secure API that uses the service role to bypass RLS
       if (isAdmin) {
         const resp = await fetch(`/api/admin/contests/${contestId}/update`, {
@@ -1726,17 +2173,69 @@ export default function EditContestPage({
         });
         if (!resp.ok) {
           const j = await resp.json().catch(() => ({}));
-          throw new Error(j.error || "Admin update failed");
+          const errorMsg = j.error || "Admin update failed";
+          console.error("❌ Admin update failed:", errorMsg, j);
+          throw new Error(errorMsg);
         }
+        const result = await resp.json().catch(() => ({}));
+        console.log("✅ Admin update successful:", result);
       } else {
+        console.log("📤 Direct Supabase update:", {
+          contestId,
+          payloadKeys: Object.keys(updatePayload),
+          categories: updatePayload.categories,
+          subcategories: updatePayload.subcategories,
+          interests: updatePayload.interests,
+          fullPayload: updatePayload,
+        });
         let updateQuery = supabase
           .from("contests")
           .update(updatePayload)
           .eq("id", contestId)
-          .eq("advertiser_id", user.id);
-        const { error: updateError } = await updateQuery;
+          .eq("advertiser_id", user.id)
+          .select("id, categories, subcategories, interests"); // Select to verify update
+        const { data: updateData, error: updateError } = await updateQuery;
         if (updateError) {
+          console.error("❌ Supabase update error:", updateError);
+          console.error("❌ Error details:", {
+            message: updateError.message,
+            details: updateError.details,
+            hint: updateError.hint,
+            code: updateError.code,
+          });
           throw updateError;
+        }
+        console.log("✅ Supabase update successful:", {
+          updatedRecord: updateData,
+          categories: updateData?.[0]?.categories,
+          subcategories: updateData?.[0]?.subcategories,
+          interests: updateData?.[0]?.interests,
+        });
+
+        // Verify the update actually worked
+        if (updateData && updateData.length > 0) {
+          const updated = updateData[0];
+          if (
+            JSON.stringify(updated.categories) !==
+              JSON.stringify(updatePayload.categories) ||
+            JSON.stringify(updated.subcategories) !==
+              JSON.stringify(updatePayload.subcategories) ||
+            JSON.stringify(updated.interests) !==
+              JSON.stringify(updatePayload.interests)
+          ) {
+            console.warn("⚠️ Update may not have saved correctly:", {
+              expected: {
+                categories: updatePayload.categories,
+                subcategories: updatePayload.subcategories,
+                interests: updatePayload.interests,
+              },
+              actual: {
+                categories: updated.categories,
+                subcategories: updated.subcategories,
+                interests: updated.interests,
+              },
+            });
+          }
         }
       }
 
@@ -1751,11 +2250,15 @@ export default function EditContestPage({
 
       router.push(`/dashboard/contests/${contestId}`);
     } catch (err: any) {
+      console.error("❌ Update failed with error:", err);
       toast({
         title: "Update Failed",
         description: err.message || "Failed to update contest",
         variant: "destructive",
       });
+    } finally {
+      setIsSubmitting(false);
+      if (submitTimeoutId) clearTimeout(submitTimeoutId);
     }
   };
 
@@ -3335,6 +3838,23 @@ export default function EditContestPage({
 
     // Only include content fields if not in datesOnly mode
     if (!datesOnly) {
+      // Helper function to process and group subcategories by category
+      const processSubcategories = (
+        subcategories: Array<{ category: string; subcategory: string }>
+      ) => {
+        if (!subcategories || subcategories.length === 0) return null;
+        const grouped: Record<string, string[]> = {};
+        subcategories.forEach((item) => {
+          if (!grouped[item.category]) {
+            grouped[item.category] = [];
+          }
+          if (!grouped[item.category].includes(item.subcategory)) {
+            grouped[item.category].push(item.subcategory);
+          }
+        });
+        return Object.keys(grouped).length > 0 ? grouped : null;
+      };
+
       updatePayload = {
         title,
         category,
@@ -3346,6 +3866,11 @@ export default function EditContestPage({
           (link) => link.url.trim() !== ""
         ),
         tracking_links: trackingLinks.filter((link) => link.url.trim() !== ""),
+        // Categories, subcategories, and interests
+        categories: contestCategories.length > 0 ? contestCategories : null,
+        subcategories: processSubcategories(contestSubcategories),
+        interests:
+          contestInterests.length > 0 ? [...new Set(contestInterests)] : null, // Remove duplicate interests
       };
     }
 
@@ -3758,18 +4283,69 @@ export default function EditContestPage({
         });
         if (!resp.ok) {
           const j = await resp.json().catch(() => ({}));
-          throw new Error(j.error || "Admin update failed");
+          const errorMsg = j.error || "Admin update failed";
+          console.error("❌ Admin draft update failed:", errorMsg, j);
+          throw new Error(errorMsg);
         }
+        const result = await resp.json().catch(() => ({}));
+        console.log("✅ Admin draft update successful:", result);
       } else {
-        const { error: updateError } = await supabase
+        console.log("📤 Direct Supabase draft update:", {
+          contestId,
+          payloadKeys: Object.keys(updatePayload),
+          categories: updatePayload.categories,
+          subcategories: updatePayload.subcategories,
+          interests: updatePayload.interests,
+          moderationStatus,
+        });
+        const { data: updateData, error: updateError } = await supabase
           .from("contests")
           .update(updatePayload)
           .eq("id", contestId)
-          .eq("advertiser_id", user.id);
+          .eq("advertiser_id", user.id)
+          .select("id, categories, subcategories, interests"); // Select to verify update
 
         if (updateError) {
-          console.error("Supabase update error:", updateError);
+          console.error("❌ Supabase draft update error:", updateError);
+          console.error("❌ Error details:", {
+            message: updateError.message,
+            details: updateError.details,
+            hint: updateError.hint,
+            code: updateError.code,
+          });
           throw updateError;
+        }
+        console.log("✅ Supabase draft update successful:", {
+          updatedRecord: updateData,
+          categories: updateData?.[0]?.categories,
+          subcategories: updateData?.[0]?.subcategories,
+          interests: updateData?.[0]?.interests,
+        });
+
+        // Verify the update actually worked
+        if (updateData && updateData.length > 0) {
+          const updated = updateData[0];
+          if (
+            JSON.stringify(updated.categories) !==
+              JSON.stringify(updatePayload.categories) ||
+            JSON.stringify(updated.subcategories) !==
+              JSON.stringify(updatePayload.subcategories) ||
+            JSON.stringify(updated.interests) !==
+              JSON.stringify(updatePayload.interests)
+          ) {
+            console.warn("⚠️ Draft update may not have saved correctly:", {
+              expected: {
+                categories: updatePayload.categories,
+                subcategories: updatePayload.subcategories,
+                interests: updatePayload.interests,
+              },
+              actual: {
+                categories: updated.categories,
+                subcategories: updated.subcategories,
+                interests: updated.interests,
+              },
+            });
+          }
         }
       }
 
@@ -4069,12 +4645,14 @@ export default function EditContestPage({
       {isAdmin &&
         contest?.moderation_status === "published" &&
         contest?.status !== "ended" && (
-          <Alert className={cn(
-            "mb-6",
-            isDark 
-              ? "border-amber-600 bg-yellow-800/30 text-amber-300" 
-              : "border-amber-300 bg-amber-50 text-amber-900"
-          )}>
+          <Alert
+            className={cn(
+              "mb-6",
+              isDark
+                ? "border-amber-600 bg-yellow-800/30 text-amber-300"
+                : "border-amber-300 bg-amber-50 text-amber-900"
+            )}
+          >
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               <strong>Admin Edit Warning:</strong> You are editing a
@@ -4084,7 +4662,7 @@ export default function EditContestPage({
               once they have ended.
             </AlertDescription>
           </Alert>
-         )} 
+        )}
 
       {/* Dates Only Warning */}
       {datesOnly && (
@@ -4268,6 +4846,458 @@ export default function EditContestPage({
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              {/* Categories Selection */}
+              <div className="space-y-3">
+                <Collapsible
+                  open={categoriesOpen}
+                  onOpenChange={setCategoriesOpen}
+                >
+                  <div
+                    className={cn(
+                      "rounded-lg border",
+                      isDark
+                        ? "bg-[#180438] border-gray-300"
+                        : "bg-white border-gray-300"
+                    )}
+                  >
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
+                          isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[14px] font-medium cursor-pointer">
+                            Categories{" "}
+                            {/* <span className="text-xs text-gray-500">
+                              (Select up to 3)
+                            </span> */}
+                          </Label>
+                          {contestCategories.length > 0 && (
+                            <span
+                              className={cn(
+                                "text-xs px-2 py-0.5 rounded-full",
+                                isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-100 text-purple-700"
+                              )}
+                            >
+                              {contestCategories.length} selected
+                            </span>
+                          )}
+                        </div>
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 transition-transform",
+                            categoriesOpen && "transform rotate-180",
+                            isDark ? "text-gray-300" : "text-gray-600"
+                          )}
+                        />
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="px-4 pb-4 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {CONTENT_TYPE_CATEGORIES.map((cat) => {
+                          const isChecked = contestCategories.includes(cat.id);
+                          return (
+                            <div
+                              key={cat.id}
+                              className="flex items-center space-x-2"
+                            >
+                              <Checkbox
+                                id={`edit-category-${cat.id}`}
+                                checked={isChecked}
+                                disabled={isSubmitting}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setContestCategories([
+                                      ...contestCategories,
+                                      cat.id,
+                                    ]);
+                                    // Automatically add all subcategories when category is selected
+                                    const newSubcategories =
+                                      cat.subcategories.map((subcategory) => ({
+                                        category: cat.id,
+                                        subcategory: subcategory,
+                                      }));
+                                    // Add subcategories that aren't already in the list
+                                    setContestSubcategories((prev) => {
+                                      const existing = new Set(
+                                        prev.map(
+                                          (item) =>
+                                            `${item.category}:${item.subcategory}`
+                                        )
+                                      );
+                                      const toAdd = newSubcategories.filter(
+                                        (item) =>
+                                          !existing.has(
+                                            `${item.category}:${item.subcategory}`
+                                          )
+                                      );
+                                      return [...prev, ...toAdd];
+                                    });
+                                  } else {
+                                    // Remove category and all its subcategories
+                                    setContestCategories(
+                                      contestCategories.filter(
+                                        (id) => id !== cat.id
+                                      )
+                                    );
+                                    setContestSubcategories(
+                                      contestSubcategories.filter(
+                                        (item) => item.category !== cat.id
+                                      )
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  isDark
+                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                )}
+                              />
+                              <label
+                                htmlFor={`edit-category-${cat.id}`}
+                                className={cn(
+                                  "text-sm font-normal cursor-pointer",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                {cat.name}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {contestCategories.length > 0 && (
+                        <div className="flex items-center justify-between mt-2">
+                          <p
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-gray-400" : "text-gray-500"
+                            )}
+                          >
+                            {contestCategories.length} selected
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setContestCategories([]);
+                              setContestSubcategories([]);
+                            }}
+                            disabled={isSubmitting}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
+                        </div>
+                      )}
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
+              </div>
+
+              {/* Subcategories Selection */}
+              <div className="space-y-3">
+                <Collapsible
+                  open={subcategoriesOpen}
+                  onOpenChange={setSubcategoriesOpen}
+                >
+                  <div
+                    className={cn(
+                      "rounded-lg border",
+                      isDark
+                        ? "bg-[#180438] border-gray-300"
+                        : "bg-white border-gray-300"
+                    )}
+                  >
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
+                          isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[14px] font-medium cursor-pointer">
+                            Subcategories
+                          </Label>
+                          {contestSubcategories.length > 0 && (
+                            <span
+                              className={cn(
+                                "text-xs px-2 py-0.5 rounded-full",
+                                isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-100 text-purple-700"
+                              )}
+                            >
+                              {contestSubcategories.length} selected
+                            </span>
+                          )}
+                        </div>
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 transition-transform",
+                            subcategoriesOpen && "transform rotate-180",
+                            isDark ? "text-gray-300" : "text-gray-600"
+                          )}
+                        />
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="px-4 pb-4 space-y-3">
+                      <Accordion type="multiple" className="w-full">
+                        {CONTENT_TYPE_CATEGORIES.map((category) => {
+                          return (
+                            <AccordionItem
+                              key={category.id}
+                              value={category.id}
+                              className="border-b border-gray-200 dark:border-gray-700"
+                            >
+                              <AccordionTrigger
+                                className={cn(
+                                  "text-sm font-medium hover:no-underline py-3",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                {category.name}
+                              </AccordionTrigger>
+                              <AccordionContent className="pt-2 pb-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {category.subcategories.map((subcategory) => {
+                                    const isChecked = contestSubcategories.some(
+                                      (item) =>
+                                        item.category === category.id &&
+                                        item.subcategory === subcategory
+                                    );
+                                    return (
+                                      <div
+                                        key={`${category.id}-${subcategory}`}
+                                        className="flex items-center space-x-2"
+                                      >
+                                        <Checkbox
+                                          id={`edit-subcategory-${category.id}-${subcategory}`}
+                                          checked={isChecked}
+                                          disabled={isSubmitting}
+                                          onCheckedChange={(checked) => {
+                                            if (checked) {
+                                              setContestSubcategories([
+                                                ...contestSubcategories,
+                                                {
+                                                  category: category.id,
+                                                  subcategory: subcategory,
+                                                },
+                                              ]);
+                                            } else {
+                                              setContestSubcategories(
+                                                contestSubcategories.filter(
+                                                  (item) =>
+                                                    !(
+                                                      item.category ===
+                                                        category.id &&
+                                                      item.subcategory ===
+                                                        subcategory
+                                                    )
+                                                )
+                                              );
+                                            }
+                                          }}
+                                          className={cn(
+                                            isDark
+                                              ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                              : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                          )}
+                                        />
+                                        <label
+                                          htmlFor={`edit-subcategory-${category.id}-${subcategory}`}
+                                          className={cn(
+                                            "text-sm font-normal cursor-pointer",
+                                            isDark
+                                              ? "text-gray-300"
+                                              : "text-gray-700"
+                                          )}
+                                        >
+                                          {subcategory}
+                                        </label>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          );
+                        })}
+                      </Accordion>
+                      {contestSubcategories.length > 0 && (
+                        <div className="flex items-center justify-between mt-2">
+                          <p
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-gray-400" : "text-gray-500"
+                            )}
+                          >
+                            {contestSubcategories.length} subcategories selected
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setContestSubcategories([])}
+                            disabled={isSubmitting}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
+                        </div>
+                      )}
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
+              </div>
+
+              {/* Interests Selection */}
+              <div className="space-y-3">
+                <Collapsible
+                  open={interestsOpen}
+                  onOpenChange={setInterestsOpen}
+                >
+                  <div
+                    className={cn(
+                      "rounded-lg border",
+                      isDark
+                        ? "bg-[#180438] border-gray-300"
+                        : "bg-white border-gray-300"
+                    )}
+                  >
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
+                          isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[14px] font-medium cursor-pointer">
+                            Interests
+                          </Label>
+                          {contestInterests.length > 0 && (
+                            <span
+                              className={cn(
+                                "text-xs px-2 py-0.5 rounded-full",
+                                isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-100 text-purple-700"
+                              )}
+                            >
+                              {contestInterests.length} selected
+                            </span>
+                          )}
+                        </div>
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 transition-transform",
+                            interestsOpen && "transform rotate-180",
+                            isDark ? "text-gray-300" : "text-gray-600"
+                          )}
+                        />
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="px-4 pb-4 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {INTERESTS.map((interest) => {
+                          const isChecked = contestInterests.includes(interest);
+                          return (
+                            <div
+                              key={interest}
+                              className="flex items-center space-x-2"
+                            >
+                              <Checkbox
+                                id={`edit-interest-${interest}`}
+                                checked={isChecked}
+                                disabled={isSubmitting}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setContestInterests([
+                                      ...contestInterests,
+                                      interest,
+                                    ]);
+                                  } else {
+                                    setContestInterests(
+                                      contestInterests.filter(
+                                        (item) => item !== interest
+                                      )
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  isDark
+                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                )}
+                              />
+                              <label
+                                htmlFor={`edit-interest-${interest}`}
+                                className={cn(
+                                  "text-sm font-normal cursor-pointer",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                {interest}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {contestInterests.length > 0 && (
+                        <div className="flex items-center justify-between mt-2">
+                          <p
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-gray-400" : "text-gray-500"
+                            )}
+                          >
+                            {contestInterests.length} interests selected
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setContestInterests([])}
+                            disabled={isSubmitting}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
+                        </div>
+                      )}
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
               </div>
 
               <div className="space-y-2">
@@ -6322,7 +7352,7 @@ export default function EditContestPage({
                       <Button
                         type="button"
                         variant="outline"
-                        size="sm"                    
+                        size="sm"
                         onClick={() => {
                           if (
                             !showBonusPreview &&
@@ -6335,10 +7365,11 @@ export default function EditContestPage({
                           }
                           setShowBonusPreview(!showBonusPreview);
                         }}
-                    
                         className={cn(
                           "text-sm font-semibold",
-                          isDark ? "bg-[#7F39EC] text-white" : "border border-[#4A00BE] text-[#4A00BE]"
+                          isDark
+                            ? "bg-[#7F39EC] text-white"
+                            : "border border-[#4A00BE] text-[#4A00BE]"
                         )}
                       >
                         {showBonusPreview ? "Edit" : "Preview"}

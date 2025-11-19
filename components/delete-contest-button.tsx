@@ -166,7 +166,11 @@ export function DeleteContestButton({
       <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Contest</AlertDialogTitle>
+            <AlertDialogTitle className={cn(        
+                isDark
+                  ? "text-white"
+                  : "text-gray-900 "
+              )}>Delete Contest</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete the contest "{contestTitle}"? This
               action cannot be undone.

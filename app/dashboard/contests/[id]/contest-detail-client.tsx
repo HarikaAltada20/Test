@@ -114,6 +114,254 @@ import {
   Star,
 } from "lucide-react";
 
+// Content type categories with subcategories (same as in create contest)
+const CONTENT_TYPE_CATEGORIES = [
+  {
+    id: "beauty",
+    name: "Beauty",
+    subcategories: [
+      "Skincare",
+      "Makeup",
+      "Haircare",
+      "Fragrance",
+      "Nail Art",
+      "Men's Grooming",
+      "K-Beauty",
+    ],
+  },
+  {
+    id: "fashion",
+    name: "Fashion",
+    subcategories: [
+      "Outfits",
+      "Streetwear",
+      "Luxury",
+      "Athleisure",
+      "Accessories",
+      "Footwear",
+      "Sustainable Fashion",
+    ],
+  },
+  {
+    id: "fitness",
+    name: "Fitness",
+    subcategories: [
+      "Gym Workouts",
+      "Home Workouts",
+      "Yoga & Pilates",
+      "Running",
+      "Nutrition",
+      "Supplements",
+      "Crossfit",
+    ],
+  },
+  {
+    id: "food",
+    name: "Food",
+    subcategories: [
+      "Recipes",
+      "Restaurant Reviews",
+      "Street Food",
+      "Desserts",
+      "Beverages (Coffee/Tea)",
+      "Vegan & Plant-based",
+      "Product Taste Tests",
+    ],
+  },
+  {
+    id: "gaming",
+    name: "Gaming",
+    subcategories: [
+      "Mobile Games",
+      "Console / PC Games",
+      "Esports",
+      "Walkthroughs / Let's Play",
+      "Game Reviews",
+      "Game Tips & Tricks",
+      "Live Streaming",
+    ],
+  },
+  {
+    id: "tech",
+    name: "Tech",
+    subcategories: [
+      "Smartphones",
+      "Laptops & PCs",
+      "Smart Home",
+      "Wearables",
+      "Apps",
+      "Software & SaaS",
+      "Gadget Reviews",
+    ],
+  },
+  {
+    id: "finance",
+    name: "Finance",
+    subcategories: [
+      "Personal Finance",
+      "Investing",
+      "Crypto",
+      "Fintech Apps",
+      "Money Saving Tips",
+      "Tax & Accounting",
+    ],
+  },
+  {
+    id: "travel",
+    name: "Travel",
+    subcategories: [
+      "Travel Vlogs",
+      "Budget Travel",
+      "Luxury Travel",
+      "Hotel Reviews",
+      "Local Guides",
+      "Travel Gear",
+    ],
+  },
+  {
+    id: "home_decor",
+    name: "Home & Decor",
+    subcategories: [
+      "Interior Design",
+      "DIY Projects",
+      "Organization Hacks",
+      "Cleaning Tips",
+      "Home Appliances",
+      "Small Space Ideas",
+    ],
+  },
+  {
+    id: "education",
+    name: "Education",
+    subcategories: [
+      "Study Tips",
+      "Course Reviews",
+      "Skill Tutorials",
+      "Language Learning",
+      "Career Advice",
+      "Exam Prep",
+    ],
+  },
+  {
+    id: "art_diy",
+    name: "Art & DIY",
+    subcategories: [
+      "Painting",
+      "Drawing",
+      "Crafts",
+      "Prints & Merch",
+      "Handmade Products",
+      "Design Tutorials",
+    ],
+  },
+  {
+    id: "parenting",
+    name: "Parenting",
+    subcategories: [
+      "Baby Care",
+      "Toddler Activities",
+      "Kids Education",
+      "Parenting Tips",
+      "Product Reviews for Parents",
+    ],
+  },
+  {
+    id: "sports",
+    name: "Sports",
+    subcategories: [
+      "Football / Soccer",
+      "Basketball",
+      "Cricket",
+      "Running & Training",
+      "Cycling",
+      "Outdoor Adventure",
+    ],
+  },
+  {
+    id: "auto",
+    name: "Auto",
+    subcategories: [
+      "Cars",
+      "Bikes",
+      "Electric Vehicles (EVs)",
+      "Auto Accessories",
+      "Car Reviews",
+      "Maintenance Tips",
+    ],
+  },
+  {
+    id: "pets",
+    name: "Pets",
+    subcategories: [
+      "Pet Care",
+      "Pet Training",
+      "Pet Food & Products",
+      "Funny Pet Videos",
+      "Pet Health",
+    ],
+  },
+  {
+    id: "business",
+    name: "Business",
+    subcategories: [
+      "Startups",
+      "SaaS & Tools",
+      "Productivity",
+      "Marketing Tips",
+      "Side Hustles",
+    ],
+  },
+  {
+    id: "entertainment",
+    name: "Entertainment",
+    subcategories: [
+      "Comedy",
+      "Drama",
+      "Romance",
+      "Horror",
+      "Emotional / Sad",
+      "Memes",
+      "Reaction Videos",
+      "Sketches / Skits",
+      "Parodies",
+      "Trailers & Reviews",
+    ],
+  },
+  {
+    id: "music_dance",
+    name: "Music & Dance",
+    subcategories: [
+      "Covers",
+      "Original Music",
+      "Music Production",
+      "Dance Choreography",
+      "Instrument Tutorials",
+    ],
+  },
+  {
+    id: "photo_video",
+    name: "Photography & Video",
+    subcategories: [
+      "Camera Gear",
+      "Editing Tutorials",
+      "Cinematography",
+      "Mobile Filmmaking",
+      "Lighting & Sound",
+    ],
+  },
+  {
+    id: "sustainability",
+    name: "Sustainability",
+    subcategories: [
+      "Eco Products",
+      "Zero Waste",
+      "Sustainable Fashion",
+      "Green Tech",
+      "Upcycling",
+    ],
+  },
+] as const;
+
 // --- Local Type Definitions ---
 interface Contest {
   id: string;
@@ -152,6 +400,13 @@ interface Contest {
   max_earnings_per_creator?: number;
   content_type?: string;
   bonus_details?: any;
+  // Categories, subcategories, and interests
+  categories?: string[] | null;
+  subcategories?:
+    | Array<{ category: string; subcategory: string }>
+    | Record<string, string[]>
+    | null; // Can be flat array or grouped object format
+  interests?: string[] | null;
   // Payment information
   payment_details?: any | null;
   // Moderation tracking fields
@@ -3199,6 +3454,164 @@ export default function ContestDetailClient({
                     </div>
                   </div>
                 )}
+
+                {/* Categories Section */}
+                {currentContest.categories &&
+                  Array.isArray(currentContest.categories) &&
+                  currentContest.categories.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                        <Tag className="h-5 w-5 text-purple-600" />
+                        Categories
+                      </h3>
+                      <div
+                        className={cn(
+                          "border rounded-xl p-4",
+                          isDark
+                            ? "border-purple-600 bg-purple-950/50"
+                            : "border-purple-300 bg-purple-50/50"
+                        )}
+                      >
+                        <div className="flex flex-wrap gap-2">
+                          {currentContest.categories.map(
+                            (categoryId: string) => {
+                              const category = CONTENT_TYPE_CATEGORIES.find(
+                                (cat) => cat.id === categoryId
+                              );
+                              return (
+                                <span
+                                  key={categoryId}
+                                  className={cn(
+                                    "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                    isDark
+                                      ? "bg-purple-600/30 text-purple-200 border border-purple-500/50"
+                                      : "bg-purple-100 text-purple-800 border border-purple-300"
+                                  )}
+                                >
+                                  {category ? category.name : categoryId}
+                                </span>
+                              );
+                            }
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                {/* Subcategories Section */}
+                {currentContest.subcategories &&
+                  (() => {
+                    // Handle both grouped format and flat array format
+                    let subcategoriesToDisplay: Array<{
+                      category: string;
+                      subcategory: string;
+                    }> = [];
+
+                    if (Array.isArray(currentContest.subcategories)) {
+                      // Old flat array format
+                      subcategoriesToDisplay = currentContest.subcategories;
+                    } else if (
+                      typeof currentContest.subcategories === "object" &&
+                      currentContest.subcategories !== null
+                    ) {
+                      // New grouped format: {"beauty": ["Skincare", "Makeup"], ...}
+                      const grouped = currentContest.subcategories as Record<
+                        string,
+                        string[]
+                      >;
+                      Object.keys(grouped).forEach((category) => {
+                        const subcats = grouped[category];
+                        if (Array.isArray(subcats)) {
+                          subcats.forEach((subcat) => {
+                            subcategoriesToDisplay.push({
+                              category,
+                              subcategory: subcat,
+                            });
+                          });
+                        }
+                      });
+                    }
+
+                    return subcategoriesToDisplay.length > 0 ? (
+                      <div className="space-y-3">
+                        <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                          <Tag className="h-5 w-5 text-indigo-600" />
+                          Subcategories
+                        </h3>
+                        <div
+                          className={cn(
+                            "border rounded-xl p-4",
+                            isDark
+                              ? "border-indigo-600 bg-indigo-950/50"
+                              : "border-indigo-300 bg-indigo-50/50"
+                          )}
+                        >
+                          <div className="flex flex-wrap gap-2">
+                            {subcategoriesToDisplay.map(
+                              (
+                                item: { category: string; subcategory: string },
+                                index: number
+                              ) => {
+                                const category = CONTENT_TYPE_CATEGORIES.find(
+                                  (cat) => cat.id === item.category
+                                );
+                                return (
+                                  <span
+                                    key={`${item.category}-${item.subcategory}-${index}`}
+                                    className={cn(
+                                      "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                      isDark
+                                        ? "bg-indigo-600/30 text-indigo-200 border border-indigo-500/50"
+                                        : "bg-indigo-100 text-indigo-800 border border-indigo-300"
+                                    )}
+                                  >
+                                    {category ? category.name : item.category}:{" "}
+                                    {item.subcategory}
+                                  </span>
+                                );
+                              }
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+
+                {/* Interests Section */}
+                {currentContest.interests &&
+                  Array.isArray(currentContest.interests) &&
+                  currentContest.interests.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                        <Star className="h-5 w-5 text-yellow-600" />
+                        Interests
+                      </h3>
+                      <div
+                        className={cn(
+                          "border rounded-xl p-4",
+                          isDark
+                            ? "border-yellow-600 bg-yellow-950/50"
+                            : "border-yellow-300 bg-yellow-50/50"
+                        )}
+                      >
+                        <div className="flex flex-wrap gap-2">
+                          {currentContest.interests.map((interest: string) => (
+                            <span
+                              key={interest}
+                              className={cn(
+                                "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                isDark
+                                  ? "bg-yellow-600/30 text-yellow-200 border border-yellow-500/50"
+                                  : "bg-yellow-100 text-yellow-800 border border-yellow-300"
+                              )}
+                            >
+                              {interest}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                 {/* Flat Fee Bonus Section */}
                 {(currentContest.contest_based_details?.cpm_contest

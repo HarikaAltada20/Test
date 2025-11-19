@@ -35,6 +35,7 @@ import {
   AlertTriangle,
   ExternalLink,
   GitGraphIcon,
+  ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
@@ -85,7 +86,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { formatName } from "@/lib/name-utils";
+import { RotateCcw } from "lucide-react";
 
 // Define types for subscription plan features
 type PlanFeatures = {
@@ -123,6 +131,363 @@ type ResourceItem = {
   description: string;
   type: "internal" | "external";
 };
+
+// Content type categories with subcategories
+const CONTENT_TYPE_CATEGORIES = [
+  {
+    id: "beauty",
+    name: "Beauty",
+    subcategories: [
+      "Skincare",
+      "Makeup",
+      "Haircare",
+      "Fragrance",
+      "Nail Art",
+      "Men's Grooming",
+      "K-Beauty",
+    ],
+  },
+  {
+    id: "fashion",
+    name: "Fashion",
+    subcategories: [
+      "Outfits",
+      "Streetwear",
+      "Luxury",
+      "Athleisure",
+      "Accessories",
+      "Footwear",
+      "Sustainable Fashion",
+    ],
+  },
+  {
+    id: "fitness",
+    name: "Fitness",
+    subcategories: [
+      "Gym Workouts",
+      "Home Workouts",
+      "Yoga & Pilates",
+      "Running",
+      "Nutrition",
+      "Supplements",
+      "Crossfit",
+    ],
+  },
+  {
+    id: "food",
+    name: "Food",
+    subcategories: [
+      "Recipes",
+      "Restaurant Reviews",
+      "Street Food",
+      "Desserts",
+      "Beverages (Coffee/Tea)",
+      "Vegan & Plant-based",
+      "Product Taste Tests",
+    ],
+  },
+  {
+    id: "gaming",
+    name: "Gaming",
+    subcategories: [
+      "Mobile Games",
+      "Console / PC Games",
+      "Esports",
+      "Walkthroughs / Let's Play",
+      "Game Reviews",
+      "Game Tips & Tricks",
+      "Live Streaming",
+    ],
+  },
+  {
+    id: "tech",
+    name: "Tech",
+    subcategories: [
+      "Smartphones",
+      "Laptops & PCs",
+      "Smart Home",
+      "Wearables",
+      "Apps",
+      "Software & SaaS",
+      "Gadget Reviews",
+    ],
+  },
+  {
+    id: "finance",
+    name: "Finance",
+    subcategories: [
+      "Personal Finance",
+      "Investing",
+      "Crypto",
+      "Fintech Apps",
+      "Money Saving Tips",
+      "Tax & Accounting",
+    ],
+  },
+  {
+    id: "travel",
+    name: "Travel",
+    subcategories: [
+      "Travel Vlogs",
+      "Budget Travel",
+      "Luxury Travel",
+      "Hotel Reviews",
+      "Local Guides",
+      "Travel Gear",
+    ],
+  },
+  {
+    id: "home_decor",
+    name: "Home & Decor",
+    subcategories: [
+      "Interior Design",
+      "DIY Projects",
+      "Organization Hacks",
+      "Cleaning Tips",
+      "Home Appliances",
+      "Small Space Ideas",
+    ],
+  },
+  {
+    id: "education",
+    name: "Education",
+    subcategories: [
+      "Study Tips",
+      "Course Reviews",
+      "Skill Tutorials",
+      "Language Learning",
+      "Career Advice",
+      "Exam Prep",
+    ],
+  },
+  {
+    id: "art_diy",
+    name: "Art & DIY",
+    subcategories: [
+      "Painting",
+      "Drawing",
+      "Crafts",
+      "Prints & Merch",
+      "Handmade Products",
+      "Design Tutorials",
+    ],
+  },
+  {
+    id: "parenting",
+    name: "Parenting",
+    subcategories: [
+      "Baby Care",
+      "Toddler Activities",
+      "Kids Education",
+      "Parenting Tips",
+      "Product Reviews for Parents",
+    ],
+  },
+  {
+    id: "sports",
+    name: "Sports",
+    subcategories: [
+      "Football / Soccer",
+      "Basketball",
+      "Cricket",
+      "Running & Training",
+      "Cycling",
+      "Outdoor Adventure",
+    ],
+  },
+  {
+    id: "auto",
+    name: "Auto",
+    subcategories: [
+      "Cars",
+      "Bikes",
+      "Electric Vehicles (EVs)",
+      "Auto Accessories",
+      "Car Reviews",
+      "Maintenance Tips",
+    ],
+  },
+  {
+    id: "pets",
+    name: "Pets",
+    subcategories: [
+      "Pet Care",
+      "Pet Training",
+      "Pet Food & Products",
+      "Funny Pet Videos",
+      "Pet Health",
+    ],
+  },
+  {
+    id: "business",
+    name: "Business",
+    subcategories: [
+      "Startups",
+      "SaaS & Tools",
+      "Productivity",
+      "Marketing Tips",
+      "Side Hustles",
+    ],
+  },
+  {
+    id: "entertainment",
+    name: "Entertainment",
+    subcategories: [
+      "Comedy",
+      "Drama",
+      "Romance",
+      "Horror",
+      "Emotional / Sad",
+      "Memes",
+      "Reaction Videos",
+      "Sketches / Skits",
+      "Parodies",
+      "Trailers & Reviews",
+    ],
+  },
+  {
+    id: "music_dance",
+    name: "Music & Dance",
+    subcategories: [
+      "Covers",
+      "Original Music",
+      "Music Production",
+      "Dance Choreography",
+      "Instrument Tutorials",
+    ],
+  },
+  {
+    id: "photo_video",
+    name: "Photography & Video",
+    subcategories: [
+      "Camera Gear",
+      "Editing Tutorials",
+      "Cinematography",
+      "Mobile Filmmaking",
+      "Lighting & Sound",
+    ],
+  },
+  {
+    id: "sustainability",
+    name: "Sustainability",
+    subcategories: [
+      "Eco Products",
+      "Zero Waste",
+      "Sustainable Fashion",
+      "Green Tech",
+      "Upcycling",
+    ],
+  },
+] as const;
+
+// Interests organized by categories (similar to subcategories structure)
+const INTEREST_CATEGORIES = [
+  {
+    id: "beauty",
+    name: "Beauty",
+    interests: ["Beauty", "Skincare", "Makeup", "Haircare", "Grooming"],
+  },
+  {
+    id: "fashion",
+    name: "Fashion",
+    interests: ["Fashion", "Outfits", "Streetwear", "Accessories", "Footwear"],
+  },
+  {
+    id: "fitness",
+    name: "Fitness",
+    interests: ["Fitness", "Workouts", "Yoga", "Healthy Living"],
+  },
+  {
+    id: "food",
+    name: "Food",
+    interests: ["Food", "Cooking", "Recipes", "Food Reviews"],
+  },
+  {
+    id: "gaming",
+    name: "Gaming",
+    interests: ["Gaming", "Mobile Games", "PC/Console Games", "Esports"],
+  },
+  {
+    id: "tech",
+    name: "Tech",
+    interests: ["Tech", "Apps", "Gadgets", "Tech Reviews"],
+  },
+  {
+    id: "finance",
+    name: "Finance",
+    interests: ["Finance", "Investing", "Crypto", "Money Tips"],
+  },
+  {
+    id: "travel",
+    name: "Travel",
+    interests: ["Travel", "Travel Vlogs", "Hotels", "Local Guides"],
+  },
+  {
+    id: "home_decor",
+    name: "Home & Decor",
+    interests: ["Home & Decor", "DIY", "Cleaning Hacks"],
+  },
+  {
+    id: "education",
+    name: "Education",
+    interests: ["Education", "Study Tips", "Career Advice"],
+  },
+  {
+    id: "art_craft",
+    name: "Art & Craft",
+    interests: ["Art & Craft", "Drawing", "Handmade"],
+  },
+  {
+    id: "parenting",
+    name: "Parenting",
+    interests: ["Parenting", "Kids Activities"],
+  },
+  {
+    id: "sports",
+    name: "Sports",
+    interests: ["Sports", "Training", "Cycling"],
+  },
+  {
+    id: "automobile",
+    name: "Automobile",
+    interests: ["Automobile", "Cars", "Bikes"],
+  },
+  {
+    id: "pets",
+    name: "Pets",
+    interests: ["Pets", "Pet Care"],
+  },
+  {
+    id: "business",
+    name: "Business",
+    interests: ["Business", "Startups"],
+  },
+  {
+    id: "entertainment",
+    name: "Entertainment",
+    interests: ["Entertainment", "Comedy", "Memes", "Reactions"],
+  },
+  {
+    id: "music_dance",
+    name: "Music & Dance",
+    interests: ["Music & Dance", "Singing", "Dancing"],
+  },
+  {
+    id: "photo_video",
+    name: "Photo & Video",
+    interests: ["Photo & Video", "Editing"],
+  },
+  {
+    id: "sustainability",
+    name: "Sustainability",
+    interests: ["Sustainability", "Eco Friendly"],
+  },
+] as const;
+
+// Flat list of all interests for backward compatibility
+const INTERESTS = INTEREST_CATEGORIES.flatMap(
+  (category) => category.interests
+) as readonly string[];
 
 export default function CreateContestPage({
   user,
@@ -263,7 +628,16 @@ export default function CreateContestPage({
   });
   const isDark = mode === "dark";
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<string>("technology");
+  // Categories, subcategories, and interests state
+  const [contestCategories, setContestCategories] = useState<string[]>([]);
+  const [contestSubcategories, setContestSubcategories] = useState<
+    Array<{ category: string; subcategory: string }>
+  >([]);
+  const [contestInterests, setContestInterests] = useState<string[]>([]);
+  // Toggle states for collapsible sections
+  const [categoriesOpen, setCategoriesOpen] = useState(true); // Categories expanded by default
+  const [subcategoriesOpen, setSubcategoriesOpen] = useState(false);
+  const [interestsOpen, setInterestsOpen] = useState(false);
   const [thumbnail, setThumbnail] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [brief, setBrief] = useState("");
@@ -673,7 +1047,6 @@ export default function CreateContestPage({
         .insert({
           advertiser_id: user.id,
           title: title || "No Title - Draft",
-          category: "technology",
           brief_html: "",
           brief_json: null,
           rules_html: "",
@@ -703,6 +1076,25 @@ export default function CreateContestPage({
                   },
                 }
               : null,
+          // Categories, subcategories, and interests
+          categories: contestCategories.length > 0 ? contestCategories : null,
+          subcategories: (() => {
+            if (!contestSubcategories || contestSubcategories.length === 0)
+              return null;
+            // Group by category and remove duplicates
+            const grouped: Record<string, string[]> = {};
+            contestSubcategories.forEach((item) => {
+              if (!grouped[item.category]) {
+                grouped[item.category] = [];
+              }
+              if (!grouped[item.category].includes(item.subcategory)) {
+                grouped[item.category].push(item.subcategory);
+              }
+            });
+            return Object.keys(grouped).length > 0 ? grouped : null;
+          })(),
+          interests:
+            contestInterests.length > 0 ? [...new Set(contestInterests)] : null,
           // New features (2025-10-01)
           multiple_submissions_enabled: false,
           max_submissions_per_creator: 1,
@@ -731,7 +1123,6 @@ export default function CreateContestPage({
       resources: ResourceItem[];
       thumbnail_url: string | null;
       title?: string;
-      category?: string;
       brief_html?: string;
       brief_json?: any;
       rules_html?: string;
@@ -741,6 +1132,9 @@ export default function CreateContestPage({
       end_date?: string | null;
       contest_type?: "leaderboard" | "cpm";
       contest_based_details?: any;
+      categories?: string[] | null;
+      subcategories?: Array<{ category: string; subcategory: string }> | null;
+      interests?: string[] | null;
     }>
   ) => {
     const currentContestId = contestId || draftId;
@@ -1909,11 +2303,34 @@ export default function CreateContestPage({
           ? "Updating contest..."
           : "Creating contest..."
       );
+
+      // Helper function to process and group subcategories by category
+      const processSubcategories = (
+        subcategories: Array<{ category: string; subcategory: string }>
+      ) => {
+        if (!subcategories || subcategories.length === 0) return null;
+
+        // Group by category and remove duplicates
+        const grouped: Record<string, string[]> = {};
+
+        subcategories.forEach((item) => {
+          if (!grouped[item.category]) {
+            grouped[item.category] = [];
+          }
+          // Only add if not already in the array for this category
+          if (!grouped[item.category].includes(item.subcategory)) {
+            grouped[item.category].push(item.subcategory);
+          }
+        });
+
+        // Return grouped object format: { "beauty": ["Skincare", "Makeup"], ... }
+        return Object.keys(grouped).length > 0 ? grouped : null;
+      };
+
       const contestData = {
         advertiser_id: userId,
         title,
         thumbnail_url: thumbnailUrl,
-        category,
         platform: platform,
         brief_html: briefHtml,
         brief_json: briefJson,
@@ -1922,6 +2339,11 @@ export default function CreateContestPage({
         resources,
         inspiration_links: inspirationLinks,
         tracking_links: trackingLinks,
+        // Categories, subcategories, and interests as direct columns
+        categories: contestCategories.length > 0 ? contestCategories : null,
+        subcategories: processSubcategories(contestSubcategories),
+        interests:
+          contestInterests.length > 0 ? [...new Set(contestInterests)] : null, // Remove duplicate interests
         subscription_info_of_user: await (async () => {
           try {
             // Get user's subscription info using new system
@@ -2421,11 +2843,29 @@ export default function CreateContestPage({
       const basicsData = {
         advertiser_id: user?.id,
         title,
-        category,
         platform,
         contest_type: contestType,
         thumbnail_url: thumbnailPreview || null,
         moderation_status: "draft",
+        // Categories, subcategories, and interests
+        categories: contestCategories.length > 0 ? contestCategories : null,
+        subcategories: (() => {
+          if (!contestSubcategories || contestSubcategories.length === 0)
+            return null;
+          // Group by category and remove duplicates
+          const grouped: Record<string, string[]> = {};
+          contestSubcategories.forEach((item) => {
+            if (!grouped[item.category]) {
+              grouped[item.category] = [];
+            }
+            if (!grouped[item.category].includes(item.subcategory)) {
+              grouped[item.category].push(item.subcategory);
+            }
+          });
+          return Object.keys(grouped).length > 0 ? grouped : null;
+        })(),
+        interests:
+          contestInterests.length > 0 ? [...new Set(contestInterests)] : null,
       };
       if (!currentContestId) {
         // Create new draft contest
@@ -2779,7 +3219,6 @@ export default function CreateContestPage({
     console.log("Draft title:", draft.title);
 
     setTitle(draft.title || "");
-    setCategory(draft.category || "technology");
     setPlatform(draft.platform || "youtube"); // Load platform, default if not present
     // If thumbnail URL is available, show it in the preview
     if (draft.thumbnail_url) {
@@ -2859,6 +3298,79 @@ export default function CreateContestPage({
       const { dateString, timeString } = toLocalDateTimeStrings(draft.end_date);
       setEndDate(dateString);
       setEndTime(timeString);
+    }
+
+    // Load categories, subcategories, and interests from direct columns
+    if (draft.categories && Array.isArray(draft.categories)) {
+      setContestCategories(draft.categories);
+    }
+
+    // Handle subcategories - can be grouped object format or flat array format
+    if (draft.subcategories) {
+      if (Array.isArray(draft.subcategories)) {
+        // Old flat array format: [{category: "beauty", subcategory: "Skincare"}, ...]
+        setContestSubcategories(draft.subcategories);
+      } else if (
+        typeof draft.subcategories === "object" &&
+        draft.subcategories !== null
+      ) {
+        // New grouped format: {"beauty": ["Skincare", "Makeup"], ...}
+        const grouped = draft.subcategories as Record<string, string[]>;
+        const flatArray: Array<{ category: string; subcategory: string }> = [];
+        Object.keys(grouped).forEach((category) => {
+          const subcats = grouped[category];
+          if (Array.isArray(subcats)) {
+            subcats.forEach((subcat) => {
+              flatArray.push({ category, subcategory: subcat });
+            });
+          }
+        });
+        setContestSubcategories(flatArray);
+      }
+    }
+
+    if (draft.interests && Array.isArray(draft.interests)) {
+      setContestInterests(draft.interests);
+    }
+    // Fallback: Also check contest_based_details for backward compatibility
+    if (draft.contest_based_details) {
+      const details = draft.contest_based_details;
+      if (
+        !draft.categories &&
+        details.categories &&
+        Array.isArray(details.categories)
+      ) {
+        setContestCategories(details.categories);
+      }
+      if (!draft.subcategories && details.subcategories) {
+        // Handle both formats in fallback
+        if (Array.isArray(details.subcategories)) {
+          setContestSubcategories(details.subcategories);
+        } else if (
+          typeof details.subcategories === "object" &&
+          details.subcategories !== null
+        ) {
+          const grouped = details.subcategories as Record<string, string[]>;
+          const flatArray: Array<{ category: string; subcategory: string }> =
+            [];
+          Object.keys(grouped).forEach((category) => {
+            const subcats = grouped[category];
+            if (Array.isArray(subcats)) {
+              subcats.forEach((subcat) => {
+                flatArray.push({ category, subcategory: subcat });
+              });
+            }
+          });
+          setContestSubcategories(flatArray);
+        }
+      }
+      if (
+        !draft.interests &&
+        details.interests &&
+        Array.isArray(details.interests)
+      ) {
+        setContestInterests(details.interests);
+      }
     }
 
     console.log(
@@ -4186,7 +4698,9 @@ export default function CreateContestPage({
                   </div>
                   <div
                     className={cn(
-                      isDark ? "bg-[#180438]p-2 sm:p-4" : "bg-gray-50 p-2 sm:p-4 rounded-lg"
+                      isDark
+                        ? "bg-[#180438]p-2 sm:p-4"
+                        : "bg-gray-50 p-2 sm:p-4 rounded-lg"
                     )}
                   >
                     <div className="flex items-center gap-4 mb-4">
@@ -6082,57 +6596,456 @@ export default function CreateContestPage({
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
-                <Select
-                  value={category}
-                  onValueChange={(value) => setCategory(value)}
+              {/* Categories Selection */}
+              <div className="space-y-3">
+                <Collapsible
+                  open={categoriesOpen}
+                  onOpenChange={setCategoriesOpen}
                 >
-                  <SelectTrigger
+                  <div
                     className={cn(
+                      "rounded-lg border",
                       isDark
-                        ? "bg-[#180438] border border-gray-600"
-                        : "bg-white"
+                        ? "bg-[#180438] border-gray-300"
+                        : "bg-white border-gray-300"
                     )}
                   >
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent isDark={isDark}>
-                    <SelectItem value="crypto-financial" isDark={isDark}>
-                      Crypto/Financial
-                    </SelectItem>
-                    <SelectItem value="education" isDark={isDark}>
-                      Education
-                    </SelectItem>
-                    <SelectItem value="dating" isDark={isDark}>
-                      Dating
-                    </SelectItem>
-                    <SelectItem value="food-drink" isDark={isDark}>
-                      Food & Drink
-                    </SelectItem>
-                    <SelectItem value="games-toys" isDark={isDark}>
-                      Games & Toys
-                    </SelectItem>
-                    <SelectItem value="health-wellness" isDark={isDark}>
-                      Health & Wellness
-                    </SelectItem>
-                    <SelectItem value="home-living" isDark={isDark}>
-                      Home & Living
-                    </SelectItem>
-                    <SelectItem value="pets-animals" isDark={isDark}>
-                      Pets & Animals
-                    </SelectItem>
-                    <SelectItem value="sports-outdoors" isDark={isDark}>
-                      Sports & Outdoors
-                    </SelectItem>
-                    <SelectItem value="technology" isDark={isDark}>
-                      Technology
-                    </SelectItem>
-                    <SelectItem value="other" isDark={isDark}>
-                      Other
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
+                          isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[14px] font-medium cursor-pointer">
+                            Categories{" "}
+                            {/* <span className="text-xs text-gray-500">
+                              (Select up to 3)
+                            </span> */}
+                          </Label>
+                          {contestCategories.length > 0 && (
+                            <span
+                              className={cn(
+                                "text-xs px-2 py-0.5 rounded-full",
+                                isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-100 text-purple-700"
+                              )}
+                            >
+                              {contestCategories.length} selected
+                            </span>
+                          )}
+                        </div>
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 transition-transform",
+                            categoriesOpen && "transform rotate-180",
+                            isDark ? "text-gray-300" : "text-gray-600"
+                          )}
+                        />
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="px-4 pb-4 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {CONTENT_TYPE_CATEGORIES.map((cat) => {
+                          const isChecked = contestCategories.includes(cat.id);
+                          return (
+                            <div
+                              key={cat.id}
+                              className="flex items-center space-x-2"
+                            >
+                              <Checkbox
+                                id={`contest-category-${cat.id}`}
+                                checked={isChecked}
+                                disabled={isLoading}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setContestCategories([
+                                      ...contestCategories,
+                                      cat.id,
+                                    ]);
+                                    // Automatically add all subcategories when category is selected
+                                    const newSubcategories =
+                                      cat.subcategories.map((subcategory) => ({
+                                        category: cat.id,
+                                        subcategory: subcategory,
+                                      }));
+                                    // Add subcategories that aren't already in the list
+                                    setContestSubcategories((prev) => {
+                                      const existing = new Set(
+                                        prev.map(
+                                          (item) =>
+                                            `${item.category}:${item.subcategory}`
+                                        )
+                                      );
+                                      const toAdd = newSubcategories.filter(
+                                        (item) =>
+                                          !existing.has(
+                                            `${item.category}:${item.subcategory}`
+                                          )
+                                      );
+                                      return [...prev, ...toAdd];
+                                    });
+                                  } else {
+                                    // Remove category and all its subcategories
+                                    setContestCategories(
+                                      contestCategories.filter(
+                                        (id) => id !== cat.id
+                                      )
+                                    );
+                                    setContestSubcategories(
+                                      contestSubcategories.filter(
+                                        (item) => item.category !== cat.id
+                                      )
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  isDark
+                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                )}
+                              />
+                              <label
+                                htmlFor={`contest-category-${cat.id}`}
+                                className={cn(
+                                  "text-sm font-normal cursor-pointer",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                {cat.name}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {contestCategories.length > 0 && (
+                        <div className="flex items-center justify-between mt-2">
+                          <p
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-gray-400" : "text-gray-500"
+                            )}
+                          >
+                            {contestCategories.length} selected
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setContestCategories([]);
+                              setContestSubcategories([]);
+                            }}
+                            disabled={isLoading}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
+                        </div>
+                      )}
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
+              </div>
+
+              {/* Subcategories Selection */}
+              <div className="space-y-3">
+                <Collapsible
+                  open={subcategoriesOpen}
+                  onOpenChange={setSubcategoriesOpen}
+                >
+                  <div
+                    className={cn(
+                      "rounded-lg border",
+                      isDark
+                        ? "bg-[#180438] border-gray-300"
+                        : "bg-white border-gray-300"
+                    )}
+                  >
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
+                          isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[14px] font-medium cursor-pointer">
+                            Subcategories
+                          </Label>
+                          {contestSubcategories.length > 0 && (
+                            <span
+                              className={cn(
+                                "text-xs px-2 py-0.5 rounded-full",
+                                isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-100 text-purple-700"
+                              )}
+                            >
+                              {contestSubcategories.length} selected
+                            </span>
+                          )}
+                        </div>
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 transition-transform",
+                            subcategoriesOpen && "transform rotate-180",
+                            isDark ? "text-gray-300" : "text-gray-600"
+                          )}
+                        />
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="px-4 pb-4 space-y-3">
+                      <Accordion type="multiple" className="w-full">
+                        {CONTENT_TYPE_CATEGORIES.map((category) => {
+                          return (
+                            <AccordionItem
+                              key={category.id}
+                              value={category.id}
+                              className="border-b border-gray-200 dark:border-gray-700"
+                            >
+                              <AccordionTrigger
+                                className={cn(
+                                  "text-sm font-medium hover:no-underline py-3",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                {category.name}
+                              </AccordionTrigger>
+                              <AccordionContent className="pt-2 pb-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {category.subcategories.map((subcategory) => {
+                                    const isChecked = contestSubcategories.some(
+                                      (item) =>
+                                        item.category === category.id &&
+                                        item.subcategory === subcategory
+                                    );
+                                    return (
+                                      <div
+                                        key={`${category.id}-${subcategory}`}
+                                        className="flex items-center space-x-2"
+                                      >
+                                        <Checkbox
+                                          id={`contest-subcategory-${category.id}-${subcategory}`}
+                                          checked={isChecked}
+                                          disabled={isLoading}
+                                          onCheckedChange={(checked) => {
+                                            if (checked) {
+                                              setContestSubcategories([
+                                                ...contestSubcategories,
+                                                {
+                                                  category: category.id,
+                                                  subcategory: subcategory,
+                                                },
+                                              ]);
+                                            } else {
+                                              setContestSubcategories(
+                                                contestSubcategories.filter(
+                                                  (item) =>
+                                                    !(
+                                                      item.category ===
+                                                        category.id &&
+                                                      item.subcategory ===
+                                                        subcategory
+                                                    )
+                                                )
+                                              );
+                                            }
+                                          }}
+                                          className={cn(
+                                            isDark
+                                              ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                              : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                          )}
+                                        />
+                                        <label
+                                          htmlFor={`contest-subcategory-${category.id}-${subcategory}`}
+                                          className={cn(
+                                            "text-sm font-normal cursor-pointer",
+                                            isDark
+                                              ? "text-gray-300"
+                                              : "text-gray-700"
+                                          )}
+                                        >
+                                          {subcategory}
+                                        </label>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          );
+                        })}
+                      </Accordion>
+                      {contestSubcategories.length > 0 && (
+                        <div className="flex items-center justify-between mt-2">
+                          <p
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-gray-400" : "text-gray-500"
+                            )}
+                          >
+                            {contestSubcategories.length} subcategories selected
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setContestSubcategories([])}
+                            disabled={isLoading}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
+                        </div>
+                      )}
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
+              </div>
+
+              {/* Interests Selection */}
+              <div className="space-y-3">
+                <Collapsible
+                  open={interestsOpen}
+                  onOpenChange={setInterestsOpen}
+                >
+                  <div
+                    className={cn(
+                      "rounded-lg border",
+                      isDark
+                        ? "bg-[#180438] border-gray-300"
+                        : "bg-white border-gray-300"
+                    )}
+                  >
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
+                          isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[14px] font-medium cursor-pointer">
+                            Interests
+                          </Label>
+                          {contestInterests.length > 0 && (
+                            <span
+                              className={cn(
+                                "text-xs px-2 py-0.5 rounded-full",
+                                isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-100 text-purple-700"
+                              )}
+                            >
+                              {contestInterests.length} selected
+                            </span>
+                          )}
+                        </div>
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 transition-transform",
+                            interestsOpen && "transform rotate-180",
+                            isDark ? "text-gray-300" : "text-gray-600"
+                          )}
+                        />
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="px-4 pb-4 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {INTERESTS.map((interest) => {
+                          const isChecked = contestInterests.includes(interest);
+                          return (
+                            <div
+                              key={interest}
+                              className="flex items-center space-x-2"
+                            >
+                              <Checkbox
+                                id={`contest-interest-${interest}`}
+                                checked={isChecked}
+                                disabled={isLoading}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setContestInterests([
+                                      ...contestInterests,
+                                      interest,
+                                    ]);
+                                  } else {
+                                    setContestInterests(
+                                      contestInterests.filter(
+                                        (item) => item !== interest
+                                      )
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  isDark
+                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                )}
+                              />
+                              <label
+                                htmlFor={`contest-interest-${interest}`}
+                                className={cn(
+                                  "text-sm font-normal cursor-pointer",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                {interest}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {contestInterests.length > 0 && (
+                        <div className="flex items-center justify-between mt-2">
+                          <p
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-gray-400" : "text-gray-500"
+                            )}
+                          >
+                            {contestInterests.length} interests selected
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setContestInterests([])}
+                            disabled={isLoading}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
+                        </div>
+                      )}
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
               </div>
 
               <div className="space-y-2">
