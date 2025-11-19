@@ -34,6 +34,9 @@ import {
   CalendarDays,
   Info,
   AlertTriangle,
+  X,
+  ArrowRight,
+  CheckCircle2,
 } from "lucide-react";
 import {
   Dialog,
@@ -161,6 +164,8 @@ export default function SettingsPage({
   const [billingData, setBillingData] = useState<any>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const { logout } = useClientAuth();
+  const [showProfileNotification, setShowProfileNotification] = useState(true);
+  const [creatorProfileData, setCreatorProfileData] = useState<any>(null);
 
   // Clear password fields when modal closes
   useEffect(() => {
@@ -370,12 +375,15 @@ export default function SettingsPage({
         if (userData.user_type === "creator") {
           const { data, error } = await supabase
             .from("creator_profiles")
-            .select("youtube_account, instagram_account")
+            .select(
+              "youtube_account, instagram_account, phone_number, date_of_birth, gender, country, state, city, address, languages, categories, subcategories, interests, has_claimed_profile_reward"
+            )
             .eq("id", user!.id)
             .single();
 
           if (error) throw error;
           setProfile(data);
+          setCreatorProfileData(data);
 
           // Check and refresh Instagram token
           if (
@@ -1077,6 +1085,107 @@ export default function SettingsPage({
     );
   };
 
+  // Calculate profile completion percentage
+  const getProfileCompletionPercentage = () => {
+    if (!creatorProfileData || userType !== "creator") return 0;
+
+    // Check if reward has already been claimed
+    if (creatorProfileData.has_claimed_profile_reward) return 100;
+
+    // List of all required fields
+    const fields = [
+      {
+        name: "phone_number",
+        check: () =>
+          creatorProfileData.phone_number &&
+          creatorProfileData.phone_number.trim() !== "",
+      },
+      {
+        name: "date_of_birth",
+        check: () =>
+          creatorProfileData.date_of_birth &&
+          creatorProfileData.date_of_birth.trim() !== "",
+      },
+      {
+        name: "gender",
+        check: () =>
+          creatorProfileData.gender && creatorProfileData.gender.trim() !== "",
+      },
+      {
+        name: "country",
+        check: () =>
+          creatorProfileData.country &&
+          creatorProfileData.country.trim() !== "",
+      },
+      {
+        name: "state",
+        check: () =>
+          creatorProfileData.state && creatorProfileData.state.trim() !== "",
+      },
+      {
+        name: "city",
+        check: () =>
+          creatorProfileData.city && creatorProfileData.city.trim() !== "",
+      },
+      {
+        name: "address",
+        check: () =>
+          creatorProfileData.address &&
+          creatorProfileData.address.trim() !== "",
+      },
+      {
+        name: "languages",
+        check: () =>
+          creatorProfileData.languages &&
+          Array.isArray(creatorProfileData.languages) &&
+          creatorProfileData.languages.length > 0,
+      },
+      {
+        name: "categories",
+        check: () =>
+          creatorProfileData.categories &&
+          ((Array.isArray(creatorProfileData.categories) &&
+            creatorProfileData.categories.length > 0) ||
+            (typeof creatorProfileData.categories === "object" &&
+              Object.keys(creatorProfileData.categories).length > 0)),
+      },
+      {
+        name: "subcategories",
+        check: () =>
+          creatorProfileData.subcategories &&
+          ((Array.isArray(creatorProfileData.subcategories) &&
+            creatorProfileData.subcategories.length > 0) ||
+            (typeof creatorProfileData.subcategories === "object" &&
+              Object.keys(creatorProfileData.subcategories).length > 0)),
+      },
+      {
+        name: "interests",
+        check: () =>
+          creatorProfileData.interests &&
+          Array.isArray(creatorProfileData.interests) &&
+          creatorProfileData.interests.length > 0,
+      },
+    ];
+
+    // Count filled fields
+    const filledFields = fields.filter((field) => field.check()).length;
+    const totalFields = fields.length;
+
+    // Calculate percentage
+    return Math.round((filledFields / totalFields) * 100);
+  };
+
+  // Check if profile is incomplete
+  const isProfileIncomplete = () => {
+    if (!creatorProfileData || userType !== "creator") return false;
+
+    // Check if reward has already been claimed
+    if (creatorProfileData.has_claimed_profile_reward) return false;
+
+    // Profile is incomplete if percentage is less than 100
+    return getProfileCompletionPercentage() < 100;
+  };
+
   const settingsItems = [
     {
       id: "profile",
@@ -1612,46 +1721,213 @@ export default function SettingsPage({
             const Icon = item.icon;
             if (item.isLink && item.href) {
               return (
-                <Link
+                <div
                   key={item.id}
-                  href={item.href}
                   className={cn(
-                    "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200 hover:shadow-md",
+                    "rounded-xl transition-all duration-200",
                     isDark
                       ? "bg-[#180438] hover:border-purple-500"
                       : "bg-white border border-gray-300 hover:border-purple-300"
                   )}
                 >
-                  <div className="flex items-center gap-4">
-                    <div
-                      className={cn(
-                        "p-2 rounded-lg",
-                        isDark ? "bg-purple-900/30" : "bg-purple-100"
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          "h-5 w-5",
-                          isDark ? "text-purple-400" : "text-purple-600"
-                        )}
-                      />
-                    </div>
-                    <span
-                      className={cn(
-                        "font-medium",
-                        isDark ? "text-white" : "text-gray-900"
-                      )}
-                    >
-                      {item.title}
-                    </span>
-                  </div>
-                  <ChevronRight
+                  <Link
+                    href={item.href}
                     className={cn(
-                      "h-5 w-5",
-                      isDark ? "text-gray-400" : "text-gray-500"
+                      "flex items-center justify-between w-full px-4 py-4 rounded-t-xl transition-all duration-200",
+                      item.id === "profile" &&
+                        showProfileNotification &&
+                        isProfileIncomplete()
+                        ? "rounded-b-none"
+                        : "rounded-b-xl"
                     )}
-                  />
-                </Link>
+                  >
+                    <div className="flex items-center gap-4 flex-1">
+                      <div
+                        className={cn(
+                          "p-2 rounded-lg",
+                          isDark ? "bg-purple-900/30" : "bg-purple-100"
+                        )}
+                      >
+                        <Icon
+                          className={cn(
+                            "h-5 w-5",
+                            isDark ? "text-purple-400" : "text-purple-600"
+                          )}
+                        />
+                      </div>
+                      <div className="flex flex-col flex-1">
+                        <span
+                          className={cn(
+                            "font-medium",
+                            isDark ? "text-white" : "text-gray-900"
+                          )}
+                        >
+                          {item.title}
+                        </span>
+                        {/* {item.id === "profile" && (
+                          <p
+                            className={cn(
+                              "text-xs mt-1",
+                              isDark ? "text-purple-300" : "text-purple-600"
+                            )}
+                          >
+                            💰 When you fill your complete profile, we give you
+                            a $0.50 bonus!
+                          </p>
+                        )} */}
+                      </div>
+                    </div>
+                    <ChevronRight
+                      className={cn(
+                        "h-5 w-5",
+                        isDark ? "text-gray-400" : "text-gray-500"
+                      )}
+                    />
+                  </Link>
+                  {/* Profile Completion Notification */}
+                  {item.id === "profile" &&
+                    showProfileNotification &&
+                    isProfileIncomplete() && (
+                      <div
+                        className={cn(
+                          "relative p-4 border lg:max-w-[1200px] rounded-lg lg:mx-4 mb-4",
+                          isDark
+                            ? "bg-purple-900/30 border-purple-500"
+                            : "bg-purple-50 border-purple-300"
+                        )}
+                      >
+                        {/* <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setShowProfileNotification(false);
+                          }}
+                          className={cn(
+                            "absolute top-2 right-2 p-1 rounded-full hover:bg-black/10 transition-colors",
+                            isDark
+                              ? "text-gray-300 hover:text-white"
+                              : "text-gray-700 hover:text-gray-900"
+                          )}
+                          aria-label="Close notification"
+                        >
+                          <X className="h-4 w-4" />
+                        </button> */}
+                        <div className="pr-6">
+                          <div className="mb-3">
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                              <span
+                                className={cn(
+                                  "text-sm font-medium whitespace-nowrap",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                Profile Completion
+                              </span>
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={cn(
+                                    "relative h-2 w-32 overflow-hidden rounded-full",
+                                    isDark
+                                      ? "bg-purple-900/50"
+                                      : "bg-purple-100"
+                                  )}
+                                >
+                                  <div
+                                    className={cn(
+                                      "h-full rounded-full transition-all duration-300",
+                                      isDark
+                                        ? "bg-gradient-to-r from-purple-600 to-purple-500"
+                                        : "bg-gradient-to-r from-purple-500 to-purple-400"
+                                    )}
+                                    style={{
+                                      width: `${getProfileCompletionPercentage()}%`,
+                                    }}
+                                  />
+                                </div>
+                                <span
+                                  className={cn(
+                                    "text-sm font-bold whitespace-nowrap",
+                                    isDark
+                                      ? "text-purple-400"
+                                      : "text-purple-600"
+                                  )}
+                                >
+                                  {getProfileCompletionPercentage()}%
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <p
+                            className={cn(
+                              "text-sm mb-3",
+                              isDark ? "text-gray-300" : "text-gray-600"
+                            )}
+                          >
+                            Complete your profile now and claim your $0.50
+                            reward!
+                          </p>
+                          <Link href="/dashboard/profile">
+                            <Button
+                              className={cn(
+                                "w-full sm:w-auto bg-purple-500 hover:bg-purple-600 text-white font-bold py-2.5 px-6 rounded-full flex items-center justify-center gap-2 transition-colors",
+                                isDark && "bg-purple-600 hover:bg-purple-700"
+                              )}
+                            >
+                              COMPLETE PROFILE
+                              <ArrowRight className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+                  {/* Profile Completion Success Notification */}
+                  {item.id === "profile" &&
+                    showProfileNotification &&
+                    creatorProfileData?.has_claimed_profile_reward &&
+                    getProfileCompletionPercentage() === 100 && (
+                      <div
+                        className={cn(
+                          "relative p-4 border lg:max-w-[1200px] rounded-lg lg:mx-4 mb-4",
+                          isDark
+                            ? "bg-green-900/30 border-green-500"
+                            : "bg-green-50 border-green-300"
+                        )}
+                      >
+                        <div className="pr-6">
+                          <div className="flex items-start gap-3">
+                            <CheckCircle2
+                              className={cn(
+                                "h-5 w-5 flex-shrink-0 mt-0.5",
+                                isDark ? "text-green-400" : "text-green-600"
+                              )}
+                            />
+                            <div className="flex-1">
+                              <div className="mb-2">
+                                <span
+                                  className={cn(
+                                    "text-sm font-semibold",
+                                    isDark ? "text-green-300" : "text-green-700"
+                                  )}
+                                >
+                                  Profile Completed & Bonus Claimed!
+                                </span>
+                              </div>
+                              <p
+                                className={cn(
+                                  "text-sm",
+                                  isDark ? "text-gray-300" : "text-gray-600"
+                                )}
+                              >
+                                Congratulations! Your profile has been completed
+                                and you've successfully claimed your $0.50
+                                reward. Your profile is now locked and cannot be
+                                edited.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                </div>
               );
             } else if (item.expandable) {
               const isExpanded = expandedSection === item.id;
@@ -1660,7 +1936,7 @@ export default function SettingsPage({
                   <button
                     onClick={() => toggleSection(item.id)}
                     className={cn(
-                      "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200 hover:shadow-md",
+                      "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200",
                       isDark
                         ? "bg-[#180438] hover:border-purple-500"
                         : "bg-white border border-gray-300 hover:border-purple-300"
@@ -1714,7 +1990,7 @@ export default function SettingsPage({
                       }
                     }}
                     className={cn(
-                      "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200 hover:shadow-md",
+                      "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200",
                       isDark
                         ? "bg-[#180438] hover:border-purple-500"
                         : "bg-white border border-gray-300 hover:border-purple-300"
