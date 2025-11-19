@@ -39,8 +39,8 @@ import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import { EmailChangeModal } from "@/components/EmailChangeModal";
-import PhoneInput from "react-phone-number-input";
-import "react-phone-number-input/style.css";
+// import PhoneInput from "react-phone-number-input";
+// import "react-phone-number-input/style.css";
 import { Country, State, City } from "country-state-city";
 import {
   Select,
@@ -521,7 +521,7 @@ export default function ProfilePage({
   const [editedWebsiteUrl, setEditedWebsiteUrl] = useState("");
 
   // New profile fields state - directly editable
-  const [editedPhone, setEditedPhone] = useState("");
+  // const [editedPhone, setEditedPhone] = useState("");
   const [editedDateOfBirth, setEditedDateOfBirth] = useState("");
   const [editedGender, setEditedGender] = useState("");
   const [editedCountry, setEditedCountry] = useState("");
@@ -726,7 +726,7 @@ export default function ProfilePage({
             if (!profileError && profile) {
               setCreatorProfile(profile as CreatorProfile);
               // Initialize the new profile fields
-              setEditedPhone(profile.phone_number || "");
+              // setEditedPhone(profile.phone_number || "");
               setEditedDateOfBirth(profile.date_of_birth || "");
               setEditedGender(profile.gender || "");
               setEditedCountry(profile.country || "");
@@ -1455,7 +1455,7 @@ export default function ProfilePage({
     if (!creatorProfile) return false;
 
     return (
-      editedPhone.trim() !== "" &&
+      // editedPhone.trim() !== "" &&
       editedDateOfBirth.trim() !== "" &&
       editedGender.trim() !== "" &&
       editedCountry.trim() !== "" &&
@@ -1561,7 +1561,7 @@ export default function ProfilePage({
     };
 
     return (
-      editedPhone !== (creatorProfile.phone_number || "") ||
+      // editedPhone !== (creatorProfile.phone_number || "") ||
       editedDateOfBirth !== (creatorProfile.date_of_birth || "") ||
       editedGender !== (creatorProfile.gender || "") ||
       editedCountry !== (creatorProfile.country || "") ||
@@ -1601,10 +1601,10 @@ export default function ProfilePage({
       const updateData: any = {};
 
       // Use edited phone number
-      const phoneToSave = editedPhone;
-      if (phoneToSave !== (creatorProfile.phone_number || "")) {
-        updateData.phone_number = phoneToSave.trim() || null;
-      }
+      // const phoneToSave = editedPhone;
+      // if (phoneToSave !== (creatorProfile.phone_number || "")) {
+      //   updateData.phone_number = phoneToSave.trim() || null;
+      // }
       if (editedDateOfBirth !== (creatorProfile.date_of_birth || "")) {
         // Validate date of birth: cannot be in future or of same year
         if (editedDateOfBirth.trim()) {
@@ -1863,8 +1863,53 @@ export default function ProfilePage({
       return;
     }
 
+    // Check if profile is complete first
+    const isComplete = isProfileComplete();
+
+    // Only check for cities/states if user has selected a country (required field)
+    if (selectedCountryCode) {
+      const states = State.getStatesOfCountry(selectedCountryCode);
+      let hasCities = false;
+      let hasStates = states.length > 0;
+
+      if (!hasStates) {
+        // Country has no states available, check country-level cities
+        const cities = City.getCitiesOfCountry(selectedCountryCode);
+        hasCities = !!(cities && cities.length > 0);
+
+        // If no states AND no cities, show complete profile modal when clicking save
+        if (!hasCities) {
+          setIsCompleteProfileModalOpen(true);
+          return;
+        }
+      } else if (selectedStateCode) {
+        // State is selected, check state-level cities
+        const cities = City.getCitiesOfState(
+          selectedCountryCode,
+          selectedStateCode
+        );
+        hasCities = !!(cities && cities.length > 0);
+
+        // If no cities available for the selected state, show complete profile modal
+        if (!hasCities) {
+          setIsCompleteProfileModalOpen(true);
+          return;
+        }
+      } else {
+        // States exist but none selected, check country-level cities as fallback
+        const cities = City.getCitiesOfCountry(selectedCountryCode);
+        hasCities = !!(cities && cities.length > 0);
+
+        // If no cities available, show complete profile modal
+        if (!hasCities) {
+          setIsCompleteProfileModalOpen(true);
+          return;
+        }
+      }
+    }
+
     // Check if profile is complete
-    if (isProfileComplete() && !hasReceivedProfileBonus) {
+    if (isComplete && !hasReceivedProfileBonus) {
       // Show confirmation modal
       setIsCompleteProfileModalOpen(true);
     } else {
@@ -2368,7 +2413,7 @@ export default function ProfilePage({
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-10">
                 {/* Phone Number */}
-                <div className="relative w-full">
+                {/* <div className="relative w-full">
                   <div className="relative flex-1">
                     <label
                       htmlFor="phone"
@@ -2437,7 +2482,7 @@ export default function ProfilePage({
                       }}
                     />
                   </div>
-                </div>
+                </div> */}
 
                 {/* Date of Birth */}
                 <div className="relative w-full">
@@ -3140,6 +3185,32 @@ export default function ProfilePage({
                                         ...editedContentTypesCreated,
                                         category.id,
                                       ]);
+                                      // Automatically check all subcategories when category is selected
+                                      const newSubcategories =
+                                        category.subcategories.map(
+                                          (subcategory) => ({
+                                            category: category.id,
+                                            subcategory: subcategory,
+                                          })
+                                        );
+                                      // Add subcategories that aren't already in the list
+                                      setEditedInterestedContentTypes(
+                                        (prev) => {
+                                          const existing = new Set(
+                                            prev.map(
+                                              (item) =>
+                                                `${item.category}:${item.subcategory}`
+                                            )
+                                          );
+                                          const toAdd = newSubcategories.filter(
+                                            (item) =>
+                                              !existing.has(
+                                                `${item.category}:${item.subcategory}`
+                                              )
+                                          );
+                                          return [...prev, ...toAdd];
+                                        }
+                                      );
                                     }
                                   } else {
                                     // Remove category and all its subcategories from interested list
@@ -3224,11 +3295,6 @@ export default function ProfilePage({
                       )}
                     >
                       Subcategories
-                      {editedContentTypesCreated.length === 0 && (
-                        <span className="text-xs text-gray-500 ml-2">
-                          (Select categories above first)
-                        </span>
-                      )}
                     </label>
                     <div
                       className={cn(
@@ -3238,145 +3304,124 @@ export default function ProfilePage({
                           : "bg-white border-gray-300"
                       )}
                     >
-                      {editedContentTypesCreated.length === 0 ? (
-                        <p
-                          className={cn(
-                            "text-sm text-center py-4",
-                            isDark ? "text-gray-400" : "text-gray-500"
-                          )}
-                        >
-                          Please select at least one category above to see
-                          subcategories
-                        </p>
-                      ) : (
-                        <>
-                          <Accordion type="multiple" className="w-full">
-                            {CONTENT_TYPE_CATEGORIES.filter((category) =>
-                              editedContentTypesCreated.includes(category.id)
-                            ).map((category) => {
-                              return (
-                                <AccordionItem
-                                  key={category.id}
-                                  value={category.id}
-                                  className="border-b border-gray-200 dark:border-gray-700"
-                                >
-                                  <AccordionTrigger
-                                    className={cn(
-                                      "text-sm font-medium hover:no-underline py-3",
-                                      isDark ? "text-gray-300" : "text-gray-700"
-                                    )}
-                                  >
-                                    {category.name}
-                                  </AccordionTrigger>
-                                  <AccordionContent className="pt-2 pb-4">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                      {category.subcategories.map(
-                                        (subcategory) => {
-                                          const isChecked =
-                                            editedInterestedContentTypes.some(
-                                              (item) =>
-                                                item.category === category.id &&
-                                                item.subcategory === subcategory
-                                            );
-                                          return (
-                                            <div
-                                              key={`${category.id}-${subcategory}`}
-                                              className="flex items-center space-x-2"
-                                            >
-                                              <Checkbox
-                                                id={`content-interested-${category.id}-${subcategory}`}
-                                                checked={isChecked}
-                                                disabled={
-                                                  hasReceivedProfileBonus ||
-                                                  isSubmitting
-                                                }
-                                                onCheckedChange={(checked) => {
-                                                  if (checked) {
-                                                    setEditedInterestedContentTypes(
-                                                      [
-                                                        ...editedInterestedContentTypes,
-                                                        {
-                                                          category: category.id,
-                                                          subcategory:
-                                                            subcategory,
-                                                        },
-                                                      ]
-                                                    );
-                                                  } else {
-                                                    setEditedInterestedContentTypes(
-                                                      editedInterestedContentTypes.filter(
-                                                        (item) =>
-                                                          !(
-                                                            item.category ===
-                                                              category.id &&
-                                                            item.subcategory ===
-                                                              subcategory
-                                                          )
-                                                      )
-                                                    );
-                                                  }
-                                                }}
-                                                className={cn(
-                                                  isDark
-                                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
-                                                )}
-                                              />
-                                              <label
-                                                htmlFor={`content-interested-${category.id}-${subcategory}`}
-                                                className={cn(
-                                                  "text-sm font-normal cursor-pointer",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700"
-                                                )}
-                                              >
-                                                {subcategory}
-                                              </label>
-                                            </div>
-                                          );
-                                        }
-                                      )}
-                                    </div>
-                                  </AccordionContent>
-                                </AccordionItem>
-                              );
-                            })}
-                          </Accordion>
-                          {editedInterestedContentTypes.length > 0 && (
-                            <div className="flex items-center justify-between mt-2">
-                              <p
+                      <Accordion type="multiple" className="w-full">
+                        {CONTENT_TYPE_CATEGORIES.map((category) => {
+                          return (
+                            <AccordionItem
+                              key={category.id}
+                              value={category.id}
+                              className="border-b border-gray-200 dark:border-gray-700"
+                            >
+                              <AccordionTrigger
                                 className={cn(
-                                  "text-xs",
-                                  isDark ? "text-gray-400" : "text-gray-500"
+                                  "text-sm font-medium hover:no-underline py-3",
+                                  isDark ? "text-gray-300" : "text-gray-700"
                                 )}
                               >
-                                {editedInterestedContentTypes.length}{" "}
-                                subcategories selected
-                              </p>
-                              {!hasReceivedProfileBonus && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    setEditedInterestedContentTypes([])
-                                  }
-                                  disabled={isSubmitting}
-                                  className={cn(
-                                    "h-7 px-2 text-xs",
-                                    isDark
-                                      ? "border-gray-400 text-gray-300"
-                                      : "border-gray-400 text-gray-700 hover:bg-gray-100"
-                                  )}
-                                >
-                                  <RotateCcw className="h-3 w-3" />
-                                  Reset
-                                </Button>
+                                {category.name}
+                              </AccordionTrigger>
+                              <AccordionContent className="pt-2 pb-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {category.subcategories.map((subcategory) => {
+                                    const isChecked =
+                                      editedInterestedContentTypes.some(
+                                        (item) =>
+                                          item.category === category.id &&
+                                          item.subcategory === subcategory
+                                      );
+                                    return (
+                                      <div
+                                        key={`${category.id}-${subcategory}`}
+                                        className="flex items-center space-x-2"
+                                      >
+                                        <Checkbox
+                                          id={`content-interested-${category.id}-${subcategory}`}
+                                          checked={isChecked}
+                                          disabled={
+                                            hasReceivedProfileBonus ||
+                                            isSubmitting
+                                          }
+                                          onCheckedChange={(checked) => {
+                                            if (checked) {
+                                              setEditedInterestedContentTypes([
+                                                ...editedInterestedContentTypes,
+                                                {
+                                                  category: category.id,
+                                                  subcategory: subcategory,
+                                                },
+                                              ]);
+                                            } else {
+                                              setEditedInterestedContentTypes(
+                                                editedInterestedContentTypes.filter(
+                                                  (item) =>
+                                                    !(
+                                                      item.category ===
+                                                        category.id &&
+                                                      item.subcategory ===
+                                                        subcategory
+                                                    )
+                                                )
+                                              );
+                                            }
+                                          }}
+                                          className={cn(
+                                            isDark
+                                              ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                              : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                          )}
+                                        />
+                                        <label
+                                          htmlFor={`content-interested-${category.id}-${subcategory}`}
+                                          className={cn(
+                                            "text-sm font-normal cursor-pointer",
+                                            isDark
+                                              ? "text-gray-300"
+                                              : "text-gray-700"
+                                          )}
+                                        >
+                                          {subcategory}
+                                        </label>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          );
+                        })}
+                      </Accordion>
+                      {editedInterestedContentTypes.length > 0 && (
+                        <div className="flex items-center justify-between mt-2">
+                          <p
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-gray-400" : "text-gray-500"
+                            )}
+                          >
+                            {editedInterestedContentTypes.length} subcategories
+                            selected
+                          </p>
+                          {!hasReceivedProfileBonus && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                setEditedInterestedContentTypes([])
+                              }
+                              disabled={isSubmitting}
+                              className={cn(
+                                "h-7 px-2 text-xs",
+                                isDark
+                                  ? "border-gray-400 text-gray-300"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
                               )}
-                            </div>
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Reset
+                            </Button>
                           )}
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>
