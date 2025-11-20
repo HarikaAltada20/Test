@@ -1477,18 +1477,52 @@ export default function ProfilePage({
   const isProfileComplete = () => {
     if (!creatorProfile) return false;
 
-    return (
-      // editedPhone.trim() !== "" &&
+    // Check basic required fields
+    const hasBasicFields =
       editedDateOfBirth.trim() !== "" &&
       editedGender.trim() !== "" &&
-      editedCountry.trim() !== "" &&
-      editedState.trim() !== "" &&
-      editedCity.trim() !== "" &&
       editedAddress.trim() !== "" &&
       editedLanguages.length > 0 &&
       editedContentTypesCreated.length > 0 &&
-      editedInterestedContentTypes.length > 0
-    );
+      editedInterestedContentTypes.length > 0 &&
+      editedInterests.length > 0;
+
+    if (!hasBasicFields) return false;
+
+    // Check country is selected
+    if (!editedCountry.trim() || !selectedCountryCode) return false;
+
+    // Check state and city based on availability
+    const states = State.getStatesOfCountry(selectedCountryCode);
+    const hasStates = states.length > 0;
+
+    if (hasStates) {
+      // States exist, state must be filled
+      if (!editedState.trim() || !selectedStateCode) return false;
+
+      // Check if cities are available for the selected state
+      const cities = City.getCitiesOfState(
+        selectedCountryCode,
+        selectedStateCode
+      );
+      const hasCities = !!(cities && cities.length > 0);
+
+      // Only require city if cities are available for this state
+      if (hasCities && !editedCity.trim()) return false;
+      // If no cities available for the state, don't require city field
+    } else {
+      // No states, check if country has cities
+      const cities = City.getCitiesOfCountry(selectedCountryCode);
+      const hasCities = !!(cities && cities.length > 0);
+
+      if (hasCities) {
+        // Cities exist at country level, city must be filled
+        if (!editedCity.trim()) return false;
+      }
+      // If no states and no cities, we don't require state/city fields
+    }
+
+    return true;
   };
 
   // Check if profile has changes
@@ -1938,52 +1972,19 @@ export default function ProfilePage({
       return;
     }
 
-    // Check if profile is complete first
+    // Check if all required profile fields are filled
+    // Required fields: date of birth, gender, flat number (address), language,
+    // categories, subcategories (interests)
     const isComplete = isProfileComplete();
 
-    // Only check for cities/states if user has selected a country (required field)
-    if (selectedCountryCode) {
-      const states = State.getStatesOfCountry(selectedCountryCode);
-      let hasCities = false;
-      let hasStates = states.length > 0;
-
-      if (!hasStates) {
-        // Country has no states available, check country-level cities
-        const cities = City.getCitiesOfCountry(selectedCountryCode);
-        hasCities = !!(cities && cities.length > 0);
-
-        // If no states AND no cities, show complete profile modal when clicking save
-        if (!hasCities) {
-          setIsCompleteProfileModalOpen(true);
-          return;
-        }
-      } else if (selectedStateCode) {
-        // State is selected, check state-level cities
-        const cities = City.getCitiesOfState(
-          selectedCountryCode,
-          selectedStateCode
-        );
-        hasCities = !!(cities && cities.length > 0);
-
-        // If no cities available for the selected state, show complete profile modal
-        if (!hasCities) {
-          setIsCompleteProfileModalOpen(true);
-          return;
-        }
-      } else {
-        // States exist but none selected, check country-level cities as fallback
-        const cities = City.getCitiesOfCountry(selectedCountryCode);
-        hasCities = !!(cities && cities.length > 0);
-
-        // If no cities available, show complete profile modal
-        if (!hasCities) {
-          setIsCompleteProfileModalOpen(true);
-          return;
-        }
-      }
+    // If profile is not complete, just save without showing modal
+    if (!isComplete) {
+      handleSaveProfileChanges(false);
+      return;
     }
 
-    // Check if profile is complete
+    // If all required fields are filled and bonus hasn't been received, show modal
+    // Show modal regardless of whether states/cities are available for the country
     if (isComplete && !hasReceivedProfileBonus) {
       // Show confirmation modal
       setIsCompleteProfileModalOpen(true);

@@ -2,25 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import countries from "i18n-iso-countries";
 
-// Register English locale for country names
 countries.registerLocale(require("i18n-iso-countries/langs/en.json"));
 
 /**
  * Get country from IP address using ipinfo.io (free tier)
  * Returns country name (and region name for backward compatibility)
  * Saves country to database in users.registration_info JSONB if user is authenticated
- * Works on localhost by automatically detecting public IP
+ 
  */
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   try {
-    // Try ipinfo.io 
-    // Falls back to ipapi.co and ip-api.com if needed
+    //ipinfo.io
+   
     let country = null;
     let ip = null;
     let apiUsed = "none";
 
-    // Try ipinfo.io/json first 
+
     const ipinfoUrl = "https://ipinfo.io/json";
     console.log(
       "[get-location] Trying ipinfo.io (auto-detects public IP):",
@@ -265,7 +264,7 @@ export async function GET(request: NextRequest) {
         const countryChanged = country && existingCountry !== country;
         console.log("[get-location] Country changed:", countryChanged);
 
-        // Only update if IP address changed or if we have new country data
+        // Only update if IP address changed or if we have new country 
         const ipChanged = existingIp !== ip;
         console.log(
           "[get-location] IP changed:",
@@ -276,7 +275,36 @@ export async function GET(request: NextRequest) {
           ip
         );
 
-        if (ipChanged || countryChanged) {
+        // Check if user has no existing country 
+        const hasNoExistingCountry = !existingCountry;
+
+        // Check when location was last updated
+        const lastLocationUpdate =
+          existingRegistrationInfo?.last_location_update;
+        const lastUpdateTime = lastLocationUpdate
+          ? new Date(lastLocationUpdate).getTime()
+          : 0;
+        const now = Date.now();
+        const oneHourAgo = now - 60 * 60 * 1000; 
+        const shouldRefreshDueToAge = lastUpdateTime < oneHourAgo;
+
+        console.log(
+          "[get-location] Last location update:",
+          lastLocationUpdate || "never",
+          "Should refresh due to age:",
+          shouldRefreshDueToAge
+        );
+
+        // update location
+        
+        const shouldUpdate =
+          ipChanged ||
+          countryChanged ||
+          hasNoExistingCountry ||
+          shouldRefreshDueToAge ||
+          !lastLocationUpdate;
+
+        if (shouldUpdate) {
           const updateData: {
             registration_info?: Record<string, any>;
             location_updated_at: string;
@@ -288,7 +316,7 @@ export async function GET(request: NextRequest) {
           updateData.registration_info = {
             ...existingRegistrationInfo,
             ip_address: ip,
-            country: country || existingRegistrationInfo.country, // Preserve existing country if new one is null
+            country: country || existingRegistrationInfo.country, // Preserve existing country
             last_location_update: new Date().toISOString(),
           };
 
@@ -297,7 +325,7 @@ export async function GET(request: NextRequest) {
             JSON.stringify(updateData, null, 2)
           );
 
-          // Update user's location in database (only in registration_info JSONB)
+          // Update user's location in database ( in registration_info JSONB)
           const { error: updateError } = await supabase
             .from("users")
             .update(updateData)
@@ -312,12 +340,22 @@ export async function GET(request: NextRequest) {
           } else {
             console.log(
               "[get-location] Successfully updated country in registration_info:",
-              country
+              country,
+              "Reason:",
+              ipChanged
+                ? "IP changed"
+                : countryChanged
+                ? "Country changed"
+                : hasNoExistingCountry
+                ? "No existing country"
+                : shouldRefreshDueToAge
+                ? "Location refresh due to age"
+                : "First time update"
             );
           }
         } else {
           console.log(
-            "[get-location] Skipping update - IP and country unchanged"
+            "[get-location] Skipping update - IP and country unchanged, and location was recently updated"
           );
         }
         // If IP address already exists and location data hasn't changed, skip update
@@ -329,7 +367,7 @@ export async function GET(request: NextRequest) {
       // Don't fail the request if DB save fails
     }
 
-    // Get region name for backward compatibility (not stored in DB, only returned in response)
+  
     let region: string | null = null;
     if (country) {
       try {
@@ -343,7 +381,7 @@ export async function GET(request: NextRequest) {
           }
         }
       } catch (error) {
-        // Region lookup failed, but country is still available
+        
       }
     }
 
