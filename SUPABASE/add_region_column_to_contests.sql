@@ -1,26 +1,17 @@
--- Migration: Add categories, subcategories, and interests columns to contests table
--- Date: 2025-01-XX
--- Description: Adds categories, subcategories, and interests as JSONB columns to replace the single category field
+-- Add region column to contests table
+-- This column stores regions and countries as JSONB format:
+-- { "North America": ["United States", "Canada", ...], "Europe": [...], ... }
 
--- Add new columns to contests table
 ALTER TABLE public.contests
-ADD COLUMN IF NOT EXISTS categories JSONB DEFAULT NULL,
-ADD COLUMN IF NOT EXISTS subcategories JSONB DEFAULT NULL,
-ADD COLUMN IF NOT EXISTS interests JSONB DEFAULT NULL;
+ADD COLUMN IF NOT EXISTS region jsonb NULL;
 
--- Add comments for documentation
-COMMENT ON COLUMN public.contests.categories IS 'JSONB array of category IDs selected for this contest (max 3). Stored as JSON array: ["beauty", "fashion", "tech"]';
-COMMENT ON COLUMN public.contests.subcategories IS 'JSONB object grouping subcategories by category. Stored as JSON object: {"beauty": ["Skincare", "Makeup", "Haircare"], "sports": ["Football / Soccer", "Basketball"], ...}. This format avoids repeating category names and groups subcategories efficiently.';
-COMMENT ON COLUMN public.contests.interests IS 'JSONB array of interests selected for this contest. Stored as JSON array: ["Beauty", "Skincare", "Makeup", ...]';
+-- Add comment to document the column structure
+COMMENT ON COLUMN public.contests.region IS 'Stores regions and countries as JSONB object where keys are region names and values are arrays of country names. Example: {"North America": ["United States", "Canada"], "Europe": ["France", "Germany"]}';
 
--- Create indexes for better query performance
-CREATE INDEX IF NOT EXISTS idx_contests_categories ON public.contests USING GIN(categories) WHERE categories IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_contests_subcategories ON public.contests USING GIN(subcategories) WHERE subcategories IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_contests_interests ON public.contests USING GIN(interests) WHERE interests IS NOT NULL;
+-- Create GIN index for efficient JSONB queries
+CREATE INDEX IF NOT EXISTS idx_contests_region ON public.contests USING gin (region);
 
--- Note: The old 'category' column is kept for backward compatibility but should not be used for new contests
-
--- Update contests_with_status view to include new columns
+-- Update contests_with_status view to include region column
 CREATE OR REPLACE VIEW public.contests_with_status WITH (security_invoker='on') AS
  SELECT contests.id,
     contests.advertiser_id,

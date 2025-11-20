@@ -112,6 +112,7 @@ import {
   Gift,
   Tag,
   Star,
+  Globe,
 } from "lucide-react";
 
 // Content type categories with subcategories (same as in create contest)
@@ -407,6 +408,8 @@ interface Contest {
     | Record<string, string[]>
     | null; // Can be flat array or grouped object format
   interests?: string[] | null;
+  // Region data (JSONB format: { "North America": ["United States", "Canada"], ... })
+  region?: Record<string, string[]> | null;
   // Payment information
   payment_details?: any | null;
   // Moderation tracking fields
@@ -2643,6 +2646,76 @@ export default function ContestDetailClient({
                     </CardContent>
                   </div>
                 </div>
+
+                {/* Regions Card */}
+                {currentContest.region && Object.keys(currentContest.region).length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-lg text-foreground">
+                      Available Regions
+                    </h3>
+                    <div
+                      className={cn(
+                        "border rounded-xl transition-all duration-300",
+                        isDark ? "border-gray-600" : "border-gray-300"
+                      )}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-4">
+                          <div
+                            className={cn(
+                              "w-10 h-10 flex items-center justify-center rounded-full flex-shrink-0",
+                              isDark
+                                ? "bg-[#FFFFFF42] text-white"
+                                : "bg-purple-100 text-[#4A00BE]"
+                            )}
+                          >
+                            <Globe className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1 space-y-3">
+                            {Object.entries(currentContest.region).map(
+                              ([regionName, countries]) => (
+                                <div
+                                  key={regionName}
+                                  className={cn(
+                                    "p-3 rounded-lg border",
+                                    isDark
+                                      ? "bg-[#170337] border-gray-600"
+                                      : "bg-gray-50 border-gray-200"
+                                  )}
+                                >
+                                  <p
+                                    className={cn(
+                                      "font-semibold text-base mb-2",
+                                      isDark ? "text-white" : "text-gray-900"
+                                    )}
+                                  >
+                                    {regionName}
+                                  </p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {countries.map((country) => (
+                                      <Badge
+                                        key={country}
+                                        variant="secondary"
+                                        className={cn(
+                                          "text-xs",
+                                          isDark
+                                            ? "bg-gray-700 text-gray-200 border-gray-600"
+                                            : "bg-white text-gray-700 border-gray-300"
+                                        )}
+                                      >
+                                        {country}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </div>
+                  </div>
+                )}
 
                 {/* Conditional Prize Structure / CPM Details */}
                 {currentContest.contest_type === "leaderboard" &&

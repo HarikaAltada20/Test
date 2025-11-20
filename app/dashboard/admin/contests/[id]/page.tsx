@@ -163,6 +163,11 @@ export default async function AdminContestDetailPage({
             content_type: contestData.content_type,
             bonus_details: contestData.bonus_details,
             max_earnings_per_creator: contestData.max_earnings_per_creator,
+            // Categories, subcategories, interests, and region
+            categories: contestData.categories,
+            subcategories: contestData.subcategories,
+            interests: contestData.interests,
+            region: contestData.region,
         };
 
         // Prepare submissions data

@@ -214,6 +214,8 @@ export default async function ContestDetailPage({
     categories: contestData.categories,
     subcategories: contestData.subcategories,
     interests: contestData.interests,
+    // Region data
+    region: contestData.region,
   };
 
   const submissions = submissionsData

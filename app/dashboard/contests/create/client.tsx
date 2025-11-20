@@ -49,6 +49,7 @@ import {
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { toast } from "@/hooks/use-toast"; // Added import
 import dynamic from "next/dynamic";
+import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
 
 // Dynamically import the Novel editor
 const NovelEditor = dynamic(() => import("@/components/novel-editor"), {
@@ -489,6 +490,103 @@ const INTERESTS = INTEREST_CATEGORIES.flatMap(
   (category) => category.interests
 ) as readonly string[];
 
+// Regions and countries data
+const REGIONS_AND_COUNTRIES: Record<string, string[]> =
+  REGIONS_AND_COUNTRIES_DATA;
+
+// Helper function to build region JSONB object from selected regions and countries
+const buildRegionData = (
+  selectedRegions: string[],
+  selectedCountries: string[]
+): Record<string, string[]> | null => {
+  if (selectedRegions.length === 0 && selectedCountries.length === 0) {
+    return null;
+  }
+
+  const regionData: Record<string, string[]> = {};
+
+  // For each selected region, get the countries that are selected
+  selectedRegions.forEach((region) => {
+    const regionKey = region as keyof typeof REGIONS_AND_COUNTRIES;
+    const regionCountries = REGIONS_AND_COUNTRIES[regionKey] || [];
+    const countriesArray = Array.isArray(regionCountries)
+      ? regionCountries.map((c) => String(c))
+      : [];
+
+    // Filter to only include countries that are actually selected
+    const selectedCountriesInRegion = countriesArray.filter((country) =>
+      selectedCountries.includes(country)
+    );
+
+    // Only add region if it has selected countries
+    if (selectedCountriesInRegion.length > 0) {
+      regionData[region] = selectedCountriesInRegion;
+    }
+  });
+
+  // Also handle countries that might be selected without their region being selected
+  // Group them by their region
+  const ungroupedCountries = selectedCountries.filter((country) => {
+    // Check if this country belongs to any selected region
+    return !selectedRegions.some((region) => {
+      const regionKey = region as keyof typeof REGIONS_AND_COUNTRIES;
+      const regionCountries = REGIONS_AND_COUNTRIES[regionKey] || [];
+      const countriesArray = Array.isArray(regionCountries)
+        ? regionCountries.map((c) => String(c))
+        : [];
+      return countriesArray.includes(country);
+    });
+  });
+
+  // Find which region each ungrouped country belongs to
+  ungroupedCountries.forEach((country) => {
+    Object.keys(REGIONS_AND_COUNTRIES).forEach((region) => {
+      const regionKey = region as keyof typeof REGIONS_AND_COUNTRIES;
+      const regionCountries = REGIONS_AND_COUNTRIES[regionKey] || [];
+      const countriesArray = Array.isArray(regionCountries)
+        ? regionCountries.map((c) => String(c))
+        : [];
+
+      if (countriesArray.includes(country)) {
+        if (!regionData[region]) {
+          regionData[region] = [];
+        }
+        if (!regionData[region].includes(country)) {
+          regionData[region].push(country);
+        }
+      }
+    });
+  });
+
+  return Object.keys(regionData).length > 0 ? regionData : null;
+};
+
+// Helper function to extract regions and countries from region JSONB data
+const extractRegionsAndCountries = (
+  regionData: Record<string, string[]> | null
+): { regions: string[]; countries: string[] } => {
+  if (!regionData || typeof regionData !== "object") {
+    return { regions: [], countries: [] };
+  }
+
+  const regions: string[] = [];
+  const countries: string[] = [];
+
+  Object.keys(regionData).forEach((region) => {
+    const regionCountries = regionData[region];
+    if (Array.isArray(regionCountries)) {
+      regions.push(region);
+      regionCountries.forEach((country) => {
+        if (!countries.includes(country)) {
+          countries.push(country);
+        }
+      });
+    }
+  });
+
+  return { regions, countries };
+};
+
 export default function CreateContestPage({
   user,
 }: {
@@ -634,10 +732,14 @@ export default function CreateContestPage({
     Array<{ category: string; subcategory: string }>
   >([]);
   const [contestInterests, setContestInterests] = useState<string[]>([]);
+  // Regions and countries state
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   // Toggle states for collapsible sections
   const [categoriesOpen, setCategoriesOpen] = useState(true); // Categories expanded by default
   const [subcategoriesOpen, setSubcategoriesOpen] = useState(false);
   const [interestsOpen, setInterestsOpen] = useState(false);
+  const [regionsOpen, setRegionsOpen] = useState(false);
   const [thumbnail, setThumbnail] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [brief, setBrief] = useState("");
@@ -1008,6 +1110,56 @@ export default function CreateContestPage({
     }
   };
 
+  // Handler for region selection - automatically selects all countries in the region
+  const handleRegionToggle = (region: string, checked: boolean) => {
+    const regionKey = region as keyof typeof REGIONS_AND_COUNTRIES;
+    const regionCountries = REGIONS_AND_COUNTRIES[regionKey] || [];
+    const countriesArray = Array.isArray(regionCountries)
+      ? [...regionCountries]
+      : [];
+
+    if (checked) {
+      // Add region and all its countries
+      setSelectedRegions([...selectedRegions, region]);
+      setSelectedCountries([
+        ...new Set([...selectedCountries, ...countriesArray]),
+      ]);
+    } else {
+      // Remove region and all its countries
+      setSelectedRegions(selectedRegions.filter((r) => r !== region));
+      setSelectedCountries(
+        selectedCountries.filter((country) => !countriesArray.includes(country))
+      );
+    }
+  };
+
+  // Handler for individual country selection
+  const handleCountryToggle = (country: string, checked: boolean) => {
+    if (checked) {
+      setSelectedCountries([...selectedCountries, country]);
+    } else {
+      setSelectedCountries(selectedCountries.filter((c) => c !== country));
+      // If all countries from a region are deselected, remove the region
+      const regionKeys = Object.keys(REGIONS_AND_COUNTRIES) as Array<
+        keyof typeof REGIONS_AND_COUNTRIES
+      >;
+      regionKeys.forEach((region) => {
+        const regionCountries = REGIONS_AND_COUNTRIES[region];
+        const countriesArray = Array.isArray(regionCountries)
+          ? [...regionCountries]
+          : [];
+        if (countriesArray.includes(country)) {
+          const remainingCountries = countriesArray.filter(
+            (c) => c !== country && selectedCountries.includes(c)
+          );
+          if (remainingCountries.length === 0) {
+            setSelectedRegions(selectedRegions.filter((r) => r !== region));
+          }
+        }
+      });
+    }
+  };
+
   // Helper function to delete thumbnail from Supabase storage
   const deleteFromStorage = async (thumbnailUrl: string) => {
     try {
@@ -1095,6 +1247,8 @@ export default function CreateContestPage({
           })(),
           interests:
             contestInterests.length > 0 ? [...new Set(contestInterests)] : null,
+          // Regions and countries as JSONB
+          region: buildRegionData(selectedRegions, selectedCountries),
           // New features (2025-10-01)
           multiple_submissions_enabled: false,
           max_submissions_per_creator: 1,
@@ -2344,6 +2498,8 @@ export default function CreateContestPage({
         subcategories: processSubcategories(contestSubcategories),
         interests:
           contestInterests.length > 0 ? [...new Set(contestInterests)] : null, // Remove duplicate interests
+        // Regions and countries as JSONB
+        region: buildRegionData(selectedRegions, selectedCountries),
         subscription_info_of_user: await (async () => {
           try {
             // Get user's subscription info using new system
@@ -3332,6 +3488,23 @@ export default function CreateContestPage({
     if (draft.interests && Array.isArray(draft.interests)) {
       setContestInterests(draft.interests);
     }
+    // Load regions and countries from region JSONB column
+    if (draft.region && typeof draft.region === "object") {
+      const { regions, countries } = extractRegionsAndCountries(
+        draft.region as Record<string, string[]>
+      );
+      setSelectedRegions(regions);
+      setSelectedCountries(countries);
+    }
+    // Fallback: Load from old target_regions and target_countries columns for backward compatibility
+    else {
+      if (draft.target_regions && Array.isArray(draft.target_regions)) {
+        setSelectedRegions(draft.target_regions);
+      }
+      if (draft.target_countries && Array.isArray(draft.target_countries)) {
+        setSelectedCountries(draft.target_countries);
+      }
+    }
     // Fallback: Also check contest_based_details for backward compatibility
     if (draft.contest_based_details) {
       const details = draft.contest_based_details;
@@ -3370,6 +3543,18 @@ export default function CreateContestPage({
         Array.isArray(details.interests)
       ) {
         setContestInterests(details.interests);
+      }
+      // Load regions and countries from details if not in draft (backward compatibility)
+      if (!draft.region) {
+        if (details.target_regions && Array.isArray(details.target_regions)) {
+          setSelectedRegions(details.target_regions);
+        }
+        if (
+          details.target_countries &&
+          Array.isArray(details.target_countries)
+        ) {
+          setSelectedCountries(details.target_countries);
+        }
       }
     }
 
@@ -7030,6 +7215,194 @@ export default function CreateContestPage({
                             variant="outline"
                             size="sm"
                             onClick={() => setContestInterests([])}
+                            disabled={isLoading}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
+                        </div>
+                      )}
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
+              </div>
+
+              {/* Regions and Countries Selection */}
+              <div className="space-y-3">
+                <Collapsible open={regionsOpen} onOpenChange={setRegionsOpen}>
+                  <div
+                    className={cn(
+                      "rounded-lg border",
+                      isDark
+                        ? "bg-[#180438] border-gray-300"
+                        : "bg-white border-gray-300"
+                    )}
+                  >
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
+                          isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[14px] font-medium cursor-pointer">
+                            Regions
+                          </Label>
+                          {selectedCountries.length > 0 && (
+                            <span
+                              className={cn(
+                                "text-xs px-2 py-0.5 rounded-full",
+                                isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-100 text-purple-700"
+                              )}
+                            >
+                              {selectedCountries.length} selected
+                            </span>
+                          )}
+                        </div>
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 transition-transform",
+                            regionsOpen && "transform rotate-180",
+                            isDark ? "text-gray-300" : "text-gray-600"
+                          )}
+                        />
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="px-4 pb-4 space-y-4">
+                      <div className="space-y-4">
+                        {Object.keys(REGIONS_AND_COUNTRIES).map((region) => {
+                          const regionKey =
+                            region as keyof typeof REGIONS_AND_COUNTRIES;
+                          const regionCountries =
+                            REGIONS_AND_COUNTRIES[regionKey];
+                          if (!regionCountries) return null;
+                          const countriesArray: string[] = Array.isArray(
+                            regionCountries
+                          )
+                            ? regionCountries.map((c) => String(c))
+                            : [];
+                          const isRegionSelected =
+                            selectedRegions.includes(region);
+                          const selectedCountriesInRegion =
+                            countriesArray.filter((country) =>
+                              selectedCountries.includes(country)
+                            );
+                          const isPartiallySelected =
+                            selectedCountriesInRegion.length > 0 &&
+                            selectedCountriesInRegion.length <
+                              countriesArray.length;
+                          const hasAnySelected =
+                            selectedCountriesInRegion.length > 0;
+
+                          return (
+                            <div key={region} className="space-y-2">
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`region-${region}`}
+                                  checked={isRegionSelected}
+                                  disabled={isLoading}
+                                  onCheckedChange={(checked) => {
+                                    handleRegionToggle(
+                                      region,
+                                      checked as boolean
+                                    );
+                                  }}
+                                  className={cn(
+                                    isDark
+                                      ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                      : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                  )}
+                                />
+                                <label
+                                  htmlFor={`region-${region}`}
+                                  className={cn(
+                                    "text-sm font-semibold cursor-pointer",
+                                    isDark ? "text-gray-300" : "text-gray-700"
+                                  )}
+                                >
+                                  {region}
+                                  {isPartiallySelected && (
+                                    <span className="text-xs font-normal ml-2 text-gray-500">
+                                      ({selectedCountriesInRegion.length} of{" "}
+                                      {countriesArray.length} selected)
+                                    </span>
+                                  )}
+                                </label>
+                              </div>
+                              {(isRegionSelected || hasAnySelected) && (
+                                <div className="ml-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                  {countriesArray.map((country: string) => {
+                                    const isCountrySelected =
+                                      selectedCountries.includes(country);
+                                    return (
+                                      <div
+                                        key={country}
+                                        className="flex items-center space-x-2"
+                                      >
+                                        <Checkbox
+                                          id={`country-${region}-${country}`}
+                                          checked={isCountrySelected}
+                                          disabled={isLoading}
+                                          onCheckedChange={(checked) => {
+                                            handleCountryToggle(
+                                              country,
+                                              checked as boolean
+                                            );
+                                          }}
+                                          className={cn(
+                                            isDark
+                                              ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                              : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                          )}
+                                        />
+                                        <label
+                                          htmlFor={`country-${region}-${country}`}
+                                          className={cn(
+                                            "text-sm font-normal cursor-pointer",
+                                            isDark
+                                              ? "text-gray-300"
+                                              : "text-gray-700"
+                                          )}
+                                        >
+                                          {country}
+                                        </label>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {selectedCountries.length > 0 && (
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                          <p
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-gray-400" : "text-gray-500"
+                            )}
+                          >
+                            {selectedCountries.length} countries selected
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedRegions([]);
+                              setSelectedCountries([]);
+                            }}
                             disabled={isLoading}
                             className={cn(
                               "h-7 px-2 text-xs",

@@ -11,6 +11,7 @@ CREATE OR REPLACE VIEW public.contests_with_status WITH (security_invoker='on') 
     contests.categories,
     contests.subcategories,
     contests.interests,
+    contests.region,
     contests.inspiration_links,
     contests.tracking_links,
     contests.created_at,
