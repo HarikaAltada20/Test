@@ -114,254 +114,7 @@ import {
   Star,
   Globe,
 } from "lucide-react";
-
-// Content type categories with subcategories (same as in create contest)
-const CONTENT_TYPE_CATEGORIES = [
-  {
-    id: "beauty",
-    name: "Beauty",
-    subcategories: [
-      "Skincare",
-      "Makeup",
-      "Haircare",
-      "Fragrance",
-      "Nail Art",
-      "Men's Grooming",
-      "K-Beauty",
-    ],
-  },
-  {
-    id: "fashion",
-    name: "Fashion",
-    subcategories: [
-      "Outfits",
-      "Streetwear",
-      "Luxury",
-      "Athleisure",
-      "Accessories",
-      "Footwear",
-      "Sustainable Fashion",
-    ],
-  },
-  {
-    id: "fitness",
-    name: "Fitness",
-    subcategories: [
-      "Gym Workouts",
-      "Home Workouts",
-      "Yoga & Pilates",
-      "Running",
-      "Nutrition",
-      "Supplements",
-      "Crossfit",
-    ],
-  },
-  {
-    id: "food",
-    name: "Food",
-    subcategories: [
-      "Recipes",
-      "Restaurant Reviews",
-      "Street Food",
-      "Desserts",
-      "Beverages (Coffee/Tea)",
-      "Vegan & Plant-based",
-      "Product Taste Tests",
-    ],
-  },
-  {
-    id: "gaming",
-    name: "Gaming",
-    subcategories: [
-      "Mobile Games",
-      "Console / PC Games",
-      "Esports",
-      "Walkthroughs / Let's Play",
-      "Game Reviews",
-      "Game Tips & Tricks",
-      "Live Streaming",
-    ],
-  },
-  {
-    id: "tech",
-    name: "Tech",
-    subcategories: [
-      "Smartphones",
-      "Laptops & PCs",
-      "Smart Home",
-      "Wearables",
-      "Apps",
-      "Software & SaaS",
-      "Gadget Reviews",
-    ],
-  },
-  {
-    id: "finance",
-    name: "Finance",
-    subcategories: [
-      "Personal Finance",
-      "Investing",
-      "Crypto",
-      "Fintech Apps",
-      "Money Saving Tips",
-      "Tax & Accounting",
-    ],
-  },
-  {
-    id: "travel",
-    name: "Travel",
-    subcategories: [
-      "Travel Vlogs",
-      "Budget Travel",
-      "Luxury Travel",
-      "Hotel Reviews",
-      "Local Guides",
-      "Travel Gear",
-    ],
-  },
-  {
-    id: "home_decor",
-    name: "Home & Decor",
-    subcategories: [
-      "Interior Design",
-      "DIY Projects",
-      "Organization Hacks",
-      "Cleaning Tips",
-      "Home Appliances",
-      "Small Space Ideas",
-    ],
-  },
-  {
-    id: "education",
-    name: "Education",
-    subcategories: [
-      "Study Tips",
-      "Course Reviews",
-      "Skill Tutorials",
-      "Language Learning",
-      "Career Advice",
-      "Exam Prep",
-    ],
-  },
-  {
-    id: "art_diy",
-    name: "Art & DIY",
-    subcategories: [
-      "Painting",
-      "Drawing",
-      "Crafts",
-      "Prints & Merch",
-      "Handmade Products",
-      "Design Tutorials",
-    ],
-  },
-  {
-    id: "parenting",
-    name: "Parenting",
-    subcategories: [
-      "Baby Care",
-      "Toddler Activities",
-      "Kids Education",
-      "Parenting Tips",
-      "Product Reviews for Parents",
-    ],
-  },
-  {
-    id: "sports",
-    name: "Sports",
-    subcategories: [
-      "Football / Soccer",
-      "Basketball",
-      "Cricket",
-      "Running & Training",
-      "Cycling",
-      "Outdoor Adventure",
-    ],
-  },
-  {
-    id: "auto",
-    name: "Auto",
-    subcategories: [
-      "Cars",
-      "Bikes",
-      "Electric Vehicles (EVs)",
-      "Auto Accessories",
-      "Car Reviews",
-      "Maintenance Tips",
-    ],
-  },
-  {
-    id: "pets",
-    name: "Pets",
-    subcategories: [
-      "Pet Care",
-      "Pet Training",
-      "Pet Food & Products",
-      "Funny Pet Videos",
-      "Pet Health",
-    ],
-  },
-  {
-    id: "business",
-    name: "Business",
-    subcategories: [
-      "Startups",
-      "SaaS & Tools",
-      "Productivity",
-      "Marketing Tips",
-      "Side Hustles",
-    ],
-  },
-  {
-    id: "entertainment",
-    name: "Entertainment",
-    subcategories: [
-      "Comedy",
-      "Drama",
-      "Romance",
-      "Horror",
-      "Emotional / Sad",
-      "Memes",
-      "Reaction Videos",
-      "Sketches / Skits",
-      "Parodies",
-      "Trailers & Reviews",
-    ],
-  },
-  {
-    id: "music_dance",
-    name: "Music & Dance",
-    subcategories: [
-      "Covers",
-      "Original Music",
-      "Music Production",
-      "Dance Choreography",
-      "Instrument Tutorials",
-    ],
-  },
-  {
-    id: "photo_video",
-    name: "Photography & Video",
-    subcategories: [
-      "Camera Gear",
-      "Editing Tutorials",
-      "Cinematography",
-      "Mobile Filmmaking",
-      "Lighting & Sound",
-    ],
-  },
-  {
-    id: "sustainability",
-    name: "Sustainability",
-    subcategories: [
-      "Eco Products",
-      "Zero Waste",
-      "Sustainable Fashion",
-      "Green Tech",
-      "Upcycling",
-    ],
-  },
-] as const;
+import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
 
 // --- Local Type Definitions ---
 interface Contest {
@@ -2648,74 +2401,75 @@ export default function ContestDetailClient({
                 </div>
 
                 {/* Regions Card */}
-                {currentContest.region && Object.keys(currentContest.region).length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-lg text-foreground">
-                      Available Regions
-                    </h3>
-                    <div
-                      className={cn(
-                        "border rounded-xl transition-all duration-300",
-                        isDark ? "border-gray-600" : "border-gray-300"
-                      )}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-start gap-4">
-                          <div
-                            className={cn(
-                              "w-10 h-10 flex items-center justify-center rounded-full flex-shrink-0",
-                              isDark
-                                ? "bg-[#FFFFFF42] text-white"
-                                : "bg-purple-100 text-[#4A00BE]"
-                            )}
-                          >
-                            <Globe className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1 space-y-3">
-                            {Object.entries(currentContest.region).map(
-                              ([regionName, countries]) => (
-                                <div
-                                  key={regionName}
-                                  className={cn(
-                                    "p-3 rounded-lg border",
-                                    isDark
-                                      ? "bg-[#170337] border-gray-600"
-                                      : "bg-gray-50 border-gray-200"
-                                  )}
-                                >
-                                  <p
+                {currentContest.region &&
+                  Object.keys(currentContest.region).length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-lg text-foreground">
+                        Available Regions
+                      </h3>
+                      <div
+                        className={cn(
+                          "border rounded-xl transition-all duration-300",
+                          isDark ? "border-gray-600" : "border-gray-300"
+                        )}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-start gap-4">
+                            <div
+                              className={cn(
+                                "w-10 h-10 flex items-center justify-center rounded-full flex-shrink-0",
+                                isDark
+                                  ? "bg-[#FFFFFF42] text-white"
+                                  : "bg-purple-100 text-[#4A00BE]"
+                              )}
+                            >
+                              <Globe className="h-5 w-5" />
+                            </div>
+                            <div className="flex-1 space-y-3">
+                              {Object.entries(currentContest.region).map(
+                                ([regionName, countries]) => (
+                                  <div
+                                    key={regionName}
                                     className={cn(
-                                      "font-semibold text-base mb-2",
-                                      isDark ? "text-white" : "text-gray-900"
+                                      "p-3 rounded-lg border",
+                                      isDark
+                                        ? "bg-[#170337] border-gray-600"
+                                        : "bg-gray-50 border-gray-200"
                                     )}
                                   >
-                                    {regionName}
-                                  </p>
-                                  <div className="flex flex-wrap gap-2">
-                                    {countries.map((country) => (
-                                      <Badge
-                                        key={country}
-                                        variant="secondary"
-                                        className={cn(
-                                          "text-xs",
-                                          isDark
-                                            ? "bg-gray-700 text-gray-200 border-gray-600"
-                                            : "bg-white text-gray-700 border-gray-300"
-                                        )}
-                                      >
-                                        {country}
-                                      </Badge>
-                                    ))}
+                                    <p
+                                      className={cn(
+                                        "font-semibold text-base mb-2",
+                                        isDark ? "text-white" : "text-gray-900"
+                                      )}
+                                    >
+                                      {regionName}
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {countries.map((country) => (
+                                        <Badge
+                                          key={country}
+                                          variant="secondary"
+                                          className={cn(
+                                            "text-xs",
+                                            isDark
+                                              ? "bg-gray-700 text-gray-200 border-gray-600"
+                                              : "bg-white text-gray-700 border-gray-300"
+                                          )}
+                                        >
+                                          {country}
+                                        </Badge>
+                                      ))}
+                                    </div>
                                   </div>
-                                </div>
-                              )
-                            )}
+                                )
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </CardContent>
+                        </CardContent>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {/* Conditional Prize Structure / CPM Details */}
                 {currentContest.contest_type === "leaderboard" &&
