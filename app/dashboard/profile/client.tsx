@@ -97,6 +97,7 @@ interface CreatorProfile {
     | string[]
     | null;
   subcategories?:
+    | Record<string, string[]>
     | Array<{ category: string; subcategory: string }>
     | string[]
     | null;
@@ -793,46 +794,68 @@ export default function ProfilePage({
                 return [];
               };
 
-              // Convert subcategories to {category, subcategory} format
+              // Convert subcategories to {category, subcategory} format for internal use
               const convertToSubcategoryFormat = (
                 data: any
               ): Array<{ category: string; subcategory: string }> => {
-                if (!data || !Array.isArray(data)) return [];
-                // Check if already in new format
-                if (
-                  data.length > 0 &&
-                  typeof data[0] === "object" &&
-                  "category" in data[0] &&
-                  "subcategory" in data[0]
-                ) {
-                  return data as Array<{
+                if (!data) return [];
+
+                // New object format: {category: [subcategories]}
+                if (typeof data === "object" && !Array.isArray(data)) {
+                  const result: Array<{
                     category: string;
                     subcategory: string;
-                  }>;
+                  }> = [];
+                  Object.entries(data).forEach(([category, subcategories]) => {
+                    if (Array.isArray(subcategories)) {
+                      (subcategories as string[]).forEach((subcategory) => {
+                        result.push({ category, subcategory });
+                      });
+                    }
+                  });
+                  return result;
                 }
-                // Old format - convert string array to objects
-                const result: Array<{ category: string; subcategory: string }> =
-                  [];
-                (data as string[]).forEach((oldValue) => {
-                  const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
-                    cat.subcategories.some(
-                      (sub) =>
-                        sub.toLowerCase().includes(oldValue.toLowerCase()) ||
-                        oldValue.toLowerCase().includes(cat.id.toLowerCase())
-                    )
-                  );
-                  if (category) {
-                    const subcategory =
-                      category.subcategories.find((sub) =>
-                        sub.toLowerCase().includes(oldValue.toLowerCase())
-                      ) || category.subcategories[0];
-                    result.push({
-                      category: category.id,
-                      subcategory: subcategory,
-                    });
+
+                // Old array format with objects
+                if (Array.isArray(data) && data.length > 0) {
+                  // Check if already in {category, subcategory} format
+                  if (
+                    typeof data[0] === "object" &&
+                    "category" in data[0] &&
+                    "subcategory" in data[0]
+                  ) {
+                    return data as Array<{
+                      category: string;
+                      subcategory: string;
+                    }>;
                   }
-                });
-                return result;
+                  // Old format - convert string array to objects
+                  const result: Array<{
+                    category: string;
+                    subcategory: string;
+                  }> = [];
+                  (data as string[]).forEach((oldValue) => {
+                    const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+                      cat.subcategories.some(
+                        (sub) =>
+                          sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                          oldValue.toLowerCase().includes(cat.id.toLowerCase())
+                      )
+                    );
+                    if (category) {
+                      const subcategory =
+                        category.subcategories.find((sub) =>
+                          sub.toLowerCase().includes(oldValue.toLowerCase())
+                        ) || category.subcategories[0];
+                      result.push({
+                        category: category.id,
+                        subcategory: subcategory,
+                      });
+                    }
+                  });
+                  return result;
+                }
+                return [];
               };
 
               setEditedContentTypesCreated(convertToCategoryIds(typeOfContent));
@@ -1528,36 +1551,54 @@ export default function ProfilePage({
 
     // Convert current subcategories to normalized format
     const convertSubcategories = (data: any): string => {
-      if (!data || !Array.isArray(data)) return "";
-      if (
-        data.length > 0 &&
-        typeof data[0] === "object" &&
-        "category" in data[0] &&
-        "subcategory" in data[0]
-      ) {
-        return normalizeSubcategories(
-          data as Array<{ category: string; subcategory: string }>
-        );
+      if (!data) return "";
+
+      // New object format: {category: [subcategories]}
+      if (typeof data === "object" && !Array.isArray(data)) {
+        const converted: Array<{ category: string; subcategory: string }> = [];
+        Object.entries(data).forEach(([category, subcategories]) => {
+          if (Array.isArray(subcategories)) {
+            (subcategories as string[]).forEach((subcategory) => {
+              converted.push({ category, subcategory });
+            });
+          }
+        });
+        return normalizeSubcategories(converted);
       }
-      // Old format - convert
-      const converted: Array<{ category: string; subcategory: string }> = [];
-      (data as string[]).forEach((oldValue) => {
-        const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
-          cat.subcategories.some(
-            (sub) =>
-              sub.toLowerCase().includes(oldValue.toLowerCase()) ||
-              oldValue.toLowerCase().includes(cat.id.toLowerCase())
-          )
-        );
-        if (category) {
-          const subcategory =
-            category.subcategories.find((sub) =>
-              sub.toLowerCase().includes(oldValue.toLowerCase())
-            ) || category.subcategories[0];
-          converted.push({ category: category.id, subcategory: subcategory });
+
+      // Old array format
+      if (Array.isArray(data) && data.length > 0) {
+        // Check if already in {category, subcategory} format
+        if (
+          typeof data[0] === "object" &&
+          "category" in data[0] &&
+          "subcategory" in data[0]
+        ) {
+          return normalizeSubcategories(
+            data as Array<{ category: string; subcategory: string }>
+          );
         }
-      });
-      return normalizeSubcategories(converted);
+        // Old string array format - convert
+        const converted: Array<{ category: string; subcategory: string }> = [];
+        (data as string[]).forEach((oldValue) => {
+          const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+            cat.subcategories.some(
+              (sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                oldValue.toLowerCase().includes(cat.id.toLowerCase())
+            )
+          );
+          if (category) {
+            const subcategory =
+              category.subcategories.find((sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase())
+              ) || category.subcategories[0];
+            converted.push({ category: category.id, subcategory: subcategory });
+          }
+        });
+        return normalizeSubcategories(converted);
+      }
+      return "";
     };
 
     return (
@@ -1715,35 +1756,59 @@ export default function ProfilePage({
 
       // Convert current subcategories to normalized format
       const convertSubcategories = (data: any): string => {
-        if (!data || !Array.isArray(data)) return "";
-        if (
-          data.length > 0 &&
-          typeof data[0] === "object" &&
-          "category" in data[0] &&
-          "subcategory" in data[0]
-        ) {
-          return normalizeSubcategories(
-            data as Array<{ category: string; subcategory: string }>
-          );
+        if (!data) return "";
+
+        // New object format: {category: [subcategories]}
+        if (typeof data === "object" && !Array.isArray(data)) {
+          const converted: Array<{ category: string; subcategory: string }> =
+            [];
+          Object.entries(data).forEach(([category, subcategories]) => {
+            if (Array.isArray(subcategories)) {
+              (subcategories as string[]).forEach((subcategory) => {
+                converted.push({ category, subcategory });
+              });
+            }
+          });
+          return normalizeSubcategories(converted);
         }
-        const converted: Array<{ category: string; subcategory: string }> = [];
-        (data as string[]).forEach((oldValue) => {
-          const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
-            cat.subcategories.some(
-              (sub) =>
-                sub.toLowerCase().includes(oldValue.toLowerCase()) ||
-                oldValue.toLowerCase().includes(cat.id.toLowerCase())
-            )
-          );
-          if (category) {
-            const subcategory =
-              category.subcategories.find((sub) =>
-                sub.toLowerCase().includes(oldValue.toLowerCase())
-              ) || category.subcategories[0];
-            converted.push({ category: category.id, subcategory: subcategory });
+
+        // Old array format
+        if (Array.isArray(data) && data.length > 0) {
+          // Check if already in {category, subcategory} format
+          if (
+            typeof data[0] === "object" &&
+            "category" in data[0] &&
+            "subcategory" in data[0]
+          ) {
+            return normalizeSubcategories(
+              data as Array<{ category: string; subcategory: string }>
+            );
           }
-        });
-        return normalizeSubcategories(converted);
+          // Old string array format - convert
+          const converted: Array<{ category: string; subcategory: string }> =
+            [];
+          (data as string[]).forEach((oldValue) => {
+            const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+              cat.subcategories.some(
+                (sub) =>
+                  sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                  oldValue.toLowerCase().includes(cat.id.toLowerCase())
+              )
+            );
+            if (category) {
+              const subcategory =
+                category.subcategories.find((sub) =>
+                  sub.toLowerCase().includes(oldValue.toLowerCase())
+                ) || category.subcategories[0];
+              converted.push({
+                category: category.id,
+                subcategory: subcategory,
+              });
+            }
+          });
+          return normalizeSubcategories(converted);
+        }
+        return "";
       };
 
       if (
@@ -1759,9 +1824,19 @@ export default function ProfilePage({
         normalizeSubcategories(editedInterestedContentTypes) !==
         convertSubcategories(currentOtherTypeOfContent)
       ) {
+        // Convert array format to object format: {category: [subcategories]}
+        const subcategoriesObject: Record<string, string[]> = {};
+        editedInterestedContentTypes.forEach(({ category, subcategory }) => {
+          if (!subcategoriesObject[category]) {
+            subcategoriesObject[category] = [];
+          }
+          if (!subcategoriesObject[category].includes(subcategory)) {
+            subcategoriesObject[category].push(subcategory);
+          }
+        });
         updateData.subcategories =
-          editedInterestedContentTypes.length > 0
-            ? editedInterestedContentTypes
+          Object.keys(subcategoriesObject).length > 0
+            ? subcategoriesObject
             : null;
       }
       if (
@@ -3288,14 +3363,29 @@ export default function ProfilePage({
                 {/* Other type of content I am interested in - Subcategories of selected categories */}
                 <div className="relative w-full col-span-1 sm:col-span-2">
                   <div className="space-y-3">
-                    <label
-                      className={cn(
-                        "text-[14px] font-medium block",
-                        isDark ? "text-white" : "text-[#1A1A1A]"
+                    <div className="flex items-center gap-2">
+                      <label
+                        className={cn(
+                          "text-[14px] font-medium block",
+                          isDark ? "text-white" : "text-[#1A1A1A]"
+                        )}
+                      >
+                        Subcategories
+                      </label>
+                      {editedInterestedContentTypes.length > 0 && (
+                        <span
+                          className={cn(
+                            "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+                            isDark
+                              ? "bg-purple-900/30 text-purple-200 border border-purple-700"
+                              : "bg-purple-100 text-purple-800 border border-purple-300"
+                          )}
+                        >
+                          {editedInterestedContentTypes.length}
+                          selected
+                        </span>
                       )}
-                    >
-                      Subcategories
-                    </label>
+                    </div>
                     <div
                       className={cn(
                         "rounded-lg border p-4 space-y-3",

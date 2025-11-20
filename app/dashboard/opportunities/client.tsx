@@ -15,7 +15,9 @@ import {
   CheckCheck,
   Gift,
   Tag,
-  Star, Play, GraduationCap,
+  Star,
+  Play,
+  GraduationCap,
   RotateCcw,
 } from "lucide-react";
 import { User, UserResponse } from "@supabase/supabase-js";
@@ -47,6 +49,11 @@ import {
 import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
+import {
+  isCountryInContestRegions,
+  extractCountryFromRegionJsonb,
+  getRegionForCountry,
+} from "@/lib/region-utils";
 
 // Define types for filters and sorting
 type StatusFilterType = "all" | "live" | "upcoming" | "completed";
@@ -74,6 +81,8 @@ export default function OpportunitiesPage({
   const [showGuidelines, setShowGuidelines] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [hasCheckedGuidelines, setHasCheckedGuidelines] = useState(false);
+  const [userCountry, setUserCountry] = useState<string | null>(null);
+  const [userRegion, setUserRegion] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
 
@@ -260,6 +269,155 @@ export default function OpportunitiesPage({
       setIsFetchingData(true);
 
       try {
+        // Fetch user location - check database first, then API if needed
+        const locationCacheKey = "user_location";
+        const locationTimestampKey = "user_location_timestamp";
+        const cachedLocation = localStorage.getItem(locationCacheKey);
+        const cachedLocationTimestamp =
+          localStorage.getItem(locationTimestampKey);
+
+        // Check if cache is still valid (24 hours)
+        const isLocationCacheValid =
+          cachedLocationTimestamp &&
+          Date.now() - parseInt(cachedLocationTimestamp) < 24 * 60 * 60 * 1000;
+
+        // Use local variable for filtering (state updates are async)
+        // Support multiple countries - both registration info and creator profile will work together
+        let userCountries: string[] = [];
+        let currentUserCountry: string | null = null;
+        let currentUserRegion: string | null = null;
+
+        // Collect countries from both sources - both will work together
+        //  get country from registration_info
+        try {
+          const { data: userProfile, error: profileError } = await supabase
+            .from("users")
+            .select("registration_info")
+            .eq("id", currentUser.id)
+            .single();
+
+          if (!profileError && userProfile) {
+            // Get country from registration_info JSONB
+            let extractedCountry = null;
+            if (userProfile.registration_info) {
+              const registrationInfo = userProfile.registration_info as Record<
+                string,
+                any
+              >;
+              extractedCountry = registrationInfo.country || null;
+            }
+
+            // Add registration info country to the list if available
+            if (extractedCountry) {
+              userCountries.push(extractedCountry);
+              // Set as primary country for state (first one found)
+              if (!currentUserCountry) {
+                currentUserCountry = extractedCountry;
+                currentUserRegion = getRegionForCountry(extractedCountry);
+              }
+            }
+          } else if (profileError) {
+            console.error(
+              "Error fetching location from database:",
+              profileError
+            );
+          }
+        } catch (dbError) {
+          console.error("Error fetching location from database:", dbError);
+        }
+
+        //  get country from creator profile (add to list if different)
+        try {
+          const { data: creatorProfileData, error: creatorProfileError } =
+            await supabase
+              .from("creator_profiles")
+              .select("country")
+              .eq("id", currentUser.id)
+              .single();
+
+          if (!creatorProfileError && creatorProfileData?.country) {
+            // Add creator profile country if it's different from registration info
+            if (
+              creatorProfileData.country &&
+              !userCountries.includes(creatorProfileData.country)
+            ) {
+              userCountries.push(creatorProfileData.country);
+            }
+            // Set as primary if no country set yet
+            if (!currentUserCountry && creatorProfileData.country) {
+              currentUserCountry = creatorProfileData.country;
+              currentUserRegion = getRegionForCountry(
+                creatorProfileData.country
+              );
+            }
+          }
+        } catch (creatorProfileError) {
+          console.error(
+            "Error fetching creator profile country:",
+            creatorProfileError
+          );
+        }
+
+        // Update state with primary country (for display purposes)
+        if (currentUserCountry) {
+          setUserCountry(currentUserCountry);
+          setUserRegion(currentUserRegion);
+          // Cache it
+          const locationData = {
+            country: currentUserCountry,
+            region: currentUserRegion,
+            countries: userCountries, // Store all countries
+          };
+          localStorage.setItem(locationCacheKey, JSON.stringify(locationData));
+          localStorage.setItem(locationTimestampKey, Date.now().toString());
+        }
+
+        // If not found in database or cache, fetch from API (fallback only)
+        if (userCountries.length === 0) {
+          if (cachedLocation && isLocationCacheValid) {
+            try {
+              const locationData = JSON.parse(cachedLocation);
+              if (locationData.country) {
+                userCountries.push(locationData.country);
+                currentUserCountry = locationData.country;
+                currentUserRegion = locationData.region;
+                setUserCountry(locationData.country);
+                setUserRegion(locationData.region);
+              }
+            } catch (e) {
+              console.error("Error parsing cached location:", e);
+            }
+          } else {
+            // Fetch location from API (will also save to database if user is authenticated)
+            try {
+              const locationResponse = await fetch("/api/get-location");
+              if (locationResponse.ok) {
+                const locationData = await locationResponse.json();
+                if (locationData.country) {
+                  userCountries.push(locationData.country);
+                  currentUserCountry = locationData.country;
+                  currentUserRegion = locationData.region;
+                  setUserCountry(locationData.country);
+                  setUserRegion(locationData.region);
+
+                  // Cache the location
+                  localStorage.setItem(
+                    locationCacheKey,
+                    JSON.stringify(locationData)
+                  );
+                  localStorage.setItem(
+                    locationTimestampKey,
+                    Date.now().toString()
+                  );
+                }
+              }
+            } catch (locationError) {
+              console.error("Error fetching user location:", locationError);
+              // Continue without location filtering if API fails
+            }
+          }
+        }
+
         const { data: userData, error: userError } = await supabase
           .from("users")
           .select("user_type")
@@ -305,7 +463,7 @@ export default function OpportunitiesPage({
           // No cache - query database once
           const { data: creatorProfile, error: profileError } = await supabase
             .from("creator_profiles")
-            .select("has_seen_guidelines")
+            .select("has_seen_guidelines, country")
             .eq("id", currentUser.id)
             .single();
 
@@ -387,7 +545,28 @@ export default function OpportunitiesPage({
             })
           );
 
-          setAvailableContests(contestsWithCalculatedBudgets);
+          // Filter contests based on user's countries (both registration info and creator profile)
+          const regionFilteredContests = contestsWithCalculatedBudgets.filter(
+            (contest) => {
+              // If no user countries available, show all contests (fallback)
+              if (userCountries.length === 0) {
+                return true;
+              }
+
+              // If contest has no region restrictions, show it to everyone
+              if (!contest.region || Object.keys(contest.region).length === 0) {
+                return true;
+              }
+
+              // Check if ANY of the user's countries matches the contest's regions
+              // This allows users to see contests from both their registration country and profile country
+              return userCountries.some((country: string) =>
+                isCountryInContestRegions(country, contest.region)
+              );
+            }
+          );
+
+          setAvailableContests(regionFilteredContests);
         }
       } catch (error) {
         console.error("Unexpected error in fetchData:", error);
@@ -492,12 +671,12 @@ export default function OpportunitiesPage({
         case "cpm_rate_asc":
           const rateA =
             a.contest_type === "cpm" &&
-              a.contest_based_details?.cpm_contest?.cpm_rate_usd
+            a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1; // Use -1 to sort contests without CPM rate last
           const rateB =
             b.contest_type === "cpm" &&
-              b.contest_based_details?.cpm_contest?.cpm_rate_usd
+            b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           if (rateA === -1 && rateB === -1) return 0;
@@ -587,10 +766,11 @@ export default function OpportunitiesPage({
             href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N"
             target="_blank"
             rel="noopener noreferrer"
-          
             className={cn(
               "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
-              isDark ? "text-white border-gray-600" : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]"
+              isDark
+                ? "text-white border-gray-600"
+                : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]"
             )}
           >
             <Play className="h-3.5 w-3.5" />
@@ -600,7 +780,9 @@ export default function OpportunitiesPage({
             href="/dashboard/getting-started"
             className={cn(
               "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
-              isDark ? "text-white border-gray-600" : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]"
+              isDark
+                ? "text-white border-gray-600"
+                : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]"
             )}
           >
             <GraduationCap className="h-3.5 w-3.5" />
@@ -791,9 +973,9 @@ export default function OpportunitiesPage({
                       className={cn(
                         "capitalize text-sm px-3 py-1 font-medium border",
                         contest.status === "active" &&
-                        "bg-[#7F39EC] text-white",
+                          "bg-[#7F39EC] text-white",
                         contest.status === "upcoming" &&
-                        "bg-[#7F39EC] text-white",
+                          "bg-[#7F39EC] text-white",
                         contest.status === "ended" && "bg-[#7F39EC] text-white",
                         !["active", "upcoming", "ended"].includes(
                           contest.status
@@ -850,26 +1032,26 @@ export default function OpportunitiesPage({
                         ?.flat_fee_bonus ||
                         contest.contest_based_details?.leaderboard_contest
                           ?.flat_fee_bonus) && (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[12px]",
-                              isDark
-                                ? "bg-green-900/30 text-green-300 border-green-700/50"
-                                : "bg-green-50 text-green-700 border-green-200"
-                            )}
-                          >
-                            <Gift className="h-3 w-3 mr-1" />
-                            {formatMoney(
-                              contest.contest_based_details?.cpm_contest
-                                ?.flat_fee_bonus ||
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[12px]",
+                            isDark
+                              ? "bg-green-900/30 text-green-300 border-green-700/50"
+                              : "bg-green-50 text-green-700 border-green-200"
+                          )}
+                        >
+                          <Gift className="h-3 w-3 mr-1" />
+                          {formatMoney(
+                            contest.contest_based_details?.cpm_contest
+                              ?.flat_fee_bonus ||
                               contest.contest_based_details?.leaderboard_contest
                                 ?.flat_fee_bonus ||
                               0
-                            )}
-                            /submission
-                          </Badge>
-                        )}
+                          )}
+                          /submission
+                        </Badge>
+                      )}
                       {contest.content_type && (
                         <Badge
                           variant="outline"
@@ -988,11 +1170,11 @@ export default function OpportunitiesPage({
                           {contest.contest_type === "cpm"
                             ? "CPM Based"
                             : contest.contest_type === "leaderboard"
-                              ? "Leaderboard"
-                              : contest.contest_type
-                                ? contest.contest_type.charAt(0).toUpperCase() +
-                                contest.contest_type.slice(1)
-                                : "N/A"}
+                            ? "Leaderboard"
+                            : contest.contest_type
+                            ? contest.contest_type.charAt(0).toUpperCase() +
+                              contest.contest_type.slice(1)
+                            : "N/A"}
                         </span>
                       </span>
                     </div>
@@ -1022,7 +1204,7 @@ export default function OpportunitiesPage({
                       contest.contest_based_details?.cpm_contest
                         ?.total_budget != null &&
                       contest.contest_based_details.cpm_contest.total_budget >
-                      0 && (
+                        0 && (
                         <div className="flex items-center">
                           <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                           <span>
@@ -1092,9 +1274,9 @@ export default function OpportunitiesPage({
                   {/* Budget Spent Progress Bar for CPM contests */}
                   {contest.contest_type === "cpm" &&
                     contest.contest_based_details?.cpm_contest?.total_budget !=
-                    null &&
+                      null &&
                     contest.contest_based_details.cpm_contest.total_budget >
-                    0 &&
+                      0 &&
                     (() => {
                       const totalBudget =
                         contest.contest_based_details.cpm_contest.total_budget;
@@ -1260,8 +1442,6 @@ export default function OpportunitiesPage({
               <RotateCcw className="h-4 w-4" />
               Reset
             </Button>
-           
-
           </div>
         )}
       </div>

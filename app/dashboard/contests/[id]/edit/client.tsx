@@ -5518,6 +5518,16 @@ export default function EditContestPage({
                       </button>
                     </CollapsibleTrigger>
                     <CollapsibleContent className="px-4 pb-4 space-y-4">
+                      <p
+                        className={cn(
+                          "text-sm mb-3",
+                          isDark ? "text-gray-400" : "text-gray-600"
+                        )}
+                      >
+                        Select regions and countries where creators can see and
+                        participate in this contest. Only creators from selected
+                        regions will see this opportunity in their dashboard.
+                      </p>
                       <div className="space-y-4">
                         {Object.keys(REGIONS_AND_COUNTRIES).map((region) => {
                           const regionKey =

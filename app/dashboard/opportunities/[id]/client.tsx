@@ -72,6 +72,254 @@ const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
 const MY_DUMMY_SUBMISSION_USER_ID = "user_dummy_me_special_id_123"; // A consistent ID for 'my' dummy submission
 // --- END DUMMY DATA CONFIGURATION ---
 
+// Content type categories with subcategories
+const CONTENT_TYPE_CATEGORIES = [
+  {
+    id: "beauty",
+    name: "Beauty",
+    subcategories: [
+      "Skincare",
+      "Makeup",
+      "Haircare",
+      "Fragrance",
+      "Nail Art",
+      "Men's Grooming",
+      "K-Beauty",
+    ],
+  },
+  {
+    id: "fashion",
+    name: "Fashion",
+    subcategories: [
+      "Outfits",
+      "Streetwear",
+      "Luxury",
+      "Athleisure",
+      "Accessories",
+      "Footwear",
+      "Sustainable Fashion",
+    ],
+  },
+  {
+    id: "fitness",
+    name: "Fitness",
+    subcategories: [
+      "Gym Workouts",
+      "Home Workouts",
+      "Yoga & Pilates",
+      "Running",
+      "Nutrition",
+      "Supplements",
+      "Crossfit",
+    ],
+  },
+  {
+    id: "food",
+    name: "Food",
+    subcategories: [
+      "Recipes",
+      "Restaurant Reviews",
+      "Street Food",
+      "Desserts",
+      "Beverages (Coffee/Tea)",
+      "Vegan & Plant-based",
+      "Product Taste Tests",
+    ],
+  },
+  {
+    id: "gaming",
+    name: "Gaming",
+    subcategories: [
+      "Mobile Games",
+      "Console / PC Games",
+      "Esports",
+      "Walkthroughs / Let's Play",
+      "Game Reviews",
+      "Game Tips & Tricks",
+      "Live Streaming",
+    ],
+  },
+  {
+    id: "tech",
+    name: "Tech",
+    subcategories: [
+      "Smartphones",
+      "Laptops & PCs",
+      "Smart Home",
+      "Wearables",
+      "Apps",
+      "Software & SaaS",
+      "Gadget Reviews",
+    ],
+  },
+  {
+    id: "finance",
+    name: "Finance",
+    subcategories: [
+      "Personal Finance",
+      "Investing",
+      "Crypto",
+      "Fintech Apps",
+      "Money Saving Tips",
+      "Tax & Accounting",
+    ],
+  },
+  {
+    id: "travel",
+    name: "Travel",
+    subcategories: [
+      "Travel Vlogs",
+      "Budget Travel",
+      "Luxury Travel",
+      "Hotel Reviews",
+      "Local Guides",
+      "Travel Gear",
+    ],
+  },
+  {
+    id: "home_decor",
+    name: "Home & Decor",
+    subcategories: [
+      "Interior Design",
+      "DIY Projects",
+      "Organization Hacks",
+      "Cleaning Tips",
+      "Home Appliances",
+      "Small Space Ideas",
+    ],
+  },
+  {
+    id: "education",
+    name: "Education",
+    subcategories: [
+      "Study Tips",
+      "Course Reviews",
+      "Skill Tutorials",
+      "Language Learning",
+      "Career Advice",
+      "Exam Prep",
+    ],
+  },
+  {
+    id: "art_diy",
+    name: "Art & DIY",
+    subcategories: [
+      "Painting",
+      "Drawing",
+      "Crafts",
+      "Prints & Merch",
+      "Handmade Products",
+      "Design Tutorials",
+    ],
+  },
+  {
+    id: "parenting",
+    name: "Parenting",
+    subcategories: [
+      "Baby Care",
+      "Toddler Activities",
+      "Kids Education",
+      "Parenting Tips",
+      "Product Reviews for Parents",
+    ],
+  },
+  {
+    id: "sports",
+    name: "Sports",
+    subcategories: [
+      "Football / Soccer",
+      "Basketball",
+      "Cricket",
+      "Running & Training",
+      "Cycling",
+      "Outdoor Adventure",
+    ],
+  },
+  {
+    id: "auto",
+    name: "Auto",
+    subcategories: [
+      "Cars",
+      "Bikes",
+      "Electric Vehicles (EVs)",
+      "Auto Accessories",
+      "Car Reviews",
+      "Maintenance Tips",
+    ],
+  },
+  {
+    id: "pets",
+    name: "Pets",
+    subcategories: [
+      "Pet Care",
+      "Pet Training",
+      "Pet Food & Products",
+      "Funny Pet Videos",
+      "Pet Health",
+    ],
+  },
+  {
+    id: "business",
+    name: "Business",
+    subcategories: [
+      "Startups",
+      "SaaS & Tools",
+      "Productivity",
+      "Marketing Tips",
+      "Side Hustles",
+    ],
+  },
+  {
+    id: "entertainment",
+    name: "Entertainment",
+    subcategories: [
+      "Comedy",
+      "Drama",
+      "Romance",
+      "Horror",
+      "Emotional / Sad",
+      "Memes",
+      "Reaction Videos",
+      "Sketches / Skits",
+      "Parodies",
+      "Trailers & Reviews",
+    ],
+  },
+  {
+    id: "music_dance",
+    name: "Music & Dance",
+    subcategories: [
+      "Covers",
+      "Original Music",
+      "Music Production",
+      "Dance Choreography",
+      "Instrument Tutorials",
+    ],
+  },
+  {
+    id: "photo_video",
+    name: "Photography & Video",
+    subcategories: [
+      "Camera Gear",
+      "Editing Tutorials",
+      "Cinematography",
+      "Mobile Filmmaking",
+      "Lighting & Sound",
+    ],
+  },
+  {
+    id: "sustainability",
+    name: "Sustainability",
+    subcategories: [
+      "Eco Products",
+      "Zero Waste",
+      "Sustainable Fashion",
+      "Green Tech",
+      "Upcycling",
+    ],
+  },
+] as const;
+
 // Define type for prize objects globally within the file
 type PrizeInfo = {
   position: number;
@@ -2273,28 +2521,36 @@ export function ContestClientPage({
                       {contest.contest_type === "cpm" &&
                         contest.contest_based_details?.cpm_contest
                           ?.flat_fee_bonus && (
-                          <div className={cn(
-                            "flex items-center justify-between p-3 rounded-lg border transition-all duration-300",
-                            isDark
-                              ? "bg-gradient-to-r from-green-900/40 to-emerald-900/40 border-green-400/40"
-                              : "bg-gradient-to-r from-green-50 to-green-50 border-green-200"
-                          )}>
+                          <div
+                            className={cn(
+                              "flex items-center justify-between p-3 rounded-lg border transition-all duration-300",
+                              isDark
+                                ? "bg-gradient-to-r from-green-900/40 to-emerald-900/40 border-green-400/40"
+                                : "bg-gradient-to-r from-green-50 to-green-50 border-green-200"
+                            )}
+                          >
                             <div className="flex items-center gap-3">
-                              <Gift className={cn(
-                                "h-5 w-5",
-                                isDark ? "text-green-400" : "text-green-600"
-                              )} />
-                              <span className={cn(
-                                "font-medium",
-                                isDark ? "text-slate-100" : "text-slate-900"
-                              )}>
+                              <Gift
+                                className={cn(
+                                  "h-5 w-5",
+                                  isDark ? "text-green-400" : "text-green-600"
+                                )}
+                              />
+                              <span
+                                className={cn(
+                                  "font-medium",
+                                  isDark ? "text-slate-100" : "text-slate-900"
+                                )}
+                              >
                                 Guaranteed Bonus
                               </span>
                               <div className="group relative">
-                                <Info className={cn(
-                                  "h-4 w-4 cursor-help",
-                                  isDark ? "text-green-400" : "text-green-600"
-                                )} />
+                                <Info
+                                  className={cn(
+                                    "h-4 w-4 cursor-help",
+                                    isDark ? "text-green-400" : "text-green-600"
+                                  )}
+                                />
                                 <div
                                   className={cn(
                                     "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center",
@@ -2311,24 +2567,28 @@ export function ContestClientPage({
                               </div>
                             </div>
                             <div className="text-right">
-                              <div className={cn(
-                                "text-lg font-bold",
-                                isDark ? "text-green-100" : "text-green-900"
-                              )}>
+                              <div
+                                className={cn(
+                                  "text-lg font-bold",
+                                  isDark ? "text-green-100" : "text-green-900"
+                                )}
+                              >
                                 {formatMoney(
                                   contest.contest_based_details.cpm_contest
                                     .flat_fee_bonus
-                                )} 
+                                )}
                               </div>
-                              <div className={cn(
-                                "text-xs",
-                                isDark ? "text-green-300" : "text-green-700"
-                              )}>
+                              <div
+                                className={cn(
+                                  "text-xs",
+                                  isDark ? "text-green-300" : "text-green-700"
+                                )}
+                              >
                                 per verified submission
                               </div>
                             </div>
                           </div>
-                         )} 
+                        )}
 
                       {/* Multiple Submissions */}
                       {(contest as any).multiple_submissions_enabled && (
@@ -3026,6 +3286,165 @@ export function ContestClientPage({
                       </div>
                     </div>
                   </div>
+
+                  {/* Categories Section */}
+                  {contest.categories &&
+                    Array.isArray(contest.categories) &&
+                    contest.categories.length > 0 && (
+                      <div className="space-y-3 mt-6">
+                        <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                          <Tag className="h-5 w-5 text-purple-600" />
+                          Categories
+                        </h3>
+                        <div
+                          className={cn(
+                            "border rounded-xl p-4",
+                            isDark
+                              ? "border-purple-600 bg-purple-950/50"
+                              : "border-purple-300 bg-purple-50/50"
+                          )}
+                        >
+                          <div className="flex flex-wrap gap-2">
+                            {contest.categories.map((categoryId: string) => {
+                              const category = CONTENT_TYPE_CATEGORIES.find(
+                                (cat) => cat.id === categoryId
+                              );
+                              return (
+                                <span
+                                  key={categoryId}
+                                  className={cn(
+                                    "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                    isDark
+                                      ? "bg-purple-600/30 text-purple-200 border border-purple-500/50"
+                                      : "bg-purple-100 text-purple-800 border border-purple-300"
+                                  )}
+                                >
+                                  {category ? category.name : categoryId}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                  {/* Subcategories Section */}
+                  {contest.subcategories &&
+                    (() => {
+                      // Handle both grouped format and flat array format
+                      let subcategoriesToDisplay: Array<{
+                        category: string;
+                        subcategory: string;
+                      }> = [];
+
+                      if (Array.isArray(contest.subcategories)) {
+                        // Old flat array format
+                        subcategoriesToDisplay = contest.subcategories;
+                      } else if (
+                        typeof contest.subcategories === "object" &&
+                        contest.subcategories !== null
+                      ) {
+                        // New grouped format: {"beauty": ["Skincare", "Makeup"], ...}
+                        const grouped = contest.subcategories as Record<
+                          string,
+                          string[]
+                        >;
+                        Object.keys(grouped).forEach((category) => {
+                          const subcats = grouped[category];
+                          if (Array.isArray(subcats)) {
+                            subcats.forEach((subcat) => {
+                              subcategoriesToDisplay.push({
+                                category,
+                                subcategory: subcat,
+                              });
+                            });
+                          }
+                        });
+                      }
+
+                      return subcategoriesToDisplay.length > 0 ? (
+                        <div className="space-y-3 mt-6">
+                          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                            <Tag className="h-5 w-5 text-indigo-600" />
+                            Subcategories
+                          </h3>
+                          <div
+                            className={cn(
+                              "border rounded-xl p-4",
+                              isDark
+                                ? "border-indigo-600 bg-indigo-950/50"
+                                : "border-indigo-300 bg-indigo-50/50"
+                            )}
+                          >
+                            <div className="flex flex-wrap gap-2">
+                              {subcategoriesToDisplay.map(
+                                (
+                                  item: {
+                                    category: string;
+                                    subcategory: string;
+                                  },
+                                  index: number
+                                ) => {
+                                  const category = CONTENT_TYPE_CATEGORIES.find(
+                                    (cat) => cat.id === item.category
+                                  );
+                                  return (
+                                    <span
+                                      key={`${item.category}-${item.subcategory}-${index}`}
+                                      className={cn(
+                                        "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                        isDark
+                                          ? "bg-indigo-600/30 text-indigo-200 border border-indigo-500/50"
+                                          : "bg-indigo-100 text-indigo-800 border border-indigo-300"
+                                      )}
+                                    >
+                                      {category ? category.name : item.category}
+                                      : {item.subcategory}
+                                    </span>
+                                  );
+                                }
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+
+                  {/* Interests Section */}
+                  {contest.interests &&
+                    Array.isArray(contest.interests) &&
+                    contest.interests.length > 0 && (
+                      <div className="space-y-3 mt-6">
+                        <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                          <Star className="h-5 w-5 text-yellow-600" />
+                          Interests
+                        </h3>
+                        <div
+                          className={cn(
+                            "border rounded-xl p-4",
+                            isDark
+                              ? "border-yellow-600 bg-yellow-950/50"
+                              : "border-yellow-300 bg-yellow-50/50"
+                          )}
+                        >
+                          <div className="flex flex-wrap gap-2">
+                            {contest.interests.map((interest: string) => (
+                              <span
+                                key={interest}
+                                className={cn(
+                                  "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                  isDark
+                                    ? "bg-yellow-600/30 text-yellow-200 border border-yellow-500/50"
+                                    : "bg-yellow-100 text-yellow-800 border border-yellow-300"
+                                )}
+                              >
+                                {interest}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                 </div>
 
                 {/* 3. CONTENT REQUIREMENTS - Brief and Content Type */}
@@ -3777,11 +4196,12 @@ export function ContestClientPage({
             ) : leaderboard.length === 0 && totalLeaderboardEntries === 0 ? (
               <div className="text-center py-8">
                 <Trophy className="mx-auto h-12 w-12 text-slate-400" />
-                <p 
+                <p
                   className={cn(
                     "mb-2",
                     isDark ? "text-slate-300" : "text-slate-600"
-                  )}>
+                  )}
+                >
                   No submissions yet. Be the first!
                 </p>
               </div>
