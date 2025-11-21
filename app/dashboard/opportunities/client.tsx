@@ -49,6 +49,7 @@ import {
 import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
+
 import {
   isCountryInContestRegions,
   extractCountryFromRegionJsonb,
@@ -60,6 +61,8 @@ type StatusFilterType = "all" | "live" | "upcoming" | "completed";
 type PlatformFilterType = "all" | "youtube" | "instagram"; // Add more as needed
 type ContestTypeFilterType = "all" | "leaderboard" | "cpm";
 type SortOptionType =
+  | "relevance_desc"
+  | "relevance_asc"
   | "start_date_desc"
   | "start_date_asc"
   | "end_date_asc"
@@ -83,6 +86,11 @@ export default function OpportunitiesPage({
   const [hasCheckedGuidelines, setHasCheckedGuidelines] = useState(false);
   const [userCountry, setUserCountry] = useState<string | null>(null);
   const [userRegion, setUserRegion] = useState<string | null>(null);
+  const [creatorCategories, setCreatorCategories] = useState<string[]>([]);
+  const [creatorSubcategories, setCreatorSubcategories] = useState<
+    Record<string, string[]>
+  >({});
+  const [creatorInterests, setCreatorInterests] = useState<string[]>([]);
   const router = useRouter();
   const supabase = createClient();
 
@@ -126,7 +134,7 @@ export default function OpportunitiesPage({
     useState<PlatformFilterType>("all");
   const [typeFilter, setTypeFilter] = useState<ContestTypeFilterType>("all");
   const [sortOption, setSortOption] =
-    useState<SortOptionType>("start_date_desc");
+    useState<SortOptionType>("relevance_desc");
   const [displayedContests, setDisplayedContests] = useState<any[]>([]);
   const [mode, setMode] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {
@@ -463,7 +471,9 @@ export default function OpportunitiesPage({
           // No cache - query database once
           const { data: creatorProfile, error: profileError } = await supabase
             .from("creator_profiles")
-            .select("has_seen_guidelines, country")
+            .select(
+              "has_seen_guidelines, country, categories, subcategories, interests"
+            )
             .eq("id", currentUser.id)
             .single();
 
@@ -486,6 +496,69 @@ export default function OpportunitiesPage({
           }
           setHasCheckedGuidelines(true);
         }
+
+        // Fetch creator's categories, subcategories, and interests for filtering
+        // Use local variables since state updates are async
+        let localCreatorCategories: string[] = [];
+        let localCreatorSubcategories: Record<string, string[]> = {};
+        let localCreatorInterests: string[] = [];
+
+        // Fetch from database
+        const { data: creatorProfileData } = await supabase
+          .from("creator_profiles")
+          .select("categories, subcategories, interests")
+          .eq("id", currentUser.id)
+          .single();
+
+        if (creatorProfileData) {
+          if (creatorProfileData.categories) {
+            localCreatorCategories = Array.isArray(
+              creatorProfileData.categories
+            )
+              ? creatorProfileData.categories
+              : [];
+          }
+
+          if (creatorProfileData.subcategories) {
+            // Handle both object format and array format
+            if (Array.isArray(creatorProfileData.subcategories)) {
+              // If it's an array of {category, subcategory} objects
+              (creatorProfileData.subcategories as any[]).forEach(
+                (item: any) => {
+                  if (item.category && item.subcategory) {
+                    if (!localCreatorSubcategories[item.category]) {
+                      localCreatorSubcategories[item.category] = [];
+                    }
+                    if (
+                      !localCreatorSubcategories[item.category].includes(
+                        item.subcategory
+                      )
+                    ) {
+                      localCreatorSubcategories[item.category].push(
+                        item.subcategory
+                      );
+                    }
+                  }
+                }
+              );
+            } else if (typeof creatorProfileData.subcategories === "object") {
+              // If it's already an object
+              localCreatorSubcategories =
+                creatorProfileData.subcategories as Record<string, string[]>;
+            }
+          }
+
+          if (creatorProfileData.interests) {
+            localCreatorInterests = Array.isArray(creatorProfileData.interests)
+              ? creatorProfileData.interests
+              : [];
+          }
+        }
+
+        // Update state for use in scoring function
+        setCreatorCategories(localCreatorCategories);
+        setCreatorSubcategories(localCreatorSubcategories);
+        setCreatorInterests(localCreatorInterests);
 
         const { data: contests, error: contestError } = await supabase
           .from("contests_with_status")
@@ -544,7 +617,7 @@ export default function OpportunitiesPage({
               return contest;
             })
           );
-
+        
           // Filter contests based on user's countries (both registration info and creator profile)
           const regionFilteredContests = contestsWithCalculatedBudgets.filter(
             (contest) => {
@@ -578,6 +651,147 @@ export default function OpportunitiesPage({
 
     fetchData(user);
   }, [user, router, supabase]);
+
+  // Calculate relevance score for a contest
+  const calculateRelevanceScore = (contest: any): number => {
+    let score = 0;
+
+    const contestCategories = Array.isArray(contest.categories)
+      ? contest.categories
+      : [];
+    const contestSubcategories =
+      typeof contest.subcategories === "object" &&
+      contest.subcategories !== null
+        ? (contest.subcategories as Record<string, string[]>)
+        : {};
+    const contestInterests = Array.isArray(contest.interests)
+      ? contest.interests
+      : [];
+
+    // Check if contest has preferences set
+    const contestHasPreferences =
+      contestCategories.length > 0 ||
+      Object.keys(contestSubcategories).length > 0 ||
+      contestInterests.length > 0;
+
+    // If creator has no preferences set, prioritize contests with preferences
+    if (
+      creatorCategories.length === 0 &&
+      Object.keys(creatorSubcategories).length === 0 &&
+      creatorInterests.length === 0
+    ) {
+      // Give a bonus score to contests that have preferences (preferred contests)
+      // This ensures they come first when sorted by relevance
+      if (contestHasPreferences) {
+        return 100; // Higher score for preferred contests
+      }
+      return 0; // No preferences contests get lower score
+    }
+
+    // Creator has preferences - calculate match score
+    if (creatorCategories.length > 0 && contestCategories.length > 0) {
+      const matchingCategories = creatorCategories.filter((cat) =>
+        contestCategories.includes(cat)
+      );
+      const M = matchingCategories.length;
+      const N = contestCategories.length; // Use contest categories as denominator
+      if (M > 0 && N > 0) {
+        // Calculate proportional score: (M / N) * 60, rounded
+        // If all contest categories match, get full 60 points
+        const categoryScore = Math.round((M / N) * 60);
+        score += categoryScore;
+      }
+    }
+
+    // Sub-category match: proportional points based on contest requirements (M/contestSubcategories * 30, rounded)
+    if (Object.keys(contestSubcategories).length > 0) {
+      let totalContestSubcategories = 0;
+      let matchingSubcategories = 0;
+
+      // Calculate based on contest's subcategories, not user's
+      for (const [category, contestSubcats] of Object.entries(
+        contestSubcategories
+      )) {
+        totalContestSubcategories += contestSubcats.length;
+        const creatorSubcats = creatorSubcategories[category] || [];
+        const matchingSubcats = contestSubcats.filter((subcat) =>
+          creatorSubcats.includes(subcat)
+        );
+        matchingSubcategories += matchingSubcats.length;
+      }
+
+      if (matchingSubcategories > 0 && totalContestSubcategories > 0) {
+        // Calculate proportional score: (M / N) * 30, rounded
+        // If all contest subcategories match, get full 30 points
+        const subcategoryScore = Math.round(
+          (matchingSubcategories / totalContestSubcategories) * 30
+        );
+        score += subcategoryScore;
+      }
+    }
+
+    // Interest match: proportional points based on contest requirements (M/contestInterests * 10, rounded)
+    if (creatorInterests.length > 0 && contestInterests.length > 0) {
+      const matchingInterests = creatorInterests.filter((interest) =>
+        contestInterests.includes(interest)
+      );
+      const M = matchingInterests.length;
+      const N = contestInterests.length; // Use contest interests as denominator
+      if (M > 0 && N > 0) {
+        // Calculate proportional score: (M / N) * 10, rounded
+        // If all contest interests match, get full 10 points
+        const interestScore = Math.round((M / N) * 10);
+        score += interestScore;
+      }
+    }
+
+    return score;
+  };
+
+  // Get match details for display
+  const getMatchDetails = (contest: any) => {
+    const score = calculateRelevanceScore(contest);
+    const maxPossibleScore = 100; // Category (60) + Subcategory (30) + Interests (10 max)
+    const percentage = Math.min((score / maxPossibleScore) * 100, 100);
+
+    let matchLabel = "";
+    let matchColor = "gray";
+
+    if (
+      creatorCategories.length === 0 &&
+      Object.keys(creatorSubcategories).length === 0 &&
+      creatorInterests.length === 0
+    ) {
+      // Creator has no preferences
+      if (score === 100) {
+        matchLabel = "Preferred";
+        matchColor = "blue";
+      } else {
+        matchLabel = "General";
+        matchColor = "gray";
+      }
+    } else {
+      // Creator has preferences
+      if (score >= 70) {
+        matchLabel = "Perfect Match";
+        matchColor = "green";
+      } else if (score >= 50) {
+        matchLabel = "Great Match";
+        matchColor = "emerald";
+      } else if (score >= 30) {
+        matchLabel = "Good Match";
+        matchColor = "yellow";
+      } else if (score > 0) {
+        matchLabel = "Partial Match";
+        matchColor = "orange";
+      } else {
+        matchLabel = "";
+        matchColor = "gray";
+      }
+    }
+
+    return { score, percentage, matchLabel, matchColor };
+  };
 
   // useEffect for filtering and sorting
   useEffect(() => {
@@ -614,6 +828,16 @@ export default function OpportunitiesPage({
     // Sorting
     contestsToDisplay.sort((a, b) => {
       switch (sortOption) {
+        case "relevance_desc":
+          const scoreA = calculateRelevanceScore(a);
+          const scoreB = calculateRelevanceScore(b);
+          // Sort by score descending (highest first)
+          return scoreB - scoreA;
+        case "relevance_asc":
+          const scoreA_asc = calculateRelevanceScore(a);
+          const scoreB_asc = calculateRelevanceScore(b);
+          // Sort by score ascending (lowest first)
+          return scoreA_asc - scoreB_asc;
         case "start_date_desc":
           if (!a.start_date) return 1; // push contests without start_date to the bottom
           if (!b.start_date) return -1;
@@ -664,9 +888,11 @@ export default function OpportunitiesPage({
           ) {
             valueB = b.contest_based_details.cpm_contest.total_budget; // Assuming budget is in cents
           }
-          return sortOption === "value_desc"
-            ? valueB - valueA
-            : valueA - valueB;
+          if (sortOption === "value_desc") {
+            return valueB - valueA;
+          } else {
+            return valueA - valueB;
+          }
         case "cpm_rate_desc":
         case "cpm_rate_asc":
           const rateA =
@@ -699,7 +925,16 @@ export default function OpportunitiesPage({
     });
 
     setDisplayedContests(contestsToDisplay);
-  }, [availableContests, statusFilter, platformFilter, typeFilter, sortOption]);
+  }, [
+    availableContests,
+    statusFilter,
+    platformFilter,
+    typeFilter,
+    sortOption,
+    creatorCategories,
+    creatorSubcategories,
+    creatorInterests,
+  ]);
 
   const handleViewDetails = (id: string) => {
     router.push(`/dashboard/opportunities/${id}`);
@@ -707,7 +942,7 @@ export default function OpportunitiesPage({
   const resetFilters = () => {
     setPlatformFilter("all");
     setTypeFilter("all");
-    setSortOption("start_date_desc");
+    setSortOption("relevance_desc");
   };
   if (isFetchingData) {
     return (
@@ -910,6 +1145,12 @@ export default function OpportunitiesPage({
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent isDark={isDark}>
+            <SelectItem value="relevance_desc" isDark={isDark}>
+              Niche Category: Highest to Lowest
+            </SelectItem>
+            <SelectItem value="relevance_asc" isDark={isDark}>
+              Niche Category: Lowest to Highest
+            </SelectItem>
             <SelectItem value="start_date_asc" isDark={isDark}>
               Start Date: Soonest First
             </SelectItem>
@@ -992,15 +1233,113 @@ export default function OpportunitiesPage({
                   </div>
                 </div>
                 <CardHeader className="p-4 pb-2">
-                  <CardTitle
-                    className="text-lg font-bold mr-2 leading-tight"
-                    style={{
-                      color: isDark ? "white" : "#1e293b",
-                      transition: "none",
-                    }}
-                  >
-                    {contest.title}
-                  </CardTitle>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <CardTitle
+                      className="text-lg font-bold leading-tight flex-1"
+                      style={{
+                        color: isDark ? "white" : "#1e293b",
+                        transition: "none",
+                      }}
+                    >
+                      {contest.title}
+                    </CardTitle>
+                    {(() => {
+                      // Don't show match indicator if creator hasn't set profile preferences
+                      if (
+                        creatorCategories.length === 0 &&
+                        Object.keys(creatorSubcategories).length === 0 &&
+                        creatorInterests.length === 0
+                      ) {
+                        return null;
+                      }
+
+                      const matchDetails = getMatchDetails(contest);
+                      const colorMap: Record<
+                        string,
+                        { bg: string; text: string; border: string }
+                      > = {
+                        green: {
+                          bg: isDark ? "bg-green-900/30" : "bg-green-50",
+                          text: isDark ? "text-green-300" : "text-green-700",
+                          border: isDark
+                            ? "border-green-700/50"
+                            : "border-green-200",
+                        },
+                        emerald: {
+                          bg: isDark ? "bg-emerald-900/30" : "bg-emerald-50",
+                          text: isDark
+                            ? "text-emerald-300"
+                            : "text-emerald-700",
+                          border: isDark
+                            ? "border-emerald-700/50"
+                            : "border-emerald-200",
+                        },
+                        yellow: {
+                          bg: isDark ? "bg-yellow-900/30" : "bg-yellow-50",
+                          text: isDark ? "text-yellow-300" : "text-yellow-700",
+                          border: isDark
+                            ? "border-yellow-700/50"
+                            : "border-yellow-200",
+                        },
+                        orange: {
+                          bg: isDark ? "bg-orange-900/30" : "bg-orange-50",
+                          text: isDark ? "text-orange-300" : "text-orange-700",
+                          border: isDark
+                            ? "border-orange-700/50"
+                            : "border-orange-200",
+                        },
+                        blue: {
+                          bg: isDark ? "bg-blue-900/30" : "bg-blue-50",
+                          text: isDark ? "text-blue-300" : "text-blue-700",
+                          border: isDark
+                            ? "border-blue-700/50"
+                            : "border-blue-200",
+                        },
+                        gray: {
+                          bg: isDark ? "bg-gray-800/30" : "bg-gray-50",
+                          text: isDark ? "text-gray-400" : "text-gray-600",
+                          border: isDark
+                            ? "border-gray-700/50"
+                            : "border-gray-200",
+                        },
+                      };
+
+                      const colors =
+                        colorMap[matchDetails.matchColor] || colorMap.gray;
+
+                      // Don't show badge if matchLabel is empty
+                      if (!matchDetails.matchLabel) {
+                        return null;
+                      }
+
+                      return (
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[11px] font-semibold px-2 py-0.5 border",
+                              colors.bg,
+                              colors.text,
+                              colors.border
+                            )}
+                            title={`Niche Category Score: ${matchDetails.score} points`}
+                          >
+                            {matchDetails.matchLabel}
+                          </Badge>
+                          {matchDetails.score > 0 && (
+                            <div
+                              className={cn(
+                                "text-[10px] font-medium",
+                                colors.text
+                              )}
+                            >
+                              {matchDetails.score} pts
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
                   <div
@@ -1080,6 +1419,31 @@ export default function OpportunitiesPage({
                           Bonus Available
                         </Badge>
                       )}
+                      {(() => {
+                        const matchDetails = getMatchDetails(contest);
+                        if (
+                          creatorCategories.length === 0 &&
+                          Object.keys(creatorSubcategories).length === 0 &&
+                          creatorInterests.length === 0
+                        ) {
+                          // Don't show if creator has no preferences
+                          return null;
+                        }
+                        return (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[12px]",
+                              isDark
+                                ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
+                                : "bg-amber-50 text-amber-700 border-amber-200"
+                            )}
+                          >
+                            <Tag className="h-3 w-3 mr-1" />
+                            Niche Category: {matchDetails.score} points
+                          </Badge>
+                        );
+                      })()}
                     </div>
 
                     <div className="flex items-center">
