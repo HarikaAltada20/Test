@@ -696,15 +696,42 @@ export default function ContestDetailClient({
         throw new Error(message);
       }
 
-      // Update the local submissions state with latest fields from API (status + earnings)
+      // Update the local submissions state with latest fields from API (status + payouts + bonus)
       const updated = result?.submission;
       setCurrentSubmissions((prev) =>
         prev.map((sub) => {
           if (sub.id !== submissionId) return sub;
-          const merged: any = { ...sub, status: newStatus };
-          if (updated && typeof updated.earnings !== "undefined") {
-            merged.earnings = updated.earnings;
+
+          const merged: any = { ...sub };
+          if (updated?.status) {
+            merged.status = updated.status;
+          } else if (newStatus === "mark_bonus_paid") {
+            // Bonus-only payments shouldn't change status
+            merged.status = sub.status;
+          } else if (newStatus === "mark_both_paid") {
+            merged.status = "paid";
+          } else {
+            merged.status = newStatus;
           }
+
+          if (updated) {
+            if (typeof updated.earnings !== "undefined") {
+              merged.earnings = updated.earnings;
+            }
+            if (typeof updated.paid !== "undefined") {
+              merged.paid = updated.paid;
+            }
+            if (typeof updated.paid_at !== "undefined") {
+              merged.paid_at = updated.paid_at;
+            }
+            if (typeof updated.bonus_paid !== "undefined") {
+              merged.bonus_paid = updated.bonus_paid;
+            }
+            if (typeof updated.bonus_paid_at !== "undefined") {
+              merged.bonus_paid_at = updated.bonus_paid_at;
+            }
+          }
+
           return merged;
         })
       );
