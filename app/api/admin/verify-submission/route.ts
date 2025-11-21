@@ -110,10 +110,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
     }
 
+    const shouldMarkPaid = action === SUBMISSION_STATUS.paid || action === 'mark_both_paid';
+    const normalizedStatus =
+      action === 'mark_bonus_paid'
+        ? submission.status
+        : shouldMarkPaid
+        ? SUBMISSION_STATUS.paid
+        : action;
+
     // Update the submission status
     const updateData: any = {
-      status: action,
+      status: normalizedStatus,
     };
+
+    if (shouldMarkPaid) {
+      updateData.paid = true;
+      updateData.paid_at = new Date().toISOString();
+    }
 
     // Clear views_locked when changing status to pending or rejected
     if (action === 'pending' || action === 'rejected') {
@@ -138,7 +151,7 @@ export async function POST(request: Request) {
         timestamp: new Date().toISOString(),
         updatedBy: currentUserId
       };
-    } else if (action === 'paid' && paymentDetails) {
+    } else if (shouldMarkPaid && paymentDetails) {
       // Store payment metadata
       updateData.metadata = {
         type: 'payment',
@@ -536,7 +549,7 @@ export async function POST(request: Request) {
     // Always return the latest submission data (including updated earnings)
     const { data: latestSubmission } = await supabaseAdmin
       .from('submissions')
-      .select('id, status, earnings')
+      .select('id, status, earnings, paid, paid_at, bonus_paid, bonus_paid_at')
       .eq('id', submissionId)
       .single();
 
