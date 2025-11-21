@@ -1191,7 +1191,7 @@ export default function OpportunitiesPage({
           </SelectTrigger>
           <SelectContent isDark={isDark}>
             <SelectItem value="relevance_desc" isDark={isDark}>
-             Sort by
+             Niche Category: Highest to Lowest
             </SelectItem>
             <SelectItem value="start_date_asc" isDark={isDark}>
               Start Date: Soonest First
