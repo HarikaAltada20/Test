@@ -874,6 +874,15 @@ export default function OpportunitiesPage({
         Object.keys(contestSubcategories).length > 0 ||
         contestInterests.length > 0;
 
+      // If country is chosen and contest has preferences, check relevance score
+      // If score is 0, exclude the contest
+      if (userCountry && contestHasPreferences) {
+        const relevanceScore = calculateRelevanceScore(contest);
+        if (relevanceScore === 0) {
+          return false; // Don't show contests with 0 relevance score when country is chosen
+        }
+      }
+
       // If creator has no preferences and contest has preferences, filter out
       if (!creatorHasPreferences && contestHasPreferences) {
         return false; // Don't show contests with preferences if creator hasn't set preferences
@@ -996,6 +1005,7 @@ export default function OpportunitiesPage({
     creatorCategories,
     creatorSubcategories,
     creatorInterests,
+    userCountry,
   ]);
 
   const handleViewDetails = (id: string) => {
