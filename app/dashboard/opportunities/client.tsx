@@ -49,6 +49,12 @@ import {
 import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import {
   isCountryInContestRegions,
@@ -62,7 +68,6 @@ type PlatformFilterType = "all" | "youtube" | "instagram"; // Add more as needed
 type ContestTypeFilterType = "all" | "leaderboard" | "cpm";
 type SortOptionType =
   | "relevance_desc"
-  | "relevance_asc"
   | "start_date_desc"
   | "start_date_asc"
   | "end_date_asc"
@@ -617,7 +622,7 @@ export default function OpportunitiesPage({
               return contest;
             })
           );
-        
+
           // Filter contests based on user's countries (both registration info and creator profile)
           const regionFilteredContests = contestsWithCalculatedBudgets.filter(
             (contest) => {
@@ -674,21 +679,25 @@ export default function OpportunitiesPage({
       Object.keys(contestSubcategories).length > 0 ||
       contestInterests.length > 0;
 
-    // If creator has no preferences set, prioritize contests with preferences
-    if (
-      creatorCategories.length === 0 &&
-      Object.keys(creatorSubcategories).length === 0 &&
-      creatorInterests.length === 0
-    ) {
-      // Give a bonus score to contests that have preferences (preferred contests)
-      // This ensures they come first when sorted by relevance
-      if (contestHasPreferences) {
-        return 100; // Higher score for preferred contests
-      }
-      return 0; // No preferences contests get lower score
+    // Check if creator has preferences set
+    const creatorHasPreferences =
+      creatorCategories.length > 0 ||
+      Object.keys(creatorSubcategories).length > 0 ||
+      creatorInterests.length > 0;
+
+    // If creator has no preferences set, show all contests with score 0
+    // (they will be sorted by other criteria, not relevance)
+    if (!creatorHasPreferences) {
+      return 0;
     }
 
-    // Creator has preferences - calculate match score
+    // Creator has preferences - only calculate score based on actual matches
+    // If contest has no preferences, return 0 (no match possible)
+    if (!contestHasPreferences) {
+      return 0;
+    }
+
+    // Calculate match score based on actual matches
     if (creatorCategories.length > 0 && contestCategories.length > 0) {
       const matchingCategories = creatorCategories.filter((cat) =>
         contestCategories.includes(cat)
@@ -745,6 +754,7 @@ export default function OpportunitiesPage({
       }
     }
 
+    // Return score (will be 0 if no matches found)
     return score;
   };
 
@@ -757,21 +767,17 @@ export default function OpportunitiesPage({
     let matchLabel = "";
     let matchColor = "gray";
 
-    if (
-      creatorCategories.length === 0 &&
-      Object.keys(creatorSubcategories).length === 0 &&
-      creatorInterests.length === 0
-    ) {
-      // Creator has no preferences
-      if (score === 100) {
-        matchLabel = "Preferred";
-        matchColor = "blue";
-      } else {
-        matchLabel = "General";
-        matchColor = "gray";
-      }
+    const creatorHasPreferences =
+      creatorCategories.length > 0 ||
+      Object.keys(creatorSubcategories).length > 0 ||
+      creatorInterests.length > 0;
+
+    if (!creatorHasPreferences) {
+      // Creator has no preferences - show as general
+      matchLabel = "General";
+      matchColor = "gray";
     } else {
-      // Creator has preferences
+      // Creator has preferences - show match quality based on score
       if (score >= 70) {
         matchLabel = "Perfect Match";
         matchColor = "green";
@@ -785,6 +791,7 @@ export default function OpportunitiesPage({
         matchLabel = "Partial Match";
         matchColor = "orange";
       } else {
+        // Score is 0 - no matches found
         matchLabel = "";
         matchColor = "gray";
       }
@@ -825,6 +832,49 @@ export default function OpportunitiesPage({
       );
     }
 
+    // Filter out contests based on preferences matching
+    const creatorHasPreferences =
+      creatorCategories.length > 0 ||
+      Object.keys(creatorSubcategories).length > 0 ||
+      creatorInterests.length > 0;
+
+    contestsToDisplay = contestsToDisplay.filter((contest) => {
+      const contestCategories = Array.isArray(contest.categories)
+        ? contest.categories
+        : [];
+      const contestSubcategories =
+        typeof contest.subcategories === "object" &&
+        contest.subcategories !== null
+          ? (contest.subcategories as Record<string, string[]>)
+          : {};
+      const contestInterests = Array.isArray(contest.interests)
+        ? contest.interests
+        : [];
+
+      // Check if contest has preferences set (categories, subcategories, or interests)
+      const contestHasPreferences =
+        contestCategories.length > 0 ||
+        Object.keys(contestSubcategories).length > 0 ||
+        contestInterests.length > 0;
+
+      // If creator has no preferences and contest has preferences, filter out
+      if (!creatorHasPreferences && contestHasPreferences) {
+        return false; // Don't show contests with preferences if creator hasn't set preferences
+      }
+
+      // If creator has preferences and contest has preferences, only show if score > 0
+      if (creatorHasPreferences && contestHasPreferences) {
+        const relevanceScore = calculateRelevanceScore(contest);
+        // Don't show contests with 0 points if they have preferences set
+        return relevanceScore > 0;
+      }
+
+      // If contest has no preferences, show it (normal behavior)
+      // This covers: creator has preferences + contest has no preferences
+      // and: creator has no preferences + contest has no preferences
+      return true;
+    });
+
     // Sorting
     contestsToDisplay.sort((a, b) => {
       switch (sortOption) {
@@ -833,11 +883,6 @@ export default function OpportunitiesPage({
           const scoreB = calculateRelevanceScore(b);
           // Sort by score descending (highest first)
           return scoreB - scoreA;
-        case "relevance_asc":
-          const scoreA_asc = calculateRelevanceScore(a);
-          const scoreB_asc = calculateRelevanceScore(b);
-          // Sort by score ascending (lowest first)
-          return scoreA_asc - scoreB_asc;
         case "start_date_desc":
           if (!a.start_date) return 1; // push contests without start_date to the bottom
           if (!b.start_date) return -1;
@@ -1146,10 +1191,7 @@ export default function OpportunitiesPage({
           </SelectTrigger>
           <SelectContent isDark={isDark}>
             <SelectItem value="relevance_desc" isDark={isDark}>
-              Niche Category: Highest to Lowest
-            </SelectItem>
-            <SelectItem value="relevance_asc" isDark={isDark}>
-              Niche Category: Lowest to Highest
+             Sort by
             </SelectItem>
             <SelectItem value="start_date_asc" isDark={isDark}>
               Start Date: Soonest First
@@ -1243,102 +1285,7 @@ export default function OpportunitiesPage({
                     >
                       {contest.title}
                     </CardTitle>
-                    {(() => {
-                      // Don't show match indicator if creator hasn't set profile preferences
-                      if (
-                        creatorCategories.length === 0 &&
-                        Object.keys(creatorSubcategories).length === 0 &&
-                        creatorInterests.length === 0
-                      ) {
-                        return null;
-                      }
-
-                      const matchDetails = getMatchDetails(contest);
-                      const colorMap: Record<
-                        string,
-                        { bg: string; text: string; border: string }
-                      > = {
-                        green: {
-                          bg: isDark ? "bg-green-900/30" : "bg-green-50",
-                          text: isDark ? "text-green-300" : "text-green-700",
-                          border: isDark
-                            ? "border-green-700/50"
-                            : "border-green-200",
-                        },
-                        emerald: {
-                          bg: isDark ? "bg-emerald-900/30" : "bg-emerald-50",
-                          text: isDark
-                            ? "text-emerald-300"
-                            : "text-emerald-700",
-                          border: isDark
-                            ? "border-emerald-700/50"
-                            : "border-emerald-200",
-                        },
-                        yellow: {
-                          bg: isDark ? "bg-yellow-900/30" : "bg-yellow-50",
-                          text: isDark ? "text-yellow-300" : "text-yellow-700",
-                          border: isDark
-                            ? "border-yellow-700/50"
-                            : "border-yellow-200",
-                        },
-                        orange: {
-                          bg: isDark ? "bg-orange-900/30" : "bg-orange-50",
-                          text: isDark ? "text-orange-300" : "text-orange-700",
-                          border: isDark
-                            ? "border-orange-700/50"
-                            : "border-orange-200",
-                        },
-                        blue: {
-                          bg: isDark ? "bg-blue-900/30" : "bg-blue-50",
-                          text: isDark ? "text-blue-300" : "text-blue-700",
-                          border: isDark
-                            ? "border-blue-700/50"
-                            : "border-blue-200",
-                        },
-                        gray: {
-                          bg: isDark ? "bg-gray-800/30" : "bg-gray-50",
-                          text: isDark ? "text-gray-400" : "text-gray-600",
-                          border: isDark
-                            ? "border-gray-700/50"
-                            : "border-gray-200",
-                        },
-                      };
-
-                      const colors =
-                        colorMap[matchDetails.matchColor] || colorMap.gray;
-
-                      // Don't show badge if matchLabel is empty
-                      if (!matchDetails.matchLabel) {
-                        return null;
-                      }
-
-                      return (
-                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[11px] font-semibold px-2 py-0.5 border",
-                              colors.bg,
-                              colors.text,
-                              colors.border
-                            )}
-                            title={`Niche Category Score: ${matchDetails.score} points`}
-                          >
-                            {matchDetails.matchLabel}
-                          </Badge>
-                          {matchDetails.score > 0 && (
-                            <div
-                              className={cn(
-                                "text-[10px] font-medium",
-                                colors.text
-                              )}
-                            >
-                              {matchDetails.score} pts
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
+                   
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
@@ -1419,31 +1366,6 @@ export default function OpportunitiesPage({
                           Bonus Available
                         </Badge>
                       )}
-                      {(() => {
-                        const matchDetails = getMatchDetails(contest);
-                        if (
-                          creatorCategories.length === 0 &&
-                          Object.keys(creatorSubcategories).length === 0 &&
-                          creatorInterests.length === 0
-                        ) {
-                          // Don't show if creator has no preferences
-                          return null;
-                        }
-                        return (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[12px]",
-                              isDark
-                                ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
-                                : "bg-amber-50 text-amber-700 border-amber-200"
-                            )}
-                          >
-                            <Tag className="h-3 w-3 mr-1" />
-                            Niche Category: {matchDetails.score} points
-                          </Badge>
-                        );
-                      })()}
                     </div>
 
                     <div className="flex items-center">
