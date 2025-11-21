@@ -14,11 +14,10 @@ export async function GET(request: NextRequest) {
   const supabase = await createClient();
   try {
     //ipinfo.io
-   
+
     let country = null;
     let ip = null;
     let apiUsed = "none";
-
 
     const ipinfoUrl = "https://ipinfo.io/json";
     console.log(
@@ -256,15 +255,17 @@ export async function GET(request: NextRequest) {
 
         console.log(
           "[get-location] Existing country in registration_info:",
-          existingCountry
+          existingCountry,
+          "User ID:",
+          authUser.id
         );
-        console.log("[get-location] New country from API:", country);
+        console.log("[get-location] New country from API:", country, "IP:", ip);
 
         // Check if country changed
         const countryChanged = country && existingCountry !== country;
         console.log("[get-location] Country changed:", countryChanged);
 
-        // Only update if IP address changed or if we have new country 
+        // Only update if IP address changed or if we have new country
         const ipChanged = existingIp !== ip;
         console.log(
           "[get-location] IP changed:",
@@ -275,33 +276,34 @@ export async function GET(request: NextRequest) {
           ip
         );
 
-        // Check if user has no existing country 
+        // Check if user has no existing country
         const hasNoExistingCountry = !existingCountry;
 
-        // Check when location was last updated
+        // Check if user has no existing IP (different account scenario)
+        const hasNoExistingIp = !existingIp;
+
+        // Check when location was last updated (for logging only)
         const lastLocationUpdate =
           existingRegistrationInfo?.last_location_update;
-        const lastUpdateTime = lastLocationUpdate
-          ? new Date(lastLocationUpdate).getTime()
-          : 0;
-        const now = Date.now();
-        const oneHourAgo = now - 60 * 60 * 1000; 
-        const shouldRefreshDueToAge = lastUpdateTime < oneHourAgo;
 
         console.log(
           "[get-location] Last location update:",
-          lastLocationUpdate || "never",
-          "Should refresh due to age:",
-          shouldRefreshDueToAge
+          lastLocationUpdate || "never"
         );
 
         // update location
-        
+        // Always update if IP changed (user logged in from different location)
+        // or if country changed (more accurate detection)
+        // or if no existing country (first time)
+        // or if no existing IP (different account - ensures location is set for that account)
+        // or if never updated before
+        // Note: We don't use time-based checks to ensure location always updates
+        // when user logs in with different account, even from same location
         const shouldUpdate =
           ipChanged ||
           countryChanged ||
           hasNoExistingCountry ||
-          shouldRefreshDueToAge ||
+          hasNoExistingIp ||
           !lastLocationUpdate;
 
         if (shouldUpdate) {
@@ -312,11 +314,18 @@ export async function GET(request: NextRequest) {
             location_updated_at: new Date().toISOString(),
           };
 
-          // Update registration_info JSONB the country
+          // Update registration_info JSONB with the country
+          // Always use the newly detected country if available, otherwise preserve existing
+          // This ensures country is updated when user logs in from different location
           updateData.registration_info = {
             ...existingRegistrationInfo,
             ip_address: ip,
-            country: country || existingRegistrationInfo.country, // Preserve existing country
+            // Always use the newly detected country if we have one, otherwise preserve existing
+            // This ensures country updates correctly when user logs in from different location
+            country:
+              country !== null
+                ? country
+                : existingRegistrationInfo?.country || null,
             last_location_update: new Date().toISOString(),
           };
 
@@ -348,14 +357,14 @@ export async function GET(request: NextRequest) {
                 ? "Country changed"
                 : hasNoExistingCountry
                 ? "No existing country"
-                : shouldRefreshDueToAge
-                ? "Location refresh due to age"
+                : hasNoExistingIp
+                ? "No existing IP (different account)"
                 : "First time update"
             );
           }
         } else {
           console.log(
-            "[get-location] Skipping update - IP and country unchanged, and location was recently updated"
+            "[get-location] Skipping update - IP and country unchanged, and location data exists"
           );
         }
         // If IP address already exists and location data hasn't changed, skip update
@@ -367,7 +376,6 @@ export async function GET(request: NextRequest) {
       // Don't fail the request if DB save fails
     }
 
-  
     let region: string | null = null;
     if (country) {
       try {
@@ -380,9 +388,7 @@ export async function GET(request: NextRequest) {
             break;
           }
         }
-      } catch (error) {
-        
-      }
+      } catch (error) {}
     }
 
     return NextResponse.json({
