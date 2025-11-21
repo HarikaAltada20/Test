@@ -385,7 +385,10 @@ export default function OpportunitiesPage({
           localStorage.setItem(locationTimestampKey, Date.now().toString());
         }
 
-        // If not found in database or cache, fetch from API (fallback only)
+        // Always fetch location from API to refresh/update location
+        // This ensures location is updated when user logs in from different location
+        // The API will decide whether to update based on IP changes, country changes, etc.
+        // If no country found in database, use cache as fallback for immediate display
         if (userCountries.length === 0) {
           if (cachedLocation && isLocationCacheValid) {
             try {
@@ -400,35 +403,49 @@ export default function OpportunitiesPage({
             } catch (e) {
               console.error("Error parsing cached location:", e);
             }
-          } else {
-            // Fetch location from API (will also save to database if user is authenticated)
-            try {
-              const locationResponse = await fetch("/api/get-location");
-              if (locationResponse.ok) {
-                const locationData = await locationResponse.json();
-                if (locationData.country) {
-                  userCountries.push(locationData.country);
-                  currentUserCountry = locationData.country;
-                  currentUserRegion = locationData.region;
-                  setUserCountry(locationData.country);
-                  setUserRegion(locationData.region);
+          }
+        }
 
-                  // Cache the location
-                  localStorage.setItem(
-                    locationCacheKey,
-                    JSON.stringify(locationData)
-                  );
-                  localStorage.setItem(
-                    locationTimestampKey,
-                    Date.now().toString()
-                  );
-                }
+        // Always call API to refresh/update location (even if we already have a country)
+        // This ensures location is updated when user logs in with different account
+        // The API will update the database if IP changed, country changed, or location is stale
+        try {
+          const locationResponse = await fetch("/api/get-location");
+          if (locationResponse.ok) {
+            const locationData = await locationResponse.json();
+            if (locationData.country) {
+              // Add to countries list if not already present
+              if (!userCountries.includes(locationData.country)) {
+                userCountries.push(locationData.country);
               }
-            } catch (locationError) {
-              console.error("Error fetching user location:", locationError);
-              // Continue without location filtering if API fails
+
+              // Update current country if it changed or if we didn't have one
+              if (
+                !currentUserCountry ||
+                currentUserCountry !== locationData.country
+              ) {
+                currentUserCountry = locationData.country;
+                currentUserRegion = locationData.region;
+                setUserCountry(locationData.country);
+                setUserRegion(locationData.region);
+              }
+
+              // Cache the location
+              const locationCacheData = {
+                country: locationData.country,
+                region: locationData.region,
+                countries: userCountries,
+              };
+              localStorage.setItem(
+                locationCacheKey,
+                JSON.stringify(locationCacheData)
+              );
+              localStorage.setItem(locationTimestampKey, Date.now().toString());
             }
           }
+        } catch (locationError) {
+          console.error("Error fetching user location:", locationError);
+          // Continue without location filtering if API fails
         }
 
         const { data: userData, error: userError } = await supabase
@@ -1191,7 +1208,7 @@ export default function OpportunitiesPage({
           </SelectTrigger>
           <SelectContent isDark={isDark}>
             <SelectItem value="relevance_desc" isDark={isDark}>
-             Niche Category: Highest to Lowest
+              Niche Category: Highest to Lowest
             </SelectItem>
             <SelectItem value="start_date_asc" isDark={isDark}>
               Start Date: Soonest First
@@ -1285,7 +1302,6 @@ export default function OpportunitiesPage({
                     >
                       {contest.title}
                     </CardTitle>
-                   
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
