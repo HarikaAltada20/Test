@@ -319,7 +319,7 @@ export async function GET(request: NextRequest) {
 
             // Only set IP if it doesn't exist (first time registration)
             // Never update IP if it already exists (preserve registration IP)
-            // Only store valid public IPs (not localhost/loopback)
+           
             if (!existingIp && ip && isValidPublicIp(ip)) {
               updatedRegistrationInfo.ip_address = ip;
             } else if (!existingIp && ip && !isValidPublicIp(ip)) {

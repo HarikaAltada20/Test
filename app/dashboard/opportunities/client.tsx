@@ -1469,6 +1469,48 @@ export default function OpportunitiesPage({
                           </span>
                         </div>
                       )}
+                    {(() => {
+                      const contestCategories = Array.isArray(contest.categories)
+                        ? contest.categories
+                        : [];
+                      const contestSubcategories =
+                        typeof contest.subcategories === "object" &&
+                        contest.subcategories !== null
+                          ? (contest.subcategories as Record<string, string[]>)
+                          : {};
+                      const contestInterests = Array.isArray(contest.interests)
+                        ? contest.interests
+                        : [];
+                      const contestHasPreferences =
+                        contestCategories.length > 0 ||
+                        Object.keys(contestSubcategories).length > 0 ||
+                        contestInterests.length > 0;
+
+                      return contestHasPreferences ? (
+                        <div className="flex items-center">
+                          <Star className="h-4 w-4 mr-2 flex-shrink-0" />
+                          <span>
+                            Relevance Score:{" "}
+                            <span
+                              className={cn(
+                                "font-medium",
+                                isDark ? "text-white" : "text-slate-700"
+                              )}
+                            >
+                              {calculateRelevanceScore(contest)}
+                            </span>
+                            {(() => {
+                              const matchDetails = getMatchDetails(contest);
+                              return matchDetails.matchLabel ? (
+                                <span className="ml-1">
+                                  ({matchDetails.matchLabel})
+                                </span>
+                              ) : null;
+                            })()}
+                          </span>
+                        </div>
+                      ) : null;
+                    })()}
                     <div className="flex items-center">
                       <Info className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span>
