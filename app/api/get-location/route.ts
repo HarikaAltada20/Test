@@ -5,6 +5,24 @@ import countries from "i18n-iso-countries";
 countries.registerLocale(require("i18n-iso-countries/langs/en.json"));
 
 /**
+ * Check if an IP address is a valid public IP (not localhost/loopback)
+ */
+function isValidPublicIp(ip: string | null): boolean {
+  if (!ip) return false;
+
+  // List of localhost/loopback IPs to exclude
+  const localhostIps = [
+    "::1",
+    "127.0.0.1",
+    "0.0.0.0",
+    "localhost",
+    "::ffff:127.0.0.1", // IPv4-mapped IPv6 localhost
+  ];
+
+  return !localhostIps.includes(ip.toLowerCase());
+}
+
+/**
  * Get country from IP address using ipinfo.io (free tier)
  * Returns country name (and region name for backward compatibility)
  * Saves country to database in users.registration_info JSONB if user is authenticated
@@ -223,15 +241,18 @@ export async function GET(request: NextRequest) {
       apiUsed
     );
 
-    // If user is authenticated, save country to database
-    // Note: Only update if IP address changed or country is new
+    // If user is authenticated, handle country from registration_info
+    // Registration info stores IP at time of registration and should NOT be updated on API changes
+    // Logic:
+    // 1. If no country in registration_info: use stored IP to get country, patch and store it
+    // 2. If country exists: just extract it, no need to check or change IP
     try {
       const {
         data: { user: authUser },
       } = await supabase.auth.getUser();
 
-      if (authUser && ip) {
-        // First, check if IP address already exists in database
+      if (authUser) {
+        // First, check registration_info in database
         const { data: existingUser, error: fetchError } = await supabase
           .from("users")
           .select("registration_info")
@@ -256,124 +277,95 @@ export async function GET(request: NextRequest) {
         console.log(
           "[get-location] Existing country in registration_info:",
           existingCountry,
+          "Existing IP in registration_info:",
+          existingIp,
           "User ID:",
           authUser.id
         );
-        console.log("[get-location] New country from API:", country, "IP:", ip);
 
-        // Check if country changed
-        const countryChanged = country && existingCountry !== country;
-        console.log("[get-location] Country changed:", countryChanged);
-
-        // Only update if IP address changed or if we have new country
-        const ipChanged = existingIp !== ip;
-        console.log(
-          "[get-location] IP changed:",
-          ipChanged,
-          "Existing IP:",
-          existingIp,
-          "New IP:",
-          ip
-        );
-
-        // Check if user has no existing country
-        const hasNoExistingCountry = !existingCountry;
-
-        // Check if user has no existing IP (different account scenario)
-        const hasNoExistingIp = !existingIp;
-
-        // Check when location was last updated (for logging only)
-        const lastLocationUpdate =
-          existingRegistrationInfo?.last_location_update;
-
-        console.log(
-          "[get-location] Last location update:",
-          lastLocationUpdate || "never"
-        );
-
-        // update location
-        // Always update if IP changed (user logged in from different location)
-        // or if country changed (more accurate detection)
-        // or if no existing country (first time)
-        // or if no existing IP (different account - ensures location is set for that account)
-        // or if never updated before
-        // Note: We don't use time-based checks to ensure location always updates
-        // when user logs in with different account, even from same location
-        const shouldUpdate =
-          ipChanged ||
-          countryChanged ||
-          hasNoExistingCountry ||
-          hasNoExistingIp ||
-          !lastLocationUpdate;
-
-        if (shouldUpdate) {
-          const updateData: {
-            registration_info?: Record<string, any>;
-            location_updated_at: string;
-          } = {
-            location_updated_at: new Date().toISOString(),
-          };
-
-          // Update registration_info JSONB with the country
-          // Always use the newly detected country if available, otherwise preserve existing
-          // This ensures country is updated when user logs in from different location
-          updateData.registration_info = {
-            ...existingRegistrationInfo,
-            ip_address: ip,
-            // Always use the newly detected country if we have one, otherwise preserve existing
-            // This ensures country updates correctly when user logs in from different location
-            country:
-              country !== null
-                ? country
-                : existingRegistrationInfo?.country || null,
-            last_location_update: new Date().toISOString(),
-          };
-
+        // If there's already a country in registration_info, just use it
+        if (existingCountry) {
           console.log(
-            "[get-location] Update data:",
-            JSON.stringify(updateData, null, 2)
+            "[get-location] Country exists in registration_info, using it:",
+            existingCountry
+          );
+          // Return the country from registration_info, don't update anything
+          country = existingCountry;
+        } else {
+          // No country in registration_info - patch it from current API response
+          console.log(
+            "[get-location] No country in registration_info, patching country from current API response"
           );
 
-          // Update user's location in database ( in registration_info JSONB)
-          const { error: updateError } = await supabase
-            .from("users")
-            .update(updateData)
-            .eq("id", authUser.id);
+          // Patch country from current API response into registration_info
+          // Note: We preserve the stored IP (registration IP) and never update it
+          if (country) {
+            // We have country from current API call
+            // Store it in registration_info
+            // IMPORTANT: Never update the IP if it already exists (preserve registration IP)
+            const updateData: {
+              registration_info?: Record<string, any>;
+              location_updated_at: string;
+            } = {
+              location_updated_at: new Date().toISOString(),
+            };
 
-          if (updateError) {
-            console.error(
-              "[get-location] Error updating user location in database:",
-              updateError
-            );
-            // Don't fail the request if DB update fails
-          } else {
+            // Patch country into registration_info
+            // Preserve existing IP if it exists (never update registration IP), otherwise store current IP
+            const updatedRegistrationInfo: Record<string, any> = {
+              ...existingRegistrationInfo,
+              country: country,
+            };
+
+            // Only set IP if it doesn't exist (first time registration)
+            // Never update IP if it already exists (preserve registration IP)
+            // Only store valid public IPs (not localhost/loopback)
+            if (!existingIp && ip && isValidPublicIp(ip)) {
+              updatedRegistrationInfo.ip_address = ip;
+            } else if (!existingIp && ip && !isValidPublicIp(ip)) {
+              console.warn(
+                "[get-location] Skipping localhost IP, not storing in registration_info:",
+                ip
+              );
+            }
+
+            updateData.registration_info = updatedRegistrationInfo;
+
             console.log(
-              "[get-location] Successfully updated country in registration_info:",
-              country,
-              "Reason:",
-              ipChanged
-                ? "IP changed"
-                : countryChanged
-                ? "Country changed"
-                : hasNoExistingCountry
-                ? "No existing country"
-                : hasNoExistingIp
-                ? "No existing IP (different account)"
-                : "First time update"
+              "[get-location] Patching country into registration_info:",
+              JSON.stringify(updateData, null, 2)
+            );
+
+            // Update user's registration_info in database
+            const { error: updateError } = await supabase
+              .from("users")
+              .update(updateData)
+              .eq("id", authUser.id);
+
+            if (updateError) {
+              console.error(
+                "[get-location] Error patching country in registration_info:",
+                updateError
+              );
+              // Don't fail the request if DB update fails
+            } else {
+              console.log(
+                "[get-location] Successfully patched country in registration_info:",
+                country
+              );
+            }
+          } else {
+            console.warn(
+              "[get-location] Cannot patch country - missing IP or country data"
             );
           }
-        } else {
-          console.log(
-            "[get-location] Skipping update - IP and country unchanged, and location data exists"
-          );
         }
-        // If IP address already exists and location data hasn't changed, skip update
       } else {
-        console.log("[get-location] User not authenticated or IP is null");
+        console.log("[get-location] User not authenticated");
       }
     } catch (dbError) {
-      console.error("Error saving location to database:", dbError);
-      // Don't fail the request if DB save fails
+      console.error("Error handling registration_info:", dbError);
+      // Don't fail the request if DB operation fails
     }
 
     let region: string | null = null;
