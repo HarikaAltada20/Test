@@ -245,6 +245,13 @@ export function ContestClientPage({
     username: string;
   } | null>(null);
 
+  // Creator profile data for filtering categories, subcategories, and interests
+  const [creatorCategories, setCreatorCategories] = useState<string[]>([]);
+  const [creatorSubcategories, setCreatorSubcategories] = useState<
+    Record<string, string[]>
+  >({});
+  const [creatorInterests, setCreatorInterests] = useState<string[]>([]);
+
   const { toast } = useToast();
 
   // Scroll spy state and functionality
@@ -796,6 +803,78 @@ export function ContestClientPage({
     };
 
     fetchUserProfile();
+  }, [user?.id, supabase]);
+
+  // Fetch creator profile data for filtering categories, subcategories, and interests
+  useEffect(() => {
+    const fetchCreatorProfile = async () => {
+      if (!user?.id) return;
+
+      try {
+        let localCreatorCategories: string[] = [];
+        let localCreatorSubcategories: Record<string, string[]> = {};
+        let localCreatorInterests: string[] = [];
+
+        const { data: creatorProfileData } = await supabase
+          .from("creator_profiles")
+          .select("categories, subcategories, interests")
+          .eq("id", user.id)
+          .single();
+
+        if (creatorProfileData) {
+          if (creatorProfileData.categories) {
+            localCreatorCategories = Array.isArray(
+              creatorProfileData.categories
+            )
+              ? creatorProfileData.categories
+              : [];
+          }
+
+          if (creatorProfileData.subcategories) {
+            // Handle both object format and array format
+            if (Array.isArray(creatorProfileData.subcategories)) {
+              // If it's an array of {category, subcategory} objects
+              (creatorProfileData.subcategories as any[]).forEach(
+                (item: any) => {
+                  if (item.category && item.subcategory) {
+                    if (!localCreatorSubcategories[item.category]) {
+                      localCreatorSubcategories[item.category] = [];
+                    }
+                    if (
+                      !localCreatorSubcategories[item.category].includes(
+                        item.subcategory
+                      )
+                    ) {
+                      localCreatorSubcategories[item.category].push(
+                        item.subcategory
+                      );
+                    }
+                  }
+                }
+              );
+            } else if (typeof creatorProfileData.subcategories === "object") {
+              // If it's already an object
+              localCreatorSubcategories =
+                creatorProfileData.subcategories as Record<string, string[]>;
+            }
+          }
+
+          if (creatorProfileData.interests) {
+            localCreatorInterests = Array.isArray(creatorProfileData.interests)
+              ? creatorProfileData.interests
+              : [];
+          }
+        }
+
+        setCreatorCategories(localCreatorCategories);
+        setCreatorSubcategories(localCreatorSubcategories);
+        setCreatorInterests(localCreatorInterests);
+      } catch (error) {
+        console.error("Error fetching creator profile:", error);
+      }
+    };
+
+    fetchCreatorProfile();
   }, [user?.id, supabase]);
 
   // Reset modal page when modal opens
@@ -3043,43 +3122,53 @@ export function ContestClientPage({
                   {/* Categories Section */}
                   {contest.categories &&
                     Array.isArray(contest.categories) &&
-                    contest.categories.length > 0 && (
-                      <div className="space-y-3 mt-6">
-                        <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                          <Tag className="h-5 w-5 text-purple-600" />
-                          Categories
-                        </h3>
-                        <div
-                          className={cn(
-                            "border rounded-xl p-4",
-                            isDark
-                              ? "border-purple-600 bg-purple-950/50"
-                              : "border-purple-300 bg-purple-50/50"
-                          )}
-                        >
-                          <div className="flex flex-wrap gap-2">
-                            {contest.categories.map((categoryId: string) => {
-                              const category = CONTENT_TYPE_CATEGORIES.find(
-                                (cat) => cat.id === categoryId
-                              );
-                              return (
-                                <span
-                                  key={categoryId}
-                                  className={cn(
-                                    "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
-                                    isDark
-                                      ? "bg-purple-600/30 text-purple-200 border border-purple-500/50"
-                                      : "bg-purple-100 text-purple-800 border border-purple-300"
-                                  )}
-                                >
-                                  {category ? category.name : categoryId}
-                                </span>
-                              );
-                            })}
+                    contest.categories.length > 0 &&
+                    creatorCategories.length > 0 &&
+                    (() => {
+                      // Filter categories to only show those in user's profile
+                      const filteredCategories = contest.categories.filter(
+                        (categoryId: string) =>
+                          creatorCategories.includes(categoryId)
+                      );
+
+                      return filteredCategories.length > 0 ? (
+                        <div className="space-y-3 mt-6">
+                          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                            <Tag className="h-5 w-5 text-purple-600" />
+                            Categories
+                          </h3>
+                          <div
+                            className={cn(
+                              "border rounded-xl p-4",
+                              isDark
+                                ? "border-purple-600 bg-purple-950/50"
+                                : "border-purple-300 bg-purple-50/50"
+                            )}
+                          >
+                            <div className="flex flex-wrap gap-2">
+                              {filteredCategories.map((categoryId: string) => {
+                                const category = CONTENT_TYPE_CATEGORIES.find(
+                                  (cat) => cat.id === categoryId
+                                );
+                                return (
+                                  <span
+                                    key={categoryId}
+                                    className={cn(
+                                      "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                      isDark
+                                        ? "bg-purple-600/30 text-purple-200 border border-purple-500/50"
+                                        : "bg-purple-100 text-purple-800 border border-purple-300"
+                                    )}
+                                  >
+                                    {category ? category.name : categoryId}
+                                  </span>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      ) : null;
+                    })()}
 
                   {/* Subcategories Section */}
                   {contest.subcategories &&
@@ -3115,7 +3204,24 @@ export function ContestClientPage({
                         });
                       }
 
-                      return subcategoriesToDisplay.length > 0 ? (
+                      // Filter subcategories to only show those in user's profile
+                      const filteredSubcategories =
+                        subcategoriesToDisplay.filter((item) => {
+                          // If user has no subcategories in profile, don't show any
+                          if (Object.keys(creatorSubcategories).length === 0) {
+                            return false;
+                          }
+                          // Check if this category exists in user's profile
+                          const userSubcats =
+                            creatorSubcategories[item.category];
+                          if (!userSubcats || userSubcats.length === 0) {
+                            return false;
+                          }
+                          // Check if this specific subcategory exists in user's profile
+                          return userSubcats.includes(item.subcategory);
+                        });
+
+                      return filteredSubcategories.length > 0 ? (
                         <div className="space-y-3 mt-6">
                           <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
                             <Tag className="h-5 w-5 text-indigo-600" />
@@ -3130,7 +3236,7 @@ export function ContestClientPage({
                             )}
                           >
                             <div className="flex flex-wrap gap-2">
-                              {subcategoriesToDisplay.map(
+                              {filteredSubcategories.map(
                                 (
                                   item: {
                                     category: string;
@@ -3166,38 +3272,48 @@ export function ContestClientPage({
                   {/* Interests Section */}
                   {contest.interests &&
                     Array.isArray(contest.interests) &&
-                    contest.interests.length > 0 && (
-                      <div className="space-y-3 mt-6">
-                        <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                          <Star className="h-5 w-5 text-yellow-600" />
-                          Interests
-                        </h3>
-                        <div
-                          className={cn(
-                            "border rounded-xl p-4",
-                            isDark
-                              ? "border-yellow-600 bg-yellow-950/50"
-                              : "border-yellow-300 bg-yellow-50/50"
-                          )}
-                        >
-                          <div className="flex flex-wrap gap-2">
-                            {contest.interests.map((interest: string) => (
-                              <span
-                                key={interest}
-                                className={cn(
-                                  "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
-                                  isDark
-                                    ? "bg-yellow-600/30 text-yellow-200 border border-yellow-500/50"
-                                    : "bg-yellow-100 text-yellow-800 border border-yellow-300"
-                                )}
-                              >
-                                {interest}
-                              </span>
-                            ))}
+                    contest.interests.length > 0 &&
+                    creatorInterests.length > 0 &&
+                    (() => {
+                      // Filter interests to only show those in user's profile
+                      const filteredInterests = contest.interests.filter(
+                        (interest: string) =>
+                          creatorInterests.includes(interest)
+                      );
+
+                      return filteredInterests.length > 0 ? (
+                        <div className="space-y-3 mt-6">
+                          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                            <Star className="h-5 w-5 text-yellow-600" />
+                            Interests
+                          </h3>
+                          <div
+                            className={cn(
+                              "border rounded-xl p-4",
+                              isDark
+                                ? "border-yellow-600 bg-yellow-950/50"
+                                : "border-yellow-300 bg-yellow-50/50"
+                            )}
+                          >
+                            <div className="flex flex-wrap gap-2">
+                              {filteredInterests.map((interest: string) => (
+                                <span
+                                  key={interest}
+                                  className={cn(
+                                    "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                    isDark
+                                      ? "bg-yellow-600/30 text-yellow-200 border border-yellow-500/50"
+                                      : "bg-yellow-100 text-yellow-800 border border-yellow-300"
+                                  )}
+                                >
+                                  {interest}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      ) : null;
+                    })()}
                 </div>
 
                 {/* 3. CONTENT REQUIREMENTS - Brief and Content Type */}
