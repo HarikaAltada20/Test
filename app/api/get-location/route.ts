@@ -160,7 +160,9 @@ export async function GET(request: NextRequest) {
             if (countryFromStoredIp) {
               const updateData: {
                 registration_info?: Record<string, any>;
+                updated_at: string;
               } = {
+                updated_at: new Date().toISOString(),
                 registration_info: {
                   ...existingRegistrationInfo,
                   // Keep existing IP - NEVER change it
