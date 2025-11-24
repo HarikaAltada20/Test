@@ -22,6 +22,8 @@ import {
   Upload,
   Loader2,
   Copy,
+  Search,
+  RotateCcw,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/utils/supabase/client";
@@ -34,9 +36,40 @@ import {
   isApproachingLimit,
 } from "@/lib/name-utils";
 import { subscriptionPlans } from "@/constants/subscriptionPlans";
+import {
+  CONTENT_TYPE_CATEGORIES,
+  INTEREST_CATEGORIES,
+  INTERESTS,
+} from "@/constants/contentCategories";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import { EmailChangeModal } from "@/components/EmailChangeModal";
+// import PhoneInput from "react-phone-number-input";
+// import "react-phone-number-input/style.css";
+import { Country, State, City } from "country-state-city";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import ISO6391 from "iso-639-1";
 
 interface UserData {
   id: string;
@@ -56,6 +89,25 @@ interface CreatorProfile {
   total_contests_won: number;
   total_money_won: number;
   withdrawable_balance: number;
+  phone_number?: string | null;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  country?: string | null;
+  state?: string | null;
+  city?: string | null;
+  address?: string | null;
+  languages?: string[] | null;
+  categories?:
+    | Array<{ category: string; subcategory: string }>
+    | string[]
+    | null;
+  subcategories?:
+    | Record<string, string[]>
+    | Array<{ category: string; subcategory: string }>
+    | string[]
+    | null;
+  interests?: string[] | null;
+  has_claimed_profile_reward?: boolean;
 }
 
 interface AdvertiserProfile {
@@ -97,6 +149,7 @@ export default function ProfilePage({
   const [companyProfileLoading, setCompanyProfileLoading] = useState(false);
   const [referrer, setReferrer] = useState<string | null>(null);
   const [hasNetworkError, setHasNetworkError] = useState(false);
+  const [hasReceivedProfileBonus, setHasReceivedProfileBonus] = useState(false);
   const supabase = createClient();
   const { toast } = useToast();
 
@@ -109,10 +162,41 @@ export default function ProfilePage({
   const [editedFullName, setEditedFullName] = useState("");
   const [fullNameError, setFullNameError] = useState<string | null>(null);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [isCompleteProfileModalOpen, setIsCompleteProfileModalOpen] =
+    useState(false);
   const [isEditingCompanyName, setIsEditingCompanyName] = useState(false);
   const [editedCompanyName, setEditedCompanyName] = useState("");
   const [isEditingWebsiteUrl, setIsEditingWebsiteUrl] = useState(false);
   const [editedWebsiteUrl, setEditedWebsiteUrl] = useState("");
+
+  // New profile fields state - directly editable
+  // const [editedPhone, setEditedPhone] = useState("");
+  const [editedDateOfBirth, setEditedDateOfBirth] = useState("");
+  const [editedGender, setEditedGender] = useState("");
+  const [editedCountry, setEditedCountry] = useState("");
+  const [editedState, setEditedState] = useState("");
+  const [editedCity, setEditedCity] = useState("");
+  const [editedAddress, setEditedAddress] = useState("");
+  const [editedLanguages, setEditedLanguages] = useState<string[]>([]);
+  const [languageInput, setLanguageInput] = useState("");
+  // Type of content I create: stores category IDs (max 3)
+  const [editedContentTypesCreated, setEditedContentTypesCreated] = useState<
+    string[]
+  >([]);
+  // Other type of content: stores {category, subcategory} pairs for selected categories
+  const [editedInterestedContentTypes, setEditedInterestedContentTypes] =
+    useState<Array<{ category: string; subcategory: string }>>([]);
+  // Interests: stores array of interest strings
+  const [editedInterests, setEditedInterests] = useState<string[]>([]);
+
+  // Country, state, city codes for cascading dropdowns
+  const [selectedCountryCode, setSelectedCountryCode] = useState<string>("");
+  const [selectedStateCode, setSelectedStateCode] = useState<string>("");
+
+  // Search terms for dropdowns
+  const [countrySearch, setCountrySearch] = useState<string>("");
+  const [stateSearch, setStateSearch] = useState<string>("");
+  const [citySearch, setCitySearch] = useState<string>("");
 
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(
@@ -290,6 +374,167 @@ export default function ProfilePage({
 
             if (!profileError && profile) {
               setCreatorProfile(profile as CreatorProfile);
+              // Initialize the new profile fields
+              // setEditedPhone(profile.phone_number || "");
+              setEditedDateOfBirth(profile.date_of_birth || "");
+              setEditedGender(profile.gender || "");
+              setEditedCountry(profile.country || "");
+              setEditedState(profile.state || "");
+              setEditedCity(profile.city || "");
+              setEditedAddress(profile.address || "");
+              setEditedLanguages(profile.languages || []);
+              // Handle JSONB fields
+              // categories: stores category IDs (string[])
+              // subcategories: stores {category, subcategory} pairs
+              const typeOfContent = profile.categories as
+                | Array<{ category: string; subcategory: string }>
+                | string[]
+                | null;
+              const otherTypeOfContent = profile.subcategories as
+                | Array<{ category: string; subcategory: string }>
+                | string[]
+                | null;
+
+              // Convert categories to category IDs
+              const convertToCategoryIds = (data: any): string[] => {
+                if (!data || !Array.isArray(data)) return [];
+                // If it's already string array (category IDs), return as is
+                if (data.length > 0 && typeof data[0] === "string") {
+                  // Check if they're category IDs or old format strings
+                  const categoryIds: string[] = [];
+                  (data as string[]).forEach((value) => {
+                    // Check if it's a valid category ID
+                    const isCategoryId = CONTENT_TYPE_CATEGORIES.some(
+                      (cat) => cat.id === value
+                    );
+                    if (isCategoryId) {
+                      categoryIds.push(value);
+                    } else {
+                      // Old format - try to find matching category
+                      const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+                        cat.subcategories.some(
+                          (sub) =>
+                            sub.toLowerCase().includes(value.toLowerCase()) ||
+                            value.toLowerCase().includes(cat.id.toLowerCase())
+                        )
+                      );
+                      if (category && !categoryIds.includes(category.id)) {
+                        categoryIds.push(category.id);
+                      }
+                    }
+                  });
+                  return categoryIds;
+                }
+                // If it's objects with category+subcategory, extract unique category IDs
+                if (
+                  data.length > 0 &&
+                  typeof data[0] === "object" &&
+                  "category" in data[0]
+                ) {
+                  const categoryIds = new Set<string>();
+                  (
+                    data as Array<{ category: string; subcategory?: string }>
+                  ).forEach((item) => {
+                    categoryIds.add(item.category);
+                  });
+                  return Array.from(categoryIds);
+                }
+                return [];
+              };
+
+              // Convert subcategories to {category, subcategory} format for internal use
+              const convertToSubcategoryFormat = (
+                data: any
+              ): Array<{ category: string; subcategory: string }> => {
+                if (!data) return [];
+
+                // New object format: {category: [subcategories]}
+                if (typeof data === "object" && !Array.isArray(data)) {
+                  const result: Array<{
+                    category: string;
+                    subcategory: string;
+                  }> = [];
+                  Object.entries(data).forEach(([category, subcategories]) => {
+                    if (Array.isArray(subcategories)) {
+                      (subcategories as string[]).forEach((subcategory) => {
+                        result.push({ category, subcategory });
+                      });
+                    }
+                  });
+                  return result;
+                }
+
+                // Old array format with objects
+                if (Array.isArray(data) && data.length > 0) {
+                  // Check if already in {category, subcategory} format
+                  if (
+                    typeof data[0] === "object" &&
+                    "category" in data[0] &&
+                    "subcategory" in data[0]
+                  ) {
+                    return data as Array<{
+                      category: string;
+                      subcategory: string;
+                    }>;
+                  }
+                  // Old format - convert string array to objects
+                  const result: Array<{
+                    category: string;
+                    subcategory: string;
+                  }> = [];
+                  (data as string[]).forEach((oldValue) => {
+                    const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+                      cat.subcategories.some(
+                        (sub) =>
+                          sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                          oldValue.toLowerCase().includes(cat.id.toLowerCase())
+                      )
+                    );
+                    if (category) {
+                      const subcategory =
+                        category.subcategories.find((sub) =>
+                          sub.toLowerCase().includes(oldValue.toLowerCase())
+                        ) || category.subcategories[0];
+                      result.push({
+                        category: category.id,
+                        subcategory: subcategory,
+                      });
+                    }
+                  });
+                  return result;
+                }
+                return [];
+              };
+
+              setEditedContentTypesCreated(convertToCategoryIds(typeOfContent));
+              setEditedInterestedContentTypes(
+                convertToSubcategoryFormat(otherTypeOfContent)
+              );
+              setEditedInterests((profile.interests as string[]) || []);
+
+              // Find country code from country name
+              if (profile.country) {
+                const country = Country.getAllCountries().find(
+                  (c) => c.name === profile.country
+                );
+                if (country) {
+                  setSelectedCountryCode(country.isoCode);
+                  // Find state code from state name
+                  if (profile.state) {
+                    const state = State.getStatesOfCountry(
+                      country.isoCode
+                    ).find((s) => s.name === profile.state);
+                    if (state) {
+                      setSelectedStateCode(state.isoCode);
+                    }
+                  }
+                }
+              }
+
+              // Check if user has already claimed profile update bonus
+              if (profile.has_claimed_profile_reward) {
+                setHasReceivedProfileBonus(true);
+              }
             }
           } catch (profileError) {
             console.warn("Error fetching creator profile:", profileError);
@@ -846,6 +1091,717 @@ export default function ProfilePage({
     }
   };
 
+  // Get all languages from ISO6391
+  const allLanguages = ISO6391.getAllNames().sort();
+
+  // Helper functions for languages
+  const handleAddLanguage = (languageName?: string) => {
+    const languageToAdd = languageName || languageInput.trim();
+    if (
+      languageToAdd &&
+      !editedLanguages.includes(languageToAdd) &&
+      editedLanguages.length < 5
+    ) {
+      setEditedLanguages([...editedLanguages, languageToAdd]);
+      setLanguageInput("");
+    }
+  };
+
+  const handleRemoveLanguage = (language: string) => {
+    setEditedLanguages(editedLanguages.filter((lang) => lang !== language));
+  };
+
+  // Helper to normalize subcategory arrays for comparison
+  const normalizeSubcategories = (
+    arr: Array<{ category: string; subcategory: string }>
+  ) => {
+    return arr
+      .map((item) => `${item.category}:${item.subcategory}`)
+      .sort()
+      .join(",");
+  };
+
+  // Check if all required profile fields are filled
+  const isProfileComplete = () => {
+    if (!creatorProfile) return false;
+
+    // Check basic required fields
+    const hasBasicFields =
+      editedDateOfBirth.trim() !== "" &&
+      editedGender.trim() !== "" &&
+      editedAddress.trim() !== "" &&
+      editedLanguages.length > 0 &&
+      editedContentTypesCreated.length > 0 &&
+      editedInterestedContentTypes.length > 0 &&
+      editedInterests.length > 0;
+
+    if (!hasBasicFields) return false;
+
+    // Check country is selected
+    if (!editedCountry.trim() || !selectedCountryCode) return false;
+
+    // Check state and city based on availability
+    const states = State.getStatesOfCountry(selectedCountryCode);
+    const hasStates = states.length > 0;
+
+    if (hasStates) {
+      // States exist, state must be filled
+      if (!editedState.trim() || !selectedStateCode) return false;
+
+      // Check if cities are available for the selected state
+      const cities = City.getCitiesOfState(
+        selectedCountryCode,
+        selectedStateCode
+      );
+      const hasCities = !!(cities && cities.length > 0);
+
+      // Only require city if cities are available for this state
+      if (hasCities && !editedCity.trim()) return false;
+      // If no cities available for the state, don't require city field
+    } else {
+      // No states, check if country has cities
+      const cities = City.getCitiesOfCountry(selectedCountryCode);
+      const hasCities = !!(cities && cities.length > 0);
+
+      if (hasCities) {
+        // Cities exist at country level, city must be filled
+        if (!editedCity.trim()) return false;
+      }
+      // If no states and no cities, we don't require state/city fields
+    }
+
+    return true;
+  };
+
+  // Check if profile has changes
+  const hasProfileChanges = () => {
+    if (!creatorProfile) return false;
+
+    const currentTypeOfContent = creatorProfile.categories as
+      | Array<{ category: string; subcategory: string }>
+      | string[]
+      | null;
+    const currentOtherTypeOfContent = creatorProfile.subcategories as
+      | Array<{ category: string; subcategory: string }>
+      | string[]
+      | null;
+
+    // Convert current categories to category IDs for comparison
+    const convertToCategoryIds = (data: any): string => {
+      if (!data || !Array.isArray(data)) return "";
+      // If it's already string array (category IDs), return sorted
+      if (data.length > 0 && typeof data[0] === "string") {
+        const categoryIds: string[] = [];
+        (data as string[]).forEach((value) => {
+          const isCategoryId = CONTENT_TYPE_CATEGORIES.some(
+            (cat) => cat.id === value
+          );
+          if (isCategoryId) {
+            categoryIds.push(value);
+          } else {
+            // Old format - find matching category
+            const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+              cat.subcategories.some(
+                (sub) =>
+                  sub.toLowerCase().includes(value.toLowerCase()) ||
+                  value.toLowerCase().includes(cat.id.toLowerCase())
+              )
+            );
+            if (category && !categoryIds.includes(category.id)) {
+              categoryIds.push(category.id);
+            }
+          }
+        });
+        return categoryIds.sort().join(",");
+      }
+      // If it's objects, extract unique category IDs
+      if (
+        data.length > 0 &&
+        typeof data[0] === "object" &&
+        "category" in data[0]
+      ) {
+        const categoryIds = new Set<string>();
+        (data as Array<{ category: string; subcategory?: string }>).forEach(
+          (item) => {
+            categoryIds.add(item.category);
+          }
+        );
+        return Array.from(categoryIds).sort().join(",");
+      }
+      return "";
+    };
+
+    // Convert current subcategories to normalized format
+    const convertSubcategories = (data: any): string => {
+      if (!data) return "";
+
+      // New object format: {category: [subcategories]}
+      if (typeof data === "object" && !Array.isArray(data)) {
+        const converted: Array<{ category: string; subcategory: string }> = [];
+        Object.entries(data).forEach(([category, subcategories]) => {
+          if (Array.isArray(subcategories)) {
+            (subcategories as string[]).forEach((subcategory) => {
+              converted.push({ category, subcategory });
+            });
+          }
+        });
+        return normalizeSubcategories(converted);
+      }
+
+      // Old array format
+      if (Array.isArray(data) && data.length > 0) {
+        // Check if already in {category, subcategory} format
+        if (
+          typeof data[0] === "object" &&
+          "category" in data[0] &&
+          "subcategory" in data[0]
+        ) {
+          return normalizeSubcategories(
+            data as Array<{ category: string; subcategory: string }>
+          );
+        }
+        // Old string array format - convert
+        const converted: Array<{ category: string; subcategory: string }> = [];
+        (data as string[]).forEach((oldValue) => {
+          const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+            cat.subcategories.some(
+              (sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                oldValue.toLowerCase().includes(cat.id.toLowerCase())
+            )
+          );
+          if (category) {
+            const subcategory =
+              category.subcategories.find((sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase())
+              ) || category.subcategories[0];
+            converted.push({ category: category.id, subcategory: subcategory });
+          }
+        });
+        return normalizeSubcategories(converted);
+      }
+      return "";
+    };
+
+    return (
+      // editedPhone !== (creatorProfile.phone_number || "") ||
+      editedDateOfBirth !== (creatorProfile.date_of_birth || "") ||
+      editedGender !== (creatorProfile.gender || "") ||
+      editedCountry !== (creatorProfile.country || "") ||
+      editedState !== (creatorProfile.state || "") ||
+      editedCity !== (creatorProfile.city || "") ||
+      editedAddress !== (creatorProfile.address || "") ||
+      JSON.stringify(editedLanguages.sort()) !==
+        JSON.stringify((creatorProfile.languages || []).sort()) ||
+      JSON.stringify(editedContentTypesCreated.sort()) !==
+        convertToCategoryIds(currentTypeOfContent) ||
+      normalizeSubcategories(editedInterestedContentTypes) !==
+        convertSubcategories(currentOtherTypeOfContent) ||
+      JSON.stringify(editedInterests.sort()) !==
+        JSON.stringify((creatorProfile.interests || []).sort())
+    );
+  };
+
+  // Check if changes are only to interests, categories, or subcategories
+  const hasOnlyEditableFieldChanges = () => {
+    if (!creatorProfile) return false;
+
+    const currentTypeOfContent = creatorProfile.categories as
+      | Array<{ category: string; subcategory: string }>
+      | string[]
+      | null;
+    const currentOtherTypeOfContent = creatorProfile.subcategories as
+      | Array<{ category: string; subcategory: string }>
+      | string[]
+      | null;
+
+    // Convert current categories to category IDs for comparison
+    const convertToCategoryIds = (data: any): string => {
+      if (!data || !Array.isArray(data)) return "";
+      if (data.length > 0 && typeof data[0] === "string") {
+        const categoryIds: string[] = [];
+        (data as string[]).forEach((value) => {
+          const isCategoryId = CONTENT_TYPE_CATEGORIES.some(
+            (cat) => cat.id === value
+          );
+          if (isCategoryId) {
+            categoryIds.push(value);
+          } else {
+            const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+              cat.subcategories.some(
+                (sub) =>
+                  sub.toLowerCase().includes(value.toLowerCase()) ||
+                  value.toLowerCase().includes(cat.id.toLowerCase())
+              )
+            );
+            if (category && !categoryIds.includes(category.id)) {
+              categoryIds.push(category.id);
+            }
+          }
+        });
+        return categoryIds.sort().join(",");
+      }
+      if (
+        data.length > 0 &&
+        typeof data[0] === "object" &&
+        "category" in data[0]
+      ) {
+        const categoryIds = new Set<string>();
+        (data as Array<{ category: string; subcategory?: string }>).forEach(
+          (item) => {
+            categoryIds.add(item.category);
+          }
+        );
+        return Array.from(categoryIds).sort().join(",");
+      }
+      return "";
+    };
+
+    // Convert current subcategories to normalized format
+    const convertSubcategories = (data: any): string => {
+      if (!data) return "";
+
+      // New object format: {category: [subcategories]}
+      if (typeof data === "object" && !Array.isArray(data)) {
+        const converted: Array<{ category: string; subcategory: string }> = [];
+        Object.entries(data).forEach(([category, subcategories]) => {
+          if (Array.isArray(subcategories)) {
+            (subcategories as string[]).forEach((subcategory) => {
+              converted.push({ category, subcategory });
+            });
+          }
+        });
+        return normalizeSubcategories(converted);
+      }
+
+      // Old array format
+      if (Array.isArray(data) && data.length > 0) {
+        // Check if already in {category, subcategory} format
+        if (
+          typeof data[0] === "object" &&
+          "category" in data[0] &&
+          "subcategory" in data[0]
+        ) {
+          return normalizeSubcategories(
+            data as Array<{ category: string; subcategory: string }>
+          );
+        }
+        // Old string array format - convert
+        const converted: Array<{ category: string; subcategory: string }> = [];
+        (data as string[]).forEach((oldValue) => {
+          const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+            cat.subcategories.some(
+              (sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                oldValue.toLowerCase().includes(cat.id.toLowerCase())
+            )
+          );
+          if (category) {
+            const subcategory =
+              category.subcategories.find((sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase())
+              ) || category.subcategories[0];
+            converted.push({
+              category: category.id,
+              subcategory: subcategory,
+            });
+          }
+        });
+        return normalizeSubcategories(converted);
+      }
+      return "";
+    };
+
+    const hasCategoryChange =
+      JSON.stringify(editedContentTypesCreated.sort()) !==
+      convertToCategoryIds(currentTypeOfContent);
+    const hasSubcategoryChange =
+      normalizeSubcategories(editedInterestedContentTypes) !==
+      convertSubcategories(currentOtherTypeOfContent);
+    const hasInterestChange =
+      JSON.stringify(editedInterests.sort()) !==
+      JSON.stringify((creatorProfile.interests || []).sort());
+
+    const hasOtherChanges =
+      // editedPhone !== (creatorProfile.phone_number || "") ||
+      editedDateOfBirth !== (creatorProfile.date_of_birth || "") ||
+      editedGender !== (creatorProfile.gender || "") ||
+      editedCountry !== (creatorProfile.country || "") ||
+      editedState !== (creatorProfile.state || "") ||
+      editedCity !== (creatorProfile.city || "") ||
+      editedAddress !== (creatorProfile.address || "") ||
+      JSON.stringify(editedLanguages.sort()) !==
+        JSON.stringify((creatorProfile.languages || []).sort());
+
+    // Return true if only interests, categories, or subcategories have changed
+    return (
+      (hasCategoryChange || hasSubcategoryChange || hasInterestChange) &&
+      !hasOtherChanges
+    );
+  };
+
+  // Save profile changes without claiming bonus
+  const handleSaveProfileChanges = async (claimBonus: boolean = false) => {
+    if (!userData || !creatorProfile || !hasProfileChanges()) {
+      return;
+    }
+
+    // Check if user has already received the bonus
+    // If so, only allow editing interests, categories, and subcategories
+    if (hasReceivedProfileBonus) {
+      // Check if changes are only to editable fields (interests, categories, subcategories)
+      if (!hasOnlyEditableFieldChanges()) {
+        toast({
+          variant: "destructive",
+          title: "Editing Disabled",
+          description:
+            "You have already received the profile update bonus. You can only edit interests, categories, and subcategories.",
+        });
+        return;
+      }
+      // If only editable fields changed, allow saving but don't claim bonus
+      claimBonus = false;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const updateData: any = {};
+
+      // Use edited phone number
+      // const phoneToSave = editedPhone;
+      // if (phoneToSave !== (creatorProfile.phone_number || "")) {
+      //   updateData.phone_number = phoneToSave.trim() || null;
+      // }
+      if (editedDateOfBirth !== (creatorProfile.date_of_birth || "")) {
+        // Validate date of birth: cannot be in future or of same year
+        if (editedDateOfBirth.trim()) {
+          const selectedDate = new Date(editedDateOfBirth.trim());
+          selectedDate.setHours(0, 0, 0, 0); // Normalize to midnight
+          const today = new Date();
+          today.setHours(0, 0, 0, 0); // Normalize to midnight
+          const currentYear = today.getFullYear();
+          const selectedYear = selectedDate.getFullYear();
+
+          // Check if date is in the future
+          if (selectedDate > today) {
+            toast({
+              variant: "destructive",
+              title: "Invalid Date",
+              description: "Date of birth cannot be in the future.",
+            });
+            setIsSubmitting(false);
+            return;
+          }
+
+          // Check if date is in the current year
+          if (selectedYear === currentYear) {
+            toast({
+              variant: "destructive",
+              title: "Invalid Date",
+              description: "Date of birth cannot be in the current year.",
+            });
+            setIsSubmitting(false);
+            return;
+          }
+        }
+        updateData.date_of_birth = editedDateOfBirth.trim() || null;
+      }
+      if (editedGender !== (creatorProfile.gender || "")) {
+        updateData.gender = editedGender.trim() || null;
+      }
+      if (editedCountry !== (creatorProfile.country || "")) {
+        updateData.country = editedCountry.trim() || null;
+      }
+      if (editedState !== (creatorProfile.state || "")) {
+        updateData.state = editedState.trim() || null;
+      }
+      if (editedCity !== (creatorProfile.city || "")) {
+        updateData.city = editedCity.trim() || null;
+      }
+      if (editedAddress !== (creatorProfile.address || "")) {
+        updateData.address = editedAddress.trim() || null;
+      }
+      if (
+        JSON.stringify(editedLanguages.sort()) !==
+        JSON.stringify((creatorProfile.languages || []).sort())
+      ) {
+        updateData.languages =
+          editedLanguages.length > 0 ? editedLanguages : null;
+      }
+      // Compare content types
+      const currentTypeOfContent = creatorProfile.categories as
+        | Array<{ category: string; subcategory: string }>
+        | string[]
+        | null;
+      const currentOtherTypeOfContent = creatorProfile.subcategories as
+        | Array<{ category: string; subcategory: string }>
+        | string[]
+        | null;
+
+      // Convert current categories to category IDs for comparison
+      const convertToCategoryIds = (data: any): string => {
+        if (!data || !Array.isArray(data)) return "";
+        if (data.length > 0 && typeof data[0] === "string") {
+          const categoryIds: string[] = [];
+          (data as string[]).forEach((value) => {
+            const isCategoryId = CONTENT_TYPE_CATEGORIES.some(
+              (cat) => cat.id === value
+            );
+            if (isCategoryId) {
+              categoryIds.push(value);
+            } else {
+              const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+                cat.subcategories.some(
+                  (sub) =>
+                    sub.toLowerCase().includes(value.toLowerCase()) ||
+                    value.toLowerCase().includes(cat.id.toLowerCase())
+                )
+              );
+              if (category && !categoryIds.includes(category.id)) {
+                categoryIds.push(category.id);
+              }
+            }
+          });
+          return categoryIds.sort().join(",");
+        }
+        if (
+          data.length > 0 &&
+          typeof data[0] === "object" &&
+          "category" in data[0]
+        ) {
+          const categoryIds = new Set<string>();
+          (data as Array<{ category: string; subcategory?: string }>).forEach(
+            (item) => {
+              categoryIds.add(item.category);
+            }
+          );
+          return Array.from(categoryIds).sort().join(",");
+        }
+        return "";
+      };
+
+      // Convert current subcategories to normalized format
+      const convertSubcategories = (data: any): string => {
+        if (!data) return "";
+
+        // New object format: {category: [subcategories]}
+        if (typeof data === "object" && !Array.isArray(data)) {
+          const converted: Array<{ category: string; subcategory: string }> =
+            [];
+          Object.entries(data).forEach(([category, subcategories]) => {
+            if (Array.isArray(subcategories)) {
+              (subcategories as string[]).forEach((subcategory) => {
+                converted.push({ category, subcategory });
+              });
+            }
+          });
+          return normalizeSubcategories(converted);
+        }
+
+        // Old array format
+        if (Array.isArray(data) && data.length > 0) {
+          // Check if already in {category, subcategory} format
+          if (
+            typeof data[0] === "object" &&
+            "category" in data[0] &&
+            "subcategory" in data[0]
+          ) {
+            return normalizeSubcategories(
+              data as Array<{ category: string; subcategory: string }>
+            );
+          }
+          // Old string array format - convert
+          const converted: Array<{ category: string; subcategory: string }> =
+            [];
+          (data as string[]).forEach((oldValue) => {
+            const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+              cat.subcategories.some(
+                (sub) =>
+                  sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                  oldValue.toLowerCase().includes(cat.id.toLowerCase())
+              )
+            );
+            if (category) {
+              const subcategory =
+                category.subcategories.find((sub) =>
+                  sub.toLowerCase().includes(oldValue.toLowerCase())
+                ) || category.subcategories[0];
+              converted.push({
+                category: category.id,
+                subcategory: subcategory,
+              });
+            }
+          });
+          return normalizeSubcategories(converted);
+        }
+        return "";
+      };
+
+      if (
+        JSON.stringify(editedContentTypesCreated.sort()) !==
+        convertToCategoryIds(currentTypeOfContent)
+      ) {
+        updateData.categories =
+          editedContentTypesCreated.length > 0
+            ? editedContentTypesCreated
+            : null;
+      }
+      if (
+        normalizeSubcategories(editedInterestedContentTypes) !==
+        convertSubcategories(currentOtherTypeOfContent)
+      ) {
+        // Convert array format to object format: {category: [subcategories]}
+        const subcategoriesObject: Record<string, string[]> = {};
+        editedInterestedContentTypes.forEach(({ category, subcategory }) => {
+          if (!subcategoriesObject[category]) {
+            subcategoriesObject[category] = [];
+          }
+          if (!subcategoriesObject[category].includes(subcategory)) {
+            subcategoriesObject[category].push(subcategory);
+          }
+        });
+        updateData.subcategories =
+          Object.keys(subcategoriesObject).length > 0
+            ? subcategoriesObject
+            : null;
+      }
+      if (
+        JSON.stringify(editedInterests.sort()) !==
+        JSON.stringify((creatorProfile.interests || []).sort())
+      ) {
+        updateData.interests =
+          editedInterests.length > 0 ? editedInterests : null;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Check if user has already claimed the bonus before giving it
+      // Only prevent claiming bonus again, but allow saving if only editable fields changed
+      if (creatorProfile.has_claimed_profile_reward && claimBonus) {
+        // Should not reach here due to early return check, but just in case
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Update the profile first
+      const { error } = await supabase
+        .from("creator_profiles")
+        .update(updateData)
+        .eq("id", userData.id);
+
+      if (error) throw error;
+
+      // Only claim bonus if requested and not already claimed
+      if (claimBonus && !creatorProfile.has_claimed_profile_reward) {
+        // Claim the bonus via API route
+        const bonusResponse = await fetch("/api/profile/claim-bonus", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        const bonusData = await bonusResponse.json();
+
+        if (bonusResponse.ok && bonusData.success) {
+          setHasReceivedProfileBonus(true);
+          toast({
+            title: "Profile Completed & Bonus Received!",
+            description:
+              "Your profile has been completed and you've received a $0.50 bonus! You can still edit your interests, categories, and subcategories.",
+          });
+
+          // Update local state with bonus claimed
+          setCreatorProfile((prev) =>
+            prev
+              ? { ...prev, ...updateData, has_claimed_profile_reward: true }
+              : null
+          );
+        } else {
+          console.error("Failed to credit bonus:", bonusData.error);
+          toast({
+            title: "Profile Updated",
+            description:
+              "Your profile has been updated, but there was an issue crediting the bonus.",
+          });
+
+          // Update local state without bonus claimed
+          setCreatorProfile((prev) =>
+            prev ? { ...prev, ...updateData } : null
+          );
+        }
+      } else {
+        // Just update without claiming bonus
+        const isComplete = isProfileComplete();
+        if (hasReceivedProfileBonus) {
+          // User has already claimed bonus, just updating interests/categories/subcategories
+          toast({
+            title: "Profile Updated",
+            description:
+              "Your interests, categories, and subcategories have been updated successfully.",
+          });
+        } else {
+          toast({
+            title: "Profile Updated",
+            description: isComplete
+              ? "Your profile has been updated successfully. Complete your profile to claim the $0.50 bonus!"
+              : "Your profile has been updated successfully. Fill all details to get the $0.50 bonus reward!",
+          });
+        }
+
+        // Update local state
+        setCreatorProfile((prev) => (prev ? { ...prev, ...updateData } : null));
+      }
+
+      notifyProfileUpdate();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Update Failed",
+        description: error.message,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle save button click - check if profile is complete and show modal
+  const handleSaveClick = () => {
+    if (!hasProfileChanges()) {
+      return;
+    }
+
+    // Check if all required profile fields are filled
+    // Required fields: date of birth, gender, flat number (address), language,
+    // categories, subcategories (interests)
+    const isComplete = isProfileComplete();
+
+    // If profile is not complete, just save without showing modal
+    if (!isComplete) {
+      handleSaveProfileChanges(false);
+      return;
+    }
+
+    // If all required fields are filled and bonus hasn't been received, show modal
+    // Show modal regardless of whether states/cities are available for the country
+    if (isComplete && !hasReceivedProfileBonus) {
+      // Show confirmation modal
+      setIsCompleteProfileModalOpen(true);
+    } else {
+      // Save without claiming bonus (toast message will be shown in handleSaveProfileChanges)
+      handleSaveProfileChanges(false);
+    }
+  };
+
+  // Handle confirmed save with bonus claim
+  const handleConfirmCompleteProfile = async () => {
+    setIsCompleteProfileModalOpen(false);
+    await handleSaveProfileChanges(true);
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-[76vh]">
@@ -1168,8 +2124,6 @@ export default function ProfilePage({
                 </div>
               </div>
 
-             
-
               <div className="relative w-full">
                 <label
                   htmlFor="floating"
@@ -1274,10 +2228,1280 @@ export default function ProfilePage({
                   </span>
                 </div>
               </div> */}
+
+              {/* Profile fields moved to separate card below */}
             </div>
           </CardContent>
+          {/* <div className="px-6 pb-4">
+            <div
+              className={cn(
+                "rounded-lg border p-4",
+                isDark
+                  ? "bg-[#2a0a5a] border-purple-500/30"
+                  : "bg-purple-50 border-purple-200"
+              )}
+            >
+              <p
+                className={cn(
+                  "text-sm font-medium",
+                  isDark ? "text-purple-200" : "text-purple-700"
+                )}
+              >
+                💰 When you fill your complete profile, we give you a $0.50
+                bonus!
+              </p>
+            </div>
+          </div> */}
         </div>
       </div>
+
+      {/* Creator Profile Details - Only for Creators */}
+      {userData.user_type === "creator" && creatorProfile && (
+        <div>
+          <div
+            className={cn(
+              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <CardTitle
+              className={cn(
+                "text-xl",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
+              Profile Details
+            </CardTitle>
+          </div>
+          <div
+            className={cn(
+              "rounded-b-2xl shadow-lg px-2 pb-4",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <div className="px-6 pt-4 pb-8">
+              <CardTitle className="text-xl font-semibold">
+                Personal Information
+              </CardTitle>
+              <CardDescription className="mt-2 text-md">
+                Complete your profile to get contests matched to your country,
+                categories, subcategories, and interests. Click "Save Changes"
+                to save all updates and receive a $0.50 bonus.
+              </CardDescription>
+            </div>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-10">
+                {/* Phone Number */}
+                {/* <div className="relative w-full">
+                  <div className="relative flex-1">
+                    <label
+                      htmlFor="phone"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 z-10 px-1 pointer-events-none",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-gray-400"
+                            : "bg-white text-gray-400"
+                          : isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      Phone Number
+                    </label>
+                    <PhoneInput
+                      key={`phone-input-${isDark ? "dark" : "light"}`}
+                      id="phone"
+                      international
+                      defaultCountry="IN"
+                      value={editedPhone}
+                      onChange={(value: string | undefined) =>
+                        setEditedPhone(value || "")
+                      }
+                      disabled={hasReceivedProfileBonus || isSubmitting}
+                      className={cn(
+                        "custom-phone-input",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-gray-400 border-gray-400"
+                            : "bg-white text-gray-400 border-gray-400"
+                          : isDark
+                          ? "bg-[#180438] text-white border-gray-300"
+                          : "bg-white text-gray-900 border-gray-300"
+                      )}
+                      style={
+                        {
+                          "--PhoneInputCountryFlag-height": "1.2em",
+                          "--PhoneInputCountryFlag-borderWidth": "0",
+                          backgroundColor: isDark ? "#180438" : "white",
+                          color:
+                            hasReceivedProfileBonus || isSubmitting
+                              ? "#9ca3af"
+                              : isDark
+                              ? "white"
+                              : "#1a1a1a",
+                          borderColor:
+                            hasReceivedProfileBonus || isSubmitting
+                              ? "#9ca3af"
+                              : "#d1d5db",
+                        } as React.CSSProperties
+                      }
+                      numberInputProps={{
+                        className: "peer",
+                        placeholder: " ",
+                        style: {
+                          color:
+                            hasReceivedProfileBonus || isSubmitting
+                              ? "#9ca3af"
+                              : isDark
+                              ? "white"
+                              : "#1a1a1a",
+                          backgroundColor: "transparent",
+                        },
+                      }}
+                    />
+                  </div>
+                </div> */}
+
+                {/* Date of Birth */}
+                <div className="relative w-full">
+                  <div className="relative flex-1">
+                    <input
+                      id="dateOfBirth"
+                      type="date"
+                      value={editedDateOfBirth}
+                      onChange={(e) => setEditedDateOfBirth(e.target.value)}
+                      max={(() => {
+                        const today = new Date();
+                        const lastYear = today.getFullYear() - 1;
+                        return `${lastYear}-12-31`;
+                      })()}
+                      disabled={hasReceivedProfileBonus || isSubmitting}
+                      className={cn(
+                        "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-gray-400 border border-gray-400 focus:border-gray-400 focus:ring-gray-400"
+                            : "bg-white text-gray-400 border border-gray-400 focus:border-gray-400 focus:ring-gray-400"
+                          : isDark
+                          ? "bg-[#180438] text-white border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                          : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                      )}
+                    />
+                    <label
+                      htmlFor="dateOfBirth"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-gray-400"
+                            : "bg-white text-gray-400"
+                          : isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      Date of Birth
+                    </label>
+                  </div>
+                  <p
+                    className={cn(
+                      "mt-1 text-sm",
+                      isDark ? "text-gray-400" : "text-gray-500"
+                    )}
+                  >
+                    This can be set only once and cannot be changed later
+                  </p>
+                </div>
+
+                {/* Gender */}
+                <div className="relative w-full">
+                  <div className="relative flex-1">
+                    <select
+                      id="gender"
+                      value={editedGender}
+                      onChange={(e) => setEditedGender(e.target.value)}
+                      disabled={hasReceivedProfileBonus || isSubmitting}
+                      className={cn(
+                        "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-gray-400 border border-gray-400 focus:border-gray-400 focus:ring-gray-400"
+                            : "bg-white text-gray-600 border border-gray-400 focus:border-gray-400 focus:ring-gray-400"
+                          : isDark
+                          ? "bg-[#180438] text-white border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                          : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                      )}
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      {/* <option value="Other">Other</option>
+                      <option value="Prefer not to say">
+                        Prefer not to say
+                      </option> */}
+                    </select>
+                    <label
+                      htmlFor="gender"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-gray-400"
+                            : "bg-white text-gray-400"
+                          : isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      Gender
+                    </label>
+                  </div>
+                  <p
+                    className={cn(
+                      "mt-1 text-sm",
+                      isDark ? "text-gray-400" : "text-gray-500"
+                    )}
+                  >
+                    This can be set only once and cannot be changed later
+                  </p>
+                </div>
+
+                {/* Country */}
+                <div className="relative w-full">
+                  <div className="relative flex-1">
+                    <label
+                      htmlFor="country"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1 z-10",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-gray-400"
+                            : "bg-white text-gray-400"
+                          : isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      Country
+                    </label>
+                    <Select
+                      value={selectedCountryCode}
+                      onValueChange={(value) => {
+                        if (value === "__clear__") {
+                          setSelectedCountryCode("");
+                          setEditedCountry("");
+                          setSelectedStateCode("");
+                          setEditedState("");
+                          setEditedCity("");
+                          setCountrySearch("");
+                          setStateSearch("");
+                          setCitySearch("");
+                        } else {
+                          setSelectedCountryCode(value);
+                          const country = Country.getCountryByCode(value);
+                          setEditedCountry(country?.name || "");
+                          // Reset state and city when country changes
+                          setSelectedStateCode("");
+                          setEditedState("");
+                          setEditedCity("");
+                          setCountrySearch("");
+                          setStateSearch("");
+                          setCitySearch("");
+                        }
+                      }}
+                      disabled={hasReceivedProfileBonus || isSubmitting}
+                    >
+                      <SelectTrigger
+                        id="country"
+                        isDark={isDark}
+                        className={cn(
+                          "h-12 w-full text-[14px] transition-colors duration-200",
+                          hasReceivedProfileBonus || isSubmitting
+                            ? isDark
+                              ? "bg-transparent border-gray-400 text-gray-400 hover:bg-[#180438]/50 hover:border-gray-400"
+                              : "border-gray-400 text-gray-700 hover:bg-gray-50 hover:border-gray-400"
+                            : isDark
+                            ? "bg-[#180438] text-white border-gray-300 hover:bg-[#180438]/50 hover:border-gray-500"
+                            : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+                        )}
+                      >
+                        <SelectValue placeholder="Select Country" />
+                      </SelectTrigger>
+                      <SelectContent isDark={isDark}>
+                        <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                              type="text"
+                              placeholder="Search country..."
+                              value={countrySearch}
+                              onChange={(e) => setCountrySearch(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                              className={cn(
+                                "pl-8 h-9 text-sm",
+                                isDark
+                                  ? "bg-[#180438] text-white border-gray-600"
+                                  : "bg-white text-gray-900 border-gray-300"
+                              )}
+                            />
+                          </div>
+                        </div>
+                        {selectedCountryCode && (
+                          <SelectItem
+                            value="__clear__"
+                            isDark={isDark}
+                            className="text-red-500 hover:text-red-600 focus:text-red-600"
+                          >
+                            <div className="flex items-center gap-2">
+                              <X className="h-4 w-4" />
+                              <span>Clear Selection</span>
+                            </div>
+                          </SelectItem>
+                        )}
+                        {Country.getAllCountries()
+                          .filter((country) =>
+                            country.name
+                              .toLowerCase()
+                              .includes(countrySearch.toLowerCase())
+                          )
+                          .map((country) => (
+                            <SelectItem
+                              key={country.isoCode}
+                              value={country.isoCode}
+                              isDark={isDark}
+                            >
+                              {country.name}
+                            </SelectItem>
+                          ))}
+                        {Country.getAllCountries().filter((country) =>
+                          country.name
+                            .toLowerCase()
+                            .includes(countrySearch.toLowerCase())
+                        ).length === 0 && (
+                          <div className="px-2 py-1.5 text-sm text-gray-500">
+                            No countries found
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* State */}
+                <div className="relative w-full">
+                  <div className="relative flex-1">
+                    <label
+                      htmlFor="state"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1 z-10",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-gray-400"
+                            : "bg-white text-gray-400"
+                          : isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      State
+                    </label>
+                    <Select
+                      value={selectedStateCode}
+                      onValueChange={(value) => {
+                        if (value === "__clear__") {
+                          setSelectedStateCode("");
+                          setEditedState("");
+                          setEditedCity("");
+                          setStateSearch("");
+                          setCitySearch("");
+                        } else {
+                          setSelectedStateCode(value);
+                          const state = State.getStateByCodeAndCountry(
+                            value,
+                            selectedCountryCode
+                          );
+                          setEditedState(state?.name || "");
+                          // Reset city when state changes
+                          setEditedCity("");
+                          setStateSearch("");
+                          setCitySearch("");
+                        }
+                      }}
+                      disabled={hasReceivedProfileBonus || isSubmitting}
+                    >
+                      <SelectTrigger
+                        id="state"
+                        isDark={isDark}
+                        className={cn(
+                          "h-12 w-full text-[14px] transition-colors duration-200",
+                          hasReceivedProfileBonus || isSubmitting
+                            ? isDark
+                              ? "bg-transparent border-gray-400 text-gray-400 hover:bg-[#180438]/50 hover:border-gray-400"
+                              : "border-gray-400 text-gray-700 hover:bg-gray-50 hover:border-gray-400"
+                            : isDark
+                            ? "bg-[#180438] text-white border-gray-300 hover:bg-[#180438]/50 hover:border-gray-500"
+                            : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+                        )}
+                      >
+                        <SelectValue
+                          placeholder={
+                            selectedCountryCode
+                              ? State.getStatesOfCountry(selectedCountryCode)
+                                  .length === 0
+                                ? "No States Available"
+                                : "Select State"
+                              : "Select Country First"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent isDark={isDark}>
+                        {selectedCountryCode && (
+                          <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+                            <div className="relative">
+                              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                              <Input
+                                type="text"
+                                placeholder="Search state..."
+                                value={stateSearch}
+                                onChange={(e) => setStateSearch(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                className={cn(
+                                  "pl-8 h-9 text-sm",
+                                  isDark
+                                    ? "bg-[#180438] text-white border-gray-600"
+                                    : "bg-white text-gray-900 border-gray-300"
+                                )}
+                              />
+                            </div>
+                          </div>
+                        )}
+                        {selectedStateCode && (
+                          <SelectItem
+                            value="__clear__"
+                            isDark={isDark}
+                            className="text-red-500 hover:text-red-600 focus:text-red-600"
+                          >
+                            <div className="flex items-center gap-2">
+                              <X className="h-4 w-4" />
+                              <span>Clear Selection</span>
+                            </div>
+                          </SelectItem>
+                        )}
+                        {selectedCountryCode &&
+                        State.getStatesOfCountry(selectedCountryCode).length >
+                          0 ? (
+                          State.getStatesOfCountry(selectedCountryCode)
+                            .filter((state) =>
+                              state.name
+                                .toLowerCase()
+                                .includes(stateSearch.toLowerCase())
+                            )
+                            .map((state) => (
+                              <SelectItem
+                                key={state.isoCode}
+                                value={state.isoCode}
+                                isDark={isDark}
+                              >
+                                {state.name}
+                              </SelectItem>
+                            ))
+                        ) : selectedCountryCode ? (
+                          <div className="px-2 py-1.5 text-sm text-gray-500">
+                            No states available for this country
+                          </div>
+                        ) : null}
+                        {selectedCountryCode &&
+                          State.getStatesOfCountry(selectedCountryCode).length >
+                            0 &&
+                          State.getStatesOfCountry(selectedCountryCode).filter(
+                            (state) =>
+                              state.name
+                                .toLowerCase()
+                                .includes(stateSearch.toLowerCase())
+                          ).length === 0 && (
+                            <div className="px-2 py-1.5 text-sm text-gray-500">
+                              No states found
+                            </div>
+                          )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* City */}
+                <div className="relative w-full">
+                  <div className="relative flex-1">
+                    <label
+                      htmlFor="city"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1 z-10",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-gray-400"
+                            : "bg-white text-gray-400"
+                          : isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      City
+                    </label>
+                    <Select
+                      value={editedCity}
+                      onValueChange={(value) => {
+                        if (value === "__clear__") {
+                          setEditedCity("");
+                          setCitySearch("");
+                        } else {
+                          setEditedCity(value);
+                          setCitySearch("");
+                        }
+                      }}
+                      disabled={hasReceivedProfileBonus || isSubmitting}
+                    >
+                      <SelectTrigger
+                        id="city"
+                        isDark={isDark}
+                        className={cn(
+                          "h-12 w-full text-[14px] transition-colors duration-200",
+                          hasReceivedProfileBonus || isSubmitting
+                            ? isDark
+                              ? "bg-transparent border-gray-400 text-gray-400 hover:bg-[#180438]/50 hover:border-gray-400"
+                              : "border-gray-400 text-gray-700 hover:bg-gray-50 hover:border-gray-400"
+                            : isDark
+                            ? "bg-[#180438] text-white border-gray-300 hover:bg-[#180438]/50  hover:border-gray-500"
+                            : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+                        )}
+                      >
+                        <SelectValue
+                          placeholder={
+                            !selectedCountryCode
+                              ? "Select Country First"
+                              : selectedStateCode
+                              ? "Select City"
+                              : State.getStatesOfCountry(selectedCountryCode)
+                                  .length === 0
+                              ? "Select City"
+                              : "Select State First"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent isDark={isDark}>
+                        {selectedCountryCode &&
+                          (selectedStateCode ||
+                            State.getStatesOfCountry(selectedCountryCode)
+                              .length === 0) && (
+                            <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+                              <div className="relative">
+                                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Input
+                                  type="text"
+                                  placeholder="Search city..."
+                                  value={citySearch}
+                                  onChange={(e) =>
+                                    setCitySearch(e.target.value)
+                                  }
+                                  onClick={(e) => e.stopPropagation()}
+                                  onKeyDown={(e) => e.stopPropagation()}
+                                  className={cn(
+                                    "pl-8 h-9 text-sm",
+                                    isDark
+                                      ? "bg-[#180438] text-white border-gray-600"
+                                      : "bg-white text-gray-900 border-gray-300"
+                                  )}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        {editedCity && (
+                          <SelectItem
+                            value="__clear__"
+                            isDark={isDark}
+                            className="text-red-500 hover:text-red-600 focus:text-red-600"
+                          >
+                            <div className="flex items-center gap-2">
+                              <X className="h-4 w-4" />
+                              <span>Clear Selection</span>
+                            </div>
+                          </SelectItem>
+                        )}
+                        {selectedCountryCode &&
+                        (selectedStateCode ||
+                          State.getStatesOfCountry(selectedCountryCode)
+                            .length === 0)
+                          ? (() => {
+                              const cities = selectedStateCode
+                                ? City.getCitiesOfState(
+                                    selectedCountryCode,
+                                    selectedStateCode
+                                  )
+                                : City.getCitiesOfCountry(selectedCountryCode);
+                              const filteredCities = cities
+                                ? cities.filter((city) =>
+                                    city.name
+                                      .toLowerCase()
+                                      .includes(citySearch.toLowerCase())
+                                  )
+                                : [];
+                              return filteredCities.length > 0 ? (
+                                filteredCities.map((city) => (
+                                  <SelectItem
+                                    key={`${city.name}-${city.stateCode || ""}`}
+                                    value={city.name}
+                                    isDark={isDark}
+                                  >
+                                    {city.name}
+                                  </SelectItem>
+                                ))
+                              ) : cities && cities.length > 0 ? (
+                                <div className="px-2 py-1.5 text-sm text-gray-500">
+                                  No cities found
+                                </div>
+                              ) : (
+                                <div className="px-2 py-1.5 text-sm text-gray-500">
+                                  No cities available
+                                </div>
+                              );
+                            })()
+                          : null}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Address */}
+                <div className="relative w-full col-span-1 sm:col-span-2">
+                  <div className="relative flex-1">
+                    <textarea
+                      id="address"
+                      value={editedAddress}
+                      onChange={(e) => setEditedAddress(e.target.value)}
+                      disabled={hasReceivedProfileBonus || isSubmitting}
+                      placeholder=" "
+                      rows={3}
+                      className={cn(
+                        "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300 resize-none",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-gray-400 border border-gray-400 focus:border-gray-400 focus:ring-gray-400"
+                            : "bg-white text-gray-400 border border-gray-400 focus:border-gray-400 focus:ring-gray-400"
+                          : isDark
+                          ? "bg-[#180438] text-white border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                          : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                      )}
+                    />
+                    <label
+                      htmlFor="address"
+                      className={cn(
+                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1",
+                        hasReceivedProfileBonus || isSubmitting
+                          ? isDark
+                            ? "bg-[#180438] text-gray-400"
+                            : "bg-white text-gray-400"
+                          : isDark
+                          ? "bg-[#180438] text-white"
+                          : "bg-white text-[#1A1A1A]"
+                      )}
+                    >
+                      House/Flat Address
+                    </label>
+                  </div>
+                </div>
+
+                {/* Languages */}
+                <div className="relative w-full col-span-1 sm:col-span-2">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="relative flex-1">
+                        <Label
+                          htmlFor="languageSelect"
+                          className={cn(
+                            "block mb-2 text-[14px] font-medium",
+                            isDark ? "text-white" : "text-[#1A1A1A]"
+                          )}
+                        >
+                          My Languages{" "}
+                          <span className="text-xs font-normal opacity-70">
+                            ({editedLanguages.length}/5)
+                          </span>
+                        </Label>
+                        <Select
+                          value={languageInput || undefined}
+                          onValueChange={(value) => {
+                            handleAddLanguage(value);
+                          }}
+                          disabled={
+                            hasReceivedProfileBonus ||
+                            isSubmitting ||
+                            editedLanguages.length >= 5
+                          }
+                        >
+                          <SelectTrigger
+                            id="languageSelect"
+                            className={cn(
+                              "w-full text-[14px]",
+                              isDark
+                                ? "bg-[#180438] text-white border-gray-300"
+                                : "bg-white text-gray-900 border-gray-300"
+                            )}
+                          >
+                            <SelectValue placeholder="Select a language" />
+                          </SelectTrigger>
+                          <SelectContent
+                            className={cn(
+                              "max-h-[300px]",
+                              isDark
+                                ? "bg-[#180438] text-white"
+                                : "bg-white text-gray-900"
+                            )}
+                          >
+                            {allLanguages.map((language) => (
+                              <SelectItem
+                                key={language}
+                                value={language}
+                                disabled={editedLanguages.includes(language)}
+                                className={cn(
+                                  isDark
+                                    ? "hover:bg-purple-900/30"
+                                    : "hover:bg-purple-50"
+                                )}
+                              >
+                                {language}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {editedLanguages.length >= 5 && (
+                          <p
+                            className={cn(
+                              "mt-1 text-xs",
+                              isDark ? "text-yellow-400" : "text-yellow-600"
+                            )}
+                          >
+                            Maximum of 5 languages reached. Remove a language to
+                            add another.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {editedLanguages.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {editedLanguages.map((lang, index) => (
+                          <span
+                            key={index}
+                            className={cn(
+                              "inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm",
+                              isDark
+                                ? "bg-purple-900/30 text-purple-200 border border-purple-700"
+                                : "bg-purple-100 text-purple-800 border border-purple-300"
+                            )}
+                          >
+                            {lang}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveLanguage(lang)}
+                              className="ml-1 hover:text-red-500"
+                              disabled={hasReceivedProfileBonus || isSubmitting}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Type of content I create - Max 3 category selections */}
+                <div className="relative w-full col-span-1 sm:col-span-2">
+                  <div className="space-y-3">
+                    <label
+                      className={cn(
+                        "text-sm text-[14px] font-medium block",
+                        isDark ? "text-white" : "text-[#1A1A1A]"
+                      )}
+                    >
+                      Categories{" "}
+                      <span className="text-xs text-gray-500">
+                        (Select up to 3)
+                      </span>
+                    </label>
+                    <div
+                      className={cn(
+                        "rounded-lg border p-4 space-y-3",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
+                      )}
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {CONTENT_TYPE_CATEGORIES.map((category) => {
+                          const isChecked = editedContentTypesCreated.includes(
+                            category.id
+                          );
+                          const isDisabled =
+                            !isChecked && editedContentTypesCreated.length >= 3;
+                          return (
+                            <div
+                              key={category.id}
+                              className="flex items-center space-x-2"
+                            >
+                              <Checkbox
+                                id={`content-created-${category.id}`}
+                                checked={isChecked}
+                                disabled={isDisabled || isSubmitting}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    if (editedContentTypesCreated.length < 3) {
+                                      setEditedContentTypesCreated([
+                                        ...editedContentTypesCreated,
+                                        category.id,
+                                      ]);
+                                      // Automatically check all subcategories when category is selected
+                                      const newSubcategories =
+                                        category.subcategories.map(
+                                          (subcategory) => ({
+                                            category: category.id,
+                                            subcategory: subcategory,
+                                          })
+                                        );
+                                      // Add subcategories that aren't already in the list
+                                      setEditedInterestedContentTypes(
+                                        (prev) => {
+                                          const existing = new Set(
+                                            prev.map(
+                                              (item) =>
+                                                `${item.category}:${item.subcategory}`
+                                            )
+                                          );
+                                          const toAdd = newSubcategories.filter(
+                                            (item) =>
+                                              !existing.has(
+                                                `${item.category}:${item.subcategory}`
+                                              )
+                                          );
+                                          return [...prev, ...toAdd];
+                                        }
+                                      );
+                                    }
+                                  } else {
+                                    // Remove category and all its subcategories from interested list
+                                    setEditedContentTypesCreated(
+                                      editedContentTypesCreated.filter(
+                                        (id) => id !== category.id
+                                      )
+                                    );
+                                    setEditedInterestedContentTypes(
+                                      editedInterestedContentTypes.filter(
+                                        (item) => item.category !== category.id
+                                      )
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  isDark
+                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                )}
+                              />
+                              <label
+                                htmlFor={`content-created-${category.id}`}
+                                className={cn(
+                                  "text-sm font-normal",
+                                  isDisabled
+                                    ? "opacity-50 cursor-not-allowed"
+                                    : "cursor-pointer",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                {category.name}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {editedContentTypesCreated.length > 0 && (
+                        <div className="flex items-center justify-between mt-2">
+                          <p
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-gray-400" : "text-gray-500"
+                            )}
+                          >
+                            {editedContentTypesCreated.length} of 3 selected
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditedContentTypesCreated([]);
+                              setEditedInterestedContentTypes([]);
+                            }}
+                            disabled={isSubmitting}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Other type of content I am interested in - Subcategories of selected categories */}
+                <div className="relative w-full col-span-1 sm:col-span-2">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <label
+                        className={cn(
+                          "text-[14px] font-medium block",
+                          isDark ? "text-white" : "text-[#1A1A1A]"
+                        )}
+                      >
+                        Subcategories
+                      </label>
+                      {editedInterestedContentTypes.length > 0 && (
+                        <span
+                          className={cn(
+                            "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+                            isDark
+                              ? "bg-purple-900/30 text-purple-200 border border-purple-700"
+                              : "bg-purple-100 text-purple-800 border border-purple-300"
+                          )}
+                        >
+                          {editedInterestedContentTypes.length}
+                          selected
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      className={cn(
+                        "rounded-lg border p-4 space-y-3",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
+                      )}
+                    >
+                      <Accordion type="multiple" className="w-full">
+                        {CONTENT_TYPE_CATEGORIES.map((category) => {
+                          // Get selected subcategories for this category
+                          const selectedSubcategoriesForCategory =
+                            editedInterestedContentTypes.filter(
+                              (item) => item.category === category.id
+                            );
+                          const selectedCount =
+                            selectedSubcategoriesForCategory.length;
+
+                          return (
+                            <AccordionItem
+                              key={category.id}
+                              value={category.id}
+                              className="border-b border-gray-200 dark:border-gray-700"
+                            >
+                              <AccordionTrigger
+                                className={cn(
+                                  "text-sm font-medium hover:no-underline py-3",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span>{category.name}</span>
+                                  {selectedCount > 0 && (
+                                    <span
+                                      className={cn(
+                                        "text-xs px-2 py-0.5 rounded-full",
+                                        isDark
+                                          ? "bg-purple-600 text-white"
+                                          : "bg-purple-100 text-purple-700"
+                                      )}
+                                    >
+                                      {selectedCount} selected
+                                    </span>
+                                  )}
+                                </div>
+                              </AccordionTrigger>
+                              <AccordionContent className="pt-2 pb-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {category.subcategories.map((subcategory) => {
+                                    const isChecked =
+                                      editedInterestedContentTypes.some(
+                                        (item) =>
+                                          item.category === category.id &&
+                                          item.subcategory === subcategory
+                                      );
+                                    return (
+                                      <div
+                                        key={`${category.id}-${subcategory}`}
+                                        className="flex items-center space-x-2"
+                                      >
+                                        <Checkbox
+                                          id={`content-interested-${category.id}-${subcategory}`}
+                                          checked={isChecked}
+                                          disabled={isSubmitting}
+                                          onCheckedChange={(checked) => {
+                                            if (checked) {
+                                              setEditedInterestedContentTypes([
+                                                ...editedInterestedContentTypes,
+                                                {
+                                                  category: category.id,
+                                                  subcategory: subcategory,
+                                                },
+                                              ]);
+                                            } else {
+                                              setEditedInterestedContentTypes(
+                                                editedInterestedContentTypes.filter(
+                                                  (item) =>
+                                                    !(
+                                                      item.category ===
+                                                        category.id &&
+                                                      item.subcategory ===
+                                                        subcategory
+                                                    )
+                                                )
+                                              );
+                                            }
+                                          }}
+                                          className={cn(
+                                            isDark
+                                              ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                              : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                          )}
+                                        />
+                                        <label
+                                          htmlFor={`content-interested-${category.id}-${subcategory}`}
+                                          className={cn(
+                                            "text-sm font-normal cursor-pointer",
+                                            isDark
+                                              ? "text-gray-300"
+                                              : "text-gray-700"
+                                          )}
+                                        >
+                                          {subcategory}
+                                        </label>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          );
+                        })}
+                      </Accordion>
+                      {editedInterestedContentTypes.length > 0 && (
+                        <div className="flex items-center justify-end mt-2">
+                          {/* <p
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-gray-400" : "text-gray-500"
+                            )}
+                          >
+                            {editedInterestedContentTypes.length} subcategories
+                            selected
+                          </p> */}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditedInterestedContentTypes([])}
+                            disabled={isSubmitting}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Interests */}
+                <div className="relative w-full col-span-1 sm:col-span-2">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <label
+                        className={cn(
+                          "text-[14px] font-medium",
+                          isDark ? "text-white" : "text-[#1A1A1A]"
+                        )}
+                      >
+                        Interests
+                      </label>
+                      {editedInterests.length > 0 && (
+                        <span
+                          className={cn(
+                            "text-xs px-2 py-0.5 rounded-full",
+                            isDark
+                              ? "bg-purple-600 text-white"
+                              : "bg-purple-100 text-purple-700"
+                          )}
+                        >
+                          {editedInterests.length} selected
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      className={cn(
+                        "rounded-lg border p-4 space-y-3",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
+                      )}
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {INTERESTS.map((interest) => {
+                          const isChecked = editedInterests.includes(interest);
+                          return (
+                            <div
+                              key={interest}
+                              className="flex items-center space-x-2"
+                            >
+                              <Checkbox
+                                id={`interest-${interest}`}
+                                checked={isChecked}
+                                disabled={isSubmitting}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setEditedInterests([
+                                      ...editedInterests,
+                                      interest,
+                                    ]);
+                                  } else {
+                                    setEditedInterests(
+                                      editedInterests.filter(
+                                        (item) => item !== interest
+                                      )
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  isDark
+                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                )}
+                              />
+                              <label
+                                htmlFor={`interest-${interest}`}
+                                className={cn(
+                                  "text-sm font-normal cursor-pointer",
+                                  isDark ? "text-gray-300" : "text-gray-700"
+                                )}
+                              >
+                                {interest}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {editedInterests.length > 0 && (
+                        <div className="flex items-center justify-end mt-2">
+                          {/* <p
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-gray-400" : "text-gray-500"
+                            )}
+                          >
+                            {editedInterests.length} interests selected
+                          </p> */}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditedInterests([])}
+                            disabled={isSubmitting}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Save Changes Button */}
+              <div className="flex justify-end pt-4">
+                {hasReceivedProfileBonus ? (
+                  hasOnlyEditableFieldChanges() ? (
+                    <Button
+                      onClick={() => handleSaveProfileChanges(false)}
+                      disabled={!hasProfileChanges() || isSubmitting}
+                      className={cn(
+                        "px-6 py-2",
+                        isDark
+                          ? "bg-purple-600 hover:bg-purple-700"
+                          : "bg-[#7F39EC] hover:bg-[#6C43D0]"
+                      )}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          Save Changes
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <div className="text-sm text-muted-foreground italic">
+                      You can only edit interests, categories, and subcategories
+                      after receiving the bonus.
+                    </div>
+                  )
+                ) : (
+                  <Button
+                    onClick={handleSaveClick}
+                    disabled={!hasProfileChanges() || isSubmitting}
+                    className={cn(
+                      "px-6 py-2",
+                      isDark
+                        ? "bg-purple-600 hover:bg-purple-700"
+                        : "bg-[#7F39EC] hover:bg-[#6C43D0]"
+                    )}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </div>
+        </div>
+      )}
 
       {/* Company Profile - Only for Advertisers */}
       {/* {userData?.user_type === "advertiser" && (
@@ -2246,6 +4470,102 @@ export default function ProfilePage({
           </CardContent>
         </div>
       )}
+
+      {/* Complete Profile Confirmation Modal */}
+      <Dialog
+        open={isCompleteProfileModalOpen}
+        onOpenChange={setIsCompleteProfileModalOpen}
+        isdark={isDark}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-900")}
+            >
+              Complete Your Profile?
+            </DialogTitle>
+            {/* <DialogDescription
+              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            >
+              By completing your profile, you'll receive a $0.50 bonus.
+            </DialogDescription> */}
+            <p
+              className={cn(
+                "py-3 text-md font-medium",
+                isDark ? "text-white" : "text-gray-900"
+              )}
+            >
+              ⚠️ Once the $0.50 bonus is claimed, all details become disabled,
+              except your interests, categories, and subcategories, which you
+              can still edit.
+            </p>
+          </DialogHeader>
+          {/* <div
+            className={cn(
+              "py-4 space-y-2",
+              isDark ? "text-gray-300" : "text-gray-700"
+            )}
+          >
+            <p className="text-sm font-medium">Are you sure you want to:</p>
+            <ul className="text-sm list-disc list-inside space-y-1 ml-2">
+              <li>Complete your profile and claim the $0.50 bonus?</li>
+              <li>Lock your profile from further editing?</li>
+            </ul>
+          </div> */}
+          <DialogFooter className="flex flex-col sm:flex-row justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsCompleteProfileModalOpen(false);
+                // Save without claiming bonus
+                handleSaveProfileChanges(false);
+              }}
+              disabled={isSubmitting}
+              className={cn(
+                "w-full sm:w-auto",
+                isDark
+                  ? "border-gray-600 text-gray-300 hover:bg-gray-800"
+                  : "border-gray-300 text-gray-900"
+              )}
+            >
+              Save
+            </Button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              {/* <Button
+                variant="outline"
+                onClick={() => setIsCompleteProfileModalOpen(false)}
+                disabled={isSubmitting}
+                className={cn(
+                  isDark
+                    ? "border-gray-600 text-gray-300 hover:bg-gray-800"
+                    : "border-gray-300"
+                )}
+              >
+                Cancel
+              </Button> */}
+              <Button
+                onClick={handleConfirmCompleteProfile}
+                disabled={isSubmitting}
+                className={cn(
+                  "px-6",
+                  isDark
+                    ? "bg-purple-600 hover:bg-purple-700"
+                    : "bg-[#7F39EC] hover:bg-[#6C43D0]"
+                )}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Completing...
+                  </>
+                ) : (
+                  "Complete & Claim Bonus"
+                )}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Change Email Modal */}
       <EmailChangeModal

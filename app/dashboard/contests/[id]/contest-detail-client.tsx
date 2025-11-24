@@ -112,7 +112,9 @@ import {
   Gift,
   Tag,
   Star,
+  Globe,
 } from "lucide-react";
+import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
 
 // --- Local Type Definitions ---
 interface Contest {
@@ -152,6 +154,15 @@ interface Contest {
   max_earnings_per_creator?: number;
   content_type?: string;
   bonus_details?: any;
+  // Categories, subcategories, and interests
+  categories?: string[] | null;
+  subcategories?:
+    | Array<{ category: string; subcategory: string }>
+    | Record<string, string[]>
+    | null; // Can be flat array or grouped object format
+  interests?: string[] | null;
+  // Region data (JSONB format: { "North America": ["United States", "Canada"], ... })
+  region?: Record<string, string[]> | null;
   // Payment information
   payment_details?: any | null;
   // Moderation tracking fields
@@ -2432,6 +2443,77 @@ export default function ContestDetailClient({
                   </div>
                 </div>
 
+                {/* Regions Card */}
+                {currentContest.region &&
+                  Object.keys(currentContest.region).length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-lg text-foreground">
+                        Available Regions
+                      </h3>
+                      <div
+                        className={cn(
+                          "border rounded-xl transition-all duration-300",
+                          isDark ? "border-gray-600" : "border-gray-300"
+                        )}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-start gap-4">
+                            <div
+                              className={cn(
+                                "w-10 h-10 flex items-center justify-center rounded-full flex-shrink-0",
+                                isDark
+                                  ? "bg-[#FFFFFF42] text-white"
+                                  : "bg-purple-100 text-[#4A00BE]"
+                              )}
+                            >
+                              <Globe className="h-5 w-5" />
+                            </div>
+                            <div className="flex-1 space-y-3">
+                              {Object.entries(currentContest.region).map(
+                                ([regionName, countries]) => (
+                                  <div
+                                    key={regionName}
+                                    className={cn(
+                                      "p-3 rounded-lg border",
+                                      isDark
+                                        ? "bg-[#170337] border-gray-600"
+                                        : "bg-gray-50 border-gray-200"
+                                    )}
+                                  >
+                                    <p
+                                      className={cn(
+                                        "font-semibold text-base mb-2",
+                                        isDark ? "text-white" : "text-gray-900"
+                                      )}
+                                    >
+                                      {regionName}
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {countries.map((country) => (
+                                        <Badge
+                                          key={country}
+                                          variant="secondary"
+                                          className={cn(
+                                            "text-xs",
+                                            isDark
+                                              ? "bg-gray-700 text-gray-200 border-gray-600"
+                                              : "bg-white text-gray-700 border-gray-300"
+                                          )}
+                                        >
+                                          {country}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </div>
+                    </div>
+                  )}
+
                 {/* Conditional Prize Structure / CPM Details */}
                 {currentContest.contest_type === "leaderboard" &&
                   currentContest.contest_based_details?.leaderboard_contest && (
@@ -3242,6 +3324,164 @@ export default function ContestDetailClient({
                     </div>
                   </div>
                 )}
+
+                {/* Categories Section */}
+                {currentContest.categories &&
+                  Array.isArray(currentContest.categories) &&
+                  currentContest.categories.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                        <Tag className="h-5 w-5 text-purple-600" />
+                        Categories
+                      </h3>
+                      <div
+                        className={cn(
+                          "border rounded-xl p-4",
+                          isDark
+                            ? "border-purple-600 bg-purple-950/50"
+                            : "border-purple-300 bg-purple-50/50"
+                        )}
+                      >
+                        <div className="flex flex-wrap gap-2">
+                          {currentContest.categories.map(
+                            (categoryId: string) => {
+                              const category = CONTENT_TYPE_CATEGORIES.find(
+                                (cat) => cat.id === categoryId
+                              );
+                              return (
+                                <span
+                                  key={categoryId}
+                                  className={cn(
+                                    "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                    isDark
+                                      ? "bg-purple-600/30 text-purple-200 border border-purple-500/50"
+                                      : "bg-purple-100 text-purple-800 border border-purple-300"
+                                  )}
+                                >
+                                  {category ? category.name : categoryId}
+                                </span>
+                              );
+                            }
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                {/* Subcategories Section */}
+                {currentContest.subcategories &&
+                  (() => {
+                    // Handle both grouped format and flat array format
+                    let subcategoriesToDisplay: Array<{
+                      category: string;
+                      subcategory: string;
+                    }> = [];
+
+                    if (Array.isArray(currentContest.subcategories)) {
+                      // Old flat array format
+                      subcategoriesToDisplay = currentContest.subcategories;
+                    } else if (
+                      typeof currentContest.subcategories === "object" &&
+                      currentContest.subcategories !== null
+                    ) {
+                      // New grouped format: {"beauty": ["Skincare", "Makeup"], ...}
+                      const grouped = currentContest.subcategories as Record<
+                        string,
+                        string[]
+                      >;
+                      Object.keys(grouped).forEach((category) => {
+                        const subcats = grouped[category];
+                        if (Array.isArray(subcats)) {
+                          subcats.forEach((subcat) => {
+                            subcategoriesToDisplay.push({
+                              category,
+                              subcategory: subcat,
+                            });
+                          });
+                        }
+                      });
+                    }
+
+                    return subcategoriesToDisplay.length > 0 ? (
+                      <div className="space-y-3">
+                        <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                          <Tag className="h-5 w-5 text-indigo-600" />
+                          Subcategories
+                        </h3>
+                        <div
+                          className={cn(
+                            "border rounded-xl p-4",
+                            isDark
+                              ? "border-indigo-600 bg-indigo-950/50"
+                              : "border-indigo-300 bg-indigo-50/50"
+                          )}
+                        >
+                          <div className="flex flex-wrap gap-2">
+                            {subcategoriesToDisplay.map(
+                              (
+                                item: { category: string; subcategory: string },
+                                index: number
+                              ) => {
+                                const category = CONTENT_TYPE_CATEGORIES.find(
+                                  (cat) => cat.id === item.category
+                                );
+                                return (
+                                  <span
+                                    key={`${item.category}-${item.subcategory}-${index}`}
+                                    className={cn(
+                                      "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                      isDark
+                                        ? "bg-indigo-600/30 text-indigo-200 border border-indigo-500/50"
+                                        : "bg-indigo-100 text-indigo-800 border border-indigo-300"
+                                    )}
+                                  >
+                                    {category ? category.name : item.category}:{" "}
+                                    {item.subcategory}
+                                  </span>
+                                );
+                              }
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+
+                {/* Interests Section */}
+                {currentContest.interests &&
+                  Array.isArray(currentContest.interests) &&
+                  currentContest.interests.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                        <Star className="h-5 w-5 text-yellow-600" />
+                        Interests
+                      </h3>
+                      <div
+                        className={cn(
+                          "border rounded-xl p-4",
+                          isDark
+                            ? "border-yellow-600 bg-yellow-950/50"
+                            : "border-yellow-300 bg-yellow-50/50"
+                        )}
+                      >
+                        <div className="flex flex-wrap gap-2">
+                          {currentContest.interests.map((interest: string) => (
+                            <span
+                              key={interest}
+                              className={cn(
+                                "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                isDark
+                                  ? "bg-yellow-600/30 text-yellow-200 border border-yellow-500/50"
+                                  : "bg-yellow-100 text-yellow-800 border border-yellow-300"
+                              )}
+                            >
+                              {interest}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                 {/* Flat Fee Bonus Section */}
                 {(currentContest.contest_based_details?.cpm_contest

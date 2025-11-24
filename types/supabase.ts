@@ -149,6 +149,11 @@ export interface Database {
           total_money_won: number;
           withdrawable_balance: number;
           total_views: number;
+          categories: Json | null;
+          subcategories: Json | null;
+          interests: Json | null;
+          has_claimed_profile_reward: boolean;
+          profile_reward_claimed_at: string | null;
         };
         Insert: {
           id: string;
@@ -160,6 +165,11 @@ export interface Database {
           total_money_won?: number;
           withdrawable_balance?: number;
           total_views?: number;
+          categories?: Json | null;
+          subcategories?: Json | null;
+          interests?: Json | null;
+          has_claimed_profile_reward?: boolean;
+          profile_reward_claimed_at?: string | null;
         };
         Update: {
           id?: string;
@@ -171,6 +181,11 @@ export interface Database {
           total_money_won?: number;
           withdrawable_balance?: number;
           total_views?: number;
+          categories?: Json | null;
+          subcategories?: Json | null;
+          interests?: Json | null;
+          has_claimed_profile_reward?: boolean;
+          profile_reward_claimed_at?: string | null;
         };
       };
       subscriptions: {

@@ -210,6 +210,12 @@ export default async function ContestDetailPage({
     content_type: contestData.content_type,
     bonus_details: contestData.bonus_details,
     max_earnings_per_creator: contestData.max_earnings_per_creator,
+    // Categories, subcategories, and interests
+    categories: contestData.categories,
+    subcategories: contestData.subcategories,
+    interests: contestData.interests,
+    // Region data
+    region: contestData.region,
   };
 
   const submissions = submissionsData
