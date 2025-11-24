@@ -1,3 +1,17 @@
+-- Add region column to contests table
+-- This column stores regions and countries as JSONB format:
+-- { "North America": ["United States", "Canada", ...], "Europe": [...], ... }
+
+ALTER TABLE public.contests
+ADD COLUMN IF NOT EXISTS region jsonb NULL;
+
+-- Add comment to document the column structure
+COMMENT ON COLUMN public.contests.region IS 'Stores regions and countries as JSONB object where keys are region names and values are arrays of country names. Example: {"North America": ["United States", "Canada"], "Europe": ["France", "Germany"]}';
+
+-- Create GIN index for efficient JSONB queries
+CREATE INDEX IF NOT EXISTS idx_contests_region ON public.contests USING gin (region);
+
+-- Update contests_with_status view to include region column
 CREATE OR REPLACE VIEW public.contests_with_status WITH (security_invoker='on') AS
  SELECT contests.id,
     contests.advertiser_id,
@@ -49,3 +63,4 @@ CREATE OR REPLACE VIEW public.contests_with_status WITH (security_invoker='on') 
     contests.bonus_details,
     contests.max_earnings_per_creator
    FROM public.contests;
+

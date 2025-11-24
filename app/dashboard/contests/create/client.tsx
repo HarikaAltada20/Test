@@ -48,6 +48,7 @@ import {
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { toast } from "@/hooks/use-toast"; // Added import
 import dynamic from "next/dynamic";
+import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
 
 // Dynamically import the Novel editor
 const NovelEditor = dynamic(() => import("@/components/novel-editor"), {
@@ -85,7 +86,19 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { formatName } from "@/lib/name-utils";
+import { RotateCcw } from "lucide-react";
+import {
+  CONTENT_TYPE_CATEGORIES,
+  INTEREST_CATEGORIES,
+  INTERESTS,
+} from "@/constants/contentCategories";
 
 // Define types for subscription plan features
 type PlanFeatures = {
@@ -122,6 +135,103 @@ type ResourceItem = {
   url: string;
   description: string;
   type: "internal" | "external";
+};
+
+// Regions and countries data
+const REGIONS_AND_COUNTRIES: Record<string, string[]> =
+  REGIONS_AND_COUNTRIES_DATA;
+
+// Helper function to build region JSONB object from selected regions and countries
+const buildRegionData = (
+  selectedRegions: string[],
+  selectedCountries: string[]
+): Record<string, string[]> | null => {
+  if (selectedRegions.length === 0 && selectedCountries.length === 0) {
+    return null;
+  }
+
+  const regionData: Record<string, string[]> = {};
+
+  // For each selected region, get the countries that are selected
+  selectedRegions.forEach((region) => {
+    const regionKey = region as keyof typeof REGIONS_AND_COUNTRIES;
+    const regionCountries = REGIONS_AND_COUNTRIES[regionKey] || [];
+    const countriesArray = Array.isArray(regionCountries)
+      ? regionCountries.map((c) => String(c))
+      : [];
+
+    // Filter to only include countries that are actually selected
+    const selectedCountriesInRegion = countriesArray.filter((country) =>
+      selectedCountries.includes(country)
+    );
+
+    // Only add region if it has selected countries
+    if (selectedCountriesInRegion.length > 0) {
+      regionData[region] = selectedCountriesInRegion;
+    }
+  });
+
+  // Also handle countries that might be selected without their region being selected
+  // Group them by their region
+  const ungroupedCountries = selectedCountries.filter((country) => {
+    // Check if this country belongs to any selected region
+    return !selectedRegions.some((region) => {
+      const regionKey = region as keyof typeof REGIONS_AND_COUNTRIES;
+      const regionCountries = REGIONS_AND_COUNTRIES[regionKey] || [];
+      const countriesArray = Array.isArray(regionCountries)
+        ? regionCountries.map((c) => String(c))
+        : [];
+      return countriesArray.includes(country);
+    });
+  });
+
+  // Find which region each ungrouped country belongs to
+  ungroupedCountries.forEach((country) => {
+    Object.keys(REGIONS_AND_COUNTRIES).forEach((region) => {
+      const regionKey = region as keyof typeof REGIONS_AND_COUNTRIES;
+      const regionCountries = REGIONS_AND_COUNTRIES[regionKey] || [];
+      const countriesArray = Array.isArray(regionCountries)
+        ? regionCountries.map((c) => String(c))
+        : [];
+
+      if (countriesArray.includes(country)) {
+        if (!regionData[region]) {
+          regionData[region] = [];
+        }
+        if (!regionData[region].includes(country)) {
+          regionData[region].push(country);
+        }
+      }
+    });
+  });
+
+  return Object.keys(regionData).length > 0 ? regionData : null;
+};
+
+// Helper function to extract regions and countries from region JSONB data
+const extractRegionsAndCountries = (
+  regionData: Record<string, string[]> | null
+): { regions: string[]; countries: string[] } => {
+  if (!regionData || typeof regionData !== "object") {
+    return { regions: [], countries: [] };
+  }
+
+  const regions: string[] = [];
+  const countries: string[] = [];
+
+  Object.keys(regionData).forEach((region) => {
+    const regionCountries = regionData[region];
+    if (Array.isArray(regionCountries)) {
+      regions.push(region);
+      regionCountries.forEach((country) => {
+        if (!countries.includes(country)) {
+          countries.push(country);
+        }
+      });
+    }
+  });
+
+  return { regions, countries };
 };
 
 export default function CreateContestPage({
@@ -263,7 +373,22 @@ export default function CreateContestPage({
   });
   const isDark = mode === "dark";
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<string>("technology");
+  // Categories, subcategories, and interests state
+  const [contestCategories, setContestCategories] = useState<string[]>([]);
+  const [contestSubcategories, setContestSubcategories] = useState<
+    Array<{ category: string; subcategory: string }>
+  >([]);
+  const [contestInterests, setContestInterests] = useState<string[]>([]);
+  // Show/hide targeting sections
+  const [showTargetingSections, setShowTargetingSections] = useState(false);
+  // Regions and countries state
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
+  // Toggle states for collapsible sections
+  const [categoriesOpen, setCategoriesOpen] = useState(true); // Categories expanded by default
+  const [subcategoriesOpen, setSubcategoriesOpen] = useState(false);
+  const [interestsOpen, setInterestsOpen] = useState(false);
+  const [regionsOpen, setRegionsOpen] = useState(false);
   const [thumbnail, setThumbnail] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [brief, setBrief] = useState("");
@@ -475,6 +600,7 @@ export default function CreateContestPage({
     {}
   );
   const [platform, setPlatform] = useState<string>("youtube"); // Default platform
+  const [category, setCategory] = useState<string>("technology");
 
   // State for fetched subscription plans
   const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<
@@ -514,6 +640,27 @@ export default function CreateContestPage({
     console.log("Brief state updated:", brief);
     console.log("isQuillEmpty(brief) result:", isQuillEmpty(brief));
   }, [brief]);
+
+  // Automatically show targeting sections when any targeting data is selected
+  useEffect(() => {
+    const hasTargetingData =
+      contestCategories.length > 0 ||
+      contestSubcategories.length > 0 ||
+      contestInterests.length > 0 ||
+      selectedRegions.length > 0 ||
+      selectedCountries.length > 0;
+
+    if (hasTargetingData && !showTargetingSections) {
+      setShowTargetingSections(true);
+    }
+  }, [
+    contestCategories,
+    contestSubcategories,
+    contestInterests,
+    selectedRegions,
+    selectedCountries,
+    showTargetingSections,
+  ]);
 
   // Helper function to check if rich text editor content is effectively empty
   const isQuillEmpty = (htmlString: string | null | undefined): boolean => {
@@ -634,6 +781,56 @@ export default function CreateContestPage({
     }
   };
 
+  // Handler for region selection - automatically selects all countries in the region
+  const handleRegionToggle = (region: string, checked: boolean) => {
+    const regionKey = region as keyof typeof REGIONS_AND_COUNTRIES;
+    const regionCountries = REGIONS_AND_COUNTRIES[regionKey] || [];
+    const countriesArray = Array.isArray(regionCountries)
+      ? [...regionCountries]
+      : [];
+
+    if (checked) {
+      // Add region and all its countries
+      setSelectedRegions([...selectedRegions, region]);
+      setSelectedCountries([
+        ...new Set([...selectedCountries, ...countriesArray]),
+      ]);
+    } else {
+      // Remove region and all its countries
+      setSelectedRegions(selectedRegions.filter((r) => r !== region));
+      setSelectedCountries(
+        selectedCountries.filter((country) => !countriesArray.includes(country))
+      );
+    }
+  };
+
+  // Handler for individual country selection
+  const handleCountryToggle = (country: string, checked: boolean) => {
+    if (checked) {
+      setSelectedCountries([...selectedCountries, country]);
+    } else {
+      setSelectedCountries(selectedCountries.filter((c) => c !== country));
+      // If all countries from a region are deselected, remove the region
+      const regionKeys = Object.keys(REGIONS_AND_COUNTRIES) as Array<
+        keyof typeof REGIONS_AND_COUNTRIES
+      >;
+      regionKeys.forEach((region) => {
+        const regionCountries = REGIONS_AND_COUNTRIES[region];
+        const countriesArray = Array.isArray(regionCountries)
+          ? [...regionCountries]
+          : [];
+        if (countriesArray.includes(country)) {
+          const remainingCountries = countriesArray.filter(
+            (c) => c !== country && selectedCountries.includes(c)
+          );
+          if (remainingCountries.length === 0) {
+            setSelectedRegions(selectedRegions.filter((r) => r !== region));
+          }
+        }
+      });
+    }
+  };
+
   // Helper function to delete thumbnail from Supabase storage
   const deleteFromStorage = async (thumbnailUrl: string) => {
     try {
@@ -673,7 +870,6 @@ export default function CreateContestPage({
         .insert({
           advertiser_id: user.id,
           title: title || "No Title - Draft",
-          category: "technology",
           brief_html: "",
           brief_json: null,
           rules_html: "",
@@ -703,6 +899,27 @@ export default function CreateContestPage({
                   },
                 }
               : null,
+          // Categories, subcategories, and interests
+          categories: contestCategories.length > 0 ? contestCategories : null,
+          subcategories: (() => {
+            if (!contestSubcategories || contestSubcategories.length === 0)
+              return null;
+            // Group by category and remove duplicates
+            const grouped: Record<string, string[]> = {};
+            contestSubcategories.forEach((item) => {
+              if (!grouped[item.category]) {
+                grouped[item.category] = [];
+              }
+              if (!grouped[item.category].includes(item.subcategory)) {
+                grouped[item.category].push(item.subcategory);
+              }
+            });
+            return Object.keys(grouped).length > 0 ? grouped : null;
+          })(),
+          interests:
+            contestInterests.length > 0 ? [...new Set(contestInterests)] : null,
+          // Regions and countries as JSONB
+          region: buildRegionData(selectedRegions, selectedCountries),
           // New features (2025-10-01)
           multiple_submissions_enabled: false,
           max_submissions_per_creator: 1,
@@ -731,7 +948,6 @@ export default function CreateContestPage({
       resources: ResourceItem[];
       thumbnail_url: string | null;
       title?: string;
-      category?: string;
       brief_html?: string;
       brief_json?: any;
       rules_html?: string;
@@ -741,6 +957,9 @@ export default function CreateContestPage({
       end_date?: string | null;
       contest_type?: "leaderboard" | "cpm";
       contest_based_details?: any;
+      categories?: string[] | null;
+      subcategories?: Array<{ category: string; subcategory: string }> | null;
+      interests?: string[] | null;
     }>
   ) => {
     const currentContestId = contestId || draftId;
@@ -1909,12 +2128,36 @@ export default function CreateContestPage({
           ? "Updating contest..."
           : "Creating contest..."
       );
+
+      // Helper function to process and group subcategories by category
+      const processSubcategories = (
+        subcategories: Array<{ category: string; subcategory: string }>
+      ) => {
+        if (!subcategories || subcategories.length === 0) return null;
+
+        // Group by category and remove duplicates
+        const grouped: Record<string, string[]> = {};
+
+        subcategories.forEach((item) => {
+          if (!grouped[item.category]) {
+            grouped[item.category] = [];
+          }
+          // Only add if not already in the array for this category
+          if (!grouped[item.category].includes(item.subcategory)) {
+            grouped[item.category].push(item.subcategory);
+          }
+        });
+
+        // Return grouped object format: { "beauty": ["Skincare", "Makeup"], ... }
+        return Object.keys(grouped).length > 0 ? grouped : null;
+      };
+
       const contestData = {
         advertiser_id: userId,
         title,
         thumbnail_url: thumbnailUrl,
-        category,
         platform: platform,
+        category: category || null,
         brief_html: briefHtml,
         brief_json: briefJson,
         rules_html: rulesHtml,
@@ -1922,6 +2165,13 @@ export default function CreateContestPage({
         resources,
         inspiration_links: inspirationLinks,
         tracking_links: trackingLinks,
+        // Categories, subcategories, and interests as direct columns
+        categories: contestCategories.length > 0 ? contestCategories : null,
+        subcategories: processSubcategories(contestSubcategories),
+        interests:
+          contestInterests.length > 0 ? [...new Set(contestInterests)] : null, // Remove duplicate interests
+        // Regions and countries as JSONB
+        region: buildRegionData(selectedRegions, selectedCountries),
         subscription_info_of_user: await (async () => {
           try {
             // Get user's subscription info using new system
@@ -2421,11 +2671,30 @@ export default function CreateContestPage({
       const basicsData = {
         advertiser_id: user?.id,
         title,
-        category,
         platform,
+        category: category || null,
         contest_type: contestType,
         thumbnail_url: thumbnailPreview || null,
         moderation_status: "draft",
+        // Categories, subcategories, and interests
+        categories: contestCategories.length > 0 ? contestCategories : null,
+        subcategories: (() => {
+          if (!contestSubcategories || contestSubcategories.length === 0)
+            return null;
+          // Group by category and remove duplicates
+          const grouped: Record<string, string[]> = {};
+          contestSubcategories.forEach((item) => {
+            if (!grouped[item.category]) {
+              grouped[item.category] = [];
+            }
+            if (!grouped[item.category].includes(item.subcategory)) {
+              grouped[item.category].push(item.subcategory);
+            }
+          });
+          return Object.keys(grouped).length > 0 ? grouped : null;
+        })(),
+        interests:
+          contestInterests.length > 0 ? [...new Set(contestInterests)] : null,
       };
       if (!currentContestId) {
         // Create new draft contest
@@ -2779,8 +3048,8 @@ export default function CreateContestPage({
     console.log("Draft title:", draft.title);
 
     setTitle(draft.title || "");
-    setCategory(draft.category || "technology");
     setPlatform(draft.platform || "youtube"); // Load platform, default if not present
+    setCategory(draft.category || "technology"); // Load category, default to technology if not present
     // If thumbnail URL is available, show it in the preview
     if (draft.thumbnail_url) {
       setThumbnailPreview(draft.thumbnail_url);
@@ -2859,6 +3128,108 @@ export default function CreateContestPage({
       const { dateString, timeString } = toLocalDateTimeStrings(draft.end_date);
       setEndDate(dateString);
       setEndTime(timeString);
+    }
+
+    // Load categories, subcategories, and interests from direct columns
+    if (draft.categories && Array.isArray(draft.categories)) {
+      setContestCategories(draft.categories);
+    }
+
+    // Handle subcategories - can be grouped object format or flat array format
+    if (draft.subcategories) {
+      if (Array.isArray(draft.subcategories)) {
+        // Old flat array format: [{category: "beauty", subcategory: "Skincare"}, ...]
+        setContestSubcategories(draft.subcategories);
+      } else if (
+        typeof draft.subcategories === "object" &&
+        draft.subcategories !== null
+      ) {
+        // New grouped format: {"beauty": ["Skincare", "Makeup"], ...}
+        const grouped = draft.subcategories as Record<string, string[]>;
+        const flatArray: Array<{ category: string; subcategory: string }> = [];
+        Object.keys(grouped).forEach((category) => {
+          const subcats = grouped[category];
+          if (Array.isArray(subcats)) {
+            subcats.forEach((subcat) => {
+              flatArray.push({ category, subcategory: subcat });
+            });
+          }
+        });
+        setContestSubcategories(flatArray);
+      }
+    }
+
+    if (draft.interests && Array.isArray(draft.interests)) {
+      setContestInterests(draft.interests);
+    }
+    // Load regions and countries from region JSONB column
+    if (draft.region && typeof draft.region === "object") {
+      const { regions, countries } = extractRegionsAndCountries(
+        draft.region as Record<string, string[]>
+      );
+      setSelectedRegions(regions);
+      setSelectedCountries(countries);
+    }
+    // Fallback: Load from old target_regions and target_countries columns for backward compatibility
+    else {
+      if (draft.target_regions && Array.isArray(draft.target_regions)) {
+        setSelectedRegions(draft.target_regions);
+      }
+      if (draft.target_countries && Array.isArray(draft.target_countries)) {
+        setSelectedCountries(draft.target_countries);
+      }
+    }
+    // Fallback: Also check contest_based_details for backward compatibility
+    if (draft.contest_based_details) {
+      const details = draft.contest_based_details;
+      if (
+        !draft.categories &&
+        details.categories &&
+        Array.isArray(details.categories)
+      ) {
+        setContestCategories(details.categories);
+      }
+      if (!draft.subcategories && details.subcategories) {
+        // Handle both formats in fallback
+        if (Array.isArray(details.subcategories)) {
+          setContestSubcategories(details.subcategories);
+        } else if (
+          typeof details.subcategories === "object" &&
+          details.subcategories !== null
+        ) {
+          const grouped = details.subcategories as Record<string, string[]>;
+          const flatArray: Array<{ category: string; subcategory: string }> =
+            [];
+          Object.keys(grouped).forEach((category) => {
+            const subcats = grouped[category];
+            if (Array.isArray(subcats)) {
+              subcats.forEach((subcat) => {
+                flatArray.push({ category, subcategory: subcat });
+              });
+            }
+          });
+          setContestSubcategories(flatArray);
+        }
+      }
+      if (
+        !draft.interests &&
+        details.interests &&
+        Array.isArray(details.interests)
+      ) {
+        setContestInterests(details.interests);
+      }
+      // Load regions and countries from details if not in draft (backward compatibility)
+      if (!draft.region) {
+        if (details.target_regions && Array.isArray(details.target_regions)) {
+          setSelectedRegions(details.target_regions);
+        }
+        if (
+          details.target_countries &&
+          Array.isArray(details.target_countries)
+        ) {
+          setSelectedCountries(details.target_countries);
+        }
+      }
     }
 
     console.log(
@@ -4186,7 +4557,9 @@ export default function CreateContestPage({
                   </div>
                   <div
                     className={cn(
-                      isDark ? "bg-[#180438]p-2 sm:p-4" : "bg-gray-50 p-2 sm:p-4 rounded-lg"
+                      isDark
+                        ? "bg-[#180438]p-2 sm:p-4"
+                        : "bg-gray-50 p-2 sm:p-4 rounded-lg"
                     )}
                   >
                     <div className="flex items-center gap-4 mb-4">
@@ -6135,6 +6508,814 @@ export default function CreateContestPage({
                 </Select>
               </div>
 
+              {/* Targeting Toggle Checkbox */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="show-targeting-sections"
+                    checked={
+                      showTargetingSections ||
+                      contestCategories.length > 0 ||
+                      contestSubcategories.length > 0 ||
+                      contestInterests.length > 0 ||
+                      selectedRegions.length > 0 ||
+                      selectedCountries.length > 0
+                    }
+                    disabled={isLoading}
+                    onCheckedChange={(checked) => {
+                      // Prevent unchecking if any targeting data is selected
+                      const hasTargetingData =
+                        contestCategories.length > 0 ||
+                        contestSubcategories.length > 0 ||
+                        contestInterests.length > 0 ||
+                        selectedRegions.length > 0 ||
+                        selectedCountries.length > 0;
+
+                      if (!checked && hasTargetingData) {
+                        toast({
+                          title: "Cannot disable targeting",
+                          description:
+                            "Please remove all selected categories, subcategories, interests, and regions before disabling targeting.",
+                          variant: "destructive",
+                          duration: 3000,
+                        });
+                        return;
+                      }
+                      // If checked and there's targeting data but sections are collapsed, expand them
+                      if (
+                        checked &&
+                        hasTargetingData &&
+                        !showTargetingSections
+                      ) {
+                        setShowTargetingSections(true);
+                      } else {
+                        setShowTargetingSections(checked === true);
+                      }
+                    }}
+                    className={cn(
+                      isDark
+                        ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                        : "border-gray-400 data-[state=checked]:bg-purple-600"
+                    )}
+                  />
+                  <label
+                    htmlFor="show-targeting-sections"
+                    className={cn(
+                      "text-sm font-medium cursor-pointer",
+                      isDark ? "text-gray-300" : "text-gray-700"
+                    )}
+                  >
+                    Target specific creators by selecting categories,
+                    subcategories, interests, or regions. Only matching creators
+                    will see this contest.
+                  </label>
+                </div>
+              </div>
+
+              {/* Categories Selection */}
+              {showTargetingSections && (
+                <div className="space-y-3">
+                  <Collapsible
+                    open={categoriesOpen}
+                    onOpenChange={setCategoriesOpen}
+                  >
+                    <div
+                      className={cn(
+                        "rounded-lg border",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
+                      )}
+                    >
+                      <div className="relative">
+                        <CollapsibleTrigger
+                          className={cn(
+                            "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
+                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-[14px] font-medium cursor-pointer">
+                              Categories{" "}
+                              {/* <span className="text-xs text-gray-500">
+                                (Select up to 3)
+                              </span> */}
+                            </span>
+                            {contestCategories.length > 0 && (
+                              <span
+                                className={cn(
+                                  "text-xs px-2 py-0.5 rounded-full",
+                                  isDark
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-100 text-purple-700"
+                                )}
+                              >
+                                {contestCategories.length} selected
+                              </span>
+                            )}
+                          </div>
+                        </CollapsibleTrigger>
+                        <div
+                          className="absolute right-4 top-1/2 -translate-y-1/2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            id="categories-checkbox"
+                            checked={categoriesOpen}
+                            onCheckedChange={(checked) =>
+                              setCategoriesOpen(checked as boolean)
+                            }
+                            className={cn(
+                              isDark
+                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                            )}
+                          />
+                        </div>
+                      </div>
+                      <CollapsibleContent className="px-4 pb-4 space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {CONTENT_TYPE_CATEGORIES.map((cat) => {
+                            const isChecked = contestCategories.includes(
+                              cat.id
+                            );
+                            return (
+                              <div
+                                key={cat.id}
+                                className="flex items-center space-x-2"
+                              >
+                                <Checkbox
+                                  id={`contest-category-${cat.id}`}
+                                  checked={isChecked}
+                                  disabled={isLoading}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setContestCategories([
+                                        ...contestCategories,
+                                        cat.id,
+                                      ]);
+                                      // Automatically add all subcategories when category is selected
+                                      const newSubcategories =
+                                        cat.subcategories.map(
+                                          (subcategory) => ({
+                                            category: cat.id,
+                                            subcategory: subcategory,
+                                          })
+                                        );
+                                      // Add subcategories that aren't already in the list
+                                      setContestSubcategories((prev) => {
+                                        const existing = new Set(
+                                          prev.map(
+                                            (item) =>
+                                              `${item.category}:${item.subcategory}`
+                                          )
+                                        );
+                                        const toAdd = newSubcategories.filter(
+                                          (item) =>
+                                            !existing.has(
+                                              `${item.category}:${item.subcategory}`
+                                            )
+                                        );
+                                        return [...prev, ...toAdd];
+                                      });
+                                    } else {
+                                      // Remove category and all its subcategories
+                                      setContestCategories(
+                                        contestCategories.filter(
+                                          (id) => id !== cat.id
+                                        )
+                                      );
+                                      setContestSubcategories(
+                                        contestSubcategories.filter(
+                                          (item) => item.category !== cat.id
+                                        )
+                                      );
+                                    }
+                                  }}
+                                  className={cn(
+                                    isDark
+                                      ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                      : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                  )}
+                                />
+                                <label
+                                  htmlFor={`contest-category-${cat.id}`}
+                                  className={cn(
+                                    "text-sm font-normal cursor-pointer",
+                                    isDark ? "text-gray-300" : "text-gray-700"
+                                  )}
+                                >
+                                  {cat.name}
+                                </label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {contestCategories.length > 0 && (
+                          <div className="flex items-center justify-end mt-2">
+                            {/* <p
+                              className={cn(
+                                "text-xs",
+                                isDark ? "text-gray-400" : "text-gray-500"
+                              )}
+                            >
+                              {contestCategories.length} selected
+                            </p> */}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setContestCategories([]);
+                                setContestSubcategories([]);
+                              }}
+                              disabled={isLoading}
+                              className={cn(
+                                "h-7 px-2 text-xs",
+                                isDark
+                                  ? "border-gray-400 text-gray-300"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                              )}
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Reset
+                            </Button>
+                          </div>
+                        )}
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                </div>
+              )}
+
+              {/* Subcategories Selection */}
+              {showTargetingSections && (
+                <div className="space-y-3">
+                  <Collapsible
+                    open={subcategoriesOpen}
+                    onOpenChange={setSubcategoriesOpen}
+                  >
+                    <div
+                      className={cn(
+                        "rounded-lg border",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
+                      )}
+                    >
+                      <div className="relative">
+                        <CollapsibleTrigger
+                          className={cn(
+                            "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
+                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-[14px] font-medium cursor-pointer">
+                              Subcategories
+                            </span>
+                            {contestSubcategories.length > 0 && (
+                              <span
+                                className={cn(
+                                  "text-xs px-2 py-0.5 rounded-full",
+                                  isDark
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-100 text-purple-700"
+                                )}
+                              >
+                                {contestSubcategories.length} selected
+                              </span>
+                            )}
+                          </div>
+                        </CollapsibleTrigger>
+                        <div
+                          className="absolute right-4 top-1/2 -translate-y-1/2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            id="subcategories-checkbox"
+                            checked={subcategoriesOpen}
+                            onCheckedChange={(checked) =>
+                              setSubcategoriesOpen(checked as boolean)
+                            }
+                            className={cn(
+                              isDark
+                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                            )}
+                          />
+                        </div>
+                      </div>
+                      <CollapsibleContent className="px-4 pb-4 space-y-3">
+                        <Accordion type="multiple" className="w-full">
+                          {CONTENT_TYPE_CATEGORIES.map((category) => {
+                            // Get selected subcategories for this category
+                            const selectedSubcategoriesForCategory =
+                              contestSubcategories.filter(
+                                (item) => item.category === category.id
+                              );
+                            const selectedCount =
+                              selectedSubcategoriesForCategory.length;
+
+                            return (
+                              <AccordionItem
+                                key={category.id}
+                                value={category.id}
+                                className="border-b border-gray-200 dark:border-gray-700"
+                              >
+                                <AccordionTrigger
+                                  className={cn(
+                                    "text-sm font-medium hover:no-underline py-3",
+                                    isDark ? "text-gray-300" : "text-gray-700"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span>{category.name}</span>
+                                    {selectedCount > 0 && (
+                                      <span
+                                        className={cn(
+                                          "text-xs px-2 py-0.5 rounded-full",
+                                          isDark
+                                            ? "bg-purple-600 text-white"
+                                            : "bg-purple-100 text-purple-700"
+                                        )}
+                                      >
+                                        {selectedCount} selected
+                                      </span>
+                                    )}
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="pt-2 pb-4">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {category.subcategories.map(
+                                      (subcategory) => {
+                                        const isChecked =
+                                          contestSubcategories.some(
+                                            (item) =>
+                                              item.category === category.id &&
+                                              item.subcategory === subcategory
+                                          );
+                                        return (
+                                          <div
+                                            key={`${category.id}-${subcategory}`}
+                                            className="flex items-center space-x-2"
+                                          >
+                                            <Checkbox
+                                              id={`contest-subcategory-${category.id}-${subcategory}`}
+                                              checked={isChecked}
+                                              disabled={isLoading}
+                                              onCheckedChange={(checked) => {
+                                                if (checked) {
+                                                  setContestSubcategories([
+                                                    ...contestSubcategories,
+                                                    {
+                                                      category: category.id,
+                                                      subcategory: subcategory,
+                                                    },
+                                                  ]);
+                                                } else {
+                                                  setContestSubcategories(
+                                                    contestSubcategories.filter(
+                                                      (item) =>
+                                                        !(
+                                                          item.category ===
+                                                            category.id &&
+                                                          item.subcategory ===
+                                                            subcategory
+                                                        )
+                                                    )
+                                                  );
+                                                }
+                                              }}
+                                              className={cn(
+                                                isDark
+                                                  ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                                  : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                              )}
+                                            />
+                                            <label
+                                              htmlFor={`contest-subcategory-${category.id}-${subcategory}`}
+                                              className={cn(
+                                                "text-sm font-normal cursor-pointer",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              {subcategory}
+                                            </label>
+                                          </div>
+                                        );
+                                      }
+                                    )}
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            );
+                          })}
+                        </Accordion>
+                        {contestSubcategories.length > 0 && (
+                          <div className="flex items-center justify-end mt-2">
+                            {/* <p
+                              className={cn(
+                                "text-xs",
+                                isDark ? "text-gray-400" : "text-gray-500"
+                              )}
+                            >
+                              {contestSubcategories.length} subcategories
+                              selected
+                            </p> */}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setContestSubcategories([])}
+                              disabled={isLoading}
+                              className={cn(
+                                "h-7 px-2 text-xs",
+                                isDark
+                                  ? "border-gray-400 text-gray-300"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                              )}
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Reset
+                            </Button>
+                          </div>
+                        )}
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                </div>
+              )}
+
+              {/* Interests Selection */}
+              {showTargetingSections && (
+                <div className="space-y-3">
+                  <Collapsible
+                    open={interestsOpen}
+                    onOpenChange={setInterestsOpen}
+                  >
+                    <div
+                      className={cn(
+                        "rounded-lg border",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
+                      )}
+                    >
+                      <div className="relative">
+                        <CollapsibleTrigger
+                          className={cn(
+                            "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
+                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-[14px] font-medium cursor-pointer">
+                              Interests
+                            </span>
+                            {contestInterests.length > 0 && (
+                              <span
+                                className={cn(
+                                  "text-xs px-2 py-0.5 rounded-full",
+                                  isDark
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-100 text-purple-700"
+                                )}
+                              >
+                                {contestInterests.length} selected
+                              </span>
+                            )}
+                          </div>
+                        </CollapsibleTrigger>
+                        <div
+                          className="absolute right-4 top-1/2 -translate-y-1/2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            id="interests-checkbox"
+                            checked={interestsOpen}
+                            onCheckedChange={(checked) =>
+                              setInterestsOpen(checked as boolean)
+                            }
+                            className={cn(
+                              isDark
+                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                            )}
+                          />
+                        </div>
+                      </div>
+                      <CollapsibleContent className="px-4 pb-4 space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                          {INTERESTS.map((interest) => {
+                            const isChecked =
+                              contestInterests.includes(interest);
+                            return (
+                              <div
+                                key={interest}
+                                className="flex items-center space-x-2"
+                              >
+                                <Checkbox
+                                  id={`contest-interest-${interest}`}
+                                  checked={isChecked}
+                                  disabled={isLoading}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setContestInterests([
+                                        ...contestInterests,
+                                        interest,
+                                      ]);
+                                    } else {
+                                      setContestInterests(
+                                        contestInterests.filter(
+                                          (item) => item !== interest
+                                        )
+                                      );
+                                    }
+                                  }}
+                                  className={cn(
+                                    isDark
+                                      ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                      : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                  )}
+                                />
+                                <label
+                                  htmlFor={`contest-interest-${interest}`}
+                                  className={cn(
+                                    "text-sm font-normal cursor-pointer",
+                                    isDark ? "text-gray-300" : "text-gray-700"
+                                  )}
+                                >
+                                  {interest}
+                                </label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {contestInterests.length > 0 && (
+                          <div className="flex items-center justify-end mt-2">
+                            {/* <p
+                              className={cn(
+                                "text-xs",
+                                isDark ? "text-gray-400" : "text-gray-500"
+                              )}
+                            >
+                              {contestInterests.length} interests selected
+                            </p> */}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setContestInterests([])}
+                              disabled={isLoading}
+                              className={cn(
+                                "h-7 px-2 text-xs",
+                                isDark
+                                  ? "border-gray-400 text-gray-300"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                              )}
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Reset
+                            </Button>
+                          </div>
+                        )}
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                </div>
+              )}
+
+              {/* Regions and Countries Selection */}
+              {showTargetingSections && (
+                <div className="space-y-3">
+                  <Collapsible open={regionsOpen} onOpenChange={setRegionsOpen}>
+                    <div
+                      className={cn(
+                        "rounded-lg border",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
+                      )}
+                    >
+                      <div className="relative">
+                        <CollapsibleTrigger
+                          className={cn(
+                            "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
+                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-[14px] font-medium cursor-pointer">
+                              Regions
+                            </span>
+                            {/* {selectedRegions.length > 0 && (
+                              <span
+                                className={cn(
+                                  "text-xs px-2 py-0.5 rounded-full",
+                                  isDark
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-100 text-purple-700"
+                                )}
+                              >
+                                {selectedRegions.length} selected
+                              </span>
+                            )} */}
+                            {selectedCountries.length > 0 && (
+                              <span
+                                className={cn(
+                                  "text-xs px-2 py-0.5 rounded-full",
+                                  isDark
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-100 text-purple-700"
+                                )}
+                              >
+                                {selectedCountries.length} selected
+                              </span>
+                            )}
+                          </div>
+                        </CollapsibleTrigger>
+                        <div
+                          className="absolute right-4 top-1/2 -translate-y-1/2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            id="regions-checkbox"
+                            checked={regionsOpen}
+                            onCheckedChange={(checked) =>
+                              setRegionsOpen(checked as boolean)
+                            }
+                            className={cn(
+                              isDark
+                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                            )}
+                          />
+                        </div>
+                      </div>
+                      <CollapsibleContent className="px-4 pb-4 space-y-4">
+                        {/* <p
+                          className={cn(
+                            "text-sm mb-3",
+                            isDark ? "text-gray-400" : "text-gray-600"
+                          )}
+                        >
+                          Select regions and countries where creators can see
+                          and participate in this contest. Only creators from
+                          selected regions will see this opportunity in their
+                          dashboard.
+                        </p> */}
+                        <div className="space-y-4">
+                          {Object.keys(REGIONS_AND_COUNTRIES).map((region) => {
+                            const regionKey =
+                              region as keyof typeof REGIONS_AND_COUNTRIES;
+                            const regionCountries =
+                              REGIONS_AND_COUNTRIES[regionKey];
+                            if (!regionCountries) return null;
+                            const countriesArray: string[] = Array.isArray(
+                              regionCountries
+                            )
+                              ? regionCountries.map((c) => String(c))
+                              : [];
+                            const isRegionSelected =
+                              selectedRegions.includes(region);
+                            const selectedCountriesInRegion =
+                              countriesArray.filter((country) =>
+                                selectedCountries.includes(country)
+                              );
+                            const isPartiallySelected =
+                              selectedCountriesInRegion.length > 0 &&
+                              selectedCountriesInRegion.length <
+                                countriesArray.length;
+                            const hasAnySelected =
+                              selectedCountriesInRegion.length > 0;
+
+                            return (
+                              <div key={region} className="space-y-2">
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`region-${region}`}
+                                    checked={isRegionSelected}
+                                    disabled={isLoading}
+                                    onCheckedChange={(checked) => {
+                                      handleRegionToggle(
+                                        region,
+                                        checked as boolean
+                                      );
+                                    }}
+                                    className={cn(
+                                      isDark
+                                        ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                        : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                    )}
+                                  />
+                                  <label
+                                    htmlFor={`region-${region}`}
+                                    className={cn(
+                                      "text-sm font-semibold cursor-pointer flex items-center gap-2",
+                                      isDark ? "text-gray-300" : "text-gray-700"
+                                    )}
+                                  >
+                                    <span>{region}</span>
+                                    {hasAnySelected && (
+                                      <span
+                                      className={cn(
+                                        "text-xs px-2 py-0.5 rounded-full",
+                                        isDark
+                                          ? "bg-purple-600 text-white"
+                                          : "bg-purple-100 text-purple-700"
+                                      )}
+                                      >
+                                        {selectedCountriesInRegion.length} selected
+                                      </span>
+                                    )}
+                                  </label>
+                                </div>
+                                {(isRegionSelected || hasAnySelected) && (
+                                  <div className="ml-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                    {countriesArray.map((country: string) => {
+                                      const isCountrySelected =
+                                        selectedCountries.includes(country);
+                                      return (
+                                        <div
+                                          key={country}
+                                          className="flex items-center space-x-2"
+                                        >
+                                          <Checkbox
+                                            id={`country-${region}-${country}`}
+                                            checked={isCountrySelected}
+                                            disabled={isLoading}
+                                            onCheckedChange={(checked) => {
+                                              handleCountryToggle(
+                                                country,
+                                                checked as boolean
+                                              );
+                                            }}
+                                            className={cn(
+                                              isDark
+                                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                            )}
+                                          />
+                                          <label
+                                            htmlFor={`country-${region}-${country}`}
+                                            className={cn(
+                                              "text-sm font-normal cursor-pointer",
+                                              isDark
+                                                ? "text-gray-300"
+                                                : "text-gray-700"
+                                            )}
+                                          >
+                                            {country}
+                                          </label>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {selectedCountries.length > 0 && (
+                          <div className="flex items-center justify-end mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                            {/* <p
+                              className={cn(
+                                "text-xs",
+                                isDark ? "text-gray-400" : "text-gray-500"
+                              )}
+                            >
+                              {selectedCountries.length} countries selected
+                            </p> */}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedRegions([]);
+                                setSelectedCountries([]);
+                              }}
+                              disabled={isLoading}
+                              className={cn(
+                                "h-7 px-2 text-xs",
+                                isDark
+                                  ? "border-gray-400 text-gray-300"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                              )}
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Reset
+                            </Button>
+                          </div>
+                        )}
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label>Thumbnail</Label>
                 <div
@@ -7320,26 +8501,23 @@ export default function CreateContestPage({
                       open={trackingLinksOpen}
                       onOpenChange={setTrackingLinksOpen}
                     >
-                      <CollapsibleTrigger asChild>
-                        <button
-                          type="button"
+                      <CollapsibleTrigger
+                        className={cn(
+                          "w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold transition",
+                          isDark
+                            ? "border-gray-500"
+                            : "border-gray-400 hover:bg-accent/50"
+                        )}
+                      >
+                        <span>Tracking Links</span>
+                        <span
                           className={cn(
-                            "w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold transition",
-                            isDark
-                              ? "border-gray-500"
-                              : "border-gray-400 hover:bg-accent/50"
+                            "text-sm font-normal",
+                            isDark ? "text-gray-300" : "text-gray-600"
                           )}
                         >
-                          <span>Tracking Links</span>
-                          <span
-                            className={cn(
-                              "text-sm font-normal",
-                              isDark ? "text-gray-300" : "text-gray-600"
-                            )}
-                          >
-                            {trackingLinksOpen ? "Hide" : "Show"}
-                          </span>
-                        </button>
+                          {trackingLinksOpen ? "Hide" : "Show"}
+                        </span>
                       </CollapsibleTrigger>
                       <CollapsibleContent className="mt-4 space-y-3">
                         {trackingError && (

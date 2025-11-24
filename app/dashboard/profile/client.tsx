@@ -36,6 +36,11 @@ import {
   isApproachingLimit,
 } from "@/lib/name-utils";
 import { subscriptionPlans } from "@/constants/subscriptionPlans";
+import {
+  CONTENT_TYPE_CATEGORIES,
+  INTEREST_CATEGORIES,
+  INTERESTS,
+} from "@/constants/contentCategories";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import { EmailChangeModal } from "@/components/EmailChangeModal";
@@ -97,6 +102,7 @@ interface CreatorProfile {
     | string[]
     | null;
   subcategories?:
+    | Record<string, string[]>
     | Array<{ category: string; subcategory: string }>
     | string[]
     | null;
@@ -125,363 +131,6 @@ interface EmailChangeLog {
   new_email: string;
   changed_at: string;
 }
-
-// Content type categories with subcategories
-const CONTENT_TYPE_CATEGORIES = [
-  {
-    id: "beauty",
-    name: "Beauty",
-    subcategories: [
-      "Skincare",
-      "Makeup",
-      "Haircare",
-      "Fragrance",
-      "Nail Art",
-      "Men's Grooming",
-      "K-Beauty",
-    ],
-  },
-  {
-    id: "fashion",
-    name: "Fashion",
-    subcategories: [
-      "Outfits",
-      "Streetwear",
-      "Luxury",
-      "Athleisure",
-      "Accessories",
-      "Footwear",
-      "Sustainable Fashion",
-    ],
-  },
-  {
-    id: "fitness",
-    name: "Fitness",
-    subcategories: [
-      "Gym Workouts",
-      "Home Workouts",
-      "Yoga & Pilates",
-      "Running",
-      "Nutrition",
-      "Supplements",
-      "Crossfit",
-    ],
-  },
-  {
-    id: "food",
-    name: "Food",
-    subcategories: [
-      "Recipes",
-      "Restaurant Reviews",
-      "Street Food",
-      "Desserts",
-      "Beverages (Coffee/Tea)",
-      "Vegan & Plant-based",
-      "Product Taste Tests",
-    ],
-  },
-  {
-    id: "gaming",
-    name: "Gaming",
-    subcategories: [
-      "Mobile Games",
-      "Console / PC Games",
-      "Esports",
-      "Walkthroughs / Let's Play",
-      "Game Reviews",
-      "Game Tips & Tricks",
-      "Live Streaming",
-    ],
-  },
-  {
-    id: "tech",
-    name: "Tech",
-    subcategories: [
-      "Smartphones",
-      "Laptops & PCs",
-      "Smart Home",
-      "Wearables",
-      "Apps",
-      "Software & SaaS",
-      "Gadget Reviews",
-    ],
-  },
-  {
-    id: "finance",
-    name: "Finance",
-    subcategories: [
-      "Personal Finance",
-      "Investing",
-      "Crypto",
-      "Fintech Apps",
-      "Money Saving Tips",
-      "Tax & Accounting",
-    ],
-  },
-  {
-    id: "travel",
-    name: "Travel",
-    subcategories: [
-      "Travel Vlogs",
-      "Budget Travel",
-      "Luxury Travel",
-      "Hotel Reviews",
-      "Local Guides",
-      "Travel Gear",
-    ],
-  },
-  {
-    id: "home_decor",
-    name: "Home & Decor",
-    subcategories: [
-      "Interior Design",
-      "DIY Projects",
-      "Organization Hacks",
-      "Cleaning Tips",
-      "Home Appliances",
-      "Small Space Ideas",
-    ],
-  },
-  {
-    id: "education",
-    name: "Education",
-    subcategories: [
-      "Study Tips",
-      "Course Reviews",
-      "Skill Tutorials",
-      "Language Learning",
-      "Career Advice",
-      "Exam Prep",
-    ],
-  },
-  {
-    id: "art_diy",
-    name: "Art & DIY",
-    subcategories: [
-      "Painting",
-      "Drawing",
-      "Crafts",
-      "Prints & Merch",
-      "Handmade Products",
-      "Design Tutorials",
-    ],
-  },
-  {
-    id: "parenting",
-    name: "Parenting",
-    subcategories: [
-      "Baby Care",
-      "Toddler Activities",
-      "Kids Education",
-      "Parenting Tips",
-      "Product Reviews for Parents",
-    ],
-  },
-  {
-    id: "sports",
-    name: "Sports",
-    subcategories: [
-      "Football / Soccer",
-      "Basketball",
-      "Cricket",
-      "Running & Training",
-      "Cycling",
-      "Outdoor Adventure",
-    ],
-  },
-  {
-    id: "auto",
-    name: "Auto",
-    subcategories: [
-      "Cars",
-      "Bikes",
-      "Electric Vehicles (EVs)",
-      "Auto Accessories",
-      "Car Reviews",
-      "Maintenance Tips",
-    ],
-  },
-  {
-    id: "pets",
-    name: "Pets",
-    subcategories: [
-      "Pet Care",
-      "Pet Training",
-      "Pet Food & Products",
-      "Funny Pet Videos",
-      "Pet Health",
-    ],
-  },
-  {
-    id: "business",
-    name: "Business",
-    subcategories: [
-      "Startups",
-      "SaaS & Tools",
-      "Productivity",
-      "Marketing Tips",
-      "Side Hustles",
-    ],
-  },
-  {
-    id: "entertainment",
-    name: "Entertainment",
-    subcategories: [
-      "Comedy",
-      "Drama",
-      "Romance",
-      "Horror",
-      "Emotional / Sad",
-      "Memes",
-      "Reaction Videos",
-      "Sketches / Skits",
-      "Parodies",
-      "Trailers & Reviews",
-    ],
-  },
-  {
-    id: "music_dance",
-    name: "Music & Dance",
-    subcategories: [
-      "Covers",
-      "Original Music",
-      "Music Production",
-      "Dance Choreography",
-      "Instrument Tutorials",
-    ],
-  },
-  {
-    id: "photo_video",
-    name: "Photography & Video",
-    subcategories: [
-      "Camera Gear",
-      "Editing Tutorials",
-      "Cinematography",
-      "Mobile Filmmaking",
-      "Lighting & Sound",
-    ],
-  },
-  {
-    id: "sustainability",
-    name: "Sustainability",
-    subcategories: [
-      "Eco Products",
-      "Zero Waste",
-      "Sustainable Fashion",
-      "Green Tech",
-      "Upcycling",
-    ],
-  },
-] as const;
-
-// Interests organized by categories (similar to subcategories structure)
-const INTEREST_CATEGORIES = [
-  {
-    id: "beauty",
-    name: "Beauty",
-    interests: ["Beauty", "Skincare", "Makeup", "Haircare", "Grooming"],
-  },
-  {
-    id: "fashion",
-    name: "Fashion",
-    interests: ["Fashion", "Outfits", "Streetwear", "Accessories", "Footwear"],
-  },
-  {
-    id: "fitness",
-    name: "Fitness",
-    interests: ["Fitness", "Workouts", "Yoga", "Healthy Living"],
-  },
-  {
-    id: "food",
-    name: "Food",
-    interests: ["Food", "Cooking", "Recipes", "Food Reviews"],
-  },
-  {
-    id: "gaming",
-    name: "Gaming",
-    interests: ["Gaming", "Mobile Games", "PC/Console Games", "Esports"],
-  },
-  {
-    id: "tech",
-    name: "Tech",
-    interests: ["Tech", "Apps", "Gadgets", "Tech Reviews"],
-  },
-  {
-    id: "finance",
-    name: "Finance",
-    interests: ["Finance", "Investing", "Crypto", "Money Tips"],
-  },
-  {
-    id: "travel",
-    name: "Travel",
-    interests: ["Travel", "Travel Vlogs", "Hotels", "Local Guides"],
-  },
-  {
-    id: "home_decor",
-    name: "Home & Decor",
-    interests: ["Home & Decor", "DIY", "Cleaning Hacks"],
-  },
-  {
-    id: "education",
-    name: "Education",
-    interests: ["Education", "Study Tips", "Career Advice"],
-  },
-  {
-    id: "art_craft",
-    name: "Art & Craft",
-    interests: ["Art & Craft", "Drawing", "Handmade"],
-  },
-  {
-    id: "parenting",
-    name: "Parenting",
-    interests: ["Parenting", "Kids Activities"],
-  },
-  {
-    id: "sports",
-    name: "Sports",
-    interests: ["Sports", "Training", "Cycling"],
-  },
-  {
-    id: "automobile",
-    name: "Automobile",
-    interests: ["Automobile", "Cars", "Bikes"],
-  },
-  {
-    id: "pets",
-    name: "Pets",
-    interests: ["Pets", "Pet Care"],
-  },
-  {
-    id: "business",
-    name: "Business",
-    interests: ["Business", "Startups"],
-  },
-  {
-    id: "entertainment",
-    name: "Entertainment",
-    interests: ["Entertainment", "Comedy", "Memes", "Reactions"],
-  },
-  {
-    id: "music_dance",
-    name: "Music & Dance",
-    interests: ["Music & Dance", "Singing", "Dancing"],
-  },
-  {
-    id: "photo_video",
-    name: "Photo & Video",
-    interests: ["Photo & Video", "Editing"],
-  },
-  {
-    id: "sustainability",
-    name: "Sustainability",
-    interests: ["Sustainability", "Eco Friendly"],
-  },
-] as const;
-
-// Flat list of all interests for backward compatibility
-const INTERESTS = INTEREST_CATEGORIES.flatMap(
-  (category) => category.interests
-) as readonly string[];
 
 export default function ProfilePage({
   user,
@@ -793,46 +442,68 @@ export default function ProfilePage({
                 return [];
               };
 
-              // Convert subcategories to {category, subcategory} format
+              // Convert subcategories to {category, subcategory} format for internal use
               const convertToSubcategoryFormat = (
                 data: any
               ): Array<{ category: string; subcategory: string }> => {
-                if (!data || !Array.isArray(data)) return [];
-                // Check if already in new format
-                if (
-                  data.length > 0 &&
-                  typeof data[0] === "object" &&
-                  "category" in data[0] &&
-                  "subcategory" in data[0]
-                ) {
-                  return data as Array<{
+                if (!data) return [];
+
+                // New object format: {category: [subcategories]}
+                if (typeof data === "object" && !Array.isArray(data)) {
+                  const result: Array<{
                     category: string;
                     subcategory: string;
-                  }>;
+                  }> = [];
+                  Object.entries(data).forEach(([category, subcategories]) => {
+                    if (Array.isArray(subcategories)) {
+                      (subcategories as string[]).forEach((subcategory) => {
+                        result.push({ category, subcategory });
+                      });
+                    }
+                  });
+                  return result;
                 }
-                // Old format - convert string array to objects
-                const result: Array<{ category: string; subcategory: string }> =
-                  [];
-                (data as string[]).forEach((oldValue) => {
-                  const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
-                    cat.subcategories.some(
-                      (sub) =>
-                        sub.toLowerCase().includes(oldValue.toLowerCase()) ||
-                        oldValue.toLowerCase().includes(cat.id.toLowerCase())
-                    )
-                  );
-                  if (category) {
-                    const subcategory =
-                      category.subcategories.find((sub) =>
-                        sub.toLowerCase().includes(oldValue.toLowerCase())
-                      ) || category.subcategories[0];
-                    result.push({
-                      category: category.id,
-                      subcategory: subcategory,
-                    });
+
+                // Old array format with objects
+                if (Array.isArray(data) && data.length > 0) {
+                  // Check if already in {category, subcategory} format
+                  if (
+                    typeof data[0] === "object" &&
+                    "category" in data[0] &&
+                    "subcategory" in data[0]
+                  ) {
+                    return data as Array<{
+                      category: string;
+                      subcategory: string;
+                    }>;
                   }
-                });
-                return result;
+                  // Old format - convert string array to objects
+                  const result: Array<{
+                    category: string;
+                    subcategory: string;
+                  }> = [];
+                  (data as string[]).forEach((oldValue) => {
+                    const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+                      cat.subcategories.some(
+                        (sub) =>
+                          sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                          oldValue.toLowerCase().includes(cat.id.toLowerCase())
+                      )
+                    );
+                    if (category) {
+                      const subcategory =
+                        category.subcategories.find((sub) =>
+                          sub.toLowerCase().includes(oldValue.toLowerCase())
+                        ) || category.subcategories[0];
+                      result.push({
+                        category: category.id,
+                        subcategory: subcategory,
+                      });
+                    }
+                  });
+                  return result;
+                }
+                return [];
               };
 
               setEditedContentTypesCreated(convertToCategoryIds(typeOfContent));
@@ -1454,18 +1125,52 @@ export default function ProfilePage({
   const isProfileComplete = () => {
     if (!creatorProfile) return false;
 
-    return (
-      // editedPhone.trim() !== "" &&
+    // Check basic required fields
+    const hasBasicFields =
       editedDateOfBirth.trim() !== "" &&
       editedGender.trim() !== "" &&
-      editedCountry.trim() !== "" &&
-      editedState.trim() !== "" &&
-      editedCity.trim() !== "" &&
       editedAddress.trim() !== "" &&
       editedLanguages.length > 0 &&
       editedContentTypesCreated.length > 0 &&
-      editedInterestedContentTypes.length > 0
-    );
+      editedInterestedContentTypes.length > 0 &&
+      editedInterests.length > 0;
+
+    if (!hasBasicFields) return false;
+
+    // Check country is selected
+    if (!editedCountry.trim() || !selectedCountryCode) return false;
+
+    // Check state and city based on availability
+    const states = State.getStatesOfCountry(selectedCountryCode);
+    const hasStates = states.length > 0;
+
+    if (hasStates) {
+      // States exist, state must be filled
+      if (!editedState.trim() || !selectedStateCode) return false;
+
+      // Check if cities are available for the selected state
+      const cities = City.getCitiesOfState(
+        selectedCountryCode,
+        selectedStateCode
+      );
+      const hasCities = !!(cities && cities.length > 0);
+
+      // Only require city if cities are available for this state
+      if (hasCities && !editedCity.trim()) return false;
+      // If no cities available for the state, don't require city field
+    } else {
+      // No states, check if country has cities
+      const cities = City.getCitiesOfCountry(selectedCountryCode);
+      const hasCities = !!(cities && cities.length > 0);
+
+      if (hasCities) {
+        // Cities exist at country level, city must be filled
+        if (!editedCity.trim()) return false;
+      }
+      // If no states and no cities, we don't require state/city fields
+    }
+
+    return true;
   };
 
   // Check if profile has changes
@@ -1528,36 +1233,54 @@ export default function ProfilePage({
 
     // Convert current subcategories to normalized format
     const convertSubcategories = (data: any): string => {
-      if (!data || !Array.isArray(data)) return "";
-      if (
-        data.length > 0 &&
-        typeof data[0] === "object" &&
-        "category" in data[0] &&
-        "subcategory" in data[0]
-      ) {
-        return normalizeSubcategories(
-          data as Array<{ category: string; subcategory: string }>
-        );
+      if (!data) return "";
+
+      // New object format: {category: [subcategories]}
+      if (typeof data === "object" && !Array.isArray(data)) {
+        const converted: Array<{ category: string; subcategory: string }> = [];
+        Object.entries(data).forEach(([category, subcategories]) => {
+          if (Array.isArray(subcategories)) {
+            (subcategories as string[]).forEach((subcategory) => {
+              converted.push({ category, subcategory });
+            });
+          }
+        });
+        return normalizeSubcategories(converted);
       }
-      // Old format - convert
-      const converted: Array<{ category: string; subcategory: string }> = [];
-      (data as string[]).forEach((oldValue) => {
-        const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
-          cat.subcategories.some(
-            (sub) =>
-              sub.toLowerCase().includes(oldValue.toLowerCase()) ||
-              oldValue.toLowerCase().includes(cat.id.toLowerCase())
-          )
-        );
-        if (category) {
-          const subcategory =
-            category.subcategories.find((sub) =>
-              sub.toLowerCase().includes(oldValue.toLowerCase())
-            ) || category.subcategories[0];
-          converted.push({ category: category.id, subcategory: subcategory });
+
+      // Old array format
+      if (Array.isArray(data) && data.length > 0) {
+        // Check if already in {category, subcategory} format
+        if (
+          typeof data[0] === "object" &&
+          "category" in data[0] &&
+          "subcategory" in data[0]
+        ) {
+          return normalizeSubcategories(
+            data as Array<{ category: string; subcategory: string }>
+          );
         }
-      });
-      return normalizeSubcategories(converted);
+        // Old string array format - convert
+        const converted: Array<{ category: string; subcategory: string }> = [];
+        (data as string[]).forEach((oldValue) => {
+          const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+            cat.subcategories.some(
+              (sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                oldValue.toLowerCase().includes(cat.id.toLowerCase())
+            )
+          );
+          if (category) {
+            const subcategory =
+              category.subcategories.find((sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase())
+              ) || category.subcategories[0];
+            converted.push({ category: category.id, subcategory: subcategory });
+          }
+        });
+        return normalizeSubcategories(converted);
+      }
+      return "";
     };
 
     return (
@@ -1579,21 +1302,165 @@ export default function ProfilePage({
     );
   };
 
+  // Check if changes are only to interests, categories, or subcategories
+  const hasOnlyEditableFieldChanges = () => {
+    if (!creatorProfile) return false;
+
+    const currentTypeOfContent = creatorProfile.categories as
+      | Array<{ category: string; subcategory: string }>
+      | string[]
+      | null;
+    const currentOtherTypeOfContent = creatorProfile.subcategories as
+      | Array<{ category: string; subcategory: string }>
+      | string[]
+      | null;
+
+    // Convert current categories to category IDs for comparison
+    const convertToCategoryIds = (data: any): string => {
+      if (!data || !Array.isArray(data)) return "";
+      if (data.length > 0 && typeof data[0] === "string") {
+        const categoryIds: string[] = [];
+        (data as string[]).forEach((value) => {
+          const isCategoryId = CONTENT_TYPE_CATEGORIES.some(
+            (cat) => cat.id === value
+          );
+          if (isCategoryId) {
+            categoryIds.push(value);
+          } else {
+            const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+              cat.subcategories.some(
+                (sub) =>
+                  sub.toLowerCase().includes(value.toLowerCase()) ||
+                  value.toLowerCase().includes(cat.id.toLowerCase())
+              )
+            );
+            if (category && !categoryIds.includes(category.id)) {
+              categoryIds.push(category.id);
+            }
+          }
+        });
+        return categoryIds.sort().join(",");
+      }
+      if (
+        data.length > 0 &&
+        typeof data[0] === "object" &&
+        "category" in data[0]
+      ) {
+        const categoryIds = new Set<string>();
+        (data as Array<{ category: string; subcategory?: string }>).forEach(
+          (item) => {
+            categoryIds.add(item.category);
+          }
+        );
+        return Array.from(categoryIds).sort().join(",");
+      }
+      return "";
+    };
+
+    // Convert current subcategories to normalized format
+    const convertSubcategories = (data: any): string => {
+      if (!data) return "";
+
+      // New object format: {category: [subcategories]}
+      if (typeof data === "object" && !Array.isArray(data)) {
+        const converted: Array<{ category: string; subcategory: string }> = [];
+        Object.entries(data).forEach(([category, subcategories]) => {
+          if (Array.isArray(subcategories)) {
+            (subcategories as string[]).forEach((subcategory) => {
+              converted.push({ category, subcategory });
+            });
+          }
+        });
+        return normalizeSubcategories(converted);
+      }
+
+      // Old array format
+      if (Array.isArray(data) && data.length > 0) {
+        // Check if already in {category, subcategory} format
+        if (
+          typeof data[0] === "object" &&
+          "category" in data[0] &&
+          "subcategory" in data[0]
+        ) {
+          return normalizeSubcategories(
+            data as Array<{ category: string; subcategory: string }>
+          );
+        }
+        // Old string array format - convert
+        const converted: Array<{ category: string; subcategory: string }> = [];
+        (data as string[]).forEach((oldValue) => {
+          const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+            cat.subcategories.some(
+              (sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                oldValue.toLowerCase().includes(cat.id.toLowerCase())
+            )
+          );
+          if (category) {
+            const subcategory =
+              category.subcategories.find((sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase())
+              ) || category.subcategories[0];
+            converted.push({
+              category: category.id,
+              subcategory: subcategory,
+            });
+          }
+        });
+        return normalizeSubcategories(converted);
+      }
+      return "";
+    };
+
+    const hasCategoryChange =
+      JSON.stringify(editedContentTypesCreated.sort()) !==
+      convertToCategoryIds(currentTypeOfContent);
+    const hasSubcategoryChange =
+      normalizeSubcategories(editedInterestedContentTypes) !==
+      convertSubcategories(currentOtherTypeOfContent);
+    const hasInterestChange =
+      JSON.stringify(editedInterests.sort()) !==
+      JSON.stringify((creatorProfile.interests || []).sort());
+
+    const hasOtherChanges =
+      // editedPhone !== (creatorProfile.phone_number || "") ||
+      editedDateOfBirth !== (creatorProfile.date_of_birth || "") ||
+      editedGender !== (creatorProfile.gender || "") ||
+      editedCountry !== (creatorProfile.country || "") ||
+      editedState !== (creatorProfile.state || "") ||
+      editedCity !== (creatorProfile.city || "") ||
+      editedAddress !== (creatorProfile.address || "") ||
+      JSON.stringify(editedLanguages.sort()) !==
+        JSON.stringify((creatorProfile.languages || []).sort());
+
+    // Return true if only interests, categories, or subcategories have changed
+    return (
+      (hasCategoryChange || hasSubcategoryChange || hasInterestChange) &&
+      !hasOtherChanges
+    );
+  };
+
   // Save profile changes without claiming bonus
   const handleSaveProfileChanges = async (claimBonus: boolean = false) => {
     if (!userData || !creatorProfile || !hasProfileChanges()) {
       return;
     }
 
-    // Check if user has already received the bonus - if so, prevent editing
+    // Check if user has already received the bonus
+    // If so, only allow editing interests, categories, and subcategories
     if (hasReceivedProfileBonus) {
-      toast({
-        variant: "destructive",
-        title: "Editing Disabled",
-        description:
-          "You have already received the profile update bonus. Profile editing is no longer available.",
-      });
-      return;
+      // Check if changes are only to editable fields (interests, categories, subcategories)
+      if (!hasOnlyEditableFieldChanges()) {
+        toast({
+          variant: "destructive",
+          title: "Editing Disabled",
+          description:
+            "You have already received the profile update bonus. You can only edit interests, categories, and subcategories.",
+        });
+        return;
+      }
+      // If only editable fields changed, allow saving but don't claim bonus
+      claimBonus = false;
     }
 
     setIsSubmitting(true);
@@ -1715,35 +1582,59 @@ export default function ProfilePage({
 
       // Convert current subcategories to normalized format
       const convertSubcategories = (data: any): string => {
-        if (!data || !Array.isArray(data)) return "";
-        if (
-          data.length > 0 &&
-          typeof data[0] === "object" &&
-          "category" in data[0] &&
-          "subcategory" in data[0]
-        ) {
-          return normalizeSubcategories(
-            data as Array<{ category: string; subcategory: string }>
-          );
+        if (!data) return "";
+
+        // New object format: {category: [subcategories]}
+        if (typeof data === "object" && !Array.isArray(data)) {
+          const converted: Array<{ category: string; subcategory: string }> =
+            [];
+          Object.entries(data).forEach(([category, subcategories]) => {
+            if (Array.isArray(subcategories)) {
+              (subcategories as string[]).forEach((subcategory) => {
+                converted.push({ category, subcategory });
+              });
+            }
+          });
+          return normalizeSubcategories(converted);
         }
-        const converted: Array<{ category: string; subcategory: string }> = [];
-        (data as string[]).forEach((oldValue) => {
-          const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
-            cat.subcategories.some(
-              (sub) =>
-                sub.toLowerCase().includes(oldValue.toLowerCase()) ||
-                oldValue.toLowerCase().includes(cat.id.toLowerCase())
-            )
-          );
-          if (category) {
-            const subcategory =
-              category.subcategories.find((sub) =>
-                sub.toLowerCase().includes(oldValue.toLowerCase())
-              ) || category.subcategories[0];
-            converted.push({ category: category.id, subcategory: subcategory });
+
+        // Old array format
+        if (Array.isArray(data) && data.length > 0) {
+          // Check if already in {category, subcategory} format
+          if (
+            typeof data[0] === "object" &&
+            "category" in data[0] &&
+            "subcategory" in data[0]
+          ) {
+            return normalizeSubcategories(
+              data as Array<{ category: string; subcategory: string }>
+            );
           }
-        });
-        return normalizeSubcategories(converted);
+          // Old string array format - convert
+          const converted: Array<{ category: string; subcategory: string }> =
+            [];
+          (data as string[]).forEach((oldValue) => {
+            const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+              cat.subcategories.some(
+                (sub) =>
+                  sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                  oldValue.toLowerCase().includes(cat.id.toLowerCase())
+              )
+            );
+            if (category) {
+              const subcategory =
+                category.subcategories.find((sub) =>
+                  sub.toLowerCase().includes(oldValue.toLowerCase())
+                ) || category.subcategories[0];
+              converted.push({
+                category: category.id,
+                subcategory: subcategory,
+              });
+            }
+          });
+          return normalizeSubcategories(converted);
+        }
+        return "";
       };
 
       if (
@@ -1759,9 +1650,19 @@ export default function ProfilePage({
         normalizeSubcategories(editedInterestedContentTypes) !==
         convertSubcategories(currentOtherTypeOfContent)
       ) {
+        // Convert array format to object format: {category: [subcategories]}
+        const subcategoriesObject: Record<string, string[]> = {};
+        editedInterestedContentTypes.forEach(({ category, subcategory }) => {
+          if (!subcategoriesObject[category]) {
+            subcategoriesObject[category] = [];
+          }
+          if (!subcategoriesObject[category].includes(subcategory)) {
+            subcategoriesObject[category].push(subcategory);
+          }
+        });
         updateData.subcategories =
-          editedInterestedContentTypes.length > 0
-            ? editedInterestedContentTypes
+          Object.keys(subcategoriesObject).length > 0
+            ? subcategoriesObject
             : null;
       }
       if (
@@ -1778,7 +1679,8 @@ export default function ProfilePage({
       }
 
       // Check if user has already claimed the bonus before giving it
-      if (creatorProfile.has_claimed_profile_reward) {
+      // Only prevent claiming bonus again, but allow saving if only editable fields changed
+      if (creatorProfile.has_claimed_profile_reward && claimBonus) {
         // Should not reach here due to early return check, but just in case
         setIsSubmitting(false);
         return;
@@ -1792,8 +1694,8 @@ export default function ProfilePage({
 
       if (error) throw error;
 
-      // Only claim bonus if requested
-      if (claimBonus) {
+      // Only claim bonus if requested and not already claimed
+      if (claimBonus && !creatorProfile.has_claimed_profile_reward) {
         // Claim the bonus via API route
         const bonusResponse = await fetch("/api/profile/claim-bonus", {
           method: "POST",
@@ -1809,7 +1711,7 @@ export default function ProfilePage({
           toast({
             title: "Profile Completed & Bonus Received!",
             description:
-              "Your profile has been completed and you've received a $0.50 bonus! You can no longer edit your profile.",
+              "Your profile has been completed and you've received a $0.50 bonus! You can still edit your interests, categories, and subcategories.",
           });
 
           // Update local state with bonus claimed
@@ -1834,12 +1736,21 @@ export default function ProfilePage({
       } else {
         // Just update without claiming bonus
         const isComplete = isProfileComplete();
-        toast({
-          title: "Profile Updated",
-          description: isComplete
-            ? "Your profile has been updated successfully. Complete your profile to claim the $0.50 bonus!"
-            : "Your profile has been updated successfully. Fill all details to get the $0.50 bonus reward!",
-        });
+        if (hasReceivedProfileBonus) {
+          // User has already claimed bonus, just updating interests/categories/subcategories
+          toast({
+            title: "Profile Updated",
+            description:
+              "Your interests, categories, and subcategories have been updated successfully.",
+          });
+        } else {
+          toast({
+            title: "Profile Updated",
+            description: isComplete
+              ? "Your profile has been updated successfully. Complete your profile to claim the $0.50 bonus!"
+              : "Your profile has been updated successfully. Fill all details to get the $0.50 bonus reward!",
+          });
+        }
 
         // Update local state
         setCreatorProfile((prev) => (prev ? { ...prev, ...updateData } : null));
@@ -1863,52 +1774,19 @@ export default function ProfilePage({
       return;
     }
 
-    // Check if profile is complete first
+    // Check if all required profile fields are filled
+    // Required fields: date of birth, gender, flat number (address), language,
+    // categories, subcategories (interests)
     const isComplete = isProfileComplete();
 
-    // Only check for cities/states if user has selected a country (required field)
-    if (selectedCountryCode) {
-      const states = State.getStatesOfCountry(selectedCountryCode);
-      let hasCities = false;
-      let hasStates = states.length > 0;
-
-      if (!hasStates) {
-        // Country has no states available, check country-level cities
-        const cities = City.getCitiesOfCountry(selectedCountryCode);
-        hasCities = !!(cities && cities.length > 0);
-
-        // If no states AND no cities, show complete profile modal when clicking save
-        if (!hasCities) {
-          setIsCompleteProfileModalOpen(true);
-          return;
-        }
-      } else if (selectedStateCode) {
-        // State is selected, check state-level cities
-        const cities = City.getCitiesOfState(
-          selectedCountryCode,
-          selectedStateCode
-        );
-        hasCities = !!(cities && cities.length > 0);
-
-        // If no cities available for the selected state, show complete profile modal
-        if (!hasCities) {
-          setIsCompleteProfileModalOpen(true);
-          return;
-        }
-      } else {
-        // States exist but none selected, check country-level cities as fallback
-        const cities = City.getCitiesOfCountry(selectedCountryCode);
-        hasCities = !!(cities && cities.length > 0);
-
-        // If no cities available, show complete profile modal
-        if (!hasCities) {
-          setIsCompleteProfileModalOpen(true);
-          return;
-        }
-      }
+    // If profile is not complete, just save without showing modal
+    if (!isComplete) {
+      handleSaveProfileChanges(false);
+      return;
     }
 
-    // Check if profile is complete
+    // If all required fields are filled and bonus hasn't been received, show modal
+    // Show modal regardless of whether states/cities are available for the country
     if (isComplete && !hasReceivedProfileBonus) {
       // Show confirmation modal
       setIsCompleteProfileModalOpen(true);
@@ -2406,8 +2284,9 @@ export default function ProfilePage({
                 Personal Information
               </CardTitle>
               <CardDescription className="mt-2 text-md">
-                Complete your personal details and click "Save Changes" to save
-                all updates and receive a $0.50 bonus.
+                Complete your profile to get contests matched to your country,
+                categories, subcategories, and interests. Click "Save Changes"
+                to save all updates and receive a $0.50 bonus.
               </CardDescription>
             </div>
             <CardContent className="space-y-6">
@@ -3145,7 +3024,7 @@ export default function ProfilePage({
                         isDark ? "text-white" : "text-[#1A1A1A]"
                       )}
                     >
-                      Category{" "}
+                      Categories{" "}
                       <span className="text-xs text-gray-500">
                         (Select up to 3)
                       </span>
@@ -3173,11 +3052,7 @@ export default function ProfilePage({
                               <Checkbox
                                 id={`content-created-${category.id}`}
                                 checked={isChecked}
-                                disabled={
-                                  hasReceivedProfileBonus ||
-                                  isDisabled ||
-                                  isSubmitting
-                                }
+                                disabled={isDisabled || isSubmitting}
                                 onCheckedChange={(checked) => {
                                   if (checked) {
                                     if (editedContentTypesCreated.length < 3) {
@@ -3258,27 +3133,25 @@ export default function ProfilePage({
                           >
                             {editedContentTypesCreated.length} of 3 selected
                           </p>
-                          {!hasReceivedProfileBonus && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setEditedContentTypesCreated([]);
-                                setEditedInterestedContentTypes([]);
-                              }}
-                              disabled={isSubmitting}
-                              className={cn(
-                                "h-7 px-2 text-xs",
-                                isDark
-                                  ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
-                              )}
-                            >
-                              <RotateCcw className="h-3 w-3" />
-                              Reset
-                            </Button>
-                          )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditedContentTypesCreated([]);
+                              setEditedInterestedContentTypes([]);
+                            }}
+                            disabled={isSubmitting}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -3288,14 +3161,29 @@ export default function ProfilePage({
                 {/* Other type of content I am interested in - Subcategories of selected categories */}
                 <div className="relative w-full col-span-1 sm:col-span-2">
                   <div className="space-y-3">
-                    <label
-                      className={cn(
-                        "text-[14px] font-medium block",
-                        isDark ? "text-white" : "text-[#1A1A1A]"
+                    <div className="flex items-center gap-2">
+                      <label
+                        className={cn(
+                          "text-[14px] font-medium block",
+                          isDark ? "text-white" : "text-[#1A1A1A]"
+                        )}
+                      >
+                        Subcategories
+                      </label>
+                      {editedInterestedContentTypes.length > 0 && (
+                        <span
+                          className={cn(
+                            "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+                            isDark
+                              ? "bg-purple-900/30 text-purple-200 border border-purple-700"
+                              : "bg-purple-100 text-purple-800 border border-purple-300"
+                          )}
+                        >
+                          {editedInterestedContentTypes.length}
+                          selected
+                        </span>
                       )}
-                    >
-                      Subcategories
-                    </label>
+                    </div>
                     <div
                       className={cn(
                         "rounded-lg border p-4 space-y-3",
@@ -3306,6 +3194,14 @@ export default function ProfilePage({
                     >
                       <Accordion type="multiple" className="w-full">
                         {CONTENT_TYPE_CATEGORIES.map((category) => {
+                          // Get selected subcategories for this category
+                          const selectedSubcategoriesForCategory =
+                            editedInterestedContentTypes.filter(
+                              (item) => item.category === category.id
+                            );
+                          const selectedCount =
+                            selectedSubcategoriesForCategory.length;
+
                           return (
                             <AccordionItem
                               key={category.id}
@@ -3318,7 +3214,21 @@ export default function ProfilePage({
                                   isDark ? "text-gray-300" : "text-gray-700"
                                 )}
                               >
-                                {category.name}
+                                <div className="flex items-center gap-2">
+                                  <span>{category.name}</span>
+                                  {selectedCount > 0 && (
+                                    <span
+                                      className={cn(
+                                        "text-xs px-2 py-0.5 rounded-full",
+                                        isDark
+                                          ? "bg-purple-600 text-white"
+                                          : "bg-purple-100 text-purple-700"
+                                      )}
+                                    >
+                                      {selectedCount} selected
+                                    </span>
+                                  )}
+                                </div>
                               </AccordionTrigger>
                               <AccordionContent className="pt-2 pb-4">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -3337,10 +3247,7 @@ export default function ProfilePage({
                                         <Checkbox
                                           id={`content-interested-${category.id}-${subcategory}`}
                                           checked={isChecked}
-                                          disabled={
-                                            hasReceivedProfileBonus ||
-                                            isSubmitting
-                                          }
+                                          disabled={isSubmitting}
                                           onCheckedChange={(checked) => {
                                             if (checked) {
                                               setEditedInterestedContentTypes([
@@ -3391,8 +3298,8 @@ export default function ProfilePage({
                         })}
                       </Accordion>
                       {editedInterestedContentTypes.length > 0 && (
-                        <div className="flex items-center justify-between mt-2">
-                          <p
+                        <div className="flex items-center justify-end mt-2">
+                          {/* <p
                             className={cn(
                               "text-xs",
                               isDark ? "text-gray-400" : "text-gray-500"
@@ -3400,27 +3307,23 @@ export default function ProfilePage({
                           >
                             {editedInterestedContentTypes.length} subcategories
                             selected
-                          </p>
-                          {!hasReceivedProfileBonus && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                setEditedInterestedContentTypes([])
-                              }
-                              disabled={isSubmitting}
-                              className={cn(
-                                "h-7 px-2 text-xs",
-                                isDark
-                                  ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
-                              )}
-                            >
-                              <RotateCcw className="h-3 w-3" />
-                              Reset
-                            </Button>
-                          )}
+                          </p> */}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditedInterestedContentTypes([])}
+                            disabled={isSubmitting}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -3430,14 +3333,28 @@ export default function ProfilePage({
                 {/* Interests */}
                 <div className="relative w-full col-span-1 sm:col-span-2">
                   <div className="space-y-3">
-                    <label
-                      className={cn(
-                        "text-[14px] font-medium block",
-                        isDark ? "text-white" : "text-[#1A1A1A]"
+                    <div className="flex items-center gap-2">
+                      <label
+                        className={cn(
+                          "text-[14px] font-medium",
+                          isDark ? "text-white" : "text-[#1A1A1A]"
+                        )}
+                      >
+                        Interests
+                      </label>
+                      {editedInterests.length > 0 && (
+                        <span
+                          className={cn(
+                            "text-xs px-2 py-0.5 rounded-full",
+                            isDark
+                              ? "bg-purple-600 text-white"
+                              : "bg-purple-100 text-purple-700"
+                          )}
+                        >
+                          {editedInterests.length} selected
+                        </span>
                       )}
-                    >
-                      Interests
-                    </label>
+                    </div>
                     <div
                       className={cn(
                         "rounded-lg border p-4 space-y-3",
@@ -3457,9 +3374,7 @@ export default function ProfilePage({
                               <Checkbox
                                 id={`interest-${interest}`}
                                 checked={isChecked}
-                                disabled={
-                                  hasReceivedProfileBonus || isSubmitting
-                                }
+                                disabled={isSubmitting}
                                 onCheckedChange={(checked) => {
                                   if (checked) {
                                     setEditedInterests([
@@ -3494,33 +3409,31 @@ export default function ProfilePage({
                         })}
                       </div>
                       {editedInterests.length > 0 && (
-                        <div className="flex items-center justify-between mt-2">
-                          <p
+                        <div className="flex items-center justify-end mt-2">
+                          {/* <p
                             className={cn(
                               "text-xs",
                               isDark ? "text-gray-400" : "text-gray-500"
                             )}
                           >
                             {editedInterests.length} interests selected
-                          </p>
-                          {!hasReceivedProfileBonus && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setEditedInterests([])}
-                              disabled={isSubmitting}
-                              className={cn(
-                                "h-7 px-2 text-xs",
-                                isDark
-                                  ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
-                              )}
-                            >
-                              <RotateCcw className="h-3 w-3" />
-                              Reset
-                            </Button>
-                          )}
+                          </p> */}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditedInterests([])}
+                            disabled={isSubmitting}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -3531,10 +3444,35 @@ export default function ProfilePage({
               {/* Save Changes Button */}
               <div className="flex justify-end pt-4">
                 {hasReceivedProfileBonus ? (
-                  <div className="text-sm text-muted-foreground italic">
-                    Profile editing is disabled after receiving the update
-                    bonus.
-                  </div>
+                  hasOnlyEditableFieldChanges() ? (
+                    <Button
+                      onClick={() => handleSaveProfileChanges(false)}
+                      disabled={!hasProfileChanges() || isSubmitting}
+                      className={cn(
+                        "px-6 py-2",
+                        isDark
+                          ? "bg-purple-600 hover:bg-purple-700"
+                          : "bg-[#7F39EC] hover:bg-[#6C43D0]"
+                      )}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          Save Changes
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <div className="text-sm text-muted-foreground italic">
+                      You can only edit interests, categories, and subcategories
+                      after receiving the bonus.
+                    </div>
+                  )
                 ) : (
                   <Button
                     onClick={handleSaveClick}
@@ -4557,8 +4495,9 @@ export default function ProfilePage({
                 isDark ? "text-white" : "text-gray-900"
               )}
             >
-              ⚠️ Once you claim the $0.50 bonus, you won't be able to make
-              further edits to your profile.
+              ⚠️ Once the $0.50 bonus is claimed, all details become disabled,
+              except your interests, categories, and subcategories, which you
+              can still edit.
             </p>
           </DialogHeader>
           {/* <div

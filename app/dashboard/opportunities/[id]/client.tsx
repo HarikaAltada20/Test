@@ -66,6 +66,7 @@ import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
 // --- START DUMMY DATA CONFIGURATION ---
 const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
 const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
@@ -243,6 +244,13 @@ export function ContestClientPage({
     full_name: string;
     username: string;
   } | null>(null);
+
+  // Creator profile data for filtering categories, subcategories, and interests
+  const [creatorCategories, setCreatorCategories] = useState<string[]>([]);
+  const [creatorSubcategories, setCreatorSubcategories] = useState<
+    Record<string, string[]>
+  >({});
+  const [creatorInterests, setCreatorInterests] = useState<string[]>([]);
 
   const { toast } = useToast();
 
@@ -795,6 +803,78 @@ export function ContestClientPage({
     };
 
     fetchUserProfile();
+  }, [user?.id, supabase]);
+
+  // Fetch creator profile data for filtering categories, subcategories, and interests
+  useEffect(() => {
+    const fetchCreatorProfile = async () => {
+      if (!user?.id) return;
+
+      try {
+        let localCreatorCategories: string[] = [];
+        let localCreatorSubcategories: Record<string, string[]> = {};
+        let localCreatorInterests: string[] = [];
+
+        const { data: creatorProfileData } = await supabase
+          .from("creator_profiles")
+          .select("categories, subcategories, interests")
+          .eq("id", user.id)
+          .single();
+
+        if (creatorProfileData) {
+          if (creatorProfileData.categories) {
+            localCreatorCategories = Array.isArray(
+              creatorProfileData.categories
+            )
+              ? creatorProfileData.categories
+              : [];
+          }
+
+          if (creatorProfileData.subcategories) {
+            // Handle both object format and array format
+            if (Array.isArray(creatorProfileData.subcategories)) {
+              // If it's an array of {category, subcategory} objects
+              (creatorProfileData.subcategories as any[]).forEach(
+                (item: any) => {
+                  if (item.category && item.subcategory) {
+                    if (!localCreatorSubcategories[item.category]) {
+                      localCreatorSubcategories[item.category] = [];
+                    }
+                    if (
+                      !localCreatorSubcategories[item.category].includes(
+                        item.subcategory
+                      )
+                    ) {
+                      localCreatorSubcategories[item.category].push(
+                        item.subcategory
+                      );
+                    }
+                  }
+                }
+              );
+            } else if (typeof creatorProfileData.subcategories === "object") {
+              // If it's already an object
+              localCreatorSubcategories =
+                creatorProfileData.subcategories as Record<string, string[]>;
+            }
+          }
+
+          if (creatorProfileData.interests) {
+            localCreatorInterests = Array.isArray(creatorProfileData.interests)
+              ? creatorProfileData.interests
+              : [];
+          }
+        }
+
+        setCreatorCategories(localCreatorCategories);
+        setCreatorSubcategories(localCreatorSubcategories);
+        setCreatorInterests(localCreatorInterests);
+      } catch (error) {
+        console.error("Error fetching creator profile:", error);
+      }
+    };
+
+    fetchCreatorProfile();
   }, [user?.id, supabase]);
 
   // Reset modal page when modal opens
@@ -2273,28 +2353,36 @@ export function ContestClientPage({
                       {contest.contest_type === "cpm" &&
                         contest.contest_based_details?.cpm_contest
                           ?.flat_fee_bonus && (
-                          <div className={cn(
-                            "flex items-center justify-between p-3 rounded-lg border transition-all duration-300",
-                            isDark
-                              ? "bg-gradient-to-r from-green-900/40 to-emerald-900/40 border-green-400/40"
-                              : "bg-gradient-to-r from-green-50 to-green-50 border-green-200"
-                          )}>
+                          <div
+                            className={cn(
+                              "flex items-center justify-between p-3 rounded-lg border transition-all duration-300",
+                              isDark
+                                ? "bg-gradient-to-r from-green-900/40 to-emerald-900/40 border-green-400/40"
+                                : "bg-gradient-to-r from-green-50 to-green-50 border-green-200"
+                            )}
+                          >
                             <div className="flex items-center gap-3">
-                              <Gift className={cn(
-                                "h-5 w-5",
-                                isDark ? "text-green-400" : "text-green-600"
-                              )} />
-                              <span className={cn(
-                                "font-medium",
-                                isDark ? "text-slate-100" : "text-slate-900"
-                              )}>
+                              <Gift
+                                className={cn(
+                                  "h-5 w-5",
+                                  isDark ? "text-green-400" : "text-green-600"
+                                )}
+                              />
+                              <span
+                                className={cn(
+                                  "font-medium",
+                                  isDark ? "text-slate-100" : "text-slate-900"
+                                )}
+                              >
                                 Guaranteed Bonus
                               </span>
                               <div className="group relative">
-                                <Info className={cn(
-                                  "h-4 w-4 cursor-help",
-                                  isDark ? "text-green-400" : "text-green-600"
-                                )} />
+                                <Info
+                                  className={cn(
+                                    "h-4 w-4 cursor-help",
+                                    isDark ? "text-green-400" : "text-green-600"
+                                  )}
+                                />
                                 <div
                                   className={cn(
                                     "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center",
@@ -2311,24 +2399,28 @@ export function ContestClientPage({
                               </div>
                             </div>
                             <div className="text-right">
-                              <div className={cn(
-                                "text-lg font-bold",
-                                isDark ? "text-green-100" : "text-green-900"
-                              )}>
+                              <div
+                                className={cn(
+                                  "text-lg font-bold",
+                                  isDark ? "text-green-100" : "text-green-900"
+                                )}
+                              >
                                 {formatMoney(
                                   contest.contest_based_details.cpm_contest
                                     .flat_fee_bonus
-                                )} 
+                                )}
                               </div>
-                              <div className={cn(
-                                "text-xs",
-                                isDark ? "text-green-300" : "text-green-700"
-                              )}>
+                              <div
+                                className={cn(
+                                  "text-xs",
+                                  isDark ? "text-green-300" : "text-green-700"
+                                )}
+                              >
                                 per verified submission
                               </div>
                             </div>
                           </div>
-                         )} 
+                        )}
 
                       {/* Multiple Submissions */}
                       {(contest as any).multiple_submissions_enabled && (
@@ -3026,6 +3118,202 @@ export function ContestClientPage({
                       </div>
                     </div>
                   </div>
+
+                  {/* Categories Section */}
+                  {contest.categories &&
+                    Array.isArray(contest.categories) &&
+                    contest.categories.length > 0 &&
+                    creatorCategories.length > 0 &&
+                    (() => {
+                      // Filter categories to only show those in user's profile
+                      const filteredCategories = contest.categories.filter(
+                        (categoryId: string) =>
+                          creatorCategories.includes(categoryId)
+                      );
+
+                      return filteredCategories.length > 0 ? (
+                        <div className="space-y-3 mt-6">
+                          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                            <Tag className="h-5 w-5 text-purple-600" />
+                            Categories
+                          </h3>
+                          <div
+                            className={cn(
+                              "border rounded-xl p-4",
+                              isDark
+                                ? "border-purple-600 bg-purple-950/50"
+                                : "border-purple-300 bg-purple-50/50"
+                            )}
+                          >
+                            <div className="flex flex-wrap gap-2">
+                              {filteredCategories.map((categoryId: string) => {
+                                const category = CONTENT_TYPE_CATEGORIES.find(
+                                  (cat) => cat.id === categoryId
+                                );
+                                return (
+                                  <span
+                                    key={categoryId}
+                                    className={cn(
+                                      "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                      isDark
+                                        ? "bg-purple-600/30 text-purple-200 border border-purple-500/50"
+                                        : "bg-purple-100 text-purple-800 border border-purple-300"
+                                    )}
+                                  >
+                                    {category ? category.name : categoryId}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+
+                  {/* Subcategories Section */}
+                  {contest.subcategories &&
+                    (() => {
+                      // Handle both grouped format and flat array format
+                      let subcategoriesToDisplay: Array<{
+                        category: string;
+                        subcategory: string;
+                      }> = [];
+
+                      if (Array.isArray(contest.subcategories)) {
+                        // Old flat array format
+                        subcategoriesToDisplay = contest.subcategories;
+                      } else if (
+                        typeof contest.subcategories === "object" &&
+                        contest.subcategories !== null
+                      ) {
+                        // New grouped format: {"beauty": ["Skincare", "Makeup"], ...}
+                        const grouped = contest.subcategories as Record<
+                          string,
+                          string[]
+                        >;
+                        Object.keys(grouped).forEach((category) => {
+                          const subcats = grouped[category];
+                          if (Array.isArray(subcats)) {
+                            subcats.forEach((subcat) => {
+                              subcategoriesToDisplay.push({
+                                category,
+                                subcategory: subcat,
+                              });
+                            });
+                          }
+                        });
+                      }
+
+                      // Filter subcategories to only show those in user's profile
+                      const filteredSubcategories =
+                        subcategoriesToDisplay.filter((item) => {
+                          // If user has no subcategories in profile, don't show any
+                          if (Object.keys(creatorSubcategories).length === 0) {
+                            return false;
+                          }
+                          // Check if this category exists in user's profile
+                          const userSubcats =
+                            creatorSubcategories[item.category];
+                          if (!userSubcats || userSubcats.length === 0) {
+                            return false;
+                          }
+                          // Check if this specific subcategory exists in user's profile
+                          return userSubcats.includes(item.subcategory);
+                        });
+
+                      return filteredSubcategories.length > 0 ? (
+                        <div className="space-y-3 mt-6">
+                          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                            <Tag className="h-5 w-5 text-indigo-600" />
+                            Subcategories
+                          </h3>
+                          <div
+                            className={cn(
+                              "border rounded-xl p-4",
+                              isDark
+                                ? "border-indigo-600 bg-indigo-950/50"
+                                : "border-indigo-300 bg-indigo-50/50"
+                            )}
+                          >
+                            <div className="flex flex-wrap gap-2">
+                              {filteredSubcategories.map(
+                                (
+                                  item: {
+                                    category: string;
+                                    subcategory: string;
+                                  },
+                                  index: number
+                                ) => {
+                                  const category = CONTENT_TYPE_CATEGORIES.find(
+                                    (cat) => cat.id === item.category
+                                  );
+                                  return (
+                                    <span
+                                      key={`${item.category}-${item.subcategory}-${index}`}
+                                      className={cn(
+                                        "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                        isDark
+                                          ? "bg-indigo-600/30 text-indigo-200 border border-indigo-500/50"
+                                          : "bg-indigo-100 text-indigo-800 border border-indigo-300"
+                                      )}
+                                    >
+                                      {category ? category.name : item.category}
+                                      : {item.subcategory}
+                                    </span>
+                                  );
+                                }
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+
+                  {/* Interests Section */}
+                  {contest.interests &&
+                    Array.isArray(contest.interests) &&
+                    contest.interests.length > 0 &&
+                    creatorInterests.length > 0 &&
+                    (() => {
+                      // Filter interests to only show those in user's profile
+                      const filteredInterests = contest.interests.filter(
+                        (interest: string) =>
+                          creatorInterests.includes(interest)
+                      );
+
+                      return filteredInterests.length > 0 ? (
+                        <div className="space-y-3 mt-6">
+                          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                            <Star className="h-5 w-5 text-yellow-600" />
+                            Interests
+                          </h3>
+                          <div
+                            className={cn(
+                              "border rounded-xl p-4",
+                              isDark
+                                ? "border-yellow-600 bg-yellow-950/50"
+                                : "border-yellow-300 bg-yellow-50/50"
+                            )}
+                          >
+                            <div className="flex flex-wrap gap-2">
+                              {filteredInterests.map((interest: string) => (
+                                <span
+                                  key={interest}
+                                  className={cn(
+                                    "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
+                                    isDark
+                                      ? "bg-yellow-600/30 text-yellow-200 border border-yellow-500/50"
+                                      : "bg-yellow-100 text-yellow-800 border border-yellow-300"
+                                  )}
+                                >
+                                  {interest}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
                 </div>
 
                 {/* 3. CONTENT REQUIREMENTS - Brief and Content Type */}
@@ -3777,11 +4065,12 @@ export function ContestClientPage({
             ) : leaderboard.length === 0 && totalLeaderboardEntries === 0 ? (
               <div className="text-center py-8">
                 <Trophy className="mx-auto h-12 w-12 text-slate-400" />
-                <p 
+                <p
                   className={cn(
                     "mb-2",
                     isDark ? "text-slate-300" : "text-slate-600"
-                  )}>
+                  )}
+                >
                   No submissions yet. Be the first!
                 </p>
               </div>

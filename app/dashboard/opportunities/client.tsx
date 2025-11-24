@@ -15,7 +15,9 @@ import {
   CheckCheck,
   Gift,
   Tag,
-  Star, Play, GraduationCap,
+  Star,
+  Play,
+  GraduationCap,
   RotateCcw,
 } from "lucide-react";
 import { User, UserResponse } from "@supabase/supabase-js";
@@ -47,12 +49,25 @@ import {
 import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+import {
+  isCountryInContestRegions,
+  extractCountryFromRegionJsonb,
+  getRegionForCountry,
+} from "@/lib/region-utils";
 
 // Define types for filters and sorting
 type StatusFilterType = "all" | "live" | "upcoming" | "completed";
 type PlatformFilterType = "all" | "youtube" | "instagram"; // Add more as needed
 type ContestTypeFilterType = "all" | "leaderboard" | "cpm";
 type SortOptionType =
+  | "relevance_desc"
   | "start_date_desc"
   | "start_date_asc"
   | "end_date_asc"
@@ -74,6 +89,13 @@ export default function OpportunitiesPage({
   const [showGuidelines, setShowGuidelines] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [hasCheckedGuidelines, setHasCheckedGuidelines] = useState(false);
+  const [userCountry, setUserCountry] = useState<string | null>(null);
+  const [userRegion, setUserRegion] = useState<string | null>(null);
+  const [creatorCategories, setCreatorCategories] = useState<string[]>([]);
+  const [creatorSubcategories, setCreatorSubcategories] = useState<
+    Record<string, string[]>
+  >({});
+  const [creatorInterests, setCreatorInterests] = useState<string[]>([]);
   const router = useRouter();
   const supabase = createClient();
 
@@ -117,7 +139,7 @@ export default function OpportunitiesPage({
     useState<PlatformFilterType>("all");
   const [typeFilter, setTypeFilter] = useState<ContestTypeFilterType>("all");
   const [sortOption, setSortOption] =
-    useState<SortOptionType>("start_date_desc");
+    useState<SortOptionType>("relevance_desc");
   const [displayedContests, setDisplayedContests] = useState<any[]>([]);
   const [mode, setMode] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {
@@ -260,6 +282,172 @@ export default function OpportunitiesPage({
       setIsFetchingData(true);
 
       try {
+        // Fetch user location - check database first, then API if needed
+        const locationCacheKey = "user_location";
+        const locationTimestampKey = "user_location_timestamp";
+        const cachedLocation = localStorage.getItem(locationCacheKey);
+        const cachedLocationTimestamp =
+          localStorage.getItem(locationTimestampKey);
+
+        // Check if cache is still valid (24 hours)
+        const isLocationCacheValid =
+          cachedLocationTimestamp &&
+          Date.now() - parseInt(cachedLocationTimestamp) < 24 * 60 * 60 * 1000;
+
+        // Use local variable for filtering (state updates are async)
+        // Support multiple countries - both registration info and creator profile will work together
+        let userCountries: string[] = [];
+        let currentUserCountry: string | null = null;
+        let currentUserRegion: string | null = null;
+
+        // Collect countries from both sources - both will work together
+        //  get country from registration_info
+        try {
+          const { data: userProfile, error: profileError } = await supabase
+            .from("users")
+            .select("registration_info")
+            .eq("id", currentUser.id)
+            .single();
+
+          if (!profileError && userProfile) {
+            // Get country from registration_info JSONB
+            let extractedCountry = null;
+            if (userProfile.registration_info) {
+              const registrationInfo = userProfile.registration_info as Record<
+                string,
+                any
+              >;
+              extractedCountry = registrationInfo.country || null;
+            }
+
+            // Add registration info country to the list if available
+            if (extractedCountry) {
+              userCountries.push(extractedCountry);
+              // Set as primary country for state (first one found)
+              if (!currentUserCountry) {
+                currentUserCountry = extractedCountry;
+                currentUserRegion = getRegionForCountry(extractedCountry);
+              }
+            }
+          } else if (profileError) {
+            console.error(
+              "Error fetching location from database:",
+              profileError
+            );
+          }
+        } catch (dbError) {
+          console.error("Error fetching location from database:", dbError);
+        }
+
+        //  get country from creator profile (add to list if different)
+        try {
+          const { data: creatorProfileData, error: creatorProfileError } =
+            await supabase
+              .from("creator_profiles")
+              .select("country")
+              .eq("id", currentUser.id)
+              .single();
+
+          if (!creatorProfileError && creatorProfileData?.country) {
+            // Add creator profile country if it's different from registration info
+            if (
+              creatorProfileData.country &&
+              !userCountries.includes(creatorProfileData.country)
+            ) {
+              userCountries.push(creatorProfileData.country);
+            }
+            // Set as primary if no country set yet
+            if (!currentUserCountry && creatorProfileData.country) {
+              currentUserCountry = creatorProfileData.country;
+              currentUserRegion = getRegionForCountry(
+                creatorProfileData.country
+              );
+            }
+          }
+        } catch (creatorProfileError) {
+          console.error(
+            "Error fetching creator profile country:",
+            creatorProfileError
+          );
+        }
+
+        // Update state with primary country (for display purposes)
+        if (currentUserCountry) {
+          setUserCountry(currentUserCountry);
+          setUserRegion(currentUserRegion);
+          // Cache it
+          const locationData = {
+            country: currentUserCountry,
+            region: currentUserRegion,
+            countries: userCountries, // Store all countries
+          };
+          localStorage.setItem(locationCacheKey, JSON.stringify(locationData));
+          localStorage.setItem(locationTimestampKey, Date.now().toString());
+        }
+
+        // Always fetch location from API to refresh/update location
+        // This ensures location is updated when user logs in from different location
+        // The API will decide whether to update based on IP changes, country changes, etc.
+        // If no country found in database, use cache as fallback for immediate display
+        if (userCountries.length === 0) {
+          if (cachedLocation && isLocationCacheValid) {
+            try {
+              const locationData = JSON.parse(cachedLocation);
+              if (locationData.country) {
+                userCountries.push(locationData.country);
+                currentUserCountry = locationData.country;
+                currentUserRegion = locationData.region;
+                setUserCountry(locationData.country);
+                setUserRegion(locationData.region);
+              }
+            } catch (e) {
+              console.error("Error parsing cached location:", e);
+            }
+          }
+        }
+
+        // Always call API to refresh/update location (even if we already have a country)
+        // This ensures location is updated when user logs in with different account
+        // The API will update the database if IP changed, country changed, or location is stale
+        try {
+          const locationResponse = await fetch("/api/get-location");
+          if (locationResponse.ok) {
+            const locationData = await locationResponse.json();
+            if (locationData.country) {
+              // Add to countries list if not already present
+              if (!userCountries.includes(locationData.country)) {
+                userCountries.push(locationData.country);
+              }
+
+              // Update current country if it changed or if we didn't have one
+              if (
+                !currentUserCountry ||
+                currentUserCountry !== locationData.country
+              ) {
+                currentUserCountry = locationData.country;
+                currentUserRegion = locationData.region;
+                setUserCountry(locationData.country);
+                setUserRegion(locationData.region);
+              }
+
+              // Cache the location
+              const locationCacheData = {
+                country: locationData.country,
+                region: locationData.region,
+                countries: userCountries,
+              };
+              localStorage.setItem(
+                locationCacheKey,
+                JSON.stringify(locationCacheData)
+              );
+              localStorage.setItem(locationTimestampKey, Date.now().toString());
+            }
+          }
+        } catch (locationError) {
+          console.error("Error fetching user location:", locationError);
+          // Continue without location filtering if API fails
+        }
+
         const { data: userData, error: userError } = await supabase
           .from("users")
           .select("user_type")
@@ -305,7 +493,9 @@ export default function OpportunitiesPage({
           // No cache - query database once
           const { data: creatorProfile, error: profileError } = await supabase
             .from("creator_profiles")
-            .select("has_seen_guidelines")
+            .select(
+              "has_seen_guidelines, country, categories, subcategories, interests"
+            )
             .eq("id", currentUser.id)
             .single();
 
@@ -328,6 +518,69 @@ export default function OpportunitiesPage({
           }
           setHasCheckedGuidelines(true);
         }
+
+        // Fetch creator's categories, subcategories, and interests for filtering
+        // Use local variables since state updates are async
+        let localCreatorCategories: string[] = [];
+        let localCreatorSubcategories: Record<string, string[]> = {};
+        let localCreatorInterests: string[] = [];
+
+        // Fetch from database
+        const { data: creatorProfileData } = await supabase
+          .from("creator_profiles")
+          .select("categories, subcategories, interests")
+          .eq("id", currentUser.id)
+          .single();
+
+        if (creatorProfileData) {
+          if (creatorProfileData.categories) {
+            localCreatorCategories = Array.isArray(
+              creatorProfileData.categories
+            )
+              ? creatorProfileData.categories
+              : [];
+          }
+
+          if (creatorProfileData.subcategories) {
+            // Handle both object format and array format
+            if (Array.isArray(creatorProfileData.subcategories)) {
+              // If it's an array of {category, subcategory} objects
+              (creatorProfileData.subcategories as any[]).forEach(
+                (item: any) => {
+                  if (item.category && item.subcategory) {
+                    if (!localCreatorSubcategories[item.category]) {
+                      localCreatorSubcategories[item.category] = [];
+                    }
+                    if (
+                      !localCreatorSubcategories[item.category].includes(
+                        item.subcategory
+                      )
+                    ) {
+                      localCreatorSubcategories[item.category].push(
+                        item.subcategory
+                      );
+                    }
+                  }
+                }
+              );
+            } else if (typeof creatorProfileData.subcategories === "object") {
+              // If it's already an object
+              localCreatorSubcategories =
+                creatorProfileData.subcategories as Record<string, string[]>;
+            }
+          }
+
+          if (creatorProfileData.interests) {
+            localCreatorInterests = Array.isArray(creatorProfileData.interests)
+              ? creatorProfileData.interests
+              : [];
+          }
+        }
+
+        // Update state for use in scoring function
+        setCreatorCategories(localCreatorCategories);
+        setCreatorSubcategories(localCreatorSubcategories);
+        setCreatorInterests(localCreatorInterests);
 
         const { data: contests, error: contestError } = await supabase
           .from("contests_with_status")
@@ -387,7 +640,28 @@ export default function OpportunitiesPage({
             })
           );
 
-          setAvailableContests(contestsWithCalculatedBudgets);
+          // Filter contests based on user's countries (both registration info and creator profile)
+          const regionFilteredContests = contestsWithCalculatedBudgets.filter(
+            (contest) => {
+              // If no user countries available, show all contests (fallback)
+              if (userCountries.length === 0) {
+                return true;
+              }
+
+              // If contest has no region restrictions, show it to everyone
+              if (!contest.region || Object.keys(contest.region).length === 0) {
+                return true;
+              }
+
+              // Check if ANY of the user's countries matches the contest's regions
+              // This allows users to see contests from both their registration country and profile country
+              return userCountries.some((country: string) =>
+                isCountryInContestRegions(country, contest.region)
+              );
+            }
+          );
+
+          setAvailableContests(regionFilteredContests);
         }
       } catch (error) {
         console.error("Unexpected error in fetchData:", error);
@@ -399,6 +673,149 @@ export default function OpportunitiesPage({
 
     fetchData(user);
   }, [user, router, supabase]);
+
+  // Calculate relevance score for a contest
+  const calculateRelevanceScore = (contest: any): number => {
+    let score = 0;
+
+    const contestCategories = Array.isArray(contest.categories)
+      ? contest.categories
+      : [];
+    const contestSubcategories =
+      typeof contest.subcategories === "object" &&
+      contest.subcategories !== null
+        ? (contest.subcategories as Record<string, string[]>)
+        : {};
+    const contestInterests = Array.isArray(contest.interests)
+      ? contest.interests
+      : [];
+
+    // Check if contest has preferences set
+    const contestHasPreferences =
+      contestCategories.length > 0 ||
+      Object.keys(contestSubcategories).length > 0 ||
+      contestInterests.length > 0;
+
+    // Check if creator has preferences set
+    const creatorHasPreferences =
+      creatorCategories.length > 0 ||
+      Object.keys(creatorSubcategories).length > 0 ||
+      creatorInterests.length > 0;
+
+    // If creator has no preferences set, show all contests with score 0
+    // (they will be sorted by other criteria, not relevance)
+    if (!creatorHasPreferences) {
+      return 0;
+    }
+
+    // Creator has preferences - only calculate score based on actual matches
+    // If contest has no preferences, return 0 (no match possible)
+    if (!contestHasPreferences) {
+      return 0;
+    }
+
+    // Calculate match score based on actual matches
+    if (creatorCategories.length > 0 && contestCategories.length > 0) {
+      const matchingCategories = creatorCategories.filter((cat) =>
+        contestCategories.includes(cat)
+      );
+      const M = matchingCategories.length;
+      const N = contestCategories.length; // Use contest categories as denominator
+      if (M > 0 && N > 0) {
+        // Calculate proportional score: (M / N) * 60, rounded
+        // If all contest categories match, get full 60 points
+        const categoryScore = Math.round((M / N) * 60);
+        score += categoryScore;
+      }
+    }
+
+    // Sub-category match: proportional points based on contest requirements (M/contestSubcategories * 30, rounded)
+    if (Object.keys(contestSubcategories).length > 0) {
+      let totalContestSubcategories = 0;
+      let matchingSubcategories = 0;
+
+      // Calculate based on contest's subcategories, not user's
+      for (const [category, contestSubcats] of Object.entries(
+        contestSubcategories
+      )) {
+        totalContestSubcategories += contestSubcats.length;
+        const creatorSubcats = creatorSubcategories[category] || [];
+        const matchingSubcats = contestSubcats.filter((subcat) =>
+          creatorSubcats.includes(subcat)
+        );
+        matchingSubcategories += matchingSubcats.length;
+      }
+
+      if (matchingSubcategories > 0 && totalContestSubcategories > 0) {
+        // Calculate proportional score: (M / N) * 30, rounded
+        // If all contest subcategories match, get full 30 points
+        const subcategoryScore = Math.round(
+          (matchingSubcategories / totalContestSubcategories) * 30
+        );
+        score += subcategoryScore;
+      }
+    }
+
+    // Interest match: proportional points based on contest requirements (M/contestInterests * 10, rounded)
+    if (creatorInterests.length > 0 && contestInterests.length > 0) {
+      const matchingInterests = creatorInterests.filter((interest) =>
+        contestInterests.includes(interest)
+      );
+      const M = matchingInterests.length;
+      const N = contestInterests.length; // Use contest interests as denominator
+      if (M > 0 && N > 0) {
+        // Calculate proportional score: (M / N) * 10, rounded
+        // If all contest interests match, get full 10 points
+        const interestScore = Math.round((M / N) * 10);
+        score += interestScore;
+      }
+    }
+
+    // Return score (will be 0 if no matches found)
+    return score;
+  };
+
+  // Get match details for display
+  const getMatchDetails = (contest: any) => {
+    const score = calculateRelevanceScore(contest);
+    const maxPossibleScore = 100; // Category (60) + Subcategory (30) + Interests (10 max)
+    const percentage = Math.min((score / maxPossibleScore) * 100, 100);
+
+    let matchLabel = "";
+    let matchColor = "gray";
+
+    const creatorHasPreferences =
+      creatorCategories.length > 0 ||
+      Object.keys(creatorSubcategories).length > 0 ||
+      creatorInterests.length > 0;
+
+    if (!creatorHasPreferences) {
+      // Creator has no preferences - show as general
+      matchLabel = "General";
+      matchColor = "gray";
+    } else {
+      // Creator has preferences - show match quality based on score
+      if (score >= 70) {
+        matchLabel = "Perfect Match";
+        matchColor = "green";
+      } else if (score >= 50) {
+        matchLabel = "Great Match";
+        matchColor = "emerald";
+      } else if (score >= 30) {
+        matchLabel = "Good Match";
+        matchColor = "yellow";
+      } else if (score > 0) {
+        matchLabel = "Partial Match";
+        matchColor = "orange";
+      } else {
+        // Score is 0 - no matches found
+        matchLabel = "";
+        matchColor = "gray";
+      }
+    }
+
+    return { score, percentage, matchLabel, matchColor };
+  };
 
   // useEffect for filtering and sorting
   useEffect(() => {
@@ -432,9 +849,66 @@ export default function OpportunitiesPage({
       );
     }
 
+    // Filter out contests based on preferences matching
+    const creatorHasPreferences =
+      creatorCategories.length > 0 ||
+      Object.keys(creatorSubcategories).length > 0 ||
+      creatorInterests.length > 0;
+
+    contestsToDisplay = contestsToDisplay.filter((contest) => {
+      const contestCategories = Array.isArray(contest.categories)
+        ? contest.categories
+        : [];
+      const contestSubcategories =
+        typeof contest.subcategories === "object" &&
+        contest.subcategories !== null
+          ? (contest.subcategories as Record<string, string[]>)
+          : {};
+      const contestInterests = Array.isArray(contest.interests)
+        ? contest.interests
+        : [];
+
+      // Check if contest has preferences set (categories, subcategories, or interests)
+      const contestHasPreferences =
+        contestCategories.length > 0 ||
+        Object.keys(contestSubcategories).length > 0 ||
+        contestInterests.length > 0;
+
+      // If country is chosen and contest has preferences, check relevance score
+      // If score is 0, exclude the contest
+      if (userCountry && contestHasPreferences) {
+        const relevanceScore = calculateRelevanceScore(contest);
+        if (relevanceScore === 0) {
+          return false; // Don't show contests with 0 relevance score when country is chosen
+        }
+      }
+
+      // If creator has no preferences and contest has preferences, filter out
+      if (!creatorHasPreferences && contestHasPreferences) {
+        return false; // Don't show contests with preferences if creator hasn't set preferences
+      }
+
+      // If creator has preferences and contest has preferences, only show if score > 0
+      if (creatorHasPreferences && contestHasPreferences) {
+        const relevanceScore = calculateRelevanceScore(contest);
+        // Don't show contests with 0 points if they have preferences set
+        return relevanceScore > 0;
+      }
+
+      // If contest has no preferences, show it (normal behavior)
+      // This covers: creator has preferences + contest has no preferences
+      // and: creator has no preferences + contest has no preferences
+      return true;
+    });
+
     // Sorting
     contestsToDisplay.sort((a, b) => {
       switch (sortOption) {
+        case "relevance_desc":
+          const scoreA = calculateRelevanceScore(a);
+          const scoreB = calculateRelevanceScore(b);
+          // Sort by score descending (highest first)
+          return scoreB - scoreA;
         case "start_date_desc":
           if (!a.start_date) return 1; // push contests without start_date to the bottom
           if (!b.start_date) return -1;
@@ -485,19 +959,21 @@ export default function OpportunitiesPage({
           ) {
             valueB = b.contest_based_details.cpm_contest.total_budget; // Assuming budget is in cents
           }
-          return sortOption === "value_desc"
-            ? valueB - valueA
-            : valueA - valueB;
+          if (sortOption === "value_desc") {
+            return valueB - valueA;
+          } else {
+            return valueA - valueB;
+          }
         case "cpm_rate_desc":
         case "cpm_rate_asc":
           const rateA =
             a.contest_type === "cpm" &&
-              a.contest_based_details?.cpm_contest?.cpm_rate_usd
+            a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1; // Use -1 to sort contests without CPM rate last
           const rateB =
             b.contest_type === "cpm" &&
-              b.contest_based_details?.cpm_contest?.cpm_rate_usd
+            b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           if (rateA === -1 && rateB === -1) return 0;
@@ -520,7 +996,17 @@ export default function OpportunitiesPage({
     });
 
     setDisplayedContests(contestsToDisplay);
-  }, [availableContests, statusFilter, platformFilter, typeFilter, sortOption]);
+  }, [
+    availableContests,
+    statusFilter,
+    platformFilter,
+    typeFilter,
+    sortOption,
+    creatorCategories,
+    creatorSubcategories,
+    creatorInterests,
+    userCountry,
+  ]);
 
   const handleViewDetails = (id: string) => {
     router.push(`/dashboard/opportunities/${id}`);
@@ -528,7 +1014,7 @@ export default function OpportunitiesPage({
   const resetFilters = () => {
     setPlatformFilter("all");
     setTypeFilter("all");
-    setSortOption("start_date_desc");
+    setSortOption("relevance_desc");
   };
   if (isFetchingData) {
     return (
@@ -587,10 +1073,11 @@ export default function OpportunitiesPage({
             href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N"
             target="_blank"
             rel="noopener noreferrer"
-          
             className={cn(
               "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
-              isDark ? "text-white border-gray-600" : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]"
+              isDark
+                ? "text-white border-gray-600"
+                : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]"
             )}
           >
             <Play className="h-3.5 w-3.5" />
@@ -600,7 +1087,9 @@ export default function OpportunitiesPage({
             href="/dashboard/getting-started"
             className={cn(
               "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
-              isDark ? "text-white border-gray-600" : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]"
+              isDark
+                ? "text-white border-gray-600"
+                : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]"
             )}
           >
             <GraduationCap className="h-3.5 w-3.5" />
@@ -728,6 +1217,9 @@ export default function OpportunitiesPage({
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent isDark={isDark}>
+            <SelectItem value="relevance_desc" isDark={isDark}>
+              Relevance: Highest to Lowest
+            </SelectItem>
             <SelectItem value="start_date_asc" isDark={isDark}>
               Start Date: Soonest First
             </SelectItem>
@@ -791,9 +1283,9 @@ export default function OpportunitiesPage({
                       className={cn(
                         "capitalize text-sm px-3 py-1 font-medium border",
                         contest.status === "active" &&
-                        "bg-[#7F39EC] text-white",
+                          "bg-[#7F39EC] text-white",
                         contest.status === "upcoming" &&
-                        "bg-[#7F39EC] text-white",
+                          "bg-[#7F39EC] text-white",
                         contest.status === "ended" && "bg-[#7F39EC] text-white",
                         !["active", "upcoming", "ended"].includes(
                           contest.status
@@ -810,15 +1302,17 @@ export default function OpportunitiesPage({
                   </div>
                 </div>
                 <CardHeader className="p-4 pb-2">
-                  <CardTitle
-                    className="text-lg font-bold mr-2 leading-tight"
-                    style={{
-                      color: isDark ? "white" : "#1e293b",
-                      transition: "none",
-                    }}
-                  >
-                    {contest.title}
-                  </CardTitle>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <CardTitle
+                      className="text-lg font-bold leading-tight flex-1"
+                      style={{
+                        color: isDark ? "white" : "#1e293b",
+                        transition: "none",
+                      }}
+                    >
+                      {contest.title}
+                    </CardTitle>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
                   <div
@@ -850,26 +1344,26 @@ export default function OpportunitiesPage({
                         ?.flat_fee_bonus ||
                         contest.contest_based_details?.leaderboard_contest
                           ?.flat_fee_bonus) && (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[12px]",
-                              isDark
-                                ? "bg-green-900/30 text-green-300 border-green-700/50"
-                                : "bg-green-50 text-green-700 border-green-200"
-                            )}
-                          >
-                            <Gift className="h-3 w-3 mr-1" />
-                            {formatMoney(
-                              contest.contest_based_details?.cpm_contest
-                                ?.flat_fee_bonus ||
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[12px]",
+                            isDark
+                              ? "bg-green-900/30 text-green-300 border-green-700/50"
+                              : "bg-green-50 text-green-700 border-green-200"
+                          )}
+                        >
+                          <Gift className="h-3 w-3 mr-1" />
+                          {formatMoney(
+                            contest.contest_based_details?.cpm_contest
+                              ?.flat_fee_bonus ||
                               contest.contest_based_details?.leaderboard_contest
                                 ?.flat_fee_bonus ||
                               0
-                            )}
-                            /submission
-                          </Badge>
-                        )}
+                          )}
+                          /submission
+                        </Badge>
+                      )}
                       {contest.content_type && (
                         <Badge
                           variant="outline"
@@ -975,6 +1469,48 @@ export default function OpportunitiesPage({
                           </span>
                         </div>
                       )}
+                    {(() => {
+                      const contestCategories = Array.isArray(contest.categories)
+                        ? contest.categories
+                        : [];
+                      const contestSubcategories =
+                        typeof contest.subcategories === "object" &&
+                        contest.subcategories !== null
+                          ? (contest.subcategories as Record<string, string[]>)
+                          : {};
+                      const contestInterests = Array.isArray(contest.interests)
+                        ? contest.interests
+                        : [];
+                      const contestHasPreferences =
+                        contestCategories.length > 0 ||
+                        Object.keys(contestSubcategories).length > 0 ||
+                        contestInterests.length > 0;
+
+                      return contestHasPreferences ? (
+                        <div className="flex items-center">
+                          <Star className="h-4 w-4 mr-2 flex-shrink-0" />
+                          <span>
+                            Relevance Score:{" "}
+                            <span
+                              className={cn(
+                                "font-medium",
+                                isDark ? "text-white" : "text-slate-700"
+                              )}
+                            >
+                              {calculateRelevanceScore(contest)}
+                            </span>
+                            {(() => {
+                              const matchDetails = getMatchDetails(contest);
+                              return matchDetails.matchLabel ? (
+                                <span className="ml-1">
+                                  ({matchDetails.matchLabel})
+                                </span>
+                              ) : null;
+                            })()}
+                          </span>
+                        </div>
+                      ) : null;
+                    })()}
                     <div className="flex items-center">
                       <Info className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span>
@@ -988,11 +1524,11 @@ export default function OpportunitiesPage({
                           {contest.contest_type === "cpm"
                             ? "CPM Based"
                             : contest.contest_type === "leaderboard"
-                              ? "Leaderboard"
-                              : contest.contest_type
-                                ? contest.contest_type.charAt(0).toUpperCase() +
-                                contest.contest_type.slice(1)
-                                : "N/A"}
+                            ? "Leaderboard"
+                            : contest.contest_type
+                            ? contest.contest_type.charAt(0).toUpperCase() +
+                              contest.contest_type.slice(1)
+                            : "N/A"}
                         </span>
                       </span>
                     </div>
@@ -1022,7 +1558,7 @@ export default function OpportunitiesPage({
                       contest.contest_based_details?.cpm_contest
                         ?.total_budget != null &&
                       contest.contest_based_details.cpm_contest.total_budget >
-                      0 && (
+                        0 && (
                         <div className="flex items-center">
                           <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                           <span>
@@ -1092,9 +1628,9 @@ export default function OpportunitiesPage({
                   {/* Budget Spent Progress Bar for CPM contests */}
                   {contest.contest_type === "cpm" &&
                     contest.contest_based_details?.cpm_contest?.total_budget !=
-                    null &&
+                      null &&
                     contest.contest_based_details.cpm_contest.total_budget >
-                    0 &&
+                      0 &&
                     (() => {
                       const totalBudget =
                         contest.contest_based_details.cpm_contest.total_budget;
@@ -1260,8 +1796,6 @@ export default function OpportunitiesPage({
               <RotateCcw className="h-4 w-4" />
               Reset
             </Button>
-           
-
           </div>
         )}
       </div>

@@ -1,3 +1,6 @@
+-- Update contests_with_status view to include region column
+-- This should be run after add_region_column_to_contests.sql
+
 CREATE OR REPLACE VIEW public.contests_with_status WITH (security_invoker='on') AS
  SELECT contests.id,
     contests.advertiser_id,
@@ -49,3 +52,4 @@ CREATE OR REPLACE VIEW public.contests_with_status WITH (security_invoker='on') 
     contests.bonus_details,
     contests.max_earnings_per_creator
    FROM public.contests;
+
