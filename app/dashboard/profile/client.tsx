@@ -2284,8 +2284,9 @@ export default function ProfilePage({
                 Personal Information
               </CardTitle>
               <CardDescription className="mt-2 text-md">
-                Complete your personal details and click "Save Changes" to save
-                all updates and receive a $0.50 bonus.
+                Complete your profile to get contests matched to your country,
+                categories, subcategories, and interests. Click "Save Changes"
+                to save all updates and receive a $0.50 bonus.
               </CardDescription>
             </div>
             <CardContent className="space-y-6">
@@ -3023,7 +3024,7 @@ export default function ProfilePage({
                         isDark ? "text-white" : "text-[#1A1A1A]"
                       )}
                     >
-                      Category{" "}
+                      Categories{" "}
                       <span className="text-xs text-gray-500">
                         (Select up to 3)
                       </span>
@@ -3297,8 +3298,8 @@ export default function ProfilePage({
                         })}
                       </Accordion>
                       {editedInterestedContentTypes.length > 0 && (
-                        <div className="flex items-center justify-between mt-2">
-                          <p
+                        <div className="flex items-center justify-end mt-2">
+                          {/* <p
                             className={cn(
                               "text-xs",
                               isDark ? "text-gray-400" : "text-gray-500"
@@ -3306,7 +3307,7 @@ export default function ProfilePage({
                           >
                             {editedInterestedContentTypes.length} subcategories
                             selected
-                          </p>
+                          </p> */}
                           <Button
                             type="button"
                             variant="outline"
@@ -3332,14 +3333,28 @@ export default function ProfilePage({
                 {/* Interests */}
                 <div className="relative w-full col-span-1 sm:col-span-2">
                   <div className="space-y-3">
-                    <label
-                      className={cn(
-                        "text-[14px] font-medium block",
-                        isDark ? "text-white" : "text-[#1A1A1A]"
+                    <div className="flex items-center gap-2">
+                      <label
+                        className={cn(
+                          "text-[14px] font-medium",
+                          isDark ? "text-white" : "text-[#1A1A1A]"
+                        )}
+                      >
+                        Interests
+                      </label>
+                      {editedInterests.length > 0 && (
+                        <span
+                          className={cn(
+                            "text-xs px-2 py-0.5 rounded-full",
+                            isDark
+                              ? "bg-purple-600 text-white"
+                              : "bg-purple-100 text-purple-700"
+                          )}
+                        >
+                          {editedInterests.length} selected
+                        </span>
                       )}
-                    >
-                      Interests
-                    </label>
+                    </div>
                     <div
                       className={cn(
                         "rounded-lg border p-4 space-y-3",
@@ -3394,15 +3409,15 @@ export default function ProfilePage({
                         })}
                       </div>
                       {editedInterests.length > 0 && (
-                        <div className="flex items-center justify-between mt-2">
-                          <p
+                        <div className="flex items-center justify-end mt-2">
+                          {/* <p
                             className={cn(
                               "text-xs",
                               isDark ? "text-gray-400" : "text-gray-500"
                             )}
                           >
                             {editedInterests.length} interests selected
-                          </p>
+                          </p> */}
                           <Button
                             type="button"
                             variant="outline"

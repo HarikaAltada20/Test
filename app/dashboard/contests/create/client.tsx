@@ -6712,15 +6712,15 @@ export default function CreateContestPage({
                           })}
                         </div>
                         {contestCategories.length > 0 && (
-                          <div className="flex items-center justify-between mt-2">
-                            <p
+                          <div className="flex items-center justify-end mt-2">
+                            {/* <p
                               className={cn(
                                 "text-xs",
                                 isDark ? "text-gray-400" : "text-gray-500"
                               )}
                             >
                               {contestCategories.length} selected
-                            </p>
+                            </p> */}
                             <Button
                               type="button"
                               variant="outline"
@@ -6915,8 +6915,8 @@ export default function CreateContestPage({
                           })}
                         </Accordion>
                         {contestSubcategories.length > 0 && (
-                          <div className="flex items-center justify-between mt-2">
-                            <p
+                          <div className="flex items-center justify-end mt-2">
+                            {/* <p
                               className={cn(
                                 "text-xs",
                                 isDark ? "text-gray-400" : "text-gray-500"
@@ -6924,7 +6924,7 @@ export default function CreateContestPage({
                             >
                               {contestSubcategories.length} subcategories
                               selected
-                            </p>
+                            </p> */}
                             <Button
                               type="button"
                               variant="outline"
@@ -7055,15 +7055,15 @@ export default function CreateContestPage({
                           })}
                         </div>
                         {contestInterests.length > 0 && (
-                          <div className="flex items-center justify-between mt-2">
-                            <p
+                          <div className="flex items-center justify-end mt-2">
+                            {/* <p
                               className={cn(
                                 "text-xs",
                                 isDark ? "text-gray-400" : "text-gray-500"
                               )}
                             >
                               {contestInterests.length} interests selected
-                            </p>
+                            </p> */}
                             <Button
                               type="button"
                               variant="outline"
@@ -7111,6 +7111,18 @@ export default function CreateContestPage({
                             <span className="text-[14px] font-medium cursor-pointer">
                               Regions
                             </span>
+                            {/* {selectedRegions.length > 0 && (
+                              <span
+                                className={cn(
+                                  "text-xs px-2 py-0.5 rounded-full",
+                                  isDark
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-100 text-purple-700"
+                                )}
+                              >
+                                {selectedRegions.length} selected
+                              </span>
+                            )} */}
                             {selectedCountries.length > 0 && (
                               <span
                                 className={cn(
@@ -7202,15 +7214,21 @@ export default function CreateContestPage({
                                   <label
                                     htmlFor={`region-${region}`}
                                     className={cn(
-                                      "text-sm font-semibold cursor-pointer",
+                                      "text-sm font-semibold cursor-pointer flex items-center gap-2",
                                       isDark ? "text-gray-300" : "text-gray-700"
                                     )}
                                   >
-                                    {region}
-                                    {isPartiallySelected && (
-                                      <span className="text-xs font-normal ml-2 text-gray-500">
-                                        ({selectedCountriesInRegion.length} of{" "}
-                                        {countriesArray.length} selected)
+                                    <span>{region}</span>
+                                    {hasAnySelected && (
+                                      <span
+                                      className={cn(
+                                        "text-xs px-2 py-0.5 rounded-full",
+                                        isDark
+                                          ? "bg-purple-600 text-white"
+                                          : "bg-purple-100 text-purple-700"
+                                      )}
+                                      >
+                                        {selectedCountriesInRegion.length} selected
                                       </span>
                                     )}
                                   </label>
@@ -7262,15 +7280,15 @@ export default function CreateContestPage({
                           })}
                         </div>
                         {selectedCountries.length > 0 && (
-                          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                            <p
+                          <div className="flex items-center justify-end mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                            {/* <p
                               className={cn(
                                 "text-xs",
                                 isDark ? "text-gray-400" : "text-gray-500"
                               )}
                             >
                               {selectedCountries.length} countries selected
-                            </p>
+                            </p> */}
                             <Button
                               type="button"
                               variant="outline"
