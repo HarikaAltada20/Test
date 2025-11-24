@@ -67,136 +67,296 @@ export async function GET(request: NextRequest) {
               existingIp
             );
 
-            // Try to get country from stored IP using the same APIs
-            let countryFromStoredIp = null;
+            // Check if stored IP is localhost - cannot get country from localhost IPs
+            if (
+              existingIp === "::1" ||
+              existingIp === "127.0.0.1" ||
+              existingIp === "0.0.0.0"
+            ) {
+              console.log(
+                "[get-location] Stored IP is localhost, cannot get country from it. Trying to get current real IP/country for this session (will update country in registration_info but keep localhost IP)."
+              );
+              // Try to get current real IP and country for this session
+              // Update country in registration_info but keep original localhost IP there
+              try {
+                const ipinfoUrl = "https://ipinfo.io/json";
+                const response = await fetch(ipinfoUrl, {
+                  method: "GET",
+                  headers: { Accept: "application/json" },
+                });
 
-            // Try ipinfo.io first
-            try {
-              const ipinfoUrl = `https://ipinfo.io/${existingIp}/json`;
-              const storedIpResponse = await fetch(ipinfoUrl, {
-                method: "GET",
-                headers: { Accept: "application/json" },
-              });
+                if (response.ok) {
+                  const data = await response.json();
+                  if (data.country && !data.error) {
+                    const countryCode = data.country;
+                    country =
+                      countries.getName(countryCode, "en") ||
+                      data.country_name ||
+                      countryCode;
+                    apiUsed = "ipinfo.io";
+                    console.log(
+                      "[get-location] Got current country from ipinfo.io:",
+                      country
+                    );
+                  }
+                }
+              } catch (error) {
+                console.error(
+                  "[get-location] Error getting current location via ipinfo.io:",
+                  error
+                );
+              }
 
-              if (storedIpResponse.ok) {
-                const storedIpData = await storedIpResponse.json();
-                if (storedIpData.country && !storedIpData.error) {
-                  const countryCode = storedIpData.country;
-                  countryFromStoredIp =
-                    countries.getName(countryCode, "en") ||
-                    storedIpData.country_name ||
-                    countryCode;
-                  apiUsed = "ipinfo.io";
-                  console.log(
-                    "[get-location] Got country from stored IP via ipinfo.io:",
-                    countryFromStoredIp
+              // Fallback 1: ipapi.co
+              if (!country) {
+                try {
+                  const ipapiUrl = "https://ipapi.co/json/";
+                  const ipapiResponse = await fetch(ipapiUrl, {
+                    method: "GET",
+                    headers: { Accept: "application/json" },
+                  });
+
+                  if (ipapiResponse.ok) {
+                    const ipapiData = await ipapiResponse.json();
+                    if (!ipapiData.error) {
+                      country = ipapiData.country_name || null;
+                      apiUsed = "ipapi.co";
+                      console.log(
+                        "[get-location] Got current country from ipapi.co:",
+                        country
+                      );
+                    }
+                  }
+                } catch (error) {
+                  console.error(
+                    "[get-location] Error getting current location via ipapi.co:",
+                    error
                   );
                 }
               }
-            } catch (error) {
-              console.error(
-                "[get-location] Error getting country from stored IP via ipinfo.io:",
-                error
-              );
-            }
 
-            // Fallback to ipapi.co
-            if (!countryFromStoredIp) {
-              try {
-                const ipapiUrl = `https://ipapi.co/${existingIp}/json/`;
-                const ipapiResponse = await fetch(ipapiUrl, {
-                  method: "GET",
-                  headers: { Accept: "application/json" },
-                });
+              // Fallback 2: ip-api.com (using request headers)
+              if (!country) {
+                try {
+                  const xff = request.headers.get("x-forwarded-for");
+                  const cfConnectingIp =
+                    request.headers.get("cf-connecting-ip");
+                  const xRealIp = request.headers.get("x-real-ip");
 
-                if (ipapiResponse.ok) {
-                  const ipapiData = await ipapiResponse.json();
-                  if (!ipapiData.error) {
-                    countryFromStoredIp = ipapiData.country_name || null;
-                    apiUsed = "ipapi.co";
-                    console.log(
-                      "[get-location] Got country from stored IP via ipapi.co:",
-                      countryFromStoredIp
-                    );
+                  let requestIp = null;
+                  if (xff) {
+                    requestIp = xff.split(",")[0].trim();
+                  } else if (cfConnectingIp) {
+                    requestIp = cfConnectingIp.trim();
+                  } else if (xRealIp) {
+                    requestIp = xRealIp.trim();
                   }
-                }
-              } catch (error) {
-                console.error(
-                  "[get-location] Error getting country from stored IP via ipapi.co:",
-                  error
-                );
-              }
-            }
 
-            // Fallback to ip-api.com
-            if (!countryFromStoredIp) {
-              try {
-                const ipApiUrl = `http://ip-api.com/json/${existingIp}?fields=status,message,country,countryCode`;
-                const fallbackResponse = await fetch(ipApiUrl, {
-                  method: "GET",
-                  headers: { Accept: "application/json" },
-                });
+                  if (
+                    requestIp &&
+                    requestIp !== "::1" &&
+                    requestIp !== "127.0.0.1" &&
+                    requestIp !== "0.0.0.0"
+                  ) {
+                    const ipApiUrl = `http://ip-api.com/json/${requestIp}?fields=status,message,country,countryCode`;
+                    const fallbackResponse = await fetch(ipApiUrl, {
+                      method: "GET",
+                      headers: { Accept: "application/json" },
+                    });
 
-                if (fallbackResponse.ok) {
-                  const fallbackData = await fallbackResponse.json();
-                  if (fallbackData.status === "success") {
-                    countryFromStoredIp = fallbackData.country || null;
-                    apiUsed = "ip-api.com";
-                    console.log(
-                      "[get-location] Got country from stored IP via ip-api.com:",
-                      countryFromStoredIp
-                    );
+                    if (fallbackResponse.ok) {
+                      const fallbackData = await fallbackResponse.json();
+                      if (fallbackData.status === "success") {
+                        country = fallbackData.country || null;
+                        apiUsed = "ip-api.com";
+                        console.log(
+                          "[get-location] Got current country from ip-api.com:",
+                          country
+                        );
+                      }
+                    }
                   }
+                } catch (error) {
+                  console.error(
+                    "[get-location] Error getting current location via ip-api.com:",
+                    error
+                  );
                 }
-              } catch (error) {
-                console.error(
-                  "[get-location] Error getting country from stored IP via ip-api.com:",
-                  error
-                );
               }
-            }
 
-            // If we got country from stored IP, update ONLY the country field (never update IP)
-            if (countryFromStoredIp) {
-              const updateData: {
-                registration_info?: Record<string, any>;
-                updated_at: string;
-              } = {
-                updated_at: new Date().toISOString(),
-                registration_info: {
-                  ...existingRegistrationInfo,
-                  // Keep existing IP - NEVER change it
-                  ip_address: existingIp,
-                  // Only update country ONCE
-                  country: countryFromStoredIp,
-                },
-              };
+              // If we got country from current IP lookup, update registration_info in Supabase
+              // Keep the original localhost IP but update the country
+              if (country) {
+                const updateData: {
+                  registration_info?: Record<string, any>;
+                  updated_at: string;
+                } = {
+                  updated_at: new Date().toISOString(),
+                  registration_info: {
+                    ...existingRegistrationInfo,
+                    // Keep existing localhost IP - NEVER change it
+                    ip_address: existingIp,
+                    // Update country with the one we just fetched
+                    country: country,
+                  },
+                };
 
-              const { error: updateError } = await supabase
-                .from("users")
-                .update(updateData)
-                .eq("id", authUser.id);
+                const { error: updateError } = await supabase
+                  .from("users")
+                  .update(updateData)
+                  .eq("id", authUser.id);
 
-              if (updateError) {
-                console.error(
-                  "[get-location] Error patching country in registration_info:",
-                  updateError
-                );
+                if (updateError) {
+                  console.error(
+                    "[get-location] Error patching country in registration_info (localhost case):",
+                    updateError
+                  );
+                } else {
+                  console.log(
+                    "[get-location] Successfully patched country in registration_info (localhost case):",
+                    country
+                  );
+                }
               } else {
-                console.log(
-                  "[get-location] Successfully patched country in registration_info:",
-                  countryFromStoredIp
+                console.warn(
+                  "[get-location] Could not get country from current IP lookup. Registration info will NOT be updated."
                 );
               }
-              country = countryFromStoredIp;
-              ip = existingIp; // Use stored IP for response
+
+              // Keep stored localhost IP in response, but use fetched country if available
+              ip = existingIp; // Keep original localhost IP for consistency
             } else {
-              // If we couldn't get country from stored IP, don't update registration_info
-              // Just return null for country, but keep using stored IP
-              console.warn(
-                "[get-location] Could not get country from stored IP. Registration info will NOT be updated."
-              );
-              ip = existingIp; // Still use stored IP for response
+              // Try to get country from stored IP using the same APIs
+              let countryFromStoredIp = null;
+
+              // Try ipinfo.io first
+              try {
+                const ipinfoUrl = `https://ipinfo.io/${existingIp}/json`;
+                const storedIpResponse = await fetch(ipinfoUrl, {
+                  method: "GET",
+                  headers: { Accept: "application/json" },
+                });
+
+                if (storedIpResponse.ok) {
+                  const storedIpData = await storedIpResponse.json();
+                  if (storedIpData.country && !storedIpData.error) {
+                    const countryCode = storedIpData.country;
+                    countryFromStoredIp =
+                      countries.getName(countryCode, "en") ||
+                      storedIpData.country_name ||
+                      countryCode;
+                    apiUsed = "ipinfo.io";
+                    console.log(
+                      "[get-location] Got country from stored IP via ipinfo.io:",
+                      countryFromStoredIp
+                    );
+                  }
+                }
+              } catch (error) {
+                console.error(
+                  "[get-location] Error getting country from stored IP via ipinfo.io:",
+                  error
+                );
+              }
+
+              // Fallback to ipapi.co
+              if (!countryFromStoredIp) {
+                try {
+                  const ipapiUrl = `https://ipapi.co/${existingIp}/json/`;
+                  const ipapiResponse = await fetch(ipapiUrl, {
+                    method: "GET",
+                    headers: { Accept: "application/json" },
+                  });
+
+                  if (ipapiResponse.ok) {
+                    const ipapiData = await ipapiResponse.json();
+                    if (!ipapiData.error) {
+                      countryFromStoredIp = ipapiData.country_name || null;
+                      apiUsed = "ipapi.co";
+                      console.log(
+                        "[get-location] Got country from stored IP via ipapi.co:",
+                        countryFromStoredIp
+                      );
+                    }
+                  }
+                } catch (error) {
+                  console.error(
+                    "[get-location] Error getting country from stored IP via ipapi.co:",
+                    error
+                  );
+                }
+              }
+
+              // Fallback to ip-api.com
+              if (!countryFromStoredIp) {
+                try {
+                  const ipApiUrl = `http://ip-api.com/json/${existingIp}?fields=status,message,country,countryCode`;
+                  const fallbackResponse = await fetch(ipApiUrl, {
+                    method: "GET",
+                    headers: { Accept: "application/json" },
+                  });
+
+                  if (fallbackResponse.ok) {
+                    const fallbackData = await fallbackResponse.json();
+                    if (fallbackData.status === "success") {
+                      countryFromStoredIp = fallbackData.country || null;
+                      apiUsed = "ip-api.com";
+                      console.log(
+                        "[get-location] Got country from stored IP via ip-api.com:",
+                        countryFromStoredIp
+                      );
+                    }
+                  }
+                } catch (error) {
+                  console.error(
+                    "[get-location] Error getting country from stored IP via ip-api.com:",
+                    error
+                  );
+                }
+              }
+
+              // If we got country from stored IP, update ONLY the country field (never update IP)
+              if (countryFromStoredIp) {
+                const updateData: {
+                  registration_info?: Record<string, any>;
+                  updated_at: string;
+                } = {
+                  updated_at: new Date().toISOString(),
+                  registration_info: {
+                    ...existingRegistrationInfo,
+                    // Keep existing IP - NEVER change it
+                    ip_address: existingIp,
+                    // Only update country ONCE
+                    country: countryFromStoredIp,
+                  },
+                };
+
+                const { error: updateError } = await supabase
+                  .from("users")
+                  .update(updateData)
+                  .eq("id", authUser.id);
+
+                if (updateError) {
+                  console.error(
+                    "[get-location] Error patching country in registration_info:",
+                    updateError
+                  );
+                } else {
+                  console.log(
+                    "[get-location] Successfully patched country in registration_info:",
+                    countryFromStoredIp
+                  );
+                }
+                country = countryFromStoredIp;
+                ip = existingIp; // Use stored IP for response
+              } else {
+                // If we couldn't get country from stored IP, don't update registration_info
+                // Just return null for country, but keep using stored IP
+                console.warn(
+                  "[get-location] Could not get country from stored IP. Registration info will NOT be updated."
+                );
+                ip = existingIp; // Still use stored IP for response
+              }
             }
           }
           // Edge case: No IP and no country in registration_info

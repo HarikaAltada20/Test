@@ -325,6 +325,8 @@ export default function EditContestPage({
     Array<{ category: string; subcategory: string }>
   >([]);
   const [contestInterests, setContestInterests] = useState<string[]>([]);
+  // Show/hide targeting sections
+  const [showTargetingSections, setShowTargetingSections] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(true); // Categories expanded by default
   const [subcategoriesOpen, setSubcategoriesOpen] = useState(false);
   const [interestsOpen, setInterestsOpen] = useState(false);
@@ -445,6 +447,7 @@ export default function EditContestPage({
   const [contentType, setContentType] = useState<
     "ugc" | "clipping" | "other" | ""
   >("other");
+  const [category, setCategory] = useState<string>("technology");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
   const [bonusEnabled, setBonusEnabled] = useState(false);
   const [bonusHtml, setBonusHtml] = useState("");
@@ -890,6 +893,7 @@ export default function EditContestPage({
             );
             setMaxSubmissionsPerCreator(data.max_submissions_per_creator || 1);
             setContentType(data.content_type || "other");
+            setCategory(data.category || "technology");
 
             // Load flat fee bonus from contest_based_details
             if (data.contest_type === "leaderboard") {
@@ -985,6 +989,31 @@ export default function EditContestPage({
                 setSelectedCountries((data as any).target_countries);
               }
             }
+
+            // Show targeting sections if any targeting data exists
+            const hasTargetingData =
+              (data.categories &&
+                Array.isArray(data.categories) &&
+                data.categories.length > 0) ||
+              (data.subcategories &&
+                Array.isArray(data.subcategories) &&
+                data.subcategories.length > 0) ||
+              (typeof data.subcategories === "object" &&
+                data.subcategories !== null &&
+                Object.keys(data.subcategories).length > 0) ||
+              (data.interests &&
+                Array.isArray(data.interests) &&
+                data.interests.length > 0) ||
+              (data.region &&
+                typeof data.region === "object" &&
+                Object.keys(data.region).length > 0) ||
+              ((data as any).target_regions &&
+                Array.isArray((data as any).target_regions) &&
+                (data as any).target_regions.length > 0) ||
+              ((data as any).target_countries &&
+                Array.isArray((data as any).target_countries) &&
+                (data as any).target_countries.length > 0);
+            setShowTargetingSections(hasTargetingData);
           }
         } else {
           setError(
@@ -1943,6 +1972,7 @@ export default function EditContestPage({
         ? maxSubmissionsPerCreator
         : 1;
       updatePayload.content_type = contentType || null;
+      updatePayload.category = category || null;
 
       // Capture bonus content before saving
       if (bonusEnabled && bonusRichTextEditorRef.current) {
@@ -4118,6 +4148,7 @@ export default function EditContestPage({
         ? maxSubmissionsPerCreator
         : 1;
       updatePayload.content_type = contentType || null;
+      updatePayload.category = category || null;
 
       // Capture bonus content before saving
       if (bonusEnabled && bonusRichTextEditorRef.current) {
@@ -4668,551 +4699,216 @@ export default function EditContestPage({
                 />
               </div>
 
-              {/* Categories Selection */}
-              <div className="space-y-3">
-                <Collapsible
-                  open={categoriesOpen}
-                  onOpenChange={setCategoriesOpen}
+              <div className="space-y-2">
+                <Label htmlFor="category">Category</Label>
+                <Select
+                  value={category}
+                  onValueChange={(value) => setCategory(value)}
                 >
-                  <div
+                  <SelectTrigger
                     className={cn(
-                      "rounded-lg border",
                       isDark
-                        ? "bg-[#180438] border-gray-300"
-                        : "bg-white border-gray-300"
+                        ? "bg-[#180438] border border-gray-600"
+                        : "bg-white"
                     )}
                   >
-                    <CollapsibleTrigger asChild>
-                      <button
-                        type="button"
-                        className={cn(
-                          "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
-                          isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Label className="text-[14px] font-medium cursor-pointer">
-                            Categories{" "}
-                            {/* <span className="text-xs text-gray-500">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent isDark={isDark}>
+                    <SelectItem value="crypto-financial" isDark={isDark}>
+                      Crypto/Financial
+                    </SelectItem>
+                    <SelectItem value="education" isDark={isDark}>
+                      Education
+                    </SelectItem>
+                    <SelectItem value="dating" isDark={isDark}>
+                      Dating
+                    </SelectItem>
+                    <SelectItem value="food-drink" isDark={isDark}>
+                      Food & Drink
+                    </SelectItem>
+                    <SelectItem value="games-toys" isDark={isDark}>
+                      Games & Toys
+                    </SelectItem>
+                    <SelectItem value="health-wellness" isDark={isDark}>
+                      Health & Wellness
+                    </SelectItem>
+                    <SelectItem value="home-living" isDark={isDark}>
+                      Home & Living
+                    </SelectItem>
+                    <SelectItem value="pets-animals" isDark={isDark}>
+                      Pets & Animals
+                    </SelectItem>
+                    <SelectItem value="sports-outdoors" isDark={isDark}>
+                      Sports & Outdoors
+                    </SelectItem>
+                    <SelectItem value="technology" isDark={isDark}>
+                      Technology
+                    </SelectItem>
+                    <SelectItem value="other" isDark={isDark}>
+                      Other
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Targeting Toggle Checkbox */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="show-targeting-sections"
+                    checked={showTargetingSections}
+                    disabled={isSubmitting}
+                    onCheckedChange={(checked) => {
+                      // Prevent unchecking if any targeting data is selected
+                      const hasTargetingData =
+                        contestCategories.length > 0 ||
+                        contestSubcategories.length > 0 ||
+                        contestInterests.length > 0 ||
+                        selectedCountries.length > 0;
+
+                      if (!checked && hasTargetingData) {
+                        toast({
+                          title: "Cannot disable targeting",
+                          description:
+                            "Please remove all selected categories, subcategories, interests, and regions before disabling targeting.",
+                          variant: "destructive",
+                          duration: TOAST_DURATION_SHORT,
+                        });
+                        return;
+                      }
+                      setShowTargetingSections(checked === true);
+                    }}
+                    className={cn(
+                      isDark
+                        ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                        : "border-gray-400 data-[state=checked]:bg-purple-600"
+                    )}
+                  />
+                  <label
+                    htmlFor="show-targeting-sections"
+                    className={cn(
+                      "text-sm font-medium cursor-pointer",
+                      isDark ? "text-gray-300" : "text-gray-700"
+                    )}
+                  >
+                    Target specific creators by selecting categories,
+                    subcategories, interests, or regions. Only matching creators
+                    will see this contest.
+                  </label>
+                </div>
+              </div>
+
+              {/* Categories Selection */}
+              {showTargetingSections && (
+                <div className="space-y-3">
+                  <Collapsible
+                    open={categoriesOpen}
+                    onOpenChange={setCategoriesOpen}
+                  >
+                    <div
+                      className={cn(
+                        "rounded-lg border",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
+                      )}
+                    >
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className={cn(
+                            "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
+                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Label className="text-[14px] font-medium cursor-pointer">
+                              Categories{" "}
+                              {/* <span className="text-xs text-gray-500">
                               (Select up to 3)
                             </span> */}
-                          </Label>
-                          {contestCategories.length > 0 && (
-                            <span
-                              className={cn(
-                                "text-xs px-2 py-0.5 rounded-full",
-                                isDark
-                                  ? "bg-purple-600 text-white"
-                                  : "bg-purple-100 text-purple-700"
-                              )}
-                            >
-                              {contestCategories.length} selected
-                            </span>
-                          )}
-                        </div>
-                        <ChevronDown
-                          className={cn(
-                            "h-4 w-4 transition-transform",
-                            categoriesOpen && "transform rotate-180",
-                            isDark ? "text-gray-300" : "text-gray-600"
-                          )}
-                        />
-                      </button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="px-4 pb-4 space-y-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {CONTENT_TYPE_CATEGORIES.map((cat) => {
-                          const isChecked = contestCategories.includes(cat.id);
-                          return (
-                            <div
-                              key={cat.id}
-                              className="flex items-center space-x-2"
-                            >
-                              <Checkbox
-                                id={`edit-category-${cat.id}`}
-                                checked={isChecked}
-                                disabled={isSubmitting}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setContestCategories([
-                                      ...contestCategories,
-                                      cat.id,
-                                    ]);
-                                    // Automatically add all subcategories when category is selected
-                                    const newSubcategories =
-                                      cat.subcategories.map((subcategory) => ({
-                                        category: cat.id,
-                                        subcategory: subcategory,
-                                      }));
-                                    // Add subcategories that aren't already in the list
-                                    setContestSubcategories((prev) => {
-                                      const existing = new Set(
-                                        prev.map(
-                                          (item) =>
-                                            `${item.category}:${item.subcategory}`
-                                        )
-                                      );
-                                      const toAdd = newSubcategories.filter(
-                                        (item) =>
-                                          !existing.has(
-                                            `${item.category}:${item.subcategory}`
-                                          )
-                                      );
-                                      return [...prev, ...toAdd];
-                                    });
-                                  } else {
-                                    // Remove category and all its subcategories
-                                    setContestCategories(
-                                      contestCategories.filter(
-                                        (id) => id !== cat.id
-                                      )
-                                    );
-                                    setContestSubcategories(
-                                      contestSubcategories.filter(
-                                        (item) => item.category !== cat.id
-                                      )
-                                    );
-                                  }
-                                }}
+                            </Label>
+                            {contestCategories.length > 0 && (
+                              <span
                                 className={cn(
+                                  "text-xs px-2 py-0.5 rounded-full",
                                   isDark
-                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
-                                )}
-                              />
-                              <label
-                                htmlFor={`edit-category-${cat.id}`}
-                                className={cn(
-                                  "text-sm font-normal cursor-pointer",
-                                  isDark ? "text-gray-300" : "text-gray-700"
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-100 text-purple-700"
                                 )}
                               >
-                                {cat.name}
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {contestCategories.length > 0 && (
-                        <div className="flex items-center justify-between mt-2">
-                          <p
-                            className={cn(
-                              "text-xs",
-                              isDark ? "text-gray-400" : "text-gray-500"
+                                {contestCategories.length} selected
+                              </span>
                             )}
-                          >
-                            {contestCategories.length} selected
-                          </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setContestCategories([]);
-                              setContestSubcategories([]);
-                            }}
-                            disabled={isSubmitting}
+                          </div>
+                          <ChevronDown
                             className={cn(
-                              "h-7 px-2 text-xs",
-                              isDark
-                                ? "border-gray-400 text-gray-300"
-                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                              "h-4 w-4 transition-transform",
+                              categoriesOpen && "transform rotate-180",
+                              isDark ? "text-gray-300" : "text-gray-600"
                             )}
-                          >
-                            <RotateCcw className="h-3 w-3" />
-                            Reset
-                          </Button>
-                        </div>
-                      )}
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
-              </div>
-
-              {/* Subcategories Selection */}
-              <div className="space-y-3">
-                <Collapsible
-                  open={subcategoriesOpen}
-                  onOpenChange={setSubcategoriesOpen}
-                >
-                  <div
-                    className={cn(
-                      "rounded-lg border",
-                      isDark
-                        ? "bg-[#180438] border-gray-300"
-                        : "bg-white border-gray-300"
-                    )}
-                  >
-                    <CollapsibleTrigger asChild>
-                      <button
-                        type="button"
-                        className={cn(
-                          "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
-                          isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Label className="text-[14px] font-medium cursor-pointer">
-                            Subcategories
-                          </Label>
-                          {contestSubcategories.length > 0 && (
-                            <span
-                              className={cn(
-                                "text-xs px-2 py-0.5 rounded-full",
-                                isDark
-                                  ? "bg-purple-600 text-white"
-                                  : "bg-purple-100 text-purple-700"
-                              )}
-                            >
-                              {contestSubcategories.length} selected
-                            </span>
-                          )}
-                        </div>
-                        <ChevronDown
-                          className={cn(
-                            "h-4 w-4 transition-transform",
-                            subcategoriesOpen && "transform rotate-180",
-                            isDark ? "text-gray-300" : "text-gray-600"
-                          )}
-                        />
-                      </button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="px-4 pb-4 space-y-3">
-                      <Accordion type="multiple" className="w-full">
-                        {CONTENT_TYPE_CATEGORIES.map((category) => {
-                          return (
-                            <AccordionItem
-                              key={category.id}
-                              value={category.id}
-                              className="border-b border-gray-200 dark:border-gray-700"
-                            >
-                              <AccordionTrigger
-                                className={cn(
-                                  "text-sm font-medium hover:no-underline py-3",
-                                  isDark ? "text-gray-300" : "text-gray-700"
-                                )}
-                              >
-                                {category.name}
-                              </AccordionTrigger>
-                              <AccordionContent className="pt-2 pb-4">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  {category.subcategories.map((subcategory) => {
-                                    const isChecked = contestSubcategories.some(
-                                      (item) =>
-                                        item.category === category.id &&
-                                        item.subcategory === subcategory
-                                    );
-                                    return (
-                                      <div
-                                        key={`${category.id}-${subcategory}`}
-                                        className="flex items-center space-x-2"
-                                      >
-                                        <Checkbox
-                                          id={`edit-subcategory-${category.id}-${subcategory}`}
-                                          checked={isChecked}
-                                          disabled={isSubmitting}
-                                          onCheckedChange={(checked) => {
-                                            if (checked) {
-                                              setContestSubcategories([
-                                                ...contestSubcategories,
-                                                {
-                                                  category: category.id,
-                                                  subcategory: subcategory,
-                                                },
-                                              ]);
-                                            } else {
-                                              setContestSubcategories(
-                                                contestSubcategories.filter(
-                                                  (item) =>
-                                                    !(
-                                                      item.category ===
-                                                        category.id &&
-                                                      item.subcategory ===
-                                                        subcategory
-                                                    )
-                                                )
-                                              );
-                                            }
-                                          }}
-                                          className={cn(
-                                            isDark
-                                              ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                              : "border-gray-400 data-[state=checked]:bg-purple-600"
-                                          )}
-                                        />
-                                        <label
-                                          htmlFor={`edit-subcategory-${category.id}-${subcategory}`}
-                                          className={cn(
-                                            "text-sm font-normal cursor-pointer",
-                                            isDark
-                                              ? "text-gray-300"
-                                              : "text-gray-700"
-                                          )}
-                                        >
-                                          {subcategory}
-                                        </label>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </AccordionContent>
-                            </AccordionItem>
-                          );
-                        })}
-                      </Accordion>
-                      {contestSubcategories.length > 0 && (
-                        <div className="flex items-center justify-between mt-2">
-                          <p
-                            className={cn(
-                              "text-xs",
-                              isDark ? "text-gray-400" : "text-gray-500"
-                            )}
-                          >
-                            {contestSubcategories.length} subcategories selected
-                          </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setContestSubcategories([])}
-                            disabled={isSubmitting}
-                            className={cn(
-                              "h-7 px-2 text-xs",
-                              isDark
-                                ? "border-gray-400 text-gray-300"
-                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
-                            )}
-                          >
-                            <RotateCcw className="h-3 w-3" />
-                            Reset
-                          </Button>
-                        </div>
-                      )}
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
-              </div>
-
-              {/* Interests Selection */}
-              <div className="space-y-3">
-                <Collapsible
-                  open={interestsOpen}
-                  onOpenChange={setInterestsOpen}
-                >
-                  <div
-                    className={cn(
-                      "rounded-lg border",
-                      isDark
-                        ? "bg-[#180438] border-gray-300"
-                        : "bg-white border-gray-300"
-                    )}
-                  >
-                    <CollapsibleTrigger asChild>
-                      <button
-                        type="button"
-                        className={cn(
-                          "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
-                          isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Label className="text-[14px] font-medium cursor-pointer">
-                            Interests
-                          </Label>
-                          {contestInterests.length > 0 && (
-                            <span
-                              className={cn(
-                                "text-xs px-2 py-0.5 rounded-full",
-                                isDark
-                                  ? "bg-purple-600 text-white"
-                                  : "bg-purple-100 text-purple-700"
-                              )}
-                            >
-                              {contestInterests.length} selected
-                            </span>
-                          )}
-                        </div>
-                        <ChevronDown
-                          className={cn(
-                            "h-4 w-4 transition-transform",
-                            interestsOpen && "transform rotate-180",
-                            isDark ? "text-gray-300" : "text-gray-600"
-                          )}
-                        />
-                      </button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="px-4 pb-4 space-y-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        {INTERESTS.map((interest) => {
-                          const isChecked = contestInterests.includes(interest);
-                          return (
-                            <div
-                              key={interest}
-                              className="flex items-center space-x-2"
-                            >
-                              <Checkbox
-                                id={`edit-interest-${interest}`}
-                                checked={isChecked}
-                                disabled={isSubmitting}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setContestInterests([
-                                      ...contestInterests,
-                                      interest,
-                                    ]);
-                                  } else {
-                                    setContestInterests(
-                                      contestInterests.filter(
-                                        (item) => item !== interest
-                                      )
-                                    );
-                                  }
-                                }}
-                                className={cn(
-                                  isDark
-                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
-                                )}
-                              />
-                              <label
-                                htmlFor={`edit-interest-${interest}`}
-                                className={cn(
-                                  "text-sm font-normal cursor-pointer",
-                                  isDark ? "text-gray-300" : "text-gray-700"
-                                )}
-                              >
-                                {interest}
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {contestInterests.length > 0 && (
-                        <div className="flex items-center justify-between mt-2">
-                          <p
-                            className={cn(
-                              "text-xs",
-                              isDark ? "text-gray-400" : "text-gray-500"
-                            )}
-                          >
-                            {contestInterests.length} interests selected
-                          </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setContestInterests([])}
-                            disabled={isSubmitting}
-                            className={cn(
-                              "h-7 px-2 text-xs",
-                              isDark
-                                ? "border-gray-400 text-gray-300"
-                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
-                            )}
-                          >
-                            <RotateCcw className="h-3 w-3" />
-                            Reset
-                          </Button>
-                        </div>
-                      )}
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
-              </div>
-
-              {/* Regions and Countries Selection */}
-              <div className="space-y-3">
-                <Collapsible open={regionsOpen} onOpenChange={setRegionsOpen}>
-                  <div
-                    className={cn(
-                      "rounded-lg border",
-                      isDark
-                        ? "bg-[#180438] border-gray-300"
-                        : "bg-white border-gray-300"
-                    )}
-                  >
-                    <CollapsibleTrigger asChild>
-                      <button
-                        type="button"
-                        className={cn(
-                          "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
-                          isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Label className="text-[14px] font-medium cursor-pointer">
-                            Regions
-                          </Label>
-                          {selectedCountries.length > 0 && (
-                            <span
-                              className={cn(
-                                "text-xs px-2 py-0.5 rounded-full",
-                                isDark
-                                  ? "bg-purple-600 text-white"
-                                  : "bg-purple-100 text-purple-700"
-                              )}
-                            >
-                              {selectedCountries.length} selected
-                            </span>
-                          )}
-                        </div>
-                        <ChevronDown
-                          className={cn(
-                            "h-4 w-4 transition-transform",
-                            regionsOpen && "transform rotate-180",
-                            isDark ? "text-gray-300" : "text-gray-600"
-                          )}
-                        />
-                      </button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="px-4 pb-4 space-y-4">
-                      <p
-                        className={cn(
-                          "text-sm mb-3",
-                          isDark ? "text-gray-400" : "text-gray-600"
-                        )}
-                      >
-                        Select regions and countries where creators can see and
-                        participate in this contest. Only creators from selected
-                        regions will see this opportunity in their dashboard.
-                      </p>
-                      <div className="space-y-4">
-                        {Object.keys(REGIONS_AND_COUNTRIES).map((region) => {
-                          const regionKey =
-                            region as keyof typeof REGIONS_AND_COUNTRIES;
-                          const regionCountries =
-                            REGIONS_AND_COUNTRIES[regionKey];
-                          if (!regionCountries) return null;
-                          const countriesArray: string[] = Array.isArray(
-                            regionCountries
-                          )
-                            ? regionCountries.map((c) => String(c))
-                            : [];
-                          const isRegionSelected =
-                            selectedRegions.includes(region);
-                          const selectedCountriesInRegion =
-                            countriesArray.filter((country) =>
-                              selectedCountries.includes(country)
+                          />
+                        </button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="px-4 pb-4 space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {CONTENT_TYPE_CATEGORIES.map((cat) => {
+                            const isChecked = contestCategories.includes(
+                              cat.id
                             );
-                          const isPartiallySelected =
-                            selectedCountriesInRegion.length > 0 &&
-                            selectedCountriesInRegion.length <
-                              countriesArray.length;
-                          const hasAnySelected =
-                            selectedCountriesInRegion.length > 0;
-
-                          return (
-                            <div key={region} className="space-y-2">
-                              <div className="flex items-center space-x-2">
+                            return (
+                              <div
+                                key={cat.id}
+                                className="flex items-center space-x-2"
+                              >
                                 <Checkbox
-                                  id={`region-${region}`}
-                                  checked={isRegionSelected}
+                                  id={`edit-category-${cat.id}`}
+                                  checked={isChecked}
                                   disabled={isSubmitting}
                                   onCheckedChange={(checked) => {
-                                    handleRegionToggle(
-                                      region,
-                                      checked as boolean
-                                    );
+                                    if (checked) {
+                                      setContestCategories([
+                                        ...contestCategories,
+                                        cat.id,
+                                      ]);
+                                      // Automatically add all subcategories when category is selected
+                                      const newSubcategories =
+                                        cat.subcategories.map(
+                                          (subcategory) => ({
+                                            category: cat.id,
+                                            subcategory: subcategory,
+                                          })
+                                        );
+                                      // Add subcategories that aren't already in the list
+                                      setContestSubcategories((prev) => {
+                                        const existing = new Set(
+                                          prev.map(
+                                            (item) =>
+                                              `${item.category}:${item.subcategory}`
+                                          )
+                                        );
+                                        const toAdd = newSubcategories.filter(
+                                          (item) =>
+                                            !existing.has(
+                                              `${item.category}:${item.subcategory}`
+                                            )
+                                        );
+                                        return [...prev, ...toAdd];
+                                      });
+                                    } else {
+                                      // Remove category and all its subcategories
+                                      setContestCategories(
+                                        contestCategories.filter(
+                                          (id) => id !== cat.id
+                                        )
+                                      );
+                                      setContestSubcategories(
+                                        contestSubcategories.filter(
+                                          (item) => item.category !== cat.id
+                                        )
+                                      );
+                                    }
                                   }}
                                   className={cn(
                                     isDark
@@ -5221,102 +4917,577 @@ export default function EditContestPage({
                                   )}
                                 />
                                 <label
-                                  htmlFor={`region-${region}`}
+                                  htmlFor={`edit-category-${cat.id}`}
                                   className={cn(
-                                    "text-sm font-semibold cursor-pointer",
+                                    "text-sm font-normal cursor-pointer",
                                     isDark ? "text-gray-300" : "text-gray-700"
                                   )}
                                 >
-                                  {region}
-                                  {isPartiallySelected && (
-                                    <span className="text-xs font-normal ml-2 text-gray-500">
-                                      ({selectedCountriesInRegion.length} of{" "}
-                                      {countriesArray.length} selected)
-                                    </span>
-                                  )}
+                                  {cat.name}
                                 </label>
                               </div>
-                              {(isRegionSelected || hasAnySelected) && (
-                                <div className="ml-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                  {countriesArray.map((country: string) => {
-                                    const isCountrySelected =
-                                      selectedCountries.includes(country);
-                                    return (
-                                      <div
-                                        key={country}
-                                        className="flex items-center space-x-2"
-                                      >
-                                        <Checkbox
-                                          id={`country-${region}-${country}`}
-                                          checked={isCountrySelected}
-                                          disabled={isSubmitting}
-                                          onCheckedChange={(checked) => {
-                                            handleCountryToggle(
-                                              country,
-                                              checked as boolean
-                                            );
-                                          }}
-                                          className={cn(
-                                            isDark
-                                              ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                              : "border-gray-400 data-[state=checked]:bg-purple-600"
-                                          )}
-                                        />
-                                        <label
-                                          htmlFor={`country-${region}-${country}`}
-                                          className={cn(
-                                            "text-sm font-normal cursor-pointer",
-                                            isDark
-                                              ? "text-gray-300"
-                                              : "text-gray-700"
-                                          )}
-                                        >
-                                          {country}
-                                        </label>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {selectedCountries.length > 0 && (
-                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                          <p
-                            className={cn(
-                              "text-xs",
-                              isDark ? "text-gray-400" : "text-gray-500"
-                            )}
-                          >
-                            {selectedCountries.length} countries selected
-                          </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedRegions([]);
-                              setSelectedCountries([]);
-                            }}
-                            disabled={isSubmitting}
-                            className={cn(
-                              "h-7 px-2 text-xs",
-                              isDark
-                                ? "border-gray-400 text-gray-300"
-                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
-                            )}
-                          >
-                            <RotateCcw className="h-3 w-3" />
-                            Reset
-                          </Button>
+                            );
+                          })}
                         </div>
+                        {contestCategories.length > 0 && (
+                          <div className="flex items-center justify-between mt-2">
+                            <p
+                              className={cn(
+                                "text-xs",
+                                isDark ? "text-gray-400" : "text-gray-500"
+                              )}
+                            >
+                              {contestCategories.length} selected
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setContestCategories([]);
+                                setContestSubcategories([]);
+                              }}
+                              disabled={isSubmitting}
+                              className={cn(
+                                "h-7 px-2 text-xs",
+                                isDark
+                                  ? "border-gray-400 text-gray-300"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                              )}
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Reset
+                            </Button>
+                          </div>
+                        )}
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                </div>
+              )}
+
+              {/* Subcategories Selection */}
+              {showTargetingSections && (
+                <div className="space-y-3">
+                  <Collapsible
+                    open={subcategoriesOpen}
+                    onOpenChange={setSubcategoriesOpen}
+                  >
+                    <div
+                      className={cn(
+                        "rounded-lg border",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
                       )}
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
-              </div>
+                    >
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className={cn(
+                            "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
+                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Label className="text-[14px] font-medium cursor-pointer">
+                              Subcategories
+                            </Label>
+                            {contestSubcategories.length > 0 && (
+                              <span
+                                className={cn(
+                                  "text-xs px-2 py-0.5 rounded-full",
+                                  isDark
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-100 text-purple-700"
+                                )}
+                              >
+                                {contestSubcategories.length} selected
+                              </span>
+                            )}
+                          </div>
+                          <ChevronDown
+                            className={cn(
+                              "h-4 w-4 transition-transform",
+                              subcategoriesOpen && "transform rotate-180",
+                              isDark ? "text-gray-300" : "text-gray-600"
+                            )}
+                          />
+                        </button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="px-4 pb-4 space-y-3">
+                        <Accordion type="multiple" className="w-full">
+                          {CONTENT_TYPE_CATEGORIES.map((category) => {
+                            // Get selected subcategories for this category
+                            const selectedSubcategoriesForCategory =
+                              contestSubcategories.filter(
+                                (item) => item.category === category.id
+                              );
+                            const selectedCount =
+                              selectedSubcategoriesForCategory.length;
+
+                            return (
+                              <AccordionItem
+                                key={category.id}
+                                value={category.id}
+                                className="border-b border-gray-200 dark:border-gray-700"
+                              >
+                                <AccordionTrigger
+                                  className={cn(
+                                    "text-sm font-medium hover:no-underline py-3",
+                                    isDark ? "text-gray-300" : "text-gray-700"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span>{category.name}</span>
+                                    {selectedCount > 0 && (
+                                      <span
+                                        className={cn(
+                                          "text-xs px-2 py-0.5 rounded-full",
+                                          isDark
+                                            ? "bg-purple-600 text-white"
+                                            : "bg-purple-100 text-purple-700"
+                                        )}
+                                      >
+                                        {selectedCount} selected
+                                      </span>
+                                    )}
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="pt-2 pb-4">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {category.subcategories.map(
+                                      (subcategory) => {
+                                        const isChecked =
+                                          contestSubcategories.some(
+                                            (item) =>
+                                              item.category === category.id &&
+                                              item.subcategory === subcategory
+                                          );
+                                        return (
+                                          <div
+                                            key={`${category.id}-${subcategory}`}
+                                            className="flex items-center space-x-2"
+                                          >
+                                            <Checkbox
+                                              id={`edit-subcategory-${category.id}-${subcategory}`}
+                                              checked={isChecked}
+                                              disabled={isSubmitting}
+                                              onCheckedChange={(checked) => {
+                                                if (checked) {
+                                                  setContestSubcategories([
+                                                    ...contestSubcategories,
+                                                    {
+                                                      category: category.id,
+                                                      subcategory: subcategory,
+                                                    },
+                                                  ]);
+                                                } else {
+                                                  setContestSubcategories(
+                                                    contestSubcategories.filter(
+                                                      (item) =>
+                                                        !(
+                                                          item.category ===
+                                                            category.id &&
+                                                          item.subcategory ===
+                                                            subcategory
+                                                        )
+                                                    )
+                                                  );
+                                                }
+                                              }}
+                                              className={cn(
+                                                isDark
+                                                  ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                                  : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                              )}
+                                            />
+                                            <label
+                                              htmlFor={`edit-subcategory-${category.id}-${subcategory}`}
+                                              className={cn(
+                                                "text-sm font-normal cursor-pointer",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              {subcategory}
+                                            </label>
+                                          </div>
+                                        );
+                                      }
+                                    )}
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            );
+                          })}
+                        </Accordion>
+                        {contestSubcategories.length > 0 && (
+                          <div className="flex items-center justify-between mt-2">
+                            <p
+                              className={cn(
+                                "text-xs",
+                                isDark ? "text-gray-400" : "text-gray-500"
+                              )}
+                            >
+                              {contestSubcategories.length} subcategories
+                              selected
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setContestSubcategories([])}
+                              disabled={isSubmitting}
+                              className={cn(
+                                "h-7 px-2 text-xs",
+                                isDark
+                                  ? "border-gray-400 text-gray-300"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                              )}
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Reset
+                            </Button>
+                          </div>
+                        )}
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                </div>
+              )}
+
+              {/* Interests Selection */}
+              {showTargetingSections && (
+                <div className="space-y-3">
+                  <Collapsible
+                    open={interestsOpen}
+                    onOpenChange={setInterestsOpen}
+                  >
+                    <div
+                      className={cn(
+                        "rounded-lg border",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
+                      )}
+                    >
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className={cn(
+                            "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
+                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Label className="text-[14px] font-medium cursor-pointer">
+                              Interests
+                            </Label>
+                            {contestInterests.length > 0 && (
+                              <span
+                                className={cn(
+                                  "text-xs px-2 py-0.5 rounded-full",
+                                  isDark
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-100 text-purple-700"
+                                )}
+                              >
+                                {contestInterests.length} selected
+                              </span>
+                            )}
+                          </div>
+                          <ChevronDown
+                            className={cn(
+                              "h-4 w-4 transition-transform",
+                              interestsOpen && "transform rotate-180",
+                              isDark ? "text-gray-300" : "text-gray-600"
+                            )}
+                          />
+                        </button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="px-4 pb-4 space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                          {INTERESTS.map((interest) => {
+                            const isChecked =
+                              contestInterests.includes(interest);
+                            return (
+                              <div
+                                key={interest}
+                                className="flex items-center space-x-2"
+                              >
+                                <Checkbox
+                                  id={`edit-interest-${interest}`}
+                                  checked={isChecked}
+                                  disabled={isSubmitting}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setContestInterests([
+                                        ...contestInterests,
+                                        interest,
+                                      ]);
+                                    } else {
+                                      setContestInterests(
+                                        contestInterests.filter(
+                                          (item) => item !== interest
+                                        )
+                                      );
+                                    }
+                                  }}
+                                  className={cn(
+                                    isDark
+                                      ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                      : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                  )}
+                                />
+                                <label
+                                  htmlFor={`edit-interest-${interest}`}
+                                  className={cn(
+                                    "text-sm font-normal cursor-pointer",
+                                    isDark ? "text-gray-300" : "text-gray-700"
+                                  )}
+                                >
+                                  {interest}
+                                </label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {contestInterests.length > 0 && (
+                          <div className="flex items-center justify-between mt-2">
+                            <p
+                              className={cn(
+                                "text-xs",
+                                isDark ? "text-gray-400" : "text-gray-500"
+                              )}
+                            >
+                              {contestInterests.length} interests selected
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setContestInterests([])}
+                              disabled={isSubmitting}
+                              className={cn(
+                                "h-7 px-2 text-xs",
+                                isDark
+                                  ? "border-gray-400 text-gray-300"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                              )}
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Reset
+                            </Button>
+                          </div>
+                        )}
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                </div>
+              )}
+
+              {/* Regions and Countries Selection */}
+              {showTargetingSections && (
+                <div className="space-y-3">
+                  <Collapsible open={regionsOpen} onOpenChange={setRegionsOpen}>
+                    <div
+                      className={cn(
+                        "rounded-lg border",
+                        isDark
+                          ? "bg-[#180438] border-gray-300"
+                          : "bg-white border-gray-300"
+                      )}
+                    >
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className={cn(
+                            "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
+                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Label className="text-[14px] font-medium cursor-pointer">
+                              Regions
+                            </Label>
+                            {selectedCountries.length > 0 && (
+                              <span
+                                className={cn(
+                                  "text-xs px-2 py-0.5 rounded-full",
+                                  isDark
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-100 text-purple-700"
+                                )}
+                              >
+                                {selectedCountries.length} selected
+                              </span>
+                            )}
+                          </div>
+                          <ChevronDown
+                            className={cn(
+                              "h-4 w-4 transition-transform",
+                              regionsOpen && "transform rotate-180",
+                              isDark ? "text-gray-300" : "text-gray-600"
+                            )}
+                          />
+                        </button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="px-4 pb-4 space-y-4">
+                        {/* <p
+                          className={cn(
+                            "text-sm mb-3",
+                            isDark ? "text-gray-400" : "text-gray-600"
+                          )}
+                        >
+                          Select regions and countries where creators can see
+                          and participate in this contest. Only creators from
+                          selected regions will see this opportunity in their
+                          dashboard.
+                        </p> */}
+                        <div className="space-y-4">
+                          {Object.keys(REGIONS_AND_COUNTRIES).map((region) => {
+                            const regionKey =
+                              region as keyof typeof REGIONS_AND_COUNTRIES;
+                            const regionCountries =
+                              REGIONS_AND_COUNTRIES[regionKey];
+                            if (!regionCountries) return null;
+                            const countriesArray: string[] = Array.isArray(
+                              regionCountries
+                            )
+                              ? regionCountries.map((c) => String(c))
+                              : [];
+                            const isRegionSelected =
+                              selectedRegions.includes(region);
+                            const selectedCountriesInRegion =
+                              countriesArray.filter((country) =>
+                                selectedCountries.includes(country)
+                              );
+                            const isPartiallySelected =
+                              selectedCountriesInRegion.length > 0 &&
+                              selectedCountriesInRegion.length <
+                                countriesArray.length;
+                            const hasAnySelected =
+                              selectedCountriesInRegion.length > 0;
+
+                            return (
+                              <div key={region} className="space-y-2">
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`region-${region}`}
+                                    checked={isRegionSelected}
+                                    disabled={isSubmitting}
+                                    onCheckedChange={(checked) => {
+                                      handleRegionToggle(
+                                        region,
+                                        checked as boolean
+                                      );
+                                    }}
+                                    className={cn(
+                                      isDark
+                                        ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                        : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                    )}
+                                  />
+                                  <label
+                                    htmlFor={`region-${region}`}
+                                    className={cn(
+                                      "text-sm font-semibold cursor-pointer",
+                                      isDark ? "text-gray-300" : "text-gray-700"
+                                    )}
+                                  >
+                                    {region}
+                                    {isPartiallySelected && (
+                                      <span className="text-xs font-normal ml-2 text-gray-500">
+                                        ({selectedCountriesInRegion.length} of{" "}
+                                        {countriesArray.length} selected)
+                                      </span>
+                                    )}
+                                  </label>
+                                </div>
+                                {(isRegionSelected || hasAnySelected) && (
+                                  <div className="ml-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                    {countriesArray.map((country: string) => {
+                                      const isCountrySelected =
+                                        selectedCountries.includes(country);
+                                      return (
+                                        <div
+                                          key={country}
+                                          className="flex items-center space-x-2"
+                                        >
+                                          <Checkbox
+                                            id={`country-${region}-${country}`}
+                                            checked={isCountrySelected}
+                                            disabled={isSubmitting}
+                                            onCheckedChange={(checked) => {
+                                              handleCountryToggle(
+                                                country,
+                                                checked as boolean
+                                              );
+                                            }}
+                                            className={cn(
+                                              isDark
+                                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                            )}
+                                          />
+                                          <label
+                                            htmlFor={`country-${region}-${country}`}
+                                            className={cn(
+                                              "text-sm font-normal cursor-pointer",
+                                              isDark
+                                                ? "text-gray-300"
+                                                : "text-gray-700"
+                                            )}
+                                          >
+                                            {country}
+                                          </label>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {selectedCountries.length > 0 && (
+                          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                            <p
+                              className={cn(
+                                "text-xs",
+                                isDark ? "text-gray-400" : "text-gray-500"
+                              )}
+                            >
+                              {selectedCountries.length} countries selected
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedRegions([]);
+                                setSelectedCountries([]);
+                              }}
+                              disabled={isSubmitting}
+                              className={cn(
+                                "h-7 px-2 text-xs",
+                                isDark
+                                  ? "border-gray-400 text-gray-300"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                              )}
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Reset
+                            </Button>
+                          </div>
+                        )}
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label className={isDark ? "text-slate-200" : "text-gray-900"}>

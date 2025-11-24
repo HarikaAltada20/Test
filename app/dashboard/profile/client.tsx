@@ -1302,21 +1302,165 @@ export default function ProfilePage({
     );
   };
 
+  // Check if changes are only to interests, categories, or subcategories
+  const hasOnlyEditableFieldChanges = () => {
+    if (!creatorProfile) return false;
+
+    const currentTypeOfContent = creatorProfile.categories as
+      | Array<{ category: string; subcategory: string }>
+      | string[]
+      | null;
+    const currentOtherTypeOfContent = creatorProfile.subcategories as
+      | Array<{ category: string; subcategory: string }>
+      | string[]
+      | null;
+
+    // Convert current categories to category IDs for comparison
+    const convertToCategoryIds = (data: any): string => {
+      if (!data || !Array.isArray(data)) return "";
+      if (data.length > 0 && typeof data[0] === "string") {
+        const categoryIds: string[] = [];
+        (data as string[]).forEach((value) => {
+          const isCategoryId = CONTENT_TYPE_CATEGORIES.some(
+            (cat) => cat.id === value
+          );
+          if (isCategoryId) {
+            categoryIds.push(value);
+          } else {
+            const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+              cat.subcategories.some(
+                (sub) =>
+                  sub.toLowerCase().includes(value.toLowerCase()) ||
+                  value.toLowerCase().includes(cat.id.toLowerCase())
+              )
+            );
+            if (category && !categoryIds.includes(category.id)) {
+              categoryIds.push(category.id);
+            }
+          }
+        });
+        return categoryIds.sort().join(",");
+      }
+      if (
+        data.length > 0 &&
+        typeof data[0] === "object" &&
+        "category" in data[0]
+      ) {
+        const categoryIds = new Set<string>();
+        (data as Array<{ category: string; subcategory?: string }>).forEach(
+          (item) => {
+            categoryIds.add(item.category);
+          }
+        );
+        return Array.from(categoryIds).sort().join(",");
+      }
+      return "";
+    };
+
+    // Convert current subcategories to normalized format
+    const convertSubcategories = (data: any): string => {
+      if (!data) return "";
+
+      // New object format: {category: [subcategories]}
+      if (typeof data === "object" && !Array.isArray(data)) {
+        const converted: Array<{ category: string; subcategory: string }> = [];
+        Object.entries(data).forEach(([category, subcategories]) => {
+          if (Array.isArray(subcategories)) {
+            (subcategories as string[]).forEach((subcategory) => {
+              converted.push({ category, subcategory });
+            });
+          }
+        });
+        return normalizeSubcategories(converted);
+      }
+
+      // Old array format
+      if (Array.isArray(data) && data.length > 0) {
+        // Check if already in {category, subcategory} format
+        if (
+          typeof data[0] === "object" &&
+          "category" in data[0] &&
+          "subcategory" in data[0]
+        ) {
+          return normalizeSubcategories(
+            data as Array<{ category: string; subcategory: string }>
+          );
+        }
+        // Old string array format - convert
+        const converted: Array<{ category: string; subcategory: string }> = [];
+        (data as string[]).forEach((oldValue) => {
+          const category = CONTENT_TYPE_CATEGORIES.find((cat) =>
+            cat.subcategories.some(
+              (sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase()) ||
+                oldValue.toLowerCase().includes(cat.id.toLowerCase())
+            )
+          );
+          if (category) {
+            const subcategory =
+              category.subcategories.find((sub) =>
+                sub.toLowerCase().includes(oldValue.toLowerCase())
+              ) || category.subcategories[0];
+            converted.push({
+              category: category.id,
+              subcategory: subcategory,
+            });
+          }
+        });
+        return normalizeSubcategories(converted);
+      }
+      return "";
+    };
+
+    const hasCategoryChange =
+      JSON.stringify(editedContentTypesCreated.sort()) !==
+      convertToCategoryIds(currentTypeOfContent);
+    const hasSubcategoryChange =
+      normalizeSubcategories(editedInterestedContentTypes) !==
+      convertSubcategories(currentOtherTypeOfContent);
+    const hasInterestChange =
+      JSON.stringify(editedInterests.sort()) !==
+      JSON.stringify((creatorProfile.interests || []).sort());
+
+    const hasOtherChanges =
+      // editedPhone !== (creatorProfile.phone_number || "") ||
+      editedDateOfBirth !== (creatorProfile.date_of_birth || "") ||
+      editedGender !== (creatorProfile.gender || "") ||
+      editedCountry !== (creatorProfile.country || "") ||
+      editedState !== (creatorProfile.state || "") ||
+      editedCity !== (creatorProfile.city || "") ||
+      editedAddress !== (creatorProfile.address || "") ||
+      JSON.stringify(editedLanguages.sort()) !==
+        JSON.stringify((creatorProfile.languages || []).sort());
+
+    // Return true if only interests, categories, or subcategories have changed
+    return (
+      (hasCategoryChange || hasSubcategoryChange || hasInterestChange) &&
+      !hasOtherChanges
+    );
+  };
+
   // Save profile changes without claiming bonus
   const handleSaveProfileChanges = async (claimBonus: boolean = false) => {
     if (!userData || !creatorProfile || !hasProfileChanges()) {
       return;
     }
 
-    // Check if user has already received the bonus - if so, prevent editing
+    // Check if user has already received the bonus
+    // If so, only allow editing interests, categories, and subcategories
     if (hasReceivedProfileBonus) {
-      toast({
-        variant: "destructive",
-        title: "Editing Disabled",
-        description:
-          "You have already received the profile update bonus. Profile editing is no longer available.",
-      });
-      return;
+      // Check if changes are only to editable fields (interests, categories, subcategories)
+      if (!hasOnlyEditableFieldChanges()) {
+        toast({
+          variant: "destructive",
+          title: "Editing Disabled",
+          description:
+            "You have already received the profile update bonus. You can only edit interests, categories, and subcategories.",
+        });
+        return;
+      }
+      // If only editable fields changed, allow saving but don't claim bonus
+      claimBonus = false;
     }
 
     setIsSubmitting(true);
@@ -1535,7 +1679,8 @@ export default function ProfilePage({
       }
 
       // Check if user has already claimed the bonus before giving it
-      if (creatorProfile.has_claimed_profile_reward) {
+      // Only prevent claiming bonus again, but allow saving if only editable fields changed
+      if (creatorProfile.has_claimed_profile_reward && claimBonus) {
         // Should not reach here due to early return check, but just in case
         setIsSubmitting(false);
         return;
@@ -1549,8 +1694,8 @@ export default function ProfilePage({
 
       if (error) throw error;
 
-      // Only claim bonus if requested
-      if (claimBonus) {
+      // Only claim bonus if requested and not already claimed
+      if (claimBonus && !creatorProfile.has_claimed_profile_reward) {
         // Claim the bonus via API route
         const bonusResponse = await fetch("/api/profile/claim-bonus", {
           method: "POST",
@@ -1566,7 +1711,7 @@ export default function ProfilePage({
           toast({
             title: "Profile Completed & Bonus Received!",
             description:
-              "Your profile has been completed and you've received a $0.50 bonus! You can no longer edit your profile.",
+              "Your profile has been completed and you've received a $0.50 bonus! You can still edit your interests, categories, and subcategories.",
           });
 
           // Update local state with bonus claimed
@@ -1591,12 +1736,21 @@ export default function ProfilePage({
       } else {
         // Just update without claiming bonus
         const isComplete = isProfileComplete();
-        toast({
-          title: "Profile Updated",
-          description: isComplete
-            ? "Your profile has been updated successfully. Complete your profile to claim the $0.50 bonus!"
-            : "Your profile has been updated successfully. Fill all details to get the $0.50 bonus reward!",
-        });
+        if (hasReceivedProfileBonus) {
+          // User has already claimed bonus, just updating interests/categories/subcategories
+          toast({
+            title: "Profile Updated",
+            description:
+              "Your interests, categories, and subcategories have been updated successfully.",
+          });
+        } else {
+          toast({
+            title: "Profile Updated",
+            description: isComplete
+              ? "Your profile has been updated successfully. Complete your profile to claim the $0.50 bonus!"
+              : "Your profile has been updated successfully. Fill all details to get the $0.50 bonus reward!",
+          });
+        }
 
         // Update local state
         setCreatorProfile((prev) => (prev ? { ...prev, ...updateData } : null));
@@ -2897,11 +3051,7 @@ export default function ProfilePage({
                               <Checkbox
                                 id={`content-created-${category.id}`}
                                 checked={isChecked}
-                                disabled={
-                                  hasReceivedProfileBonus ||
-                                  isDisabled ||
-                                  isSubmitting
-                                }
+                                disabled={isDisabled || isSubmitting}
                                 onCheckedChange={(checked) => {
                                   if (checked) {
                                     if (editedContentTypesCreated.length < 3) {
@@ -2982,27 +3132,25 @@ export default function ProfilePage({
                           >
                             {editedContentTypesCreated.length} of 3 selected
                           </p>
-                          {!hasReceivedProfileBonus && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setEditedContentTypesCreated([]);
-                                setEditedInterestedContentTypes([]);
-                              }}
-                              disabled={isSubmitting}
-                              className={cn(
-                                "h-7 px-2 text-xs",
-                                isDark
-                                  ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
-                              )}
-                            >
-                              <RotateCcw className="h-3 w-3" />
-                              Reset
-                            </Button>
-                          )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditedContentTypesCreated([]);
+                              setEditedInterestedContentTypes([]);
+                            }}
+                            disabled={isSubmitting}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -3045,6 +3193,14 @@ export default function ProfilePage({
                     >
                       <Accordion type="multiple" className="w-full">
                         {CONTENT_TYPE_CATEGORIES.map((category) => {
+                          // Get selected subcategories for this category
+                          const selectedSubcategoriesForCategory =
+                            editedInterestedContentTypes.filter(
+                              (item) => item.category === category.id
+                            );
+                          const selectedCount =
+                            selectedSubcategoriesForCategory.length;
+
                           return (
                             <AccordionItem
                               key={category.id}
@@ -3057,7 +3213,21 @@ export default function ProfilePage({
                                   isDark ? "text-gray-300" : "text-gray-700"
                                 )}
                               >
-                                {category.name}
+                                <div className="flex items-center gap-2">
+                                  <span>{category.name}</span>
+                                  {selectedCount > 0 && (
+                                    <span
+                                      className={cn(
+                                        "text-xs px-2 py-0.5 rounded-full",
+                                        isDark
+                                          ? "bg-purple-600 text-white"
+                                          : "bg-purple-100 text-purple-700"
+                                      )}
+                                    >
+                                      {selectedCount} selected
+                                    </span>
+                                  )}
+                                </div>
                               </AccordionTrigger>
                               <AccordionContent className="pt-2 pb-4">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -3076,10 +3246,7 @@ export default function ProfilePage({
                                         <Checkbox
                                           id={`content-interested-${category.id}-${subcategory}`}
                                           checked={isChecked}
-                                          disabled={
-                                            hasReceivedProfileBonus ||
-                                            isSubmitting
-                                          }
+                                          disabled={isSubmitting}
                                           onCheckedChange={(checked) => {
                                             if (checked) {
                                               setEditedInterestedContentTypes([
@@ -3140,26 +3307,22 @@ export default function ProfilePage({
                             {editedInterestedContentTypes.length} subcategories
                             selected
                           </p>
-                          {!hasReceivedProfileBonus && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                setEditedInterestedContentTypes([])
-                              }
-                              disabled={isSubmitting}
-                              className={cn(
-                                "h-7 px-2 text-xs",
-                                isDark
-                                  ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
-                              )}
-                            >
-                              <RotateCcw className="h-3 w-3" />
-                              Reset
-                            </Button>
-                          )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditedInterestedContentTypes([])}
+                            disabled={isSubmitting}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -3196,9 +3359,7 @@ export default function ProfilePage({
                               <Checkbox
                                 id={`interest-${interest}`}
                                 checked={isChecked}
-                                disabled={
-                                  hasReceivedProfileBonus || isSubmitting
-                                }
+                                disabled={isSubmitting}
                                 onCheckedChange={(checked) => {
                                   if (checked) {
                                     setEditedInterests([
@@ -3242,24 +3403,22 @@ export default function ProfilePage({
                           >
                             {editedInterests.length} interests selected
                           </p>
-                          {!hasReceivedProfileBonus && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setEditedInterests([])}
-                              disabled={isSubmitting}
-                              className={cn(
-                                "h-7 px-2 text-xs",
-                                isDark
-                                  ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
-                              )}
-                            >
-                              <RotateCcw className="h-3 w-3" />
-                              Reset
-                            </Button>
-                          )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditedInterests([])}
+                            disabled={isSubmitting}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isDark
+                                ? "border-gray-400 text-gray-300"
+                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -3270,10 +3429,35 @@ export default function ProfilePage({
               {/* Save Changes Button */}
               <div className="flex justify-end pt-4">
                 {hasReceivedProfileBonus ? (
-                  <div className="text-sm text-muted-foreground italic">
-                    Profile editing is disabled after receiving the update
-                    bonus.
-                  </div>
+                  hasOnlyEditableFieldChanges() ? (
+                    <Button
+                      onClick={() => handleSaveProfileChanges(false)}
+                      disabled={!hasProfileChanges() || isSubmitting}
+                      className={cn(
+                        "px-6 py-2",
+                        isDark
+                          ? "bg-purple-600 hover:bg-purple-700"
+                          : "bg-[#7F39EC] hover:bg-[#6C43D0]"
+                      )}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          Save Changes
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <div className="text-sm text-muted-foreground italic">
+                      You can only edit interests, categories, and subcategories
+                      after receiving the bonus.
+                    </div>
+                  )
                 ) : (
                   <Button
                     onClick={handleSaveClick}
@@ -4296,8 +4480,9 @@ export default function ProfilePage({
                 isDark ? "text-white" : "text-gray-900"
               )}
             >
-              ⚠️ Once you claim the $0.50 bonus, you won't be able to make
-              further edits to your profile.
+              ⚠️ Once the $0.50 bonus is claimed, all details become disabled,
+              except your interests, categories, and subcategories, which you
+              can still edit.
             </p>
           </DialogHeader>
           {/* <div
