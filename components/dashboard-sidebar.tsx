@@ -118,6 +118,12 @@ export function DashboardSidebar({
       description: "Admin overview",
     },
     {
+      name: "Users",
+      href: "/dashboard/admin/users",
+      icon: Users,
+      description: "Manage all users",
+    },
+    {
       name: "All Contests",
       href: "/dashboard/admin/contests",
       icon: Trophy,
@@ -209,9 +215,7 @@ export function DashboardSidebar({
 
   return (
     <div
-      className=
-        "dashboard-sidebar flex h-full flex-col min-h-0 overflow-hidden max-h-screen"
-      
+      className="dashboard-sidebar flex h-full flex-col min-h-0 overflow-hidden max-h-screen"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >

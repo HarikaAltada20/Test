@@ -43,6 +43,11 @@ export async function middleware(request: NextRequest) {
         if (userData?.user_type) {
           const userType = userData.user_type
           
+           // Auto-redirect admin users from /dashboard to /dashboard/admin
+           if (userType === "admin" && pathname === "/dashboard") {
+            const redirectUrl = new URL("/dashboard/admin", request.url);
+            return NextResponse.redirect(redirectUrl);
+          }
           // Define route patterns for different user types
           const brandOnlyRoutes = [
             '/dashboard/contests',
