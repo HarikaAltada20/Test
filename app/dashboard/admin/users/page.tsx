@@ -34,6 +34,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { getSubscriptionPlanById } from "@/lib/subscription-utils-client";
 
 type AdvertiserProfile = {
   id: string;
@@ -387,6 +388,62 @@ export default function AdminUsersPage() {
   );
   const sortOrder = useMemo(() => getSortState().order, [sortState, activeTab]);
 
+  // Reusable sortable table header for any column
+  const SortableHeader = ({
+    columnId,
+    label,
+    className,
+  }: {
+    columnId: string;
+    label: string;
+    className?: string;
+  }) => (
+    <TableHead className={cn("whitespace-nowrap border-r", className)}>
+      <div className="flex items-center gap-2">
+        <span>{label}</span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() => {
+                setSortColumn(columnId);
+                setSortOrder("asc");
+              }}
+              className={cn(
+                sortColumn === columnId && sortOrder === "asc" && "bg-accent"
+              )}
+            >
+              Sort by Ascending
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                setSortColumn(columnId);
+                setSortOrder("desc");
+              }}
+              className={cn(
+                sortColumn === columnId && sortOrder === "desc" && "bg-accent"
+              )}
+            >
+              Sort by Descending
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                setSortColumn(null);
+                setSortOrder(null);
+              }}
+            >
+              Clear Sort
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </TableHead>
+  );
+
   // Column visibility state - initialize all columns as visible
   const [visibleColumns, setVisibleColumns] = useState<
     Record<string, Set<string>>
@@ -425,6 +482,27 @@ export default function AdminUsersPage() {
     );
   };
 
+  // Helper for username sorting:
+  // Ascending: numbers -> letters/other -> null
+  // Descending: letters/other -> numbers -> null.
+
+  const getUsernameSortMeta = (username: string | null | undefined) => {
+    if (!username) {
+      return { rank: 2, value: "" }; // null/empty last
+    }
+    const vRaw = username.toLowerCase();
+    // Strip leading underscores for comparison
+    const v = vRaw.replace(/^_+/, "");
+    const firstChar = v.charAt(0);
+    const isDigit = /^[0-9]/.test(firstChar);
+    const isLetter = /^[a-z]/.test(firstChar);
+
+    // base rank 0 = numeric, 1 = alphabetic/other, 2 = null/empty
+    if (isDigit) return { rank: 0, value: v };
+    if (isLetter) return { rank: 1, value: v };
+    return { rank: 1, value: v };
+  };
+
   // Filter by tab
   const tabFiltered = useMemo(() => {
     let filtered = rows;
@@ -445,8 +523,146 @@ export default function AdminUsersPage() {
           let aValue: any;
           let bValue: any;
 
+          // Shared helper for referral_code sorting:
+          // Ascending: numbers -> letters/other -> null
+          // Descending: letters/other -> numbers -> null.
+
+          const getReferralSortMeta = (
+            value: string | null | undefined
+          ): { rank: number; value: string } => {
+            if (!value) return { rank: 2, value: "" }; // null/empty last
+            const vRaw = value.toLowerCase();
+            const v = vRaw.replace(/^_+/, "");
+            const firstChar = v.charAt(0);
+            const isDigit = /^[0-9]/.test(firstChar);
+            const isLetter = /^[a-z]/.test(firstChar);
+
+            if (isDigit) return { rank: 0, value: v };
+            if (isLetter) return { rank: 1, value: v };
+            return { rank: 1, value: v };
+          };
+
           // Get values based on sort column
           switch (sortColumn) {
+            case "id":
+              aValue = a.id || "";
+              bValue = b.id || "";
+              break;
+            case "full_name":
+              aValue = a.full_name?.toLowerCase() || "";
+              bValue = b.full_name?.toLowerCase() || "";
+              break;
+            case "email":
+              aValue = a.email?.toLowerCase() || "";
+              bValue = b.email?.toLowerCase() || "";
+              break;
+            case "user_type":
+              aValue = a.user_type?.toLowerCase() || "";
+              bValue = b.user_type?.toLowerCase() || "";
+              break;
+            case "referral_code": {
+              const aMeta = getReferralSortMeta(a.referral_code || null);
+              const bMeta = getReferralSortMeta(b.referral_code || null);
+
+              // - Asc: numbers -> letters/other -> null
+              // - Desc: letters/other -> numbers -> null
+              const mapReferralRankForOrder = (rank: number) => {
+                if (sortOrder === "asc") return rank;
+                // For desc, flip 0 and 1; keep 2 (null) last
+                if (rank === 0) return 1;
+                if (rank === 1) return 0;
+                return 2;
+              };
+
+              const aRank = mapReferralRankForOrder(aMeta.rank);
+              const bRank = mapReferralRankForOrder(bMeta.rank);
+
+              if (aRank !== bRank) {
+                return aRank - bRank;
+              }
+
+              // Then compare alphabetically within the same group
+              const cmp = aMeta.value.localeCompare(bMeta.value);
+              if (cmp !== 0) {
+                return sortOrder === "asc" ? cmp : -cmp;
+              }
+
+              return 0;
+            }
+            case "referred_by": {
+              const getReferredByMeta = (
+                value: string | null | undefined
+              ): { rank: number; value: string } => {
+                if (!value) return { rank: 2, value: "" }; // null/empty last
+                const v = value.toLowerCase();
+                const firstChar = v.charAt(0);
+                const isDigit = /^[0-9]/.test(firstChar);
+                const isLetter = /^[a-z]/.test(firstChar);
+                // rank 0 = numeric, 1 = alphabetic/other
+                if (isDigit) return { rank: 0, value: v };
+                if (isLetter) return { rank: 1, value: v };
+                return { rank: 1, value: v };
+              };
+
+              const aMeta = getReferredByMeta(a.referred_by || null);
+              const bMeta = getReferredByMeta(b.referred_by || null);
+
+              // - Asc: numbers -> letters/other -> null
+              // - Desc: letters/other -> numbers -> null
+              const mapRankForOrder = (rank: number) => {
+                // rank 0: numeric, 1: alpha/other, 2: null/empty
+                if (sortOrder === "asc") return rank;
+                // For desc, flip 0 and 1; keep 2 (null) last
+                if (rank === 0) return 1;
+                if (rank === 1) return 0;
+                return 2;
+              };
+
+              const aRank = mapRankForOrder(aMeta.rank);
+              const bRank = mapRankForOrder(bMeta.rank);
+
+              if (aMeta.rank !== bMeta.rank) {
+                return aRank - bRank;
+              }
+
+              // Then compare alphabetically within the same group
+              const cmp = aMeta.value.localeCompare(bMeta.value);
+              if (cmp !== 0) {
+                return sortOrder === "asc" ? cmp : -cmp;
+              }
+
+              return 0;
+            }
+            case "username": {
+              const aMeta = getUsernameSortMeta(a.username);
+              const bMeta = getUsernameSortMeta(b.username);
+
+              // - Asc: numbers -> letters/other -> null
+              // - Desc: letters/other -> numbers -> null
+              const mapUsernameRankForOrder = (rank: number) => {
+                // rank 0: numeric, 1: alpha/other, 2: null/empty
+                if (sortOrder === "asc") return rank;
+                // For desc, flip 0 and 1; keep 2 (null) last
+                if (rank === 0) return 1;
+                if (rank === 1) return 0;
+                return 2;
+              };
+
+              const aRank = mapUsernameRankForOrder(aMeta.rank);
+              const bRank = mapUsernameRankForOrder(bMeta.rank);
+
+              if (aRank !== bRank) {
+                return aRank - bRank;
+              }
+
+              // Then compare alphabetically within the same group
+              const cmp = aMeta.value.localeCompare(bMeta.value);
+              if (cmp !== 0) {
+                return sortOrder === "asc" ? cmp : -cmp;
+              }
+
+              return 0;
+            }
             case "advertisers_referred":
               aValue = a.advertisers_referred || 0;
               bValue = b.advertisers_referred || 0;
@@ -518,8 +734,84 @@ export default function AdminUsersPage() {
               : null
             : b.advertiser_profiles || null;
 
+          const getSubscriptionPlanName = (rawInfo: any) => {
+            if (!rawInfo) return "";
+            try {
+              const info =
+                typeof rawInfo === "string" ? JSON.parse(rawInfo) : rawInfo;
+
+              const isActive =
+                info?.status === "active" || info?.status === "trialing";
+              if (!isActive) {
+                return "";
+              }
+
+              if (!info?.product_id) return "";
+              const plan = getSubscriptionPlanById(info.product_id);
+              return (
+                plan?.displayName?.toLowerCase() ||
+                plan?.name?.toLowerCase() ||
+                ""
+              );
+            } catch {
+              return "";
+            }
+          };
+
           // Get values based on sort column
           switch (sortColumn) {
+            case "id":
+              aValue = a.id || "";
+              bValue = b.id || "";
+              break;
+            case "full_name":
+              aValue = a.full_name?.toLowerCase() || "";
+              bValue = b.full_name?.toLowerCase() || "";
+              break;
+            case "email":
+              aValue = a.email?.toLowerCase() || "";
+              bValue = b.email?.toLowerCase() || "";
+              break;
+            case "username": {
+              const aMeta = getUsernameSortMeta(a.username);
+              const bMeta = getUsernameSortMeta(b.username);
+
+              // First compare by rank (numbers vs letters/other vs null/empty).
+              // We adjust effective rank based on sortOrder so that:
+              // - Asc: numbers -> letters/other -> null
+              // - Desc: letters/other -> numbers -> null
+              const mapUsernameRankForOrder = (rank: number) => {
+                // rank 0: numeric, 1: alpha/other, 2: null/empty
+                if (sortOrder === "asc") return rank;
+                // For desc, flip 0 and 1; keep 2 (null) last
+                if (rank === 0) return 1;
+                if (rank === 1) return 0;
+                return 2;
+              };
+
+              const aRank = mapUsernameRankForOrder(aMeta.rank);
+              const bRank = mapUsernameRankForOrder(bMeta.rank);
+
+              if (aRank !== bRank) {
+                return aRank - bRank;
+              }
+
+              // Then compare alphabetically within the same group
+              const cmp = aMeta.value.localeCompare(bMeta.value);
+              if (cmp !== 0) {
+                return sortOrder === "asc" ? cmp : -cmp;
+              }
+
+              return 0;
+            }
+            case "company_name":
+              aValue = aProfile?.company_name?.toLowerCase() || "";
+              bValue = bProfile?.company_name?.toLowerCase() || "";
+              break;
+            case "website_url":
+              aValue = aProfile?.website_url?.toLowerCase() || "";
+              bValue = bProfile?.website_url?.toLowerCase() || "";
+              break;
             case "total_money_spent":
               aValue = aProfile?.total_money_spent || 0;
               bValue = bProfile?.total_money_spent || 0;
@@ -535,6 +827,10 @@ export default function AdminUsersPage() {
             case "withdrawable_balance":
               aValue = aProfile?.withdrawable_balance || 0;
               bValue = bProfile?.withdrawable_balance || 0;
+              break;
+            case "subscription_info":
+              aValue = getSubscriptionPlanName(aProfile?.subscription_info);
+              bValue = getSubscriptionPlanName(bProfile?.subscription_info);
               break;
             default:
               aValue = a.full_name?.toLowerCase() || "";
@@ -583,8 +879,130 @@ export default function AdminUsersPage() {
               : null
             : b.creator_profiles || null;
 
+          const getJoined = (value: any): string => {
+            if (!value) return "";
+            if (Array.isArray(value)) return value.join(", ").toLowerCase();
+            if (typeof value === "string") return value.toLowerCase();
+            try {
+              return JSON.stringify(value).toLowerCase();
+            } catch {
+              return String(value).toLowerCase();
+            }
+          };
+
           // Get values based on sort column
           switch (sortColumn) {
+            case "id":
+              aValue = a.id || "";
+              bValue = b.id || "";
+              break;
+            case "full_name":
+              aValue = a.full_name?.toLowerCase() || "";
+              bValue = b.full_name?.toLowerCase() || "";
+              break;
+            case "email":
+              aValue = a.email?.toLowerCase() || "";
+              bValue = b.email?.toLowerCase() || "";
+              break;
+            case "username": {
+              const aMeta = getUsernameSortMeta(a.username);
+              const bMeta = getUsernameSortMeta(b.username);
+
+              const mapUsernameRankForOrder = (rank: number) => {
+                if (sortOrder === "asc") return rank;
+                if (rank === 0) return 1;
+                if (rank === 1) return 0;
+                return 2;
+              };
+
+              const aRank = mapUsernameRankForOrder(aMeta.rank);
+              const bRank = mapUsernameRankForOrder(bMeta.rank);
+
+              if (aRank !== bRank) {
+                return aRank - bRank;
+              }
+
+              const cmp = aMeta.value.localeCompare(bMeta.value);
+              if (cmp !== 0) {
+                return sortOrder === "asc" ? cmp : -cmp;
+              }
+
+              return 0;
+            }
+            case "youtube_account": {
+              const getYtName = (profile: CreatorProfile | null) => {
+                const yt = profile?.youtube_account;
+                if (!yt) return "";
+                try {
+                  const account = typeof yt === "string" ? JSON.parse(yt) : yt;
+                  return (
+                    account?.channel_title?.toLowerCase() ||
+                    account?.channel_custom_url?.toLowerCase() ||
+                    ""
+                  );
+                } catch {
+                  return "";
+                }
+              };
+
+              const aName = getYtName(aProfile);
+              const bName = getYtName(bProfile);
+
+              // Null / empty should be last for both ascending and descending.
+              const aEmpty = !aName;
+              const bEmpty = !bName;
+
+              if (aEmpty !== bEmpty) {
+                // non-empty (false) comes before empty (true)
+                return aEmpty ? 1 : -1;
+              }
+
+              if (!aEmpty && !bEmpty) {
+                const cmp = aName.localeCompare(bName);
+                if (cmp !== 0) {
+                  return sortOrder === "asc" ? cmp : -cmp;
+                }
+              }
+
+              return 0;
+            }
+            case "instagram_account": {
+              const getIgName = (profile: CreatorProfile | null) => {
+                const ig = profile?.instagram_account;
+                if (!ig) return "";
+                try {
+                  const account = typeof ig === "string" ? JSON.parse(ig) : ig;
+                  return (
+                    account?.name_of_account?.toLowerCase() ||
+                    account?.username?.toLowerCase() ||
+                    ""
+                  );
+                } catch {
+                  return "";
+                }
+              };
+
+              const aName = getIgName(aProfile);
+              const bName = getIgName(bProfile);
+
+              // Null / empty should be last for both ascending and descending.
+              const aEmpty = !aName;
+              const bEmpty = !bName;
+
+              if (aEmpty !== bEmpty) {
+                // non-empty (false) comes before empty (true)
+                return aEmpty ? 1 : -1;
+              }
+
+              if (!aEmpty && !bEmpty) {
+                const cmp = aName.localeCompare(bName);
+                if (cmp !== 0) {
+                  return sortOrder === "asc" ? cmp : -cmp;
+                }
+              }
+
+              return 0;
+            }
             case "contests_participated":
               aValue = aProfile?.total_contests_participated || 0;
               bValue = bProfile?.total_contests_participated || 0;
@@ -612,6 +1030,46 @@ export default function AdminUsersPage() {
             case "total_submissions_won":
               aValue = aProfile?.total_submissions_won || 0;
               bValue = bProfile?.total_submissions_won || 0;
+              break;
+            case "date_of_birth":
+              aValue = aProfile?.date_of_birth || "";
+              bValue = bProfile?.date_of_birth || "";
+              break;
+            case "gender":
+              aValue = aProfile?.gender?.toLowerCase() || "";
+              bValue = bProfile?.gender?.toLowerCase() || "";
+              break;
+            case "country":
+              aValue = aProfile?.country?.toLowerCase() || "";
+              bValue = bProfile?.country?.toLowerCase() || "";
+              break;
+            case "state":
+              aValue = aProfile?.state?.toLowerCase() || "";
+              bValue = bProfile?.state?.toLowerCase() || "";
+              break;
+            case "city":
+              aValue = aProfile?.city?.toLowerCase() || "";
+              bValue = bProfile?.city?.toLowerCase() || "";
+              break;
+            case "address":
+              aValue = aProfile?.address?.toLowerCase() || "";
+              bValue = bProfile?.address?.toLowerCase() || "";
+              break;
+            case "language":
+              aValue = getJoined(aProfile?.languages);
+              bValue = getJoined(bProfile?.languages);
+              break;
+            case "categories":
+              aValue = getJoined(aProfile?.categories);
+              bValue = getJoined(bProfile?.categories);
+              break;
+            case "subcategories":
+              aValue = getJoined(aProfile?.subcategories);
+              bValue = getJoined(bProfile?.subcategories);
+              break;
+            case "interests":
+              aValue = getJoined(aProfile?.interests);
+              bValue = getJoined(bProfile?.interests);
               break;
             default:
               aValue = a.full_name?.toLowerCase() || "";
@@ -860,14 +1318,10 @@ export default function AdminUsersPage() {
                   )}
                 >
                   {isColumnVisible("id") && (
-                    <TableHead className="whitespace-nowrap border-r">
-                      ID
-                    </TableHead>
+                    <SortableHeader columnId="id" label="ID" />
                   )}
                   {isColumnVisible("full_name") && (
-                    <TableHead className="whitespace-nowrap border-r">
-                      Full Name
-                    </TableHead>
+                    <SortableHeader columnId="full_name" label="Full Name" />
                   )}
                   {isColumnVisible("profile") && (
                     <TableHead className="whitespace-nowrap border-r">
@@ -875,26 +1329,24 @@ export default function AdminUsersPage() {
                     </TableHead>
                   )}
                   {isColumnVisible("email") && (
-                    <TableHead className="whitespace-nowrap border-r">
-                      Email
-                    </TableHead>
+                    <SortableHeader columnId="email" label="Email" />
                   )}
                   {activeTab === "advertisers" && (
                     <>
                       {isColumnVisible("username") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Username
-                        </TableHead>
+                        <SortableHeader columnId="username" label="Username" />
                       )}
                       {isColumnVisible("company_name") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Company Name
-                        </TableHead>
+                        <SortableHeader
+                          columnId="company_name"
+                          label="Company Name"
+                        />
                       )}
                       {isColumnVisible("website_url") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Website URL
-                        </TableHead>
+                        <SortableHeader
+                          columnId="website_url"
+                          label="Website URL"
+                        />
                       )}
                       {isColumnVisible("total_money_spent") && (
                         <TableHead className="whitespace-nowrap border-r">
@@ -1115,28 +1567,29 @@ export default function AdminUsersPage() {
                         </TableHead>
                       )}
                       {isColumnVisible("subscription_info") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Subscription Info
-                        </TableHead>
+                        <SortableHeader
+                          columnId="subscription_info"
+                          label="Subscription Info"
+                        />
                       )}
                     </>
                   )}
                   {activeTab === "creators" && (
                     <>
                       {isColumnVisible("username") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Username
-                        </TableHead>
+                        <SortableHeader columnId="username" label="Username" />
                       )}
                       {isColumnVisible("youtube_account") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          YouTube Account
-                        </TableHead>
+                        <SortableHeader
+                          columnId="youtube_account"
+                          label="YouTube Account"
+                        />
                       )}
                       {isColumnVisible("instagram_account") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Instagram Account
-                        </TableHead>
+                        <SortableHeader
+                          columnId="instagram_account"
+                          label="Instagram Account"
+                        />
                       )}
                       {isColumnVisible("contests_participated") && (
                         <TableHead className="whitespace-nowrap border-r">
@@ -1537,58 +1990,65 @@ export default function AdminUsersPage() {
                         </TableHead>
                       )}
                       {isColumnVisible("city") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          City
-                        </TableHead>
+                        <SortableHeader columnId="city" label="City" />
                       )}
                       {isColumnVisible("address") && (
-                        <TableHead className="whitespace-nowrap border-r min-w-[250px] max-w-md">
-                          Address
-                        </TableHead>
+                        <SortableHeader
+                          columnId="address"
+                          label="Address"
+                          className="min-w-[250px] max-w-md"
+                        />
                       )}
                       {isColumnVisible("language") && (
-                        <TableHead className="whitespace-nowrap border-r min-w-[150px] max-w-sm">
-                          Language
-                        </TableHead>
+                        <SortableHeader
+                          columnId="language"
+                          label="Language"
+                          className="min-w-[150px] max-w-sm"
+                        />
                       )}
                       {isColumnVisible("categories") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Categories
-                        </TableHead>
+                        <SortableHeader
+                          columnId="categories"
+                          label="Categories"
+                        />
                       )}
                       {isColumnVisible("subcategories") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Subcategories
-                        </TableHead>
+                        <SortableHeader
+                          columnId="subcategories"
+                          label="Subcategories"
+                        />
                       )}
                       {isColumnVisible("interests") && (
-                        <TableHead className="whitespace-nowrap">
-                          Interests
-                        </TableHead>
+                        <SortableHeader
+                          columnId="interests"
+                          label="Interests"
+                          className=""
+                        />
                       )}
                     </>
                   )}
                   {activeTab !== "advertisers" && activeTab !== "creators" && (
                     <>
                       {isColumnVisible("user_type") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          User Type
-                        </TableHead>
+                        <SortableHeader
+                          columnId="user_type"
+                          label="User Type"
+                        />
                       )}
                       {isColumnVisible("username") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Username
-                        </TableHead>
+                        <SortableHeader columnId="username" label="Username" />
                       )}
                       {isColumnVisible("referral_code") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Referral Code
-                        </TableHead>
+                        <SortableHeader
+                          columnId="referral_code"
+                          label="Referral Code"
+                        />
                       )}
                       {isColumnVisible("referred_by") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Referred By
-                        </TableHead>
+                        <SortableHeader
+                          columnId="referred_by"
+                          label="Referred By"
+                        />
                       )}
                       {isColumnVisible("coins") && (
                         <TableHead className="whitespace-nowrap border-r">
@@ -2014,7 +2474,7 @@ export default function AdminUsersPage() {
                           <>
                             {isColumnVisible("username") && (
                               <TableCell className="whitespace-nowrap border-r">
-                                {r.username || "N/A"}
+                                {r.username || "-"}
                               </TableCell>
                             )}
                             {isColumnVisible("company_name") && (
@@ -2072,22 +2532,99 @@ export default function AdminUsersPage() {
                             )}
                             {isColumnVisible("subscription_info") && (
                               <TableCell className="whitespace-nowrap">
-                                {advertiserProfile?.subscription_info ? (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedSubscriptionInfo(
-                                        advertiserProfile.subscription_info
+                                {(() => {
+                                  const subscriptionInfo =
+                                    advertiserProfile?.subscription_info;
+                                  if (!subscriptionInfo) {
+                                    return (
+                                      <span className="text-muted-foreground">
+                                        -
+                                      </span>
+                                    );
+                                  }
+
+                                  try {
+                                    const info =
+                                      typeof subscriptionInfo === "string"
+                                        ? JSON.parse(subscriptionInfo)
+                                        : subscriptionInfo;
+
+                                    const isActive =
+                                      info?.status === "active" ||
+                                      info?.status === "trialing";
+
+                                    if (!isActive) {
+                                      return (
+                                        <span className="text-muted-foreground">
+                                          -
+                                        </span>
                                       );
-                                      setIsSubscriptionDialogOpen(true);
-                                    }}
-                                  >
-                                    View Details
-                                  </Button>
-                                ) : (
-                                  "-"
-                                )}
+                                    }
+
+                                    // Get plan name from product_id
+                                    const plan = info?.product_id
+                                      ? getSubscriptionPlanById(info.product_id)
+                                      : null;
+                                    const planName =
+                                      plan?.displayName ||
+                                      plan?.name ||
+                                      "Unknown Plan";
+
+                                    // Get amount (price_amount is in cents)
+                                    const amount = info?.price_amount;
+                                    const formattedAmount = amount
+                                      ? `$${(amount / 100).toFixed(2)}`
+                                      : "-";
+
+                                    return (
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex flex-col">
+                                          <span className="font-medium text-sm">
+                                            {planName}
+                                          </span>
+                                          {amount !== undefined && (
+                                            <span className="text-xs text-muted-foreground">
+                                              {formattedAmount}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="ml-2"
+                                          onClick={() => {
+                                            setSelectedSubscriptionInfo(
+                                              subscriptionInfo
+                                            );
+                                            setIsSubscriptionDialogOpen(true);
+                                          }}
+                                        >
+                                          View Details
+                                        </Button>
+                                      </div>
+                                    );
+                                  } catch {
+                                    return (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-muted-foreground">
+                                          Connected
+                                        </span>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                            setSelectedSubscriptionInfo(
+                                              subscriptionInfo
+                                            );
+                                            setIsSubscriptionDialogOpen(true);
+                                          }}
+                                        >
+                                          View Details
+                                        </Button>
+                                      </div>
+                                    );
+                                  }
+                                })()}
                               </TableCell>
                             )}
                           </>
@@ -2095,7 +2632,7 @@ export default function AdminUsersPage() {
                           <>
                             {isColumnVisible("username") && (
                               <TableCell className="whitespace-nowrap border-r">
-                                {r.username || "N/A"}
+                                {r.username || "-"}
                               </TableCell>
                             )}
                             {isColumnVisible("youtube_account") && (
@@ -2109,10 +2646,40 @@ export default function AdminUsersPage() {
                                       typeof ytAccount === "string"
                                         ? JSON.parse(ytAccount)
                                         : ytAccount;
+
+                                    // Construct YouTube channel URL
+                                    let youtubeUrl = "";
+                                    if (account?.channel_custom_url) {
+                                      youtubeUrl = `https://youtube.com/${account.channel_custom_url}`;
+                                    } else if (account?.channel_id) {
+                                      youtubeUrl = `https://youtube.com/channel/${account.channel_id}`;
+                                    }
+
                                     return (
                                       <div className="space-y-1">
-                                        <div className="font-medium text-sm">
-                                          {account?.channel_title || "YouTube"}
+                                        <div className="flex items-center gap-2">
+                                          <div className="font-medium text-sm">
+                                            {account?.channel_title ||
+                                              "YouTube"}
+                                          </div>
+                                          {youtubeUrl && (
+                                            <a
+                                              href={youtubeUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-red-600 hover:text-red-700 transition-colors"
+                                              title="Visit YouTube Channel"
+                                            >
+                                              <svg
+                                                className="w-5 h-5"
+                                                fill="currentColor"
+                                                viewBox="0 0 24 24"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                              >
+                                                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                                              </svg>
+                                            </a>
+                                          )}
                                         </div>
                                         {account?.subscriber_count && (
                                           <div className="text-xs text-muted-foreground">
@@ -2149,12 +2716,38 @@ export default function AdminUsersPage() {
                                       typeof igAccount === "string"
                                         ? JSON.parse(igAccount)
                                         : igAccount;
+
+                                    // Construct Instagram profile URL
+                                    const instagramUrl = account?.username
+                                      ? `https://instagram.com/${account.username}`
+                                      : "";
+
                                     return (
                                       <div className="space-y-1">
-                                        <div className="font-medium text-sm">
-                                          {account?.name_of_account ||
-                                            account?.username ||
-                                            "Instagram"}
+                                        <div className="flex items-center gap-2">
+                                          <div className="font-medium text-sm">
+                                            {account?.name_of_account ||
+                                              account?.username ||
+                                              "Instagram"}
+                                          </div>
+                                          {instagramUrl && (
+                                            <a
+                                              href={instagramUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-pink-600 hover:text-pink-700 transition-colors"
+                                              title="Visit Instagram Profile"
+                                            >
+                                              <svg
+                                                className="w-5 h-5"
+                                                fill="currentColor"
+                                                viewBox="0 0 24 24"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                              >
+                                                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+                                              </svg>
+                                            </a>
+                                          )}
                                         </div>
                                         {account?.username && (
                                           <div className="text-xs text-muted-foreground">
@@ -2299,16 +2892,53 @@ export default function AdminUsersPage() {
 
                                   let subcategoriesArray: string[] = [];
                                   if (Array.isArray(subcategories)) {
-                                    subcategoriesArray = subcategories;
+                                    // Convert each item to string, handling objects properly
+                                    subcategoriesArray = subcategories.map(
+                                      (item: any) => {
+                                        if (
+                                          typeof item === "object" &&
+                                          item !== null
+                                        ) {
+                                          // If it has category and subcategory, format nicely
+                                          if (
+                                            item.category &&
+                                            item.subcategory
+                                          ) {
+                                            return `${item.category}: ${item.subcategory}`;
+                                          }
+                                          // Otherwise, stringify the object
+                                          return JSON.stringify(item);
+                                        }
+                                        return String(item);
+                                      }
+                                    );
                                   } else if (
                                     typeof subcategories === "string"
                                   ) {
                                     // Try to parse if it's a JSON string, otherwise split by comma
                                     try {
                                       const parsed = JSON.parse(subcategories);
-                                      subcategoriesArray = Array.isArray(parsed)
-                                        ? parsed
-                                        : [subcategories];
+                                      if (Array.isArray(parsed)) {
+                                        subcategoriesArray = parsed.map(
+                                          (item: any) => {
+                                            if (
+                                              typeof item === "object" &&
+                                              item !== null
+                                            ) {
+                                              if (
+                                                item.category &&
+                                                item.subcategory
+                                              ) {
+                                                return `${item.category}: ${item.subcategory}`;
+                                              }
+                                              return JSON.stringify(item);
+                                            }
+                                            return String(item);
+                                          }
+                                        );
+                                      } else {
+                                        subcategoriesArray = [subcategories];
+                                      }
                                     } catch {
                                       subcategoriesArray = subcategories
                                         .split(",")
@@ -2398,7 +3028,7 @@ export default function AdminUsersPage() {
                             )}
                             {isColumnVisible("username") && (
                               <TableCell className="whitespace-nowrap border-r">
-                                {r.username || "N/A"}
+                                {r.username || "-"}
                               </TableCell>
                             )}
                             {isColumnVisible("referral_code") && (
@@ -2559,43 +3189,278 @@ export default function AdminUsersPage() {
       >
         <DialogContent
           className={cn(
-            "max-w-2xl max-h-[80vh] overflow-y-auto",
+            "max-w-3xl max-h-[80vh] overflow-y-auto",
             isDark ? "text-white" : "text-gray-900"
           )}
         >
           <DialogHeader>
             <DialogTitle
-              className={cn(isDark ? "text-white" : "text-gray-900")}
+              className={cn(
+                "text-xl font-semibold",
+                isDark ? "text-white" : "text-gray-900"
+              )}
             >
               Subscription Information
             </DialogTitle>
             <DialogDescription
-              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+              className={cn("mt-1", isDark ? "text-gray-300" : "text-gray-600")}
             >
-              Detailed subscription information for this advertiser
+              Overview of the advertiser&apos;s current subscription plan,
+              billing, and status details.
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-4">
+
+          <div className="mt-6 space-y-6">
             {selectedSubscriptionInfo ? (
-              <div
-                className={cn(
-                  "p-4 rounded-lg",
-                  isDark
-                    ? "bg-[#391A6A] text-gray-200"
-                    : "bg-muted text-gray-900"
-                )}
-              >
-                <pre className="text-xs overflow-auto whitespace-pre-wrap break-words">
-                  {JSON.stringify(selectedSubscriptionInfo, null, 2)}
-                </pre>
-              </div>
+              (() => {
+                let info: any = selectedSubscriptionInfo;
+                try {
+                  if (typeof info === "string") {
+                    info = JSON.parse(info);
+                  }
+                } catch {
+                  // Keep raw info if JSON parsing fails
+                }
+
+                const plan =
+                  info && info.product_id
+                    ? getSubscriptionPlanById(info.product_id)
+                    : null;
+                const planName =
+                  plan?.displayName ||
+                  plan?.name ||
+                  info?.plan_name ||
+                  "Unknown";
+
+                const amountCents =
+                  typeof info?.price_amount === "number"
+                    ? info.price_amount
+                    : typeof info?.amount_cents === "number"
+                    ? info.amount_cents
+                    : undefined;
+                const formattedAmount =
+                  amountCents !== undefined
+                    ? `$${(amountCents / 100).toFixed(2)}`
+                    : "-";
+
+                const status = info?.status || info?.subscription_status;
+                const interval =
+                  info?.interval ||
+                  info?.billing_interval ||
+                  (info?.price_interval || "").toLowerCase();
+
+                const currentPeriodStart =
+                  info?.current_period_start || info?.billing_period_start;
+                const currentPeriodEnd =
+                  info?.current_period_end || info?.billing_period_end;
+                const cancelAtPeriodEnd = info?.cancel_at_period_end;
+
+                const formatDate = (value: any) => {
+                  if (!value) return "-";
+                  try {
+                    const d =
+                      typeof value === "string" || typeof value === "number"
+                        ? new Date(value)
+                        : value;
+                    if (Number.isNaN(d.getTime())) return String(value);
+                    return d.toLocaleString();
+                  } catch {
+                    return String(value);
+                  }
+                };
+
+                const statusColorClasses =
+                  status === "active" || status === "trialing"
+                    ? isDark
+                      ? "bg-emerald-900/60 text-emerald-200 border-emerald-700"
+                      : "bg-emerald-50 text-emerald-700 border-emerald-300"
+                    : status === "canceled" || status === "incomplete_expired"
+                    ? isDark
+                      ? "bg-rose-900/60 text-rose-200 border-rose-700"
+                      : "bg-rose-50 text-rose-700 border-rose-300"
+                    : status === "past_due" || status === "unpaid"
+                    ? isDark
+                      ? "bg-amber-900/60 text-amber-200 border-amber-700"
+                      : "bg-amber-50 text-amber-700 border-amber-300"
+                    : isDark
+                    ? "bg-slate-800 text-slate-100 border-slate-700"
+                    : "bg-slate-50 text-slate-700 border-slate-300";
+
+                return (
+                  <div className="space-y-6">
+                    {/* Top summary card */}
+                    <div
+                      className={cn(
+                        "rounded-xl border p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4",
+                        isDark
+                          ? "bg-[#1a102b] border-purple-700/50"
+                          : "bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-100"
+                      )}
+                    >
+                      <div className="space-y-1.5">
+                        <p
+                          className={cn(
+                            "text-xs uppercase tracking-wide",
+                            isDark ? "text-gray-300" : "text-gray-600"
+                          )}
+                        >
+                          Current Plan
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-lg font-semibold">
+                            {planName}
+                          </span>
+                          {interval && (
+                            <span className="text-xs rounded-full border px-2 py-0.5 uppercase tracking-wide">
+                              {interval}
+                            </span>
+                          )}
+                        </div>
+                        <p
+                          className={cn(
+                            "text-sm",
+                            isDark ? "text-gray-200" : "text-gray-900"
+                          )}
+                        >
+                          {formattedAmount}{" "}
+                          {interval ? `/ ${interval.toLowerCase()}` : ""}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col items-start sm:items-end gap-2">
+                        {status && (
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium",
+                              statusColorClasses
+                            )}
+                          >
+                            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
+                            {String(status).replace(/_/g, " ")}
+                          </span>
+                        )}
+                        {cancelAtPeriodEnd && (
+                          <span className="text-xs text-amber-500">
+                            Will cancel at end of current period
+                          </span>
+                        )}
+                        {info?.last_synced && (
+                          <span className="text-xs text-muted-foreground">
+                            Last synced: {formatDate(info.last_synced)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Billing period & IDs */}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div
+                        className={cn(
+                          "rounded-lg border p-4 space-y-2",
+                          isDark
+                            ? "bg-[#130b21] border-slate-700"
+                            : "bg-white border-slate-200"
+                        )}
+                      >
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Billing Period
+                        </p>
+                        <div className="space-y-1.5 text-sm">
+                          <div className="flex justify-between gap-4">
+                            <span className="text-muted-foreground">
+                              Current period start
+                            </span>
+                            <span className="font-medium text-right">
+                              {formatDate(currentPeriodStart)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-4">
+                            <span className="text-muted-foreground">
+                              Current period end
+                            </span>
+                            <span className="font-medium text-right">
+                              {formatDate(currentPeriodEnd)}
+                            </span>
+                          </div>
+                          {info?.trial_start || info?.trial_end ? (
+                            <>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-muted-foreground">
+                                  Trial start
+                                </span>
+                                <span className="font-medium text-right">
+                                  {formatDate(info.trial_start)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-muted-foreground">
+                                  Trial end
+                                </span>
+                                <span className="font-medium text-right">
+                                  {formatDate(info.trial_end)}
+                                </span>
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div
+                        className={cn(
+                          "rounded-lg border p-4 space-y-2",
+                          isDark
+                            ? "bg-[#130b21] border-slate-700"
+                            : "bg-white border-slate-200"
+                        )}
+                      >
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Stripe Identifiers
+                        </p>
+                        <div className="space-y-1.5 text-xs sm:text-sm">
+                          {info?.subscription_id && (
+                            <div className="flex justify-between gap-4">
+                              <span className="text-muted-foreground">
+                                Subscription ID
+                              </span>
+                              <span className="font-mono text-[11px] sm:text-xs text-right break-all">
+                                {info.subscription_id}
+                              </span>
+                            </div>
+                          )}
+                          {info?.price_id && (
+                            <div className="flex justify-between gap-4">
+                              <span className="text-muted-foreground">
+                                Price ID
+                              </span>
+                              <span className="font-mono text-[11px] sm:text-xs text-right break-all">
+                                {info.price_id}
+                              </span>
+                            </div>
+                          )}
+                          {info?.product_id && (
+                            <div className="flex justify-between gap-4">
+                              <span className="text-muted-foreground">
+                                Product ID
+                              </span>
+                              <span className="font-mono text-[11px] sm:text-xs text-right break-all">
+                                {info.product_id}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
             ) : (
               <p
                 className={cn(
+                  "text-sm",
                   isDark ? "text-gray-300" : "text-muted-foreground"
                 )}
               >
-                No subscription information available
+                No subscription information is available for this advertiser.
               </p>
             )}
           </div>
@@ -2651,8 +3516,22 @@ export default function AdminUsersPage() {
                           );
                         }
                       } else {
-                        // Could be a different object format, add as flat
-                        flatSubcategories.push(JSON.stringify(item));
+                        // Could be a different object format, format it nicely
+                        // Try to extract meaningful properties
+                        const keys = Object.keys(item);
+                        if (keys.length > 0) {
+                          // If object has a name or title, use that
+                          const displayValue =
+                            item.name ||
+                            item.title ||
+                            item.label ||
+                            (keys.length === 1
+                              ? item[keys[0]]
+                              : JSON.stringify(item));
+                          flatSubcategories.push(String(displayValue));
+                        } else {
+                          flatSubcategories.push(JSON.stringify(item));
+                        }
                       }
                     } else if (typeof item === "string") {
                       flatSubcategories.push(item);
@@ -2686,6 +3565,21 @@ export default function AdminUsersPage() {
                             subcategoriesByCategory[item.category].push(
                               item.subcategory
                             );
+                          }
+                        } else if (typeof item === "object" && item !== null) {
+                          // Handle objects in parsed array
+                          const keys = Object.keys(item);
+                          if (keys.length > 0) {
+                            const displayValue =
+                              item.name ||
+                              item.title ||
+                              item.label ||
+                              (keys.length === 1
+                                ? item[keys[0]]
+                                : JSON.stringify(item));
+                            flatSubcategories.push(String(displayValue));
+                          } else {
+                            flatSubcategories.push(JSON.stringify(item));
                           }
                         } else {
                           flatSubcategories.push(String(item));
