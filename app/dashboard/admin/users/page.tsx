@@ -26,8 +26,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Settings, X, Check } from "lucide-react";
+import { Settings, X, Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type AdvertiserProfile = {
   id: string;
@@ -278,6 +284,43 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [activeTab, setActiveTab] = useState("all");
+  // Initialize mode state with proper detection to prevent flash
+  const [mode, setMode] = useState<"light" | "dark">(() => {
+    // Check if we're in browser environment
+    if (typeof window !== "undefined") {
+      // Try to get theme from data-theme attribute first
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme") as
+        | "light"
+        | "dark";
+      if (dataTheme) return dataTheme;
+
+      // Fallback to data-mode attribute
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const dataMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (dataMode) return dataMode;
+      }
+
+      // Check localStorage as last resort
+      try {
+        const savedMode = localStorage.getItem("dashboard-mode") as
+          | "light"
+          | "dark";
+        if (savedMode) return savedMode;
+
+        const preset = localStorage.getItem("dashboard-preset");
+        if (preset === "game-of-creators" || preset === "dark-professional") {
+          return "dark";
+        }
+      } catch (e) {
+        // Ignore localStorage errors
+      }
+    }
+    return "light";
+  });
   const [selectedSubscriptionInfo, setSelectedSubscriptionInfo] = useState<
     any | null
   >(null);
@@ -293,6 +336,56 @@ export default function AdminUsersPage() {
     useState(false);
   const [selectedInterests, setSelectedInterests] = useState<any | null>(null);
   const [isInterestsDialogOpen, setIsInterestsDialogOpen] = useState(false);
+  // Sort state per tab - each tab maintains its own sort state
+  const [sortState, setSortState] = useState<
+    Record<string, { column: string | null; order: "asc" | "desc" | null }>
+  >({
+    all: { column: null, order: null },
+    advertisers: { column: null, order: null },
+    creators: { column: null, order: null },
+  });
+
+  // Helper functions to get/set sort state for current tab
+  const getSortState = () => {
+    return sortState[activeTab] || { column: null, order: null };
+  };
+
+  const setSortColumn = (column: string | null) => {
+    setSortState((prev) => ({
+      ...prev,
+      [activeTab]: {
+        ...(prev[activeTab] || { column: null, order: null }),
+        column,
+      },
+    }));
+  };
+
+  const setSortOrder = (order: "asc" | "desc" | null) => {
+    setSortState((prev) => ({
+      ...prev,
+      [activeTab]: {
+        ...(prev[activeTab] || { column: null, order: null }),
+        order,
+      },
+    }));
+  };
+
+  const setSort = (column: string | null, order: "asc" | "desc" | null) => {
+    setSortState((prev) => ({
+      ...prev,
+      [activeTab]: {
+        column,
+        order,
+      },
+    }));
+  };
+
+  // Get current tab's sort values (reactive to sortState and activeTab changes)
+  const sortColumn = useMemo(
+    () => getSortState().column,
+    [sortState, activeTab]
+  );
+  const sortOrder = useMemo(() => getSortState().order, [sortState, activeTab]);
 
   // Column visibility state - initialize all columns as visible
   const [visibleColumns, setVisibleColumns] = useState<
@@ -334,17 +427,225 @@ export default function AdminUsersPage() {
 
   // Filter by tab
   const tabFiltered = useMemo(() => {
-    if (activeTab === "all") return rows;
-    if (activeTab === "advertisers") {
+    let filtered = rows;
+    if (activeTab === "all") {
+      filtered = rows;
+    } else if (activeTab === "advertisers") {
       // Show all users with user_type === "advertiser"
       // advertiser_profiles data will be shown when available
-      return rows.filter((r) => r.user_type === "advertiser");
+      filtered = rows.filter((r) => r.user_type === "advertiser");
+    } else if (activeTab === "creators") {
+      filtered = rows.filter((r) => r.user_type === "creator");
     }
-    if (activeTab === "creators") {
-      return rows.filter((r) => r.user_type === "creator");
+
+    // Apply sorting based on active tab
+    if (activeTab === "all") {
+      if (sortOrder && sortColumn) {
+        filtered = [...filtered].sort((a, b) => {
+          let aValue: any;
+          let bValue: any;
+
+          // Get values based on sort column
+          switch (sortColumn) {
+            case "advertisers_referred":
+              aValue = a.advertisers_referred || 0;
+              bValue = b.advertisers_referred || 0;
+              break;
+            case "creators_referred":
+              aValue = a.creators_referred || 0;
+              bValue = b.creators_referred || 0;
+              break;
+            case "coins":
+              aValue = a.coins || 0;
+              bValue = b.coins || 0;
+              break;
+            case "total_lifetime_coins":
+              aValue = a.total_lifetime_coins_earned || 0;
+              bValue = b.total_lifetime_coins_earned || 0;
+              break;
+            case "affiliate_earnings":
+              aValue = a.affiliate_earnings || 0;
+              bValue = b.affiliate_earnings || 0;
+              break;
+            case "other_earnings":
+              aValue = a.other_earnings || 0;
+              bValue = b.other_earnings || 0;
+              break;
+            default:
+              aValue = a.full_name?.toLowerCase() || "";
+              bValue = b.full_name?.toLowerCase() || "";
+          }
+
+          // Handle numeric vs string comparison
+          if (typeof aValue === "number" && typeof bValue === "number") {
+            return sortOrder === "asc" ? aValue - bValue : bValue - aValue;
+          } else {
+            if (sortOrder === "asc") {
+              return String(aValue).localeCompare(String(bValue));
+            } else {
+              return String(bValue).localeCompare(String(aValue));
+            }
+          }
+        });
+      } else if (sortOrder) {
+        // Fallback to full_name sorting if no column specified
+        filtered = [...filtered].sort((a, b) => {
+          const aValue = a.full_name?.toLowerCase() || "";
+          const bValue = b.full_name?.toLowerCase() || "";
+
+          if (sortOrder === "asc") {
+            return aValue.localeCompare(bValue);
+          } else {
+            return bValue.localeCompare(aValue);
+          }
+        });
+      }
+    } else if (activeTab === "advertisers") {
+      if (sortOrder && sortColumn) {
+        filtered = [...filtered].sort((a, b) => {
+          let aValue: any;
+          let bValue: any;
+
+          // Get advertiser profiles
+          const aProfile = Array.isArray(a.advertiser_profiles)
+            ? a.advertiser_profiles.length > 0
+              ? a.advertiser_profiles[0]
+              : null
+            : a.advertiser_profiles || null;
+          const bProfile = Array.isArray(b.advertiser_profiles)
+            ? b.advertiser_profiles.length > 0
+              ? b.advertiser_profiles[0]
+              : null
+            : b.advertiser_profiles || null;
+
+          // Get values based on sort column
+          switch (sortColumn) {
+            case "total_money_spent":
+              aValue = aProfile?.total_money_spent || 0;
+              bValue = bProfile?.total_money_spent || 0;
+              break;
+            case "total_contests_run":
+              aValue = aProfile?.total_contests_run || 0;
+              bValue = bProfile?.total_contests_run || 0;
+              break;
+            case "available_deposit_balance":
+              aValue = aProfile?.available_deposit_balance || 0;
+              bValue = bProfile?.available_deposit_balance || 0;
+              break;
+            case "withdrawable_balance":
+              aValue = aProfile?.withdrawable_balance || 0;
+              bValue = bProfile?.withdrawable_balance || 0;
+              break;
+            default:
+              aValue = a.full_name?.toLowerCase() || "";
+              bValue = b.full_name?.toLowerCase() || "";
+          }
+
+          // Handle numeric vs string comparison
+          if (typeof aValue === "number" && typeof bValue === "number") {
+            return sortOrder === "asc" ? aValue - bValue : bValue - aValue;
+          } else {
+            if (sortOrder === "asc") {
+              return String(aValue).localeCompare(String(bValue));
+            } else {
+              return String(bValue).localeCompare(String(aValue));
+            }
+          }
+        });
+      } else if (sortOrder) {
+        // Fallback to full_name sorting if no column specified
+        filtered = [...filtered].sort((a, b) => {
+          const aValue = a.full_name?.toLowerCase() || "";
+          const bValue = b.full_name?.toLowerCase() || "";
+
+          if (sortOrder === "asc") {
+            return aValue.localeCompare(bValue);
+          } else {
+            return bValue.localeCompare(aValue);
+          }
+        });
+      }
+    } else if (activeTab === "creators") {
+      if (sortOrder && sortColumn) {
+        filtered = [...filtered].sort((a, b) => {
+          let aValue: any;
+          let bValue: any;
+
+          // Get creator profiles
+          const aProfile = Array.isArray(a.creator_profiles)
+            ? a.creator_profiles.length > 0
+              ? a.creator_profiles[0]
+              : null
+            : a.creator_profiles || null;
+          const bProfile = Array.isArray(b.creator_profiles)
+            ? b.creator_profiles.length > 0
+              ? b.creator_profiles[0]
+              : null
+            : b.creator_profiles || null;
+
+          // Get values based on sort column
+          switch (sortColumn) {
+            case "contests_participated":
+              aValue = aProfile?.total_contests_participated || 0;
+              bValue = bProfile?.total_contests_participated || 0;
+              break;
+            case "contests_won":
+              aValue = aProfile?.total_contests_won || 0;
+              bValue = bProfile?.total_contests_won || 0;
+              break;
+            case "total_views":
+              aValue = aProfile?.total_views || 0;
+              bValue = bProfile?.total_views || 0;
+              break;
+            case "total_money_won":
+              aValue = aProfile?.total_money_won || 0;
+              bValue = bProfile?.total_money_won || 0;
+              break;
+            case "withdrawable_balance":
+              aValue = aProfile?.withdrawable_balance || 0;
+              bValue = bProfile?.withdrawable_balance || 0;
+              break;
+            case "total_submissions_made":
+              aValue = aProfile?.total_submissions_made || 0;
+              bValue = bProfile?.total_submissions_made || 0;
+              break;
+            case "total_submissions_won":
+              aValue = aProfile?.total_submissions_won || 0;
+              bValue = bProfile?.total_submissions_won || 0;
+              break;
+            default:
+              aValue = a.full_name?.toLowerCase() || "";
+              bValue = b.full_name?.toLowerCase() || "";
+          }
+
+          // Handle numeric vs string comparison
+          if (typeof aValue === "number" && typeof bValue === "number") {
+            return sortOrder === "asc" ? aValue - bValue : bValue - aValue;
+          } else {
+            if (sortOrder === "asc") {
+              return String(aValue).localeCompare(String(bValue));
+            } else {
+              return String(bValue).localeCompare(String(aValue));
+            }
+          }
+        });
+      } else if (sortOrder) {
+        // Fallback to full_name sorting if no column specified
+        filtered = [...filtered].sort((a, b) => {
+          const aValue = a.full_name?.toLowerCase() || "";
+          const bValue = b.full_name?.toLowerCase() || "";
+
+          if (sortOrder === "asc") {
+            return aValue.localeCompare(bValue);
+          } else {
+            return bValue.localeCompare(aValue);
+          }
+        });
+      }
     }
-    return rows;
-  }, [rows, activeTab]);
+
+    return filtered;
+  }, [rows, activeTab, sortOrder, sortColumn]);
 
   // Calculate counts for each tab
   const allUsersCount = rows.length;
@@ -364,7 +665,7 @@ export default function AdminUsersPage() {
   const hasNextPage = page < totalPages;
   const hasPreviousPage = page > 1;
 
-  // Reset to page 1 when tab changes
+  // Reset to page 1 when tab changes (sort state is preserved)
   useEffect(() => {
     setPage(1);
   }, [activeTab]);
@@ -387,27 +688,138 @@ export default function AdminUsersPage() {
     load();
   }, []);
 
+  // Read mode/compact flags from data attributes with immediate updates
+  useEffect(() => {
+    const checkFlags = () => {
+      const container = document.querySelector("[data-mode][data-compact]");
+      const modeElement = container || document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode && currentMode !== mode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    // Check immediately
+    checkFlags();
+
+    // Watch for changes in the data attributes with immediate callback
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (
+          mutation.type === "attributes" &&
+          mutation.attributeName === "data-mode"
+        ) {
+          checkFlags();
+        }
+      });
+    });
+
+    const targetNode =
+      document.querySelector("[data-mode][data-compact]") ||
+      document.querySelector("[data-mode]") ||
+      document.documentElement;
+
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode", "data-theme"],
+      });
+    }
+
+    // Also listen for storage events to catch theme changes from other tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "dashboard-mode" && e.newValue) {
+        const newMode = e.newValue as "light" | "dark";
+        if (newMode !== mode) {
+          setMode(newMode);
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [mode]);
+
+  // Additional effect to catch theme changes more immediately
+  useEffect(() => {
+    // Listen for custom theme change events that might be dispatched by the theme system
+    const handleThemeChange = (event: CustomEvent) => {
+      if (event.detail && event.detail.mode) {
+        const newMode = event.detail.mode as "light" | "dark";
+        if (newMode !== mode) {
+          setMode(newMode);
+        }
+      }
+    };
+
+    // Listen for the custom event
+    window.addEventListener("theme-change", handleThemeChange as EventListener);
+
+    // Also check for changes on a more frequent interval as a fallback
+    const intervalId = setInterval(() => {
+      const container = document.querySelector("[data-mode][data-compact]");
+      const modeElement =
+        container ||
+        document.querySelector("[data-mode]") ||
+        document.documentElement;
+      if (modeElement) {
+        const currentMode = (modeElement.getAttribute("data-mode") ||
+          modeElement.getAttribute("data-theme")) as "light" | "dark" | null;
+        if (currentMode && currentMode !== mode) {
+          setMode(currentMode);
+        }
+      }
+    }, 50); // Check every 50ms for faster response
+
+    return () => {
+      window.removeEventListener(
+        "theme-change",
+        handleThemeChange as EventListener
+      );
+      clearInterval(intervalId);
+    };
+  }, [mode]);
+
+  const isDark = mode === "dark";
+
   return (
     <div className="space-y-6">
-      <Card>
+      <Card
+        className={cn(
+          "rounded-xl shadow",
+          isDark ? "bg-[#170337]" : "bg-white"
+        )}
+      >
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Users Management</CardTitle>
-            <Button
-              variant="outline"
-              onClick={() => setShowColumnSettings(true)}
-              className="flex items-center gap-2"
-            >
-              <Settings className="w-4 h-4" />
-              Customize Tiles
-            </Button>
+            <CardTitle className={cn(isDark ? "text-white" : "text-black")}>
+              Users Management
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowColumnSettings(true)}
+                className="flex items-center gap-2"
+              >
+                <Settings className="w-4 h-4" />
+                Customize Tiles
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <EnhancedTabs value={activeTab} onValueChange={setActiveTab}>
             <EnhancedTabsList>
               <EnhancedTabsTrigger value="all">
-                All Users
+                Users
                 <Badge variant="secondary" className="ml-2">
                   {allUsersCount}
                 </Badge>
@@ -429,12 +841,24 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      <Card className="bg-white">
+      <Card
+        className={cn(
+          "rounded-xl shadow",
+          isDark ? "bg-[#170337]" : "bg-white"
+        )}
+      >
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader className="sticky top-0 bg-background z-10">
-                <TableRow>
+                <TableRow
+                  className={cn(
+                    "text-left border-b",
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                  )}
+                >
                   {isColumnVisible("id") && (
                     <TableHead className="whitespace-nowrap border-r">
                       ID
@@ -474,22 +898,220 @@ export default function AdminUsersPage() {
                       )}
                       {isColumnVisible("total_money_spent") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Total Money Spent
+                          <div className="flex items-center gap-2">
+                            <span>Total Money Spent</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_money_spent");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_money_spent" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_money_spent");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_money_spent" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("total_contests_run") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Total Contests Run
+                          <div className="flex items-center gap-2">
+                            <span>Total Contests Run</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_contests_run");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_contests_run" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_contests_run");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_contests_run" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("available_deposit_balance") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Available Deposit Balance
+                          <div className="flex items-center gap-2">
+                            <span>Available Deposit Balance</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("available_deposit_balance");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn ===
+                                      "available_deposit_balance" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("available_deposit_balance");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn ===
+                                      "available_deposit_balance" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("withdrawable_balance") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Withdrawable Balance
+                          <div className="flex items-center gap-2">
+                            <span>Withdrawable Balance</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("withdrawable_balance");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "withdrawable_balance" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("withdrawable_balance");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "withdrawable_balance" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("subscription_info") && (
@@ -518,37 +1140,380 @@ export default function AdminUsersPage() {
                       )}
                       {isColumnVisible("contests_participated") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Contests Participated
+                          <div className="flex items-center gap-2">
+                            <span>Contests Participated</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("contests_participated");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "contests_participated" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("contests_participated");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "contests_participated" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("contests_won") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Contests Won
+                          <div className="flex items-center gap-2">
+                            <span>Contests Won</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("contests_won");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "contests_won" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("contests_won");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "contests_won" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("total_views") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Total Views
+                          <div className="flex items-center gap-2">
+                            <span>Total Views</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_views");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_views" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_views");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_views" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("total_money_won") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Total Money Won
+                          <div className="flex items-center gap-2">
+                            <span>Total Money Won</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_money_won");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_money_won" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_money_won");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_money_won" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("withdrawable_balance") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Withdrawable Balance
+                          <div className="flex items-center gap-2">
+                            <span>Withdrawable Balance</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("withdrawable_balance");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "withdrawable_balance" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("withdrawable_balance");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "withdrawable_balance" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("total_submissions_made") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Total Submissions Made
+                          <div className="flex items-center gap-2">
+                            <span>Total Submissions Made</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_submissions_made");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_submissions_made" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_submissions_made");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_submissions_made" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("total_submissions_won") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Total Submissions Won
+                          <div className="flex items-center gap-2">
+                            <span>Total Submissions Won</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_submissions_won");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_submissions_won" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_submissions_won");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_submissions_won" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("date_of_birth") && (
@@ -610,6 +1575,11 @@ export default function AdminUsersPage() {
                           User Type
                         </TableHead>
                       )}
+                      {isColumnVisible("username") && (
+                        <TableHead className="whitespace-nowrap border-r">
+                          Username
+                        </TableHead>
+                      )}
                       {isColumnVisible("referral_code") && (
                         <TableHead className="whitespace-nowrap border-r">
                           Referral Code
@@ -622,37 +1592,326 @@ export default function AdminUsersPage() {
                       )}
                       {isColumnVisible("coins") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Coins
+                          <div className="flex items-center gap-2">
+                            <span>Coins</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("coins");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "coins" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("coins");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "coins" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("advertisers_referred") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Advertisers Referred
+                          <div className="flex items-center gap-2">
+                            <span>Advertisers Referred</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("advertisers_referred");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "advertisers_referred" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("advertisers_referred");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "advertisers_referred" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("creators_referred") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Creators Referred
-                        </TableHead>
-                      )}
-                      {isColumnVisible("username") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Username
+                          <div className="flex items-center gap-2">
+                            <span>Creators Referred</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("creators_referred");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "creators_referred" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("creators_referred");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "creators_referred" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("total_lifetime_coins") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Total Lifetime Coins
+                          <div className="flex items-center gap-2">
+                            <span>Total Lifetime Coins</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_lifetime_coins");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_lifetime_coins" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("total_lifetime_coins");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "total_lifetime_coins" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("affiliate_earnings") && (
                         <TableHead className="whitespace-nowrap border-r">
-                          Affiliate Earnings
+                          <div className="flex items-center gap-2">
+                            <span>Affiliate Earnings</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("affiliate_earnings");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "affiliate_earnings" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("affiliate_earnings");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "affiliate_earnings" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                       {isColumnVisible("other_earnings") && (
                         <TableHead className="whitespace-nowrap">
-                          Other Earnings
+                          <div className="flex items-center gap-2">
+                            <span>Other Earnings</span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("other_earnings");
+                                    setSortOrder("asc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "other_earnings" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Ascending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn("other_earnings");
+                                    setSortOrder("desc");
+                                  }}
+                                  className={cn(
+                                    sortColumn === "other_earnings" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
+                                  )}
+                                >
+                                  Sort by Descending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSortColumn(null);
+                                    setSortOrder(null);
+                                  }}
+                                >
+                                  Clear Sort
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableHead>
                       )}
                     </>
@@ -1137,6 +2396,11 @@ export default function AdminUsersPage() {
                                 </Badge>
                               </TableCell>
                             )}
+                            {isColumnVisible("username") && (
+                              <TableCell className="whitespace-nowrap border-r">
+                                {r.username || "N/A"}
+                              </TableCell>
+                            )}
                             {isColumnVisible("referral_code") && (
                               <TableCell className="font-mono text-xs whitespace-nowrap border-r">
                                 {r.referral_code || "-"}
@@ -1160,11 +2424,6 @@ export default function AdminUsersPage() {
                             {isColumnVisible("creators_referred") && (
                               <TableCell className="whitespace-nowrap border-r">
                                 {r.creators_referred || 0}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("username") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {r.username || "N/A"}
                               </TableCell>
                             )}
                             {isColumnVisible("total_lifetime_coins") && (
@@ -1211,14 +2470,35 @@ export default function AdminUsersPage() {
       </Card>
 
       {/* Column Customization Dialog */}
-      <Dialog open={showColumnSettings} onOpenChange={setShowColumnSettings}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      <Dialog
+        open={showColumnSettings}
+        onOpenChange={setShowColumnSettings}
+        isdark={isDark}
+      >
+        <DialogContent
+          className={cn(
+            "max-w-4xl max-h-[80vh] overflow-y-auto",
+            isDark ? "text-white" : "text-gray-900"
+          )}
+        >
           <DialogHeader>
-            <DialogTitle>Customize Columns</DialogTitle>
-            <DialogDescription>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-900")}
+            >
+              
+              {activeTab === "all"
+                ? "Users"
+                : activeTab === "advertisers"
+                ? "Advertisers"
+                : "Creators"}{" "}
+              Columns
+            </DialogTitle>
+            <DialogDescription
+              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            >
               Select which columns to display in the{" "}
               {activeTab === "all"
-                ? "All Users"
+                ? "Users"
                 : activeTab === "advertisers"
                 ? "Advertisers"
                 : "Creators"}{" "}
@@ -1236,7 +2516,11 @@ export default function AdminUsersPage() {
                       className={cn(
                         "p-3 border rounded-lg cursor-pointer transition-all",
                         isVisible
-                          ? "bg-purple-50 border-purple-200 text-gray-900"
+                          ? isDark
+                            ? "bg-[#391A6A] border-purple-500 text-white"
+                            : "bg-purple-50 border-purple-200 text-gray-900"
+                          : isDark
+                          ? "border-gray-600 hover:bg-[#2A1249] text-gray-300"
                           : "border-gray-300 hover:bg-gray-100 text-gray-700"
                       )}
                       onClick={() => toggleColumn(column.id)}
@@ -1247,6 +2531,8 @@ export default function AdminUsersPage() {
                             "w-4 h-4 rounded border-2 flex items-center justify-center",
                             isVisible
                               ? "bg-purple-600 border-purple-600"
+                              : isDark
+                              ? "border-gray-500"
                               : "border-gray-400"
                           )}
                         >
