@@ -503,7 +503,6 @@ export default function AdminUsersPage() {
     return { rank: 1, value: v };
   };
 
-
   const normalizeForAlphabetSort = (value: string | null | undefined) => {
     if (!value) return "";
     const lower = value.toLowerCase();
@@ -543,7 +542,7 @@ export default function AdminUsersPage() {
           const getReferralSortMeta = (
             value: string | null | undefined
           ): { rank: number; value: string } => {
-            if (!value) return { rank: 2, value: "" }; 
+            if (!value) return { rank: 2, value: "" };
             const vRaw = value.toLowerCase();
             const v = vRaw.replace(/^_+/, "");
             const firstChar = v.charAt(0);
@@ -1043,8 +1042,22 @@ export default function AdminUsersPage() {
               bValue = bProfile?.total_submissions_won || 0;
               break;
             case "date_of_birth":
-              aValue = aProfile?.date_of_birth || "";
-              bValue = bProfile?.date_of_birth || "";
+              // Convert dates to timestamps for proper chronological sorting
+              // Use Number.MAX_SAFE_INTEGER as sentinel for empty dates to ensure they sort last
+              const aDate = aProfile?.date_of_birth
+                ? new Date(aProfile.date_of_birth)
+                : null;
+              const bDate = bProfile?.date_of_birth
+                ? new Date(bProfile.date_of_birth)
+                : null;
+              aValue =
+                aDate && !isNaN(aDate.getTime())
+                  ? aDate.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              bValue =
+                bDate && !isNaN(bDate.getTime())
+                  ? bDate.getTime()
+                  : Number.MAX_SAFE_INTEGER;
               break;
             case "gender":
               aValue = aProfile?.gender?.toLowerCase() || "";
@@ -1085,6 +1098,45 @@ export default function AdminUsersPage() {
             default:
               aValue = a.full_name?.toLowerCase() || "";
               bValue = b.full_name?.toLowerCase() || "";
+          }
+
+          // Columns where null/empty should always be last
+          const nullsLastColumns = [
+            "date_of_birth",
+            "gender",
+            "country",
+            "state",
+            "city",
+            "address",
+            "language",
+            "categories",
+            "subcategories",
+            "interests",
+          ];
+
+          if (nullsLastColumns.includes(sortColumn)) {
+            // Check if values are empty/null
+            const aEmpty =
+              typeof aValue === "number"
+                ? aValue === Number.MAX_SAFE_INTEGER
+                : !aValue || String(aValue).trim() === "";
+            const bEmpty =
+              typeof bValue === "number"
+                ? bValue === Number.MAX_SAFE_INTEGER // For date_of_birth, MAX_SAFE_INTEGER means empty
+                : !bValue || String(bValue).trim() === "";
+
+            // If both are empty, they are equal
+            if (aEmpty && bEmpty) {
+              return 0;
+            }
+
+            // If only one is empty, it goes to the end (regardless of sort order)
+            if (aEmpty !== bEmpty) {
+              // non-empty (false) comes before empty (true)
+              return aEmpty ? 1 : -1;
+            }
+
+            // If neither is empty, proceed with normal comparison
           }
 
           // Handle numeric vs string comparison
@@ -1981,24 +2033,19 @@ export default function AdminUsersPage() {
                         </TableHead>
                       )}
                       {isColumnVisible("date_of_birth") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Date of Birth
-                        </TableHead>
+                        <SortableHeader
+                          columnId="date_of_birth"
+                          label="Date of Birth"
+                        />
                       )}
                       {isColumnVisible("gender") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Gender
-                        </TableHead>
+                        <SortableHeader columnId="gender" label="Gender" />
                       )}
                       {isColumnVisible("country") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          Country
-                        </TableHead>
+                        <SortableHeader columnId="country" label="Country" />
                       )}
                       {isColumnVisible("state") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          State
-                        </TableHead>
+                        <SortableHeader columnId="state" label="State" />
                       )}
                       {isColumnVisible("city") && (
                         <SortableHeader columnId="city" label="City" />
