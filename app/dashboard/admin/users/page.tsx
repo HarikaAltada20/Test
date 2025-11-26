@@ -2485,7 +2485,6 @@ export default function AdminUsersPage() {
             <DialogTitle
               className={cn(isDark ? "text-white" : "text-gray-900")}
             >
-              
               {activeTab === "all"
                 ? "Users"
                 : activeTab === "advertisers"
@@ -2556,23 +2555,46 @@ export default function AdminUsersPage() {
       <Dialog
         open={isSubscriptionDialogOpen}
         onOpenChange={setIsSubscriptionDialogOpen}
+        isdark={isDark}
       >
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent
+          className={cn(
+            "max-w-2xl max-h-[80vh] overflow-y-auto",
+            isDark ? "text-white" : "text-gray-900"
+          )}
+        >
           <DialogHeader>
-            <DialogTitle>Subscription Information</DialogTitle>
-            <DialogDescription>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-900")}
+            >
+              Subscription Information
+            </DialogTitle>
+            <DialogDescription
+              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            >
               Detailed subscription information for this advertiser
             </DialogDescription>
           </DialogHeader>
           <div className="mt-4">
             {selectedSubscriptionInfo ? (
-              <div className="bg-muted p-4 rounded-lg">
+              <div
+                className={cn(
+                  "p-4 rounded-lg",
+                  isDark
+                    ? "bg-[#391A6A] text-gray-200"
+                    : "bg-muted text-gray-900"
+                )}
+              >
                 <pre className="text-xs overflow-auto whitespace-pre-wrap break-words">
                   {JSON.stringify(selectedSubscriptionInfo, null, 2)}
                 </pre>
               </div>
             ) : (
-              <p className="text-muted-foreground">
+              <p
+                className={cn(
+                  isDark ? "text-gray-300" : "text-muted-foreground"
+                )}
+              >
                 No subscription information available
               </p>
             )}
@@ -2583,11 +2605,23 @@ export default function AdminUsersPage() {
       <Dialog
         open={isSubcategoriesDialogOpen}
         onOpenChange={setIsSubcategoriesDialogOpen}
+        isdark={isDark}
       >
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogContent
+          className={cn(
+            "max-w-3xl max-h-[80vh] overflow-y-auto",
+            isDark ? "text-white" : "text-gray-900"
+          )}
+        >
           <DialogHeader>
-            <DialogTitle>Subcategories</DialogTitle>
-            <DialogDescription>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-900")}
+            >
+              Subcategories
+            </DialogTitle>
+            <DialogDescription
+              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            >
               Complete list of subcategories for this creator
             </DialogDescription>
           </DialogHeader>
@@ -2706,7 +2740,11 @@ export default function AdminUsersPage() {
 
               if (!hasOrganizedSubcategories && !hasFlatSubcategories) {
                 return (
-                  <p className="text-muted-foreground">
+                  <p
+                    className={cn(
+                      isDark ? "text-gray-300" : "text-muted-foreground"
+                    )}
+                  >
                     No subcategories available
                   </p>
                 );
@@ -2716,7 +2754,12 @@ export default function AdminUsersPage() {
                 <div className="space-y-6">
                   {/* Summary */}
                   <div>
-                    <span className="text-sm font-medium">
+                    <span
+                      className={cn(
+                        "text-sm font-medium",
+                        isDark ? "text-gray-200" : "text-gray-900"
+                      )}
+                    >
                       Total: {totalCount} subcategories
                     </span>
                   </div>
@@ -2730,7 +2773,12 @@ export default function AdminUsersPage() {
 
                         return (
                           <div key={category} className="space-y-2">
-                            <h3 className="text-base font-semibold text-foreground capitalize">
+                            <h3
+                              className={cn(
+                                "text-base font-semibold capitalize",
+                                isDark ? "text-white" : "text-foreground"
+                              )}
+                            >
                               {category}
                             </h3>
                             <div className="flex flex-wrap gap-2">
@@ -2738,7 +2786,12 @@ export default function AdminUsersPage() {
                                 <Badge
                                   key={index}
                                   variant="secondary"
-                                  className="text-sm py-1.5 px-3 font-normal"
+                                  className={cn(
+                                    "text-sm py-1.5 px-3 font-normal",
+                                    isDark
+                                      ? "bg-[#391A6A] text-gray-200 border-purple-500"
+                                      : ""
+                                  )}
                                 >
                                   {subcat}
                                 </Badge>
@@ -2753,7 +2806,12 @@ export default function AdminUsersPage() {
                   {/* Flat subcategories (if any that couldn't be organized) */}
                   {hasFlatSubcategories && (
                     <div className="space-y-2">
-                      <h3 className="text-base font-semibold text-foreground">
+                      <h3
+                        className={cn(
+                          "text-base font-semibold",
+                          isDark ? "text-white" : "text-foreground"
+                        )}
+                      >
                         Other Subcategories
                       </h3>
                       <div className="flex flex-wrap gap-2">
@@ -2761,7 +2819,12 @@ export default function AdminUsersPage() {
                           <Badge
                             key={index}
                             variant="secondary"
-                            className="text-sm py-1.5 px-3 font-normal"
+                            className={cn(
+                              "text-sm py-1.5 px-3 font-normal",
+                              isDark
+                                ? "bg-[#391A6A] text-gray-200 border-purple-500"
+                                : ""
+                            )}
                           >
                             {subcat}
                           </Badge>
@@ -2779,11 +2842,23 @@ export default function AdminUsersPage() {
       <Dialog
         open={isInterestsDialogOpen}
         onOpenChange={setIsInterestsDialogOpen}
+        isdark={isDark}
       >
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogContent
+          className={cn(
+            "max-w-3xl max-h-[80vh] overflow-y-auto",
+            isDark ? "text-white" : "text-gray-900"
+          )}
+        >
           <DialogHeader>
-            <DialogTitle>All Interests</DialogTitle>
-            <DialogDescription>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-900")}
+            >
+              All Interests
+            </DialogTitle>
+            <DialogDescription
+              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            >
               Complete list of interests for this creator
             </DialogDescription>
           </DialogHeader>
@@ -2818,7 +2893,11 @@ export default function AdminUsersPage() {
 
               if (totalCount === 0) {
                 return (
-                  <p className="text-muted-foreground">
+                  <p
+                    className={cn(
+                      isDark ? "text-gray-300" : "text-muted-foreground"
+                    )}
+                  >
                     No interests available
                   </p>
                 );
@@ -2828,7 +2907,12 @@ export default function AdminUsersPage() {
                 <div className="space-y-6">
                   {/* Summary */}
                   <div>
-                    <span className="text-sm font-medium">
+                    <span
+                      className={cn(
+                        "text-sm font-medium",
+                        isDark ? "text-gray-200" : "text-gray-900"
+                      )}
+                    >
                       Total: {totalCount} interests
                     </span>
                   </div>
@@ -2839,7 +2923,12 @@ export default function AdminUsersPage() {
                       <Badge
                         key={index}
                         variant="secondary"
-                        className="text-sm py-1.5 px-3 font-normal"
+                        className={cn(
+                          "text-sm py-1.5 px-3 font-normal",
+                          isDark
+                            ? "bg-[#391A6A] text-gray-200 border-purple-500"
+                            : ""
+                        )}
                       >
                         {interest}
                       </Badge>
