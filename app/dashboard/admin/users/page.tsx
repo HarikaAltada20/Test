@@ -503,6 +503,19 @@ export default function AdminUsersPage() {
     return { rank: 1, value: v };
   };
 
+
+  const normalizeForAlphabetSort = (value: string | null | undefined) => {
+    if (!value) return "";
+    const lower = value.toLowerCase();
+    // Find the first Unicode letter (covers fancy script letters ).
+    const match = lower.match(/\p{L}/u);
+    if (!match || match.index === undefined) {
+      // No letter found – fall back to the full lowercased string.
+      return lower;
+    }
+    return lower.slice(match.index);
+  };
+
   // Filter by tab
   const tabFiltered = useMemo(() => {
     let filtered = rows;
@@ -530,7 +543,7 @@ export default function AdminUsersPage() {
           const getReferralSortMeta = (
             value: string | null | undefined
           ): { rank: number; value: string } => {
-            if (!value) return { rank: 2, value: "" }; // null/empty last
+            if (!value) return { rank: 2, value: "" }; 
             const vRaw = value.toLowerCase();
             const v = vRaw.replace(/^_+/, "");
             const firstChar = v.charAt(0);
@@ -972,11 +985,9 @@ export default function AdminUsersPage() {
                 if (!ig) return "";
                 try {
                   const account = typeof ig === "string" ? JSON.parse(ig) : ig;
-                  return (
-                    account?.name_of_account?.toLowerCase() ||
-                    account?.username?.toLowerCase() ||
-                    ""
-                  );
+                  const rawName =
+                    account?.name_of_account || account?.username || "";
+                  return normalizeForAlphabetSort(rawName);
                 } catch {
                   return "";
                 }
