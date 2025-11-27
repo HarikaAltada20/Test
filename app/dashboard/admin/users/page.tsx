@@ -1504,7 +1504,9 @@ export default function AdminUsersPage() {
         )}
       >
         <CardContent className="px-6">
-          <div className="max-h-[calc(100vh-300px)] [&>div]:max-h-[calc(100vh-300px)] [&>div]:overflow-y-auto [&>div]:overflow-x-auto">
+          <div className={cn(
+            stickyHeader ? "max-h-[calc(100vh-200px)] [&>div]:max-h-[calc(100vh-200px)] [&>div]:overflow-y-auto [&>div]:overflow-x-auto" : "[&>div]:overflow-x-auto"
+          )}>
             <Table>
               <TableHeader
                 className={cn(
