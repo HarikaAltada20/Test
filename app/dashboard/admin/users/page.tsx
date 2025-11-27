@@ -4394,6 +4394,46 @@ export default function AdminUsersPage() {
                           </SelectItem>
                         </SelectContent>
                       </Select>
+                    ) : [
+                        "affiliate_earnings",
+                        "other_earnings",
+                        "total_money_spent",
+                        "available_deposit_balance",
+                        "withdrawable_balance",
+                        "total_money_won",
+                      ].includes(filter.column) ? (
+                      <div className="flex">
+                        <span
+                          className={cn(
+                            "inline-flex items-center justify-center px-2 text-xs border border-r-0 rounded-l-md",
+                            isDark
+                              ? "bg-[#07031D] border-gray-700 text-white"
+                              : "bg-gray-50 text-gray-700 border-gray-300"
+                          )}
+                        >
+                          $
+                        </span>
+                        <Input
+                          type="text"
+                          value={filter.value}
+                          onChange={(e) => {
+                            setFilters(
+                              filters.map((f) =>
+                                f.id === filter.id
+                                  ? { ...f, value: e.target.value }
+                                  : f
+                              )
+                            );
+                          }}
+                          placeholder="Enter amount..."
+                          className={cn(
+                            "rounded-l-none border-l-0 flex-1",
+                            isDark
+                              ? "bg-[#07031D] border-gray-700 text-white"
+                              : "bg-white border-gray-300"
+                          )}
+                        />
+                      </div>
                     ) : (
                       <Input
                         type={
