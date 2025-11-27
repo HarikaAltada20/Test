@@ -26,15 +26,35 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Settings, X, Check, ChevronDown } from "lucide-react";
+import {
+  Settings,
+  X,
+  Check,
+  ChevronDown,
+  Filter,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { getSubscriptionPlanById } from "@/lib/subscription-utils-client";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  getAllSubscriptionPlans,
+  getSubscriptionPlanById,
+} from "@/lib/subscription-utils-client";
 
 type AdvertiserProfile = {
   id: string;
@@ -236,6 +256,8 @@ const allColumns = {
     { id: "total_lifetime_coins", label: "Total Lifetime Coins" },
     { id: "affiliate_earnings", label: "Affiliate Earnings" },
     { id: "other_earnings", label: "Other Earnings" },
+    { id: "created_at", label: "Created At" },
+    { id: "updated_at", label: "Updated At" },
   ],
   advertisers: [
     { id: "id", label: "ID" },
@@ -250,6 +272,8 @@ const allColumns = {
     { id: "available_deposit_balance", label: "Available Deposit Balance" },
     { id: "withdrawable_balance", label: "Withdrawable Balance" },
     { id: "subscription_info", label: "Subscription Info" },
+    { id: "created_at", label: "Created At" },
+    { id: "updated_at", label: "Updated At" },
   ],
   creators: [
     { id: "id", label: "ID" },
@@ -276,6 +300,8 @@ const allColumns = {
     { id: "categories", label: "Categories" },
     { id: "subcategories", label: "Subcategories" },
     { id: "interests", label: "Interests" },
+    { id: "created_at", label: "Created At" },
+    { id: "updated_at", label: "Updated At" },
   ],
 };
 
@@ -337,6 +363,11 @@ export default function AdminUsersPage() {
     useState(false);
   const [selectedInterests, setSelectedInterests] = useState<any | null>(null);
   const [isInterestsDialogOpen, setIsInterestsDialogOpen] = useState(false);
+  const [editingUserType, setEditingUserType] = useState<string | null>(null);
+  const [updatingUserType, setUpdatingUserType] = useState<string | null>(null);
+  const [availableSubscriptionPlans, setAvailableSubscriptionPlans] = useState<
+    { id: string; name: string }[]
+  >([]);
   // Sort state per tab - each tab maintains its own sort state
   const [sortState, setSortState] = useState<
     Record<string, { column: string | null; order: "asc" | "desc" | null }>
@@ -345,6 +376,16 @@ export default function AdminUsersPage() {
     advertisers: { column: null, order: null },
     creators: { column: null, order: null },
   });
+
+  // Load all subscription plans from constants for dropdown filtering
+  useEffect(() => {
+    const allPlans = getAllSubscriptionPlans();
+    const plansArray = allPlans.map((plan: any) => ({
+      id: plan.productId || plan.id || "",
+      name: plan.displayName || plan.name || plan.id || "Unknown",
+    }));
+    setAvailableSubscriptionPlans(plansArray);
+  }, []);
 
   // Helper functions to get/set sort state for current tab
   const getSortState = () => {
@@ -398,7 +439,13 @@ export default function AdminUsersPage() {
     label: string;
     className?: string;
   }) => (
-    <TableHead className={cn("whitespace-nowrap border-r", className)}>
+    <TableHead
+      className={cn(
+        "whitespace-nowrap border-r",
+        isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+        className
+      )}
+    >
       <div className="flex items-center gap-2">
         <span>{label}</span>
         <DropdownMenu>
@@ -453,6 +500,18 @@ export default function AdminUsersPage() {
     creators: new Set(allColumns.creators.map((col) => col.id)),
   });
   const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [stickyHeader, setStickyHeader] = useState(true);
+
+  // Filter state
+  type FilterType = {
+    id: string;
+    column: string;
+    value: string;
+  };
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [filters, setFilters] = useState<FilterType[]>([]);
+  const [emptyFilterColumn, setEmptyFilterColumn] = useState<string>("");
+  const [emptyFilterValue, setEmptyFilterValue] = useState<string>("");
 
   // Toggle column visibility
   const toggleColumn = (columnId: string) => {
@@ -513,6 +572,336 @@ export default function AdminUsersPage() {
       return lower;
     }
     return lower.slice(match.index);
+  };
+
+  // Helper function to get column value from a row for filtering
+  const getColumnValue = (row: User, columnId: string): any => {
+    switch (columnId) {
+      case "id":
+        return row.id;
+      case "full_name":
+        return row.full_name;
+      case "email":
+        return row.email;
+      case "username":
+        return row.username;
+      case "user_type":
+        return row.user_type;
+      case "referral_code":
+        return row.referral_code;
+      case "referred_by":
+        return row.referred_by;
+      case "coins":
+        return row.coins;
+      case "advertisers_referred":
+        return row.advertisers_referred;
+      case "creators_referred":
+        return row.creators_referred;
+      case "total_lifetime_coins":
+        return row.total_lifetime_coins_earned;
+      case "affiliate_earnings":
+        return row.affiliate_earnings;
+      case "other_earnings":
+        return row.other_earnings;
+      case "created_at":
+        return row.created_at;
+      case "updated_at":
+        return row.updated_at;
+      // Advertiser-specific columns
+      case "company_name":
+        if (row.advertiser_profiles) {
+          const profiles = Array.isArray(row.advertiser_profiles)
+            ? row.advertiser_profiles
+            : [row.advertiser_profiles];
+          return profiles[0]?.company_name;
+        }
+        return null;
+      case "website_url":
+        if (row.advertiser_profiles) {
+          const profiles = Array.isArray(row.advertiser_profiles)
+            ? row.advertiser_profiles
+            : [row.advertiser_profiles];
+          return profiles[0]?.website_url;
+        }
+        return null;
+      case "total_money_spent":
+        if (row.advertiser_profiles) {
+          const profiles = Array.isArray(row.advertiser_profiles)
+            ? row.advertiser_profiles
+            : [row.advertiser_profiles];
+          return profiles[0]?.total_money_spent;
+        }
+        return null;
+      case "total_contests_run":
+        if (row.advertiser_profiles) {
+          const profiles = Array.isArray(row.advertiser_profiles)
+            ? row.advertiser_profiles
+            : [row.advertiser_profiles];
+          return profiles[0]?.total_contests_run;
+        }
+        return null;
+      case "available_deposit_balance":
+        if (row.advertiser_profiles) {
+          const profiles = Array.isArray(row.advertiser_profiles)
+            ? row.advertiser_profiles
+            : [row.advertiser_profiles];
+          return profiles[0]?.available_deposit_balance;
+        }
+        return null;
+      case "withdrawable_balance":
+        if (row.advertiser_profiles) {
+          const profiles = Array.isArray(row.advertiser_profiles)
+            ? row.advertiser_profiles
+            : [row.advertiser_profiles];
+          return profiles[0]?.withdrawable_balance;
+        }
+        // Check creator profiles too
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.withdrawable_balance;
+        }
+        return null;
+      case "subscription_info":
+        if (row.advertiser_profiles) {
+          const profiles = Array.isArray(row.advertiser_profiles)
+            ? row.advertiser_profiles
+            : [row.advertiser_profiles];
+          return profiles[0]?.subscription_info;
+        }
+        return null;
+      // Creator-specific columns
+      case "contests_participated":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.total_contests_participated;
+        }
+        return null;
+      case "contests_won":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.total_contests_won;
+        }
+        return null;
+      case "total_views":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.total_views;
+        }
+        return null;
+      case "total_money_won":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.total_money_won;
+        }
+        return null;
+      case "total_submissions_made":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.total_submissions_made;
+        }
+        return null;
+      case "total_submissions_won":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.total_submissions_won;
+        }
+        return null;
+      case "date_of_birth":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.date_of_birth;
+        }
+        return null;
+      case "gender":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.gender;
+        }
+        return null;
+      case "country":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.country;
+        }
+        return null;
+      case "state":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.state;
+        }
+        return null;
+      case "city":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.city;
+        }
+        return null;
+      case "youtube_account":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          const profile = profiles[0];
+          const yt = profile?.youtube_account;
+          if (!yt) return null;
+          try {
+            const account = typeof yt === "string" ? JSON.parse(yt) : yt;
+            return (
+              account?.channel_title || account?.channel_custom_url || null
+            );
+          } catch {
+            return null;
+          }
+        }
+        return null;
+      case "instagram_account":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          const profile = profiles[0];
+          const ig = profile?.instagram_account;
+          if (!ig) return null;
+          try {
+            const account = typeof ig === "string" ? JSON.parse(ig) : ig;
+            return account?.name_of_account || account?.username || null;
+          } catch {
+            return null;
+          }
+        }
+        return null;
+      case "language":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          const profile = profiles[0];
+          const langs = profile?.languages;
+          if (!langs) return null;
+          if (Array.isArray(langs)) {
+            return langs.join(", ");
+          }
+          return typeof langs === "string" ? langs : JSON.stringify(langs);
+        }
+        return null;
+      case "categories":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          const profile = profiles[0];
+          const categories = profile?.categories;
+          if (!categories) return null;
+          if (Array.isArray(categories)) {
+            return categories.join(", ");
+          }
+          if (typeof categories === "string") {
+            return categories;
+          }
+          return JSON.stringify(categories);
+        }
+        return null;
+      case "subcategories":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          const profile = profiles[0];
+          const subcategories = profile?.subcategories;
+          if (!subcategories) return null;
+
+          let subcategoriesArray: string[] = [];
+          if (Array.isArray(subcategories)) {
+            subcategoriesArray = subcategories.map((item: any) => {
+              if (typeof item === "object" && item !== null) {
+                if (item.category && item.subcategory) {
+                  return `${item.category}: ${item.subcategory}`;
+                }
+                return JSON.stringify(item);
+              }
+              return String(item);
+            });
+          } else if (typeof subcategories === "string") {
+            try {
+              const parsed = JSON.parse(subcategories);
+              if (Array.isArray(parsed)) {
+                subcategoriesArray = parsed.map((item: any) => {
+                  if (typeof item === "object" && item !== null) {
+                    if (item.category && item.subcategory) {
+                      return `${item.category}: ${item.subcategory}`;
+                    }
+                    return JSON.stringify(item);
+                  }
+                  return String(item);
+                });
+              } else {
+                subcategoriesArray = [subcategories];
+              }
+            } catch {
+              subcategoriesArray = subcategories
+                .split(",")
+                .map((s) => s.trim());
+            }
+          } else {
+            subcategoriesArray = [JSON.stringify(subcategories)];
+          }
+
+          return subcategoriesArray.join(", ");
+        }
+        return null;
+      case "interests":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          const profile = profiles[0];
+          const interests = profile?.interests;
+          if (!interests) return null;
+
+          let interestsArray: string[] = [];
+          if (Array.isArray(interests)) {
+            interestsArray = interests;
+          } else if (typeof interests === "string") {
+            try {
+              const parsed = JSON.parse(interests);
+              interestsArray = Array.isArray(parsed) ? parsed : [interests];
+            } catch {
+              interestsArray = interests.split(",").map((s) => s.trim());
+            }
+          } else {
+            interestsArray = [JSON.stringify(interests)];
+          }
+
+          return interestsArray.join(", ");
+        }
+        return null;
+      default:
+        return null;
+    }
   };
 
   // Filter by tab
@@ -699,6 +1088,32 @@ export default function AdminUsersPage() {
               aValue = a.other_earnings || 0;
               bValue = b.other_earnings || 0;
               break;
+            case "created_at":
+              // Convert dates to timestamps for proper chronological sorting
+              const aCreatedDate = a.created_at ? new Date(a.created_at) : null;
+              const bCreatedDate = b.created_at ? new Date(b.created_at) : null;
+              aValue =
+                aCreatedDate && !isNaN(aCreatedDate.getTime())
+                  ? aCreatedDate.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              bValue =
+                bCreatedDate && !isNaN(bCreatedDate.getTime())
+                  ? bCreatedDate.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              break;
+            case "updated_at":
+              // Convert dates to timestamps for proper chronological sorting
+              const aUpdatedDate = a.updated_at ? new Date(a.updated_at) : null;
+              const bUpdatedDate = b.updated_at ? new Date(b.updated_at) : null;
+              aValue =
+                aUpdatedDate && !isNaN(aUpdatedDate.getTime())
+                  ? aUpdatedDate.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              bValue =
+                bUpdatedDate && !isNaN(bUpdatedDate.getTime())
+                  ? bUpdatedDate.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              break;
             default:
               aValue = a.full_name?.toLowerCase() || "";
               bValue = b.full_name?.toLowerCase() || "";
@@ -843,6 +1258,40 @@ export default function AdminUsersPage() {
             case "subscription_info":
               aValue = getSubscriptionPlanName(aProfile?.subscription_info);
               bValue = getSubscriptionPlanName(bProfile?.subscription_info);
+              break;
+            case "created_at":
+              // Convert dates to timestamps for proper chronological sorting
+              const aCreatedDateAdv = a.created_at
+                ? new Date(a.created_at)
+                : null;
+              const bCreatedDateAdv = b.created_at
+                ? new Date(b.created_at)
+                : null;
+              aValue =
+                aCreatedDateAdv && !isNaN(aCreatedDateAdv.getTime())
+                  ? aCreatedDateAdv.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              bValue =
+                bCreatedDateAdv && !isNaN(bCreatedDateAdv.getTime())
+                  ? bCreatedDateAdv.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              break;
+            case "updated_at":
+              // Convert dates to timestamps for proper chronological sorting
+              const aUpdatedDateAdv = a.updated_at
+                ? new Date(a.updated_at)
+                : null;
+              const bUpdatedDateAdv = b.updated_at
+                ? new Date(b.updated_at)
+                : null;
+              aValue =
+                aUpdatedDateAdv && !isNaN(aUpdatedDateAdv.getTime())
+                  ? aUpdatedDateAdv.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              bValue =
+                bUpdatedDateAdv && !isNaN(bUpdatedDateAdv.getTime())
+                  ? bUpdatedDateAdv.getTime()
+                  : Number.MAX_SAFE_INTEGER;
               break;
             default:
               aValue = a.full_name?.toLowerCase() || "";
@@ -1095,6 +1544,40 @@ export default function AdminUsersPage() {
               aValue = getJoined(aProfile?.interests);
               bValue = getJoined(bProfile?.interests);
               break;
+            case "created_at":
+              // Convert dates to timestamps for proper chronological sorting
+              const aCreatedDateCreator = a.created_at
+                ? new Date(a.created_at)
+                : null;
+              const bCreatedDateCreator = b.created_at
+                ? new Date(b.created_at)
+                : null;
+              aValue =
+                aCreatedDateCreator && !isNaN(aCreatedDateCreator.getTime())
+                  ? aCreatedDateCreator.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              bValue =
+                bCreatedDateCreator && !isNaN(bCreatedDateCreator.getTime())
+                  ? bCreatedDateCreator.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              break;
+            case "updated_at":
+              // Convert dates to timestamps for proper chronological sorting
+              const aUpdatedDateCreator = a.updated_at
+                ? new Date(a.updated_at)
+                : null;
+              const bUpdatedDateCreator = b.updated_at
+                ? new Date(b.updated_at)
+                : null;
+              aValue =
+                aUpdatedDateCreator && !isNaN(aUpdatedDateCreator.getTime())
+                  ? aUpdatedDateCreator.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              bValue =
+                bUpdatedDateCreator && !isNaN(bUpdatedDateCreator.getTime())
+                  ? bUpdatedDateCreator.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              break;
             default:
               aValue = a.full_name?.toLowerCase() || "";
               bValue = b.full_name?.toLowerCase() || "";
@@ -1112,6 +1595,8 @@ export default function AdminUsersPage() {
             "categories",
             "subcategories",
             "interests",
+            "created_at",
+            "updated_at",
           ];
 
           if (nullsLastColumns.includes(sortColumn)) {
@@ -1165,8 +1650,106 @@ export default function AdminUsersPage() {
       }
     }
 
+    // Apply filters
+    if (filters.length > 0) {
+      filtered = filtered.filter((row) => {
+        return filters.every((filter) => {
+          if (!filter.value.trim()) return true; // Skip empty filters
+
+          const columnValue = getColumnValue(row, filter.column);
+          const rawFilterValue = filter.value.trim();
+          const filterValue = rawFilterValue.toLowerCase();
+
+          // Handle different data types
+          if (columnValue === null || columnValue === undefined) {
+            return false;
+          }
+
+          let columnValueForFiltering: any = columnValue;
+
+          // Exact numeric match for integer count columns (e.g. total_submissions_won)
+          const integerCountColumns = [
+            "coins",
+            "advertisers_referred",
+            "creators_referred",
+            "total_lifetime_coins",
+            "total_contests_run",
+            "contests_participated",
+            "contests_won",
+            "total_views",
+            "total_submissions_made",
+            "total_submissions_won",
+          ];
+
+          if (integerCountColumns.includes(filter.column)) {
+            const numericFilter = Number(rawFilterValue);
+            const numericColumn = Number(columnValue);
+            if (!Number.isNaN(numericFilter) && !Number.isNaN(numericColumn)) {
+              return numericColumn === numericFilter;
+            }
+          }
+
+          // Special handling for monetary fields that are stored in cents but displayed in dollars
+          const centBasedMoneyColumns = [
+            "total_money_spent",
+            "available_deposit_balance",
+            "withdrawable_balance",
+            "total_money_won",
+            "affiliate_earnings",
+            "other_earnings",
+          ];
+
+          if (centBasedMoneyColumns.includes(filter.column)) {
+            const numericColumn = Number(columnValue);
+            if (!Number.isNaN(numericColumn)) {
+              // Convert cents to a fixed 2-decimal dollar string (e.g. 246 -> "2.46")
+              columnValueForFiltering = (numericColumn / 100).toFixed(2);
+
+              const columnValueStr = String(
+                columnValueForFiltering
+              ).toLowerCase();
+
+              // For money columns, use prefix match so typing "4" only matches values like "4.00", "40.00", "4.50", etc.
+              return columnValueStr.startsWith(filterValue);
+            }
+          }
+
+          // Special handling for subscription_info: filter by plan name using helper
+          if (filter.column === "subscription_info") {
+            const planName = (() => {
+              if (!columnValue) return "";
+              try {
+                const info =
+                  typeof columnValue === "string"
+                    ? JSON.parse(columnValue)
+                    : columnValue;
+
+                if (!info?.product_id) return "";
+                const plan = getSubscriptionPlanById(info.product_id);
+                return (
+                  plan?.displayName?.toLowerCase() ||
+                  plan?.name?.toLowerCase() ||
+                  ""
+                );
+              } catch {
+                return "";
+              }
+            })();
+
+            if (!planName) return false;
+            return planName.includes(filterValue);
+          }
+
+          const columnValueStr = String(columnValueForFiltering).toLowerCase();
+
+          // Perform search (contains match) for non-money columns
+          return columnValueStr.includes(filterValue);
+        });
+      });
+    }
+
     return filtered;
-  }, [rows, activeTab, sortOrder, sortColumn]);
+  }, [rows, activeTab, sortOrder, sortColumn, filters]);
 
   // Calculate counts for each tab
   const allUsersCount = rows.length;
@@ -1186,10 +1769,18 @@ export default function AdminUsersPage() {
   const hasNextPage = page < totalPages;
   const hasPreviousPage = page > 1;
 
-  // Reset to page 1 when tab changes (sort state is preserved)
+  // Reset to page 1 and clear filters when tab changes (sort state is preserved)
   useEffect(() => {
     setPage(1);
+    setFilters([]);
+    setEmptyFilterColumn("");
+    setEmptyFilterValue("");
   }, [activeTab]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [filters]);
 
   const load = async () => {
     try {
@@ -1202,6 +1793,37 @@ export default function AdminUsersPage() {
       console.error("Error loading users:", e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateUserType = async (userId: string, newUserType: string) => {
+    try {
+      setUpdatingUserType(userId);
+      const res = await fetch(`/api/admin/users`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          userType: newUserType,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to update user type");
+
+      // Update the row in state
+      setRows((prevRows) =>
+        prevRows.map((row) =>
+          row.id === userId ? { ...row, user_type: newUserType } : row
+        )
+      );
+      setEditingUserType(null);
+    } catch (e) {
+      console.error("Error updating user type:", e);
+      alert("Failed to update user type. Please try again.");
+    } finally {
+      setUpdatingUserType(null);
     }
   };
 
@@ -1319,12 +1941,67 @@ export default function AdminUsersPage() {
           isDark ? "bg-[#170337]" : "bg-white"
         )}
       >
-        <CardHeader>
+        <CardHeader className="py-3 px-6">
           <div className="flex items-center justify-between">
-            <CardTitle className={cn(isDark ? "text-white" : "text-black")}>
+            <CardTitle
+              className={cn("text-2xl", isDark ? "text-white" : "text-black")}
+            >
               Users Management
             </CardTitle>
             <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-input">
+                <Checkbox
+                  id="sticky-header"
+                  checked={stickyHeader}
+                  onCheckedChange={(checked) =>
+                    setStickyHeader(checked as boolean)
+                  }
+                  className={cn(
+                    isDark
+                      ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                      : "border-gray-400 data-[state=checked]:bg-purple-600"
+                  )}
+                />
+                <label
+                  htmlFor="sticky-header"
+                  className={cn(
+                    "text-sm font-normal cursor-pointer select-none",
+                    isDark ? "text-gray-300" : "text-gray-700"
+                  )}
+                >
+                  Sticky Header
+                </label>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (filters.length === 0) {
+                    const availableColumns = allColumns[
+                      activeTab as keyof typeof allColumns
+                    ].filter((column) => column.id !== "profile");
+                    setFilters([
+                      {
+                        id: `filter-${Date.now()}-${Math.random()}`,
+                        column: availableColumns[0]?.id || "",
+                        value: "",
+                      },
+                    ]);
+                  }
+                  setShowFilterModal(true);
+                }}
+                className="flex items-center gap-2"
+              >
+                <Filter className="w-4 h-4" />
+                Filter
+                {filters.filter((f) => f.value.trim()).length > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="ml-1 h-5 min-w-5 rounded-full px-1.5 text-xs"
+                  >
+                    {filters.filter((f) => f.value.trim()).length}
+                  </Badge>
+                )}
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => setShowColumnSettings(true)}
@@ -1336,7 +2013,7 @@ export default function AdminUsersPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="py-2 px-6">
           <EnhancedTabs value={activeTab} onValueChange={setActiveTab}>
             <EnhancedTabsList>
               <EnhancedTabsTrigger value="all">
@@ -1368,10 +2045,21 @@ export default function AdminUsersPage() {
           isDark ? "bg-[#170337]" : "bg-white"
         )}
       >
-        <CardContent>
-          <div className="overflow-x-auto">
+        <CardContent className="px-6">
+          <div
+            className={cn(
+              stickyHeader
+                ? "max-h-[calc(100vh-200px)] [&>div]:max-h-[calc(100vh-200px)] [&>div]:overflow-y-auto [&>div]:overflow-x-auto"
+                : "[&>div]:overflow-x-auto"
+            )}
+          >
             <Table>
-              <TableHeader className="sticky top-0 bg-background z-10">
+              <TableHeader
+                className={cn(
+                  stickyHeader ? "sticky top-0 z-20" : "",
+                  isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]"
+                )}
+              >
                 <TableRow
                   className={cn(
                     "text-left border-b",
@@ -1387,7 +2075,12 @@ export default function AdminUsersPage() {
                     <SortableHeader columnId="full_name" label="Full Name" />
                   )}
                   {isColumnVisible("profile") && (
-                    <TableHead className="whitespace-nowrap border-r">
+                    <TableHead
+                      className={cn(
+                        "whitespace-nowrap border-r",
+                        isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]"
+                      )}
+                    >
                       Profile
                     </TableHead>
                   )}
@@ -1633,6 +2326,18 @@ export default function AdminUsersPage() {
                         <SortableHeader
                           columnId="subscription_info"
                           label="Subscription Info"
+                        />
+                      )}
+                      {isColumnVisible("created_at") && (
+                        <SortableHeader
+                          columnId="created_at"
+                          label="Created At"
+                        />
+                      )}
+                      {isColumnVisible("updated_at") && (
+                        <SortableHeader
+                          columnId="updated_at"
+                          label="Updated At"
                         />
                       )}
                     </>
@@ -2083,6 +2788,18 @@ export default function AdminUsersPage() {
                           className=""
                         />
                       )}
+                      {isColumnVisible("created_at") && (
+                        <SortableHeader
+                          columnId="created_at"
+                          label="Created At"
+                        />
+                      )}
+                      {isColumnVisible("updated_at") && (
+                        <SortableHeader
+                          columnId="updated_at"
+                          label="Updated At"
+                        />
+                      )}
                     </>
                   )}
                   {activeTab !== "advertisers" && activeTab !== "creators" && (
@@ -2379,7 +3096,7 @@ export default function AdminUsersPage() {
                         </TableHead>
                       )}
                       {isColumnVisible("other_earnings") && (
-                        <TableHead className="whitespace-nowrap">
+                        <TableHead className="whitespace-nowrap border-r">
                           <div className="flex items-center gap-2">
                             <span>Other Earnings</span>
                             <DropdownMenu>
@@ -2431,6 +3148,18 @@ export default function AdminUsersPage() {
                             </DropdownMenu>
                           </div>
                         </TableHead>
+                      )}
+                      {isColumnVisible("created_at") && (
+                        <SortableHeader
+                          columnId="created_at"
+                          label="Created At"
+                        />
+                      )}
+                      {isColumnVisible("updated_at") && (
+                        <SortableHeader
+                          columnId="updated_at"
+                          label="Updated At"
+                        />
                       )}
                     </>
                   )}
@@ -2589,7 +3318,7 @@ export default function AdminUsersPage() {
                               </TableCell>
                             )}
                             {isColumnVisible("subscription_info") && (
-                              <TableCell className="whitespace-nowrap">
+                              <TableCell className="whitespace-nowrap border-r">
                                 {(() => {
                                   const subscriptionInfo =
                                     advertiserProfile?.subscription_info;
@@ -2683,6 +3412,20 @@ export default function AdminUsersPage() {
                                     );
                                   }
                                 })()}
+                              </TableCell>
+                            )}
+                            {isColumnVisible("created_at") && (
+                              <TableCell className="whitespace-nowrap border-r">
+                                {r.created_at
+                                  ? new Date(r.created_at).toLocaleString()
+                                  : "-"}
+                              </TableCell>
+                            )}
+                            {isColumnVisible("updated_at") && (
+                              <TableCell className="whitespace-nowrap">
+                                {r.updated_at
+                                  ? new Date(r.updated_at).toLocaleString()
+                                  : "-"}
                               </TableCell>
                             )}
                           </>
@@ -3066,22 +3809,84 @@ export default function AdminUsersPage() {
                                 })()}
                               </TableCell>
                             )}
+                            {isColumnVisible("created_at") && (
+                              <TableCell className="whitespace-nowrap border-r">
+                                {r.created_at
+                                  ? new Date(r.created_at).toLocaleString()
+                                  : "-"}
+                              </TableCell>
+                            )}
+                            {isColumnVisible("updated_at") && (
+                              <TableCell className="whitespace-nowrap">
+                                {r.updated_at
+                                  ? new Date(r.updated_at).toLocaleString()
+                                  : "-"}
+                              </TableCell>
+                            )}
                           </>
                         ) : (
                           <>
                             {isColumnVisible("user_type") && (
                               <TableCell className="whitespace-nowrap border-r">
-                                <Badge
-                                  variant={
-                                    r.user_type === "admin"
-                                      ? "destructive"
-                                      : r.user_type === "advertiser"
-                                      ? "default"
-                                      : "secondary"
-                                  }
-                                >
-                                  {r.user_type}
-                                </Badge>
+                                {editingUserType === r.id ? (
+                                  <Select
+                                    value={r.user_type}
+                                    onValueChange={(value) => {
+                                      if (value !== r.user_type) {
+                                        updateUserType(r.id, value);
+                                      } else {
+                                        setEditingUserType(null);
+                                      }
+                                    }}
+                                    onOpenChange={(open) => {
+                                      if (!open && updatingUserType !== r.id) {
+                                        setEditingUserType(null);
+                                      }
+                                    }}
+                                    disabled={updatingUserType === r.id}
+                                  >
+                                    <SelectTrigger
+                                      isDark={isDark}
+                                      className="w-[140px]"
+                                    >
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent isDark={isDark}>
+                                      <SelectItem
+                                        value="creator"
+                                        isDark={isDark}
+                                      >
+                                        Creator
+                                      </SelectItem>
+                                      <SelectItem
+                                        value="advertiser"
+                                        isDark={isDark}
+                                      >
+                                        Advertiser
+                                      </SelectItem>
+                                      <SelectItem value="admin" isDark={isDark}>
+                                        Admin
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <div
+                                    className="cursor-pointer"
+                                    onClick={() => setEditingUserType(r.id)}
+                                  >
+                                    <Badge
+                                      variant={
+                                        r.user_type === "admin"
+                                          ? "destructive"
+                                          : r.user_type === "advertiser"
+                                          ? "default"
+                                          : "secondary"
+                                      }
+                                    >
+                                      {r.user_type}
+                                    </Badge>
+                                  </div>
+                                )}
                               </TableCell>
                             )}
                             {isColumnVisible("username") && (
@@ -3126,8 +3931,22 @@ export default function AdminUsersPage() {
                               </TableCell>
                             )}
                             {isColumnVisible("other_earnings") && (
-                              <TableCell className="whitespace-nowrap">
+                              <TableCell className="whitespace-nowrap border-r">
                                 ${((r.other_earnings || 0) / 100).toFixed(2)}
+                              </TableCell>
+                            )}
+                            {isColumnVisible("created_at") && (
+                              <TableCell className="whitespace-nowrap border-r">
+                                {r.created_at
+                                  ? new Date(r.created_at).toLocaleString()
+                                  : "-"}
+                              </TableCell>
+                            )}
+                            {isColumnVisible("updated_at") && (
+                              <TableCell className="whitespace-nowrap">
+                                {r.updated_at
+                                  ? new Date(r.updated_at).toLocaleString()
+                                  : "-"}
                               </TableCell>
                             )}
                           </>
@@ -3236,6 +4055,483 @@ export default function AdminUsersPage() {
                 }
               )}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Filter Dialog */}
+      <Dialog
+        open={showFilterModal}
+        onOpenChange={setShowFilterModal}
+        isdark={isDark}
+      >
+        <DialogContent
+          className={cn(
+            "max-w-4xl max-h-[80vh] overflow-y-auto",
+            isDark ? "text-white" : "text-gray-900"
+          )}
+        >
+          <DialogHeader>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-900")}
+            >
+              Filter{" "}
+              {activeTab === "all"
+                ? "Users"
+                : activeTab === "advertisers"
+                ? "Advertisers"
+                : "Creators"}
+            </DialogTitle>
+            <DialogDescription
+              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            >
+              Add filters to search and filter the table data. You can add
+              multiple filters for different columns.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 space-y-4">
+            {filters.length === 0 ? (
+              <div
+                className={cn(
+                  "flex items-center gap-3 p-4 rounded-lg border",
+                  isDark
+                    ? "bg-[#1a102b] border-gray-700"
+                    : "bg-gray-50 border-gray-200"
+                )}
+              >
+                <div className="flex-1">
+                  <Select
+                    value={
+                      emptyFilterColumn ||
+                      allColumns[activeTab as keyof typeof allColumns].filter(
+                        (column) => column.id !== "profile"
+                      )[0]?.id ||
+                      ""
+                    }
+                    onValueChange={(value) => {
+                      setEmptyFilterColumn(value);
+                      if (emptyFilterValue) {
+                        setFilters([
+                          {
+                            id: `filter-${Date.now()}-${Math.random()}`,
+                            column: value,
+                            value: emptyFilterValue,
+                          },
+                        ]);
+                        setEmptyFilterValue("");
+                      }
+                    }}
+                  >
+                    <SelectTrigger isDark={isDark} className="w-full">
+                      <SelectValue placeholder="Select column" />
+                    </SelectTrigger>
+                    <SelectContent isDark={isDark}>
+                      {allColumns[activeTab as keyof typeof allColumns]
+                        .filter((column) => column.id !== "profile")
+                        .map((column) => (
+                          <SelectItem
+                            key={column.id}
+                            value={column.id}
+                            isDark={isDark}
+                          >
+                            {column.label}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1">
+                  {(() => {
+                    const selectedColumnId =
+                      emptyFilterColumn ||
+                      allColumns[activeTab as keyof typeof allColumns].filter(
+                        (column) => column.id !== "profile"
+                      )[0]?.id ||
+                      "";
+                    const isUserType = selectedColumnId === "user_type";
+                    const isGender = selectedColumnId === "gender";
+                    const isDateField =
+                      selectedColumnId === "created_at" ||
+                      selectedColumnId === "updated_at" ||
+                      selectedColumnId === "date_of_birth";
+
+                    const commonOnSelectValueChange = (value: string) => {
+                      setEmptyFilterValue(value);
+                      const selectedColumn =
+                        emptyFilterColumn ||
+                        allColumns[activeTab as keyof typeof allColumns].filter(
+                          (column) => column.id !== "profile"
+                        )[0]?.id ||
+                        "";
+                      if (selectedColumn && value) {
+                        setFilters([
+                          {
+                            id: `filter-${Date.now()}-${Math.random()}`,
+                            column: selectedColumn,
+                            value,
+                          },
+                        ]);
+                        setEmptyFilterValue("");
+                        setEmptyFilterColumn("");
+                      }
+                    };
+
+                    if (isUserType) {
+                      return (
+                        <Select
+                          value={emptyFilterValue}
+                          onValueChange={commonOnSelectValueChange}
+                        >
+                          <SelectTrigger isDark={isDark} className="w-full">
+                            <SelectValue placeholder="Select user type..." />
+                          </SelectTrigger>
+                          <SelectContent isDark={isDark}>
+                            <SelectItem value="creator" isDark={isDark}>
+                              Creator
+                            </SelectItem>
+                            <SelectItem value="advertiser" isDark={isDark}>
+                              Advertiser
+                            </SelectItem>
+                            <SelectItem value="admin" isDark={isDark}>
+                              Admin
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      );
+                    }
+
+                    if (isGender) {
+                      return (
+                        <Select
+                          value={emptyFilterValue}
+                          onValueChange={commonOnSelectValueChange}
+                        >
+                          <SelectTrigger isDark={isDark} className="w-full">
+                            <SelectValue placeholder="Select gender..." />
+                          </SelectTrigger>
+                          <SelectContent isDark={isDark}>
+                            <SelectItem value="Male" isDark={isDark}>
+                              Male
+                            </SelectItem>
+                            <SelectItem value="Female" isDark={isDark}>
+                              Female
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      );
+                    }
+
+                    return (
+                      <Input
+                        type={isDateField ? "date" : "text"}
+                        value={emptyFilterValue}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setEmptyFilterValue(value);
+                          const selectedColumn =
+                            emptyFilterColumn ||
+                            allColumns[
+                              activeTab as keyof typeof allColumns
+                            ].filter((column) => column.id !== "profile")[0]
+                              ?.id ||
+                            "";
+                          if (selectedColumn && value) {
+                            setFilters([
+                              {
+                                id: `filter-${Date.now()}-${Math.random()}`,
+                                column: selectedColumn,
+                                value: value,
+                              },
+                            ]);
+                            setEmptyFilterValue("");
+                            setEmptyFilterColumn("");
+                          }
+                        }}
+                        placeholder={
+                          isDateField
+                            ? "Select date..."
+                            : "Enter filter value..."
+                        }
+                        className={cn(
+                          isDark
+                            ? "bg-[#07031D] border-gray-700 text-white"
+                            : "bg-white"
+                        )}
+                      />
+                    );
+                  })()}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled
+                  className="text-gray-400 cursor-not-allowed"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              filters.map((filter) => (
+                <div
+                  key={filter.id}
+                  className={cn(
+                    "flex items-center gap-3 p-4 rounded-lg border",
+                    isDark
+                      ? "bg-[#1a102b] border-gray-700"
+                      : "bg-gray-50 border-gray-200"
+                  )}
+                >
+                  <div className="flex-1">
+                    <Select
+                      value={filter.column}
+                      onValueChange={(value) => {
+                        setFilters(
+                          filters.map((f) =>
+                            f.id === filter.id
+                              ? {
+                                  ...f,
+                                  column: value,
+                                  // Clear the previous text/value when changing the column,
+                                  // so old filter text doesn't remain attached to the new field.
+                                  value: "",
+                                }
+                              : f
+                          )
+                        );
+                      }}
+                    >
+                      <SelectTrigger isDark={isDark} className="w-full">
+                        <SelectValue placeholder="Select column" />
+                      </SelectTrigger>
+                      <SelectContent isDark={isDark}>
+                        {allColumns[activeTab as keyof typeof allColumns]
+                          .filter((column) => column.id !== "profile")
+                          .map((column) => (
+                            <SelectItem
+                              key={column.id}
+                              value={column.id}
+                              isDark={isDark}
+                            >
+                              {column.label}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex-1">
+                    {filter.column === "user_type" ? (
+                      <Select
+                        value={filter.value}
+                        onValueChange={(value) => {
+                          setFilters(
+                            filters.map((f) =>
+                              f.id === filter.id ? { ...f, value } : f
+                            )
+                          );
+                        }}
+                      >
+                        <SelectTrigger isDark={isDark} className="w-full">
+                          <SelectValue placeholder="Select user type..." />
+                        </SelectTrigger>
+                        <SelectContent isDark={isDark}>
+                          <SelectItem value="creator" isDark={isDark}>
+                            Creator
+                          </SelectItem>
+                          <SelectItem value="advertiser" isDark={isDark}>
+                            Advertiser
+                          </SelectItem>
+                          <SelectItem value="admin" isDark={isDark}>
+                            Admin
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : filter.column === "subscription_info" ? (
+                      <Select
+                        value={filter.value}
+                        onValueChange={(value) => {
+                          setFilters(
+                            filters.map((f) =>
+                              f.id === filter.id ? { ...f, value } : f
+                            )
+                          );
+                        }}
+                      >
+                        <SelectTrigger isDark={isDark} className="w-full">
+                          <SelectValue placeholder="Select plan..." />
+                        </SelectTrigger>
+                        <SelectContent isDark={isDark}>
+                          {availableSubscriptionPlans.map((plan) => (
+                            <SelectItem
+                              key={plan.id}
+                              value={plan.name}
+                              isDark={isDark}
+                            >
+                              {plan.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : filter.column === "gender" ? (
+                      <Select
+                        value={filter.value}
+                        onValueChange={(value) => {
+                          setFilters(
+                            filters.map((f) =>
+                              f.id === filter.id ? { ...f, value } : f
+                            )
+                          );
+                        }}
+                      >
+                        <SelectTrigger isDark={isDark} className="w-full">
+                          <SelectValue placeholder="Select gender..." />
+                        </SelectTrigger>
+                        <SelectContent isDark={isDark}>
+                          <SelectItem value="Male" isDark={isDark}>
+                            Male
+                          </SelectItem>
+                          <SelectItem value="Female" isDark={isDark}>
+                            Female
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : [
+                        "affiliate_earnings",
+                        "other_earnings",
+                        "total_money_spent",
+                        "available_deposit_balance",
+                        "withdrawable_balance",
+                        "total_money_won",
+                      ].includes(filter.column) ? (
+                      <div className="flex">
+                        <span
+                          className={cn(
+                            "inline-flex items-center justify-center px-2 text-xs border border-r-0 rounded-l-md",
+                            isDark
+                              ? "bg-[#07031D] border-gray-700 text-white"
+                              : "bg-gray-50 text-gray-700 border-gray-300"
+                          )}
+                        >
+                          $
+                        </span>
+                        <Input
+                          type="text"
+                          value={filter.value}
+                          onChange={(e) => {
+                            setFilters(
+                              filters.map((f) =>
+                                f.id === filter.id
+                                  ? { ...f, value: e.target.value }
+                                  : f
+                              )
+                            );
+                          }}
+                          placeholder="Enter amount..."
+                          className={cn(
+                            "rounded-l-none border-l-0 flex-1",
+                            isDark
+                              ? "bg-[#07031D] border-gray-700 text-white"
+                              : "bg-white border-gray-300"
+                          )}
+                        />
+                      </div>
+                    ) : (
+                      <Input
+                        type={
+                          filter.column === "created_at" ||
+                          filter.column === "updated_at" ||
+                          filter.column === "date_of_birth"
+                            ? "date"
+                            : "text"
+                        }
+                        value={filter.value}
+                        onChange={(e) => {
+                          setFilters(
+                            filters.map((f) =>
+                              f.id === filter.id
+                                ? { ...f, value: e.target.value }
+                                : f
+                            )
+                          );
+                        }}
+                        placeholder={
+                          filter.column === "created_at" ||
+                          filter.column === "updated_at" ||
+                          filter.column === "date_of_birth"
+                            ? "Select date..."
+                            : "Enter filter value..."
+                        }
+                        className={cn(
+                          isDark
+                            ? "bg-[#07031D] border-gray-700 text-white"
+                            : "bg-white"
+                        )}
+                      />
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setFilters(filters.filter((f) => f.id !== filter.id));
+                    }}
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))
+            )}
+            <Button
+              variant="outline"
+              onClick={() => {
+                const availableColumns = allColumns[
+                  activeTab as keyof typeof allColumns
+                ].filter((column) => column.id !== "profile");
+                setFilters([
+                  ...filters,
+                  {
+                    id: `filter-${Date.now()}-${Math.random()}`,
+                    column: availableColumns[0]?.id || "",
+                    value: "",
+                  },
+                ]);
+              }}
+              className={cn(
+                "w-full",
+                isDark
+                  ? "border-gray-700 text-white hover:bg-gray-800"
+                  : "border-gray-300"
+              )}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Filter
+            </Button>
+            {filters.length > 0 && (
+              <div className="flex gap-2 justify-end pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setFilters([]);
+                  }}
+                  className={cn(
+                    isDark ? "border-gray-700 text-white hover:bg-gray-800" : ""
+                  )}
+                >
+                  Clear All
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowFilterModal(false);
+                  }}
+                  className={cn(
+                    "bg-purple-600 text-white hover:bg-purple-700",
+                    isDark && "bg-purple-600 hover:bg-purple-700"
+                  )}
+                >
+                  Apply Filters
+                </Button>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
