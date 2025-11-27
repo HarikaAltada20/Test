@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Settings, X, Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -236,6 +237,8 @@ const allColumns = {
     { id: "total_lifetime_coins", label: "Total Lifetime Coins" },
     { id: "affiliate_earnings", label: "Affiliate Earnings" },
     { id: "other_earnings", label: "Other Earnings" },
+    { id: "created_at", label: "Created At" },
+    { id: "updated_at", label: "Updated At" },
   ],
   advertisers: [
     { id: "id", label: "ID" },
@@ -250,6 +253,8 @@ const allColumns = {
     { id: "available_deposit_balance", label: "Available Deposit Balance" },
     { id: "withdrawable_balance", label: "Withdrawable Balance" },
     { id: "subscription_info", label: "Subscription Info" },
+    { id: "created_at", label: "Created At" },
+    { id: "updated_at", label: "Updated At" },
   ],
   creators: [
     { id: "id", label: "ID" },
@@ -276,6 +281,8 @@ const allColumns = {
     { id: "categories", label: "Categories" },
     { id: "subcategories", label: "Subcategories" },
     { id: "interests", label: "Interests" },
+    { id: "created_at", label: "Created At" },
+    { id: "updated_at", label: "Updated At" },
   ],
 };
 
@@ -398,7 +405,13 @@ export default function AdminUsersPage() {
     label: string;
     className?: string;
   }) => (
-    <TableHead className={cn("whitespace-nowrap border-r", className)}>
+    <TableHead
+      className={cn(
+        "whitespace-nowrap border-r",
+        isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+        className
+      )}
+    >
       <div className="flex items-center gap-2">
         <span>{label}</span>
         <DropdownMenu>
@@ -453,6 +466,7 @@ export default function AdminUsersPage() {
     creators: new Set(allColumns.creators.map((col) => col.id)),
   });
   const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [stickyHeader, setStickyHeader] = useState(true);
 
   // Toggle column visibility
   const toggleColumn = (columnId: string) => {
@@ -699,6 +713,32 @@ export default function AdminUsersPage() {
               aValue = a.other_earnings || 0;
               bValue = b.other_earnings || 0;
               break;
+            case "created_at":
+              // Convert dates to timestamps for proper chronological sorting
+              const aCreatedDate = a.created_at ? new Date(a.created_at) : null;
+              const bCreatedDate = b.created_at ? new Date(b.created_at) : null;
+              aValue =
+                aCreatedDate && !isNaN(aCreatedDate.getTime())
+                  ? aCreatedDate.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              bValue =
+                bCreatedDate && !isNaN(bCreatedDate.getTime())
+                  ? bCreatedDate.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              break;
+            case "updated_at":
+              // Convert dates to timestamps for proper chronological sorting
+              const aUpdatedDate = a.updated_at ? new Date(a.updated_at) : null;
+              const bUpdatedDate = b.updated_at ? new Date(b.updated_at) : null;
+              aValue =
+                aUpdatedDate && !isNaN(aUpdatedDate.getTime())
+                  ? aUpdatedDate.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              bValue =
+                bUpdatedDate && !isNaN(bUpdatedDate.getTime())
+                  ? bUpdatedDate.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              break;
             default:
               aValue = a.full_name?.toLowerCase() || "";
               bValue = b.full_name?.toLowerCase() || "";
@@ -843,6 +883,40 @@ export default function AdminUsersPage() {
             case "subscription_info":
               aValue = getSubscriptionPlanName(aProfile?.subscription_info);
               bValue = getSubscriptionPlanName(bProfile?.subscription_info);
+              break;
+            case "created_at":
+              // Convert dates to timestamps for proper chronological sorting
+              const aCreatedDateAdv = a.created_at
+                ? new Date(a.created_at)
+                : null;
+              const bCreatedDateAdv = b.created_at
+                ? new Date(b.created_at)
+                : null;
+              aValue =
+                aCreatedDateAdv && !isNaN(aCreatedDateAdv.getTime())
+                  ? aCreatedDateAdv.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              bValue =
+                bCreatedDateAdv && !isNaN(bCreatedDateAdv.getTime())
+                  ? bCreatedDateAdv.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              break;
+            case "updated_at":
+              // Convert dates to timestamps for proper chronological sorting
+              const aUpdatedDateAdv = a.updated_at
+                ? new Date(a.updated_at)
+                : null;
+              const bUpdatedDateAdv = b.updated_at
+                ? new Date(b.updated_at)
+                : null;
+              aValue =
+                aUpdatedDateAdv && !isNaN(aUpdatedDateAdv.getTime())
+                  ? aUpdatedDateAdv.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              bValue =
+                bUpdatedDateAdv && !isNaN(bUpdatedDateAdv.getTime())
+                  ? bUpdatedDateAdv.getTime()
+                  : Number.MAX_SAFE_INTEGER;
               break;
             default:
               aValue = a.full_name?.toLowerCase() || "";
@@ -1095,6 +1169,40 @@ export default function AdminUsersPage() {
               aValue = getJoined(aProfile?.interests);
               bValue = getJoined(bProfile?.interests);
               break;
+            case "created_at":
+              // Convert dates to timestamps for proper chronological sorting
+              const aCreatedDateCreator = a.created_at
+                ? new Date(a.created_at)
+                : null;
+              const bCreatedDateCreator = b.created_at
+                ? new Date(b.created_at)
+                : null;
+              aValue =
+                aCreatedDateCreator && !isNaN(aCreatedDateCreator.getTime())
+                  ? aCreatedDateCreator.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              bValue =
+                bCreatedDateCreator && !isNaN(bCreatedDateCreator.getTime())
+                  ? bCreatedDateCreator.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              break;
+            case "updated_at":
+              // Convert dates to timestamps for proper chronological sorting
+              const aUpdatedDateCreator = a.updated_at
+                ? new Date(a.updated_at)
+                : null;
+              const bUpdatedDateCreator = b.updated_at
+                ? new Date(b.updated_at)
+                : null;
+              aValue =
+                aUpdatedDateCreator && !isNaN(aUpdatedDateCreator.getTime())
+                  ? aUpdatedDateCreator.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              bValue =
+                bUpdatedDateCreator && !isNaN(bUpdatedDateCreator.getTime())
+                  ? bUpdatedDateCreator.getTime()
+                  : Number.MAX_SAFE_INTEGER;
+              break;
             default:
               aValue = a.full_name?.toLowerCase() || "";
               bValue = b.full_name?.toLowerCase() || "";
@@ -1112,6 +1220,8 @@ export default function AdminUsersPage() {
             "categories",
             "subcategories",
             "interests",
+            "created_at",
+            "updated_at",
           ];
 
           if (nullsLastColumns.includes(sortColumn)) {
@@ -1319,12 +1429,37 @@ export default function AdminUsersPage() {
           isDark ? "bg-[#170337]" : "bg-white"
         )}
       >
-        <CardHeader>
+        <CardHeader className="py-3 px-6">
           <div className="flex items-center justify-between">
-            <CardTitle className={cn(isDark ? "text-white" : "text-black")}>
+            <CardTitle
+              className={cn("text-2xl", isDark ? "text-white" : "text-black")}
+            >
               Users Management
             </CardTitle>
             <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-input">
+                <Checkbox
+                  id="sticky-header"
+                  checked={stickyHeader}
+                  onCheckedChange={(checked) =>
+                    setStickyHeader(checked as boolean)
+                  }
+                  className={cn(
+                    isDark
+                      ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                      : "border-gray-400 data-[state=checked]:bg-purple-600"
+                  )}
+                />
+                <label
+                  htmlFor="sticky-header"
+                  className={cn(
+                    "text-sm font-normal cursor-pointer select-none",
+                    isDark ? "text-gray-300" : "text-gray-700"
+                  )}
+                >
+                  Sticky Header
+                </label>
+              </div>
               <Button
                 variant="outline"
                 onClick={() => setShowColumnSettings(true)}
@@ -1336,7 +1471,7 @@ export default function AdminUsersPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="py-2 px-6">
           <EnhancedTabs value={activeTab} onValueChange={setActiveTab}>
             <EnhancedTabsList>
               <EnhancedTabsTrigger value="all">
@@ -1368,10 +1503,15 @@ export default function AdminUsersPage() {
           isDark ? "bg-[#170337]" : "bg-white"
         )}
       >
-        <CardContent>
-          <div className="overflow-x-auto">
+        <CardContent className="px-6">
+          <div className="max-h-[calc(100vh-300px)] [&>div]:max-h-[calc(100vh-300px)] [&>div]:overflow-y-auto [&>div]:overflow-x-auto">
             <Table>
-              <TableHeader className="sticky top-0 bg-background z-10">
+              <TableHeader
+                className={cn(
+                  stickyHeader ? "sticky top-0 z-20" : "",
+                  isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]"
+                )}
+              >
                 <TableRow
                   className={cn(
                     "text-left border-b",
@@ -1387,7 +1527,12 @@ export default function AdminUsersPage() {
                     <SortableHeader columnId="full_name" label="Full Name" />
                   )}
                   {isColumnVisible("profile") && (
-                    <TableHead className="whitespace-nowrap border-r">
+                    <TableHead
+                      className={cn(
+                        "whitespace-nowrap border-r",
+                        isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]"
+                      )}
+                    >
                       Profile
                     </TableHead>
                   )}
@@ -1633,6 +1778,18 @@ export default function AdminUsersPage() {
                         <SortableHeader
                           columnId="subscription_info"
                           label="Subscription Info"
+                        />
+                      )}
+                      {isColumnVisible("created_at") && (
+                        <SortableHeader
+                          columnId="created_at"
+                          label="Created At"
+                        />
+                      )}
+                      {isColumnVisible("updated_at") && (
+                        <SortableHeader
+                          columnId="updated_at"
+                          label="Updated At"
                         />
                       )}
                     </>
@@ -2083,6 +2240,18 @@ export default function AdminUsersPage() {
                           className=""
                         />
                       )}
+                      {isColumnVisible("created_at") && (
+                        <SortableHeader
+                          columnId="created_at"
+                          label="Created At"
+                        />
+                      )}
+                      {isColumnVisible("updated_at") && (
+                        <SortableHeader
+                          columnId="updated_at"
+                          label="Updated At"
+                        />
+                      )}
                     </>
                   )}
                   {activeTab !== "advertisers" && activeTab !== "creators" && (
@@ -2379,7 +2548,7 @@ export default function AdminUsersPage() {
                         </TableHead>
                       )}
                       {isColumnVisible("other_earnings") && (
-                        <TableHead className="whitespace-nowrap">
+                        <TableHead className="whitespace-nowrap border-r">
                           <div className="flex items-center gap-2">
                             <span>Other Earnings</span>
                             <DropdownMenu>
@@ -2431,6 +2600,18 @@ export default function AdminUsersPage() {
                             </DropdownMenu>
                           </div>
                         </TableHead>
+                      )}
+                      {isColumnVisible("created_at") && (
+                        <SortableHeader
+                          columnId="created_at"
+                          label="Created At"
+                        />
+                      )}
+                      {isColumnVisible("updated_at") && (
+                        <SortableHeader
+                          columnId="updated_at"
+                          label="Updated At"
+                        />
                       )}
                     </>
                   )}
@@ -2589,7 +2770,7 @@ export default function AdminUsersPage() {
                               </TableCell>
                             )}
                             {isColumnVisible("subscription_info") && (
-                              <TableCell className="whitespace-nowrap">
+                              <TableCell className="whitespace-nowrap border-r">
                                 {(() => {
                                   const subscriptionInfo =
                                     advertiserProfile?.subscription_info;
@@ -2683,6 +2864,20 @@ export default function AdminUsersPage() {
                                     );
                                   }
                                 })()}
+                              </TableCell>
+                            )}
+                            {isColumnVisible("created_at") && (
+                              <TableCell className="whitespace-nowrap border-r">
+                                {r.created_at
+                                  ? new Date(r.created_at).toLocaleString()
+                                  : "-"}
+                              </TableCell>
+                            )}
+                            {isColumnVisible("updated_at") && (
+                              <TableCell className="whitespace-nowrap">
+                                {r.updated_at
+                                  ? new Date(r.updated_at).toLocaleString()
+                                  : "-"}
                               </TableCell>
                             )}
                           </>
@@ -3066,6 +3261,20 @@ export default function AdminUsersPage() {
                                 })()}
                               </TableCell>
                             )}
+                            {isColumnVisible("created_at") && (
+                              <TableCell className="whitespace-nowrap border-r">
+                                {r.created_at
+                                  ? new Date(r.created_at).toLocaleString()
+                                  : "-"}
+                              </TableCell>
+                            )}
+                            {isColumnVisible("updated_at") && (
+                              <TableCell className="whitespace-nowrap">
+                                {r.updated_at
+                                  ? new Date(r.updated_at).toLocaleString()
+                                  : "-"}
+                              </TableCell>
+                            )}
                           </>
                         ) : (
                           <>
@@ -3126,8 +3335,22 @@ export default function AdminUsersPage() {
                               </TableCell>
                             )}
                             {isColumnVisible("other_earnings") && (
-                              <TableCell className="whitespace-nowrap">
+                              <TableCell className="whitespace-nowrap border-r">
                                 ${((r.other_earnings || 0) / 100).toFixed(2)}
+                              </TableCell>
+                            )}
+                            {isColumnVisible("created_at") && (
+                              <TableCell className="whitespace-nowrap border-r">
+                                {r.created_at
+                                  ? new Date(r.created_at).toLocaleString()
+                                  : "-"}
+                              </TableCell>
+                            )}
+                            {isColumnVisible("updated_at") && (
+                              <TableCell className="whitespace-nowrap">
+                                {r.updated_at
+                                  ? new Date(r.updated_at).toLocaleString()
+                                  : "-"}
                               </TableCell>
                             )}
                           </>
