@@ -306,6 +306,16 @@ const allColumns = {
 };
 
 export default function AdminUsersPage() {
+  // Operator mapping for dropdown display
+  const operatorMap: Record<string, { label: string; symbol: string }> = {
+    "=": { label: "Equals", symbol: "=" },
+    "!=": { label: "Not equal", symbol: "≠" },
+    ">": { label: "Greater than", symbol: ">" },
+    "<": { label: "Less than", symbol: "<" },
+    ">=": { label: "Greater than or equal", symbol: "≥" },
+    "<=": { label: "Less than or equal", symbol: "≤" },
+  };
+
   const [rows, setRows] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -4418,26 +4428,35 @@ export default function AdminUsersPage() {
                             onValueChange={setEmptyFilterOperator}
                           >
                             <SelectTrigger isDark={isDark} className="w-24">
-                              <SelectValue />
+                              <SelectValue>
+                                {operatorMap[emptyFilterOperator]?.symbol ||
+                                  emptyFilterOperator}
+                              </SelectValue>
                             </SelectTrigger>
                             <SelectContent isDark={isDark}>
                               <SelectItem value="=" isDark={isDark}>
-                                =
+                                {operatorMap["="].label}{" "}
+                                {operatorMap["="].symbol}
                               </SelectItem>
                               <SelectItem value="!=" isDark={isDark}>
-                                &ne;
+                                {operatorMap["!="].label}{" "}
+                                {operatorMap["!="].symbol}
                               </SelectItem>
                               <SelectItem value=">" isDark={isDark}>
-                                &gt;
+                                {operatorMap[">"].label}{" "}
+                                {operatorMap[">"].symbol}
                               </SelectItem>
                               <SelectItem value="<" isDark={isDark}>
-                                &lt;
+                                {operatorMap["<"].label}{" "}
+                                {operatorMap["<"].symbol}
                               </SelectItem>
                               <SelectItem value=">=" isDark={isDark}>
-                                &gt;=
+                                {operatorMap[">="].label}{" "}
+                                {operatorMap[">="].symbol}
                               </SelectItem>
                               <SelectItem value="<=" isDark={isDark}>
-                                &lt;=
+                                {operatorMap["<="].label}{" "}
+                                {operatorMap["<="].symbol}
                               </SelectItem>
                             </SelectContent>
                           </Select>
@@ -4808,26 +4827,37 @@ export default function AdminUsersPage() {
                                     isDark={isDark}
                                     className="w-24"
                                   >
-                                    <SelectValue />
+                                    <SelectValue>
+                                      {operatorMap[filter.operator || "="]
+                                        ?.symbol ||
+                                        filter.operator ||
+                                        "="}
+                                    </SelectValue>
                                   </SelectTrigger>
                                   <SelectContent isDark={isDark}>
                                     <SelectItem value="=" isDark={isDark}>
-                                      =
+                                      {operatorMap["="].label}{" "}
+                                      {operatorMap["="].symbol}
                                     </SelectItem>
                                     <SelectItem value="!=" isDark={isDark}>
-                                      &ne;
+                                      {operatorMap["!="].label}{" "}
+                                      {operatorMap["!="].symbol}
                                     </SelectItem>
                                     <SelectItem value=">" isDark={isDark}>
-                                      &gt;
+                                      {operatorMap[">"].label}{" "}
+                                      {operatorMap[">"].symbol}
                                     </SelectItem>
                                     <SelectItem value="<" isDark={isDark}>
-                                      &lt;
+                                      {operatorMap["<"].label}{" "}
+                                      {operatorMap["<"].symbol}
                                     </SelectItem>
                                     <SelectItem value=">=" isDark={isDark}>
-                                      &gt;=
+                                      {operatorMap[">="].label}{" "}
+                                      {operatorMap[">="].symbol}
                                     </SelectItem>
                                     <SelectItem value="<=" isDark={isDark}>
-                                      &lt;=
+                                      {operatorMap["<="].label}{" "}
+                                      {operatorMap["<="].symbol}
                                     </SelectItem>
                                   </SelectContent>
                                 </Select>
@@ -4884,26 +4914,37 @@ export default function AdminUsersPage() {
                                 }}
                               >
                                 <SelectTrigger isDark={isDark} className="w-24">
-                                  <SelectValue />
+                                  <SelectValue>
+                                    {operatorMap[filter.operator || "="]
+                                      ?.symbol ||
+                                      filter.operator ||
+                                      "="}
+                                  </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent isDark={isDark}>
                                   <SelectItem value="=" isDark={isDark}>
-                                    =
+                                    {operatorMap["="].label}{" "}
+                                    {operatorMap["="].symbol}
                                   </SelectItem>
                                   <SelectItem value="!=" isDark={isDark}>
-                                    &ne;
+                                    {operatorMap["!="].label}{" "}
+                                    {operatorMap["!="].symbol}
                                   </SelectItem>
                                   <SelectItem value=">" isDark={isDark}>
-                                    &gt;
+                                    {operatorMap[">"].label}{" "}
+                                    {operatorMap[">"].symbol}
                                   </SelectItem>
                                   <SelectItem value="<" isDark={isDark}>
-                                    &lt;
+                                    {operatorMap["<"].label}{" "}
+                                    {operatorMap["<"].symbol}
                                   </SelectItem>
                                   <SelectItem value=">=" isDark={isDark}>
-                                    &gt;=
+                                    {operatorMap[">="].label}{" "}
+                                    {operatorMap[">="].symbol}
                                   </SelectItem>
                                   <SelectItem value="<=" isDark={isDark}>
-                                    &lt;=
+                                    {operatorMap["<="].label}{" "}
+                                    {operatorMap["<="].symbol}
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
@@ -4947,26 +4988,37 @@ export default function AdminUsersPage() {
                                 }}
                               >
                                 <SelectTrigger isDark={isDark} className="w-24">
-                                  <SelectValue />
+                                  <SelectValue>
+                                    {operatorMap[filter.operator || "="]
+                                      ?.symbol ||
+                                      filter.operator ||
+                                      "="}
+                                  </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent isDark={isDark}>
                                   <SelectItem value="=" isDark={isDark}>
-                                    =
+                                    {operatorMap["="].label}{" "}
+                                    {operatorMap["="].symbol}
                                   </SelectItem>
                                   <SelectItem value="!=" isDark={isDark}>
-                                    &ne;
+                                    {operatorMap["!="].label}{" "}
+                                    {operatorMap["!="].symbol}
                                   </SelectItem>
                                   <SelectItem value=">" isDark={isDark}>
-                                    &gt;
+                                    {operatorMap[">"].label}{" "}
+                                    {operatorMap[">"].symbol}
                                   </SelectItem>
                                   <SelectItem value="<" isDark={isDark}>
-                                    &lt;
+                                    {operatorMap["<"].label}{" "}
+                                    {operatorMap["<"].symbol}
                                   </SelectItem>
                                   <SelectItem value=">=" isDark={isDark}>
-                                    &gt;=
+                                    {operatorMap[">="].label}{" "}
+                                    {operatorMap[">="].symbol}
                                   </SelectItem>
                                   <SelectItem value="<=" isDark={isDark}>
-                                    &lt;=
+                                    {operatorMap["<="].label}{" "}
+                                    {operatorMap["<="].symbol}
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
