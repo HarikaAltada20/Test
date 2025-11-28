@@ -507,11 +507,13 @@ export default function AdminUsersPage() {
     id: string;
     column: string;
     value: string;
+    operator?: string; // For comparison operators: "=", ">", "<", ">=", "<="
   };
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [filters, setFilters] = useState<FilterType[]>([]);
   const [emptyFilterColumn, setEmptyFilterColumn] = useState<string>("");
   const [emptyFilterValue, setEmptyFilterValue] = useState<string>("");
+  const [emptyFilterOperator, setEmptyFilterOperator] = useState<string>("=");
 
   // Toggle column visibility
   const toggleColumn = (columnId: string) => {
@@ -1652,98 +1654,245 @@ export default function AdminUsersPage() {
 
     // Apply filters
     if (filters.length > 0) {
-      filtered = filtered.filter((row) => {
-        return filters.every((filter) => {
-          if (!filter.value.trim()) return true; // Skip empty filters
+      // Helper function to check if a single filter matches a row
+      const doesFilterMatch = (row: User, filter: FilterType): boolean => {
+        if (!filter.value.trim()) return true; // Skip empty filters
 
-          const columnValue = getColumnValue(row, filter.column);
-          const rawFilterValue = filter.value.trim();
-          const filterValue = rawFilterValue.toLowerCase();
+        const columnValue = getColumnValue(row, filter.column);
+        const rawFilterValue = filter.value.trim();
+        const filterValue = rawFilterValue.toLowerCase();
 
-          // Handle different data types
-          if (columnValue === null || columnValue === undefined) {
-            return false;
-          }
+        // Exact numeric match for integer count columns (e.g. total_submissions_won)
+        // Also supports comparison operators for rankings and other integer fields
+        const integerCountColumns = [
+          "coins",
+          "advertisers_referred",
+          "creators_referred",
+          "total_lifetime_coins",
+          "total_contests_run",
+          "contests_participated",
+          "contests_won",
+          "total_views",
+          "total_submissions_made",
+          "total_submissions_won",
+          // Add "rankings" here when the field is available
+        ];
 
-          let columnValueForFiltering: any = columnValue;
+        // Fields that support comparison operators via dropdown
+        const integerComparisonColumns = [
+          "coins",
+          "advertisers_referred",
+          "creators_referred",
+          "total_lifetime_coins",
+          "total_contests_run",
+          "contests_participated",
+          "contests_won",
+          "total_views",
+          "total_submissions_made",
+          "total_submissions_won",
+          // Add "rankings" here when the field is available
+        ];
 
-          // Exact numeric match for integer count columns (e.g. total_submissions_won)
-          const integerCountColumns = [
-            "coins",
-            "advertisers_referred",
-            "creators_referred",
-            "total_lifetime_coins",
-            "total_contests_run",
-            "contests_participated",
-            "contests_won",
-            "total_views",
-            "total_submissions_made",
-            "total_submissions_won",
-          ];
-
-          if (integerCountColumns.includes(filter.column)) {
+        // Check integer columns first, before null check
+        if (integerCountColumns.includes(filter.column)) {
+          // For integer columns, treat null/undefined as 0
+          const numericColumn = Number(columnValue ?? 0);
+          if (!Number.isNaN(numericColumn)) {
             const numericFilter = Number(rawFilterValue);
-            const numericColumn = Number(columnValue);
-            if (!Number.isNaN(numericFilter) && !Number.isNaN(numericColumn)) {
-              return numericColumn === numericFilter;
-            }
-          }
+            if (Number.isNaN(numericFilter)) return false;
 
-          // Special handling for monetary fields that are stored in cents but displayed in dollars
-          const centBasedMoneyColumns = [
-            "total_money_spent",
-            "available_deposit_balance",
-            "withdrawable_balance",
-            "total_money_won",
-            "affiliate_earnings",
-            "other_earnings",
-          ];
+            // Use operator from filter state if available, otherwise fallback to parsing from value
+            const operator = filter.operator || "=";
 
-          if (centBasedMoneyColumns.includes(filter.column)) {
-            const numericColumn = Number(columnValue);
-            if (!Number.isNaN(numericColumn)) {
-              // Convert cents to a fixed 2-decimal dollar string (e.g. 246 -> "2.46")
-              columnValueForFiltering = (numericColumn / 100).toFixed(2);
-
-              const columnValueStr = String(
-                columnValueForFiltering
-              ).toLowerCase();
-
-              // For money columns, use prefix match so typing "4" only matches values like "4.00", "40.00", "4.50", etc.
-              return columnValueStr.startsWith(filterValue);
-            }
-          }
-
-          // Special handling for subscription_info: filter by plan name using helper
-          if (filter.column === "subscription_info") {
-            const planName = (() => {
-              if (!columnValue) return "";
-              try {
-                const info =
-                  typeof columnValue === "string"
-                    ? JSON.parse(columnValue)
-                    : columnValue;
-
-                if (!info?.product_id) return "";
-                const plan = getSubscriptionPlanById(info.product_id);
-                return (
-                  plan?.displayName?.toLowerCase() ||
-                  plan?.name?.toLowerCase() ||
-                  ""
-                );
-              } catch {
-                return "";
+            if (
+              integerComparisonColumns.includes(filter.column) &&
+              operator !== "="
+            ) {
+              switch (operator) {
+                case ">":
+                  return numericColumn > numericFilter;
+                case "<":
+                  return numericColumn < numericFilter;
+                case ">=":
+                  return numericColumn >= numericFilter;
+                case "<=":
+                  return numericColumn <= numericFilter;
+                case "!=":
+                  return numericColumn !== numericFilter;
+                default:
+                  return numericColumn === numericFilter;
               }
-            })();
+            }
 
-            if (!planName) return false;
-            return planName.includes(filterValue);
+            // Fallback to exact match
+            return numericColumn === numericFilter;
           }
+          // If conversion to number fails, return false
+          return false;
+        }
 
-          const columnValueStr = String(columnValueForFiltering).toLowerCase();
+        // Handle different data types for non-integer columns
+        if (columnValue === null || columnValue === undefined) {
+          return false;
+        }
 
-          // Perform search (contains match) for non-money columns
-          return columnValueStr.includes(filterValue);
+        let columnValueForFiltering: any = columnValue;
+
+        // Special handling for monetary fields that are stored in cents but displayed in dollars
+        const centBasedMoneyColumns = [
+          "total_money_spent",
+          "available_deposit_balance",
+          "withdrawable_balance",
+          "total_money_won",
+          "affiliate_earnings",
+          "other_earnings",
+        ];
+
+        // Fields that support comparison operators via dropdown
+        // For earnings and money fields: values are in dollars (e.g., ">100", "<50", ">=200", "<=10")
+        const moneyComparisonColumns = [
+          "affiliate_earnings",
+          "other_earnings",
+          "total_money_spent",
+          "available_deposit_balance",
+          "withdrawable_balance",
+          "total_money_won",
+        ];
+
+        if (centBasedMoneyColumns.includes(filter.column)) {
+          const numericColumn = Number(columnValue);
+          if (!Number.isNaN(numericColumn)) {
+            const columnValueInDollars = numericColumn / 100;
+
+            // Check if this field supports comparison operators
+            if (moneyComparisonColumns.includes(filter.column)) {
+              const numericFilter = parseFloat(rawFilterValue);
+              if (Number.isNaN(numericFilter)) return false;
+
+              // Use operator from filter state if available, otherwise fallback to parsing from value
+              const operator = filter.operator || "=";
+
+              if (operator !== "=") {
+                switch (operator) {
+                  case ">":
+                    return columnValueInDollars > numericFilter;
+                  case "<":
+                    return columnValueInDollars < numericFilter;
+                  case ">=":
+                    return columnValueInDollars >= numericFilter;
+                  case "<=":
+                    return columnValueInDollars <= numericFilter;
+                  case "!=":
+                    return columnValueInDollars !== numericFilter;
+                  default:
+                    return columnValueInDollars === numericFilter;
+                }
+              }
+            }
+
+            // Convert cents to a fixed 2-decimal dollar string (e.g. 246 -> "2.46")
+            columnValueForFiltering = columnValueInDollars.toFixed(2);
+
+            const columnValueStr = String(
+              columnValueForFiltering
+            ).toLowerCase();
+
+            // For money columns, use prefix match so typing "4" only matches values like "4.00", "40.00", "4.50", etc.
+            return columnValueStr.startsWith(filterValue);
+          }
+        }
+
+        // Special handling for date fields with comparison operators
+        const dateFields = ["created_at", "updated_at", "date_of_birth"];
+        if (dateFields.includes(filter.column)) {
+          const columnDate = columnValue
+            ? new Date(columnValue as string)
+            : null;
+          if (!columnDate || isNaN(columnDate.getTime())) return false;
+
+          // Parse the filter date value
+          const filterDate = new Date(rawFilterValue);
+          if (isNaN(filterDate.getTime())) return false;
+
+          // Use operator from filter state if available, otherwise fallback to "="
+          const operator = filter.operator || "=";
+
+          // For all date fields, compare only date part (ignore time)
+          const colDateOnly = new Date(
+            columnDate.getFullYear(),
+            columnDate.getMonth(),
+            columnDate.getDate()
+          );
+          const filterDateOnly = new Date(
+            filterDate.getFullYear(),
+            filterDate.getMonth(),
+            filterDate.getDate()
+          );
+
+          switch (operator) {
+            case ">":
+              return colDateOnly > filterDateOnly;
+            case "<":
+              return colDateOnly < filterDateOnly;
+            case ">=":
+              return colDateOnly >= filterDateOnly;
+            case "<=":
+              return colDateOnly <= filterDateOnly;
+            case "!=":
+              return colDateOnly.getTime() !== filterDateOnly.getTime();
+            default:
+              return colDateOnly.getTime() === filterDateOnly.getTime();
+          }
+        }
+
+        // Special handling for subscription_info: filter by plan name using helper
+        if (filter.column === "subscription_info") {
+          const planName = (() => {
+            if (!columnValue) return "";
+            try {
+              const info =
+                typeof columnValue === "string"
+                  ? JSON.parse(columnValue)
+                  : columnValue;
+
+              if (!info?.product_id) return "";
+              const plan = getSubscriptionPlanById(info.product_id);
+              return (
+                plan?.displayName?.toLowerCase() ||
+                plan?.name?.toLowerCase() ||
+                ""
+              );
+            } catch {
+              return "";
+            }
+          })();
+
+          if (!planName) return false;
+          return planName.includes(filterValue);
+        }
+
+        const columnValueStr = String(columnValueForFiltering).toLowerCase();
+
+        // Perform search (contains match) for non-money columns
+        return columnValueStr.includes(filterValue);
+      };
+
+      // Group filters by column - filters on the same column use OR logic, different columns use AND logic
+      const filtersByColumn = filters.reduce((acc, filter) => {
+        if (!filter.value.trim()) return acc; // Skip empty filters
+        if (!acc[filter.column]) {
+          acc[filter.column] = [];
+        }
+        acc[filter.column].push(filter);
+        return acc;
+      }, {} as Record<string, FilterType[]>);
+
+      filtered = filtered.filter((row) => {
+        // For each column group, at least one filter must match (OR logic)
+        // Across different columns, all column groups must match (AND logic)
+        return Object.values(filtersByColumn).every((columnFilters) => {
+          // At least one filter in this column group must match
+          return columnFilters.some((filter) => doesFilterMatch(row, filter));
         });
       });
     }
@@ -1769,7 +1918,6 @@ export default function AdminUsersPage() {
   const hasNextPage = page < totalPages;
   const hasPreviousPage = page > 1;
 
-  // Reset to page 1 and clear filters when tab changes (sort state is preserved)
   useEffect(() => {
     setPage(1);
     setFilters([]);
@@ -4150,10 +4298,46 @@ export default function AdminUsersPage() {
                       "";
                     const isUserType = selectedColumnId === "user_type";
                     const isGender = selectedColumnId === "gender";
-                    const isDateField =
-                      selectedColumnId === "created_at" ||
-                      selectedColumnId === "updated_at" ||
-                      selectedColumnId === "date_of_birth";
+
+                    // Check if this field supports comparison operators
+                    const earningsFields = [
+                      "affiliate_earnings",
+                      "other_earnings",
+                    ];
+                    const moneyFields = [
+                      "total_money_spent",
+                      "available_deposit_balance",
+                      "withdrawable_balance",
+                      "total_money_won",
+                    ];
+                    const integerFields = [
+                      "coins",
+                      "advertisers_referred",
+                      "creators_referred",
+                      "total_lifetime_coins",
+                      "total_contests_run",
+                      "contests_participated",
+                      "contests_won",
+                      "total_views",
+                      "total_submissions_made",
+                      "total_submissions_won",
+                    ];
+                    const dateFields = [
+                      "created_at",
+                      "updated_at",
+                      "date_of_birth",
+                    ];
+                    const isEarningsField =
+                      earningsFields.includes(selectedColumnId);
+                    const isMoneyField = moneyFields.includes(selectedColumnId);
+                    const isIntegerField =
+                      integerFields.includes(selectedColumnId);
+                    const isDateField = dateFields.includes(selectedColumnId);
+                    const supportsOperators =
+                      isEarningsField ||
+                      isMoneyField ||
+                      isIntegerField ||
+                      isDateField;
 
                     const commonOnSelectValueChange = (value: string) => {
                       setEmptyFilterValue(value);
@@ -4169,10 +4353,14 @@ export default function AdminUsersPage() {
                             id: `filter-${Date.now()}-${Math.random()}`,
                             column: selectedColumn,
                             value,
+                            operator: supportsOperators
+                              ? emptyFilterOperator
+                              : undefined,
                           },
                         ]);
                         setEmptyFilterValue("");
                         setEmptyFilterColumn("");
+                        setEmptyFilterOperator("=");
                       }
                     };
 
@@ -4218,6 +4406,166 @@ export default function AdminUsersPage() {
                             </SelectItem>
                           </SelectContent>
                         </Select>
+                      );
+                    }
+
+                    // For earnings and integer fields, show operator dropdown + input
+                    if (supportsOperators) {
+                      return (
+                        <div className="flex gap-2">
+                          <Select
+                            value={emptyFilterOperator}
+                            onValueChange={setEmptyFilterOperator}
+                          >
+                            <SelectTrigger isDark={isDark} className="w-24">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent isDark={isDark}>
+                              <SelectItem value="=" isDark={isDark}>
+                                =
+                              </SelectItem>
+                              <SelectItem value="!=" isDark={isDark}>
+                                &ne;
+                              </SelectItem>
+                              <SelectItem value=">" isDark={isDark}>
+                                &gt;
+                              </SelectItem>
+                              <SelectItem value="<" isDark={isDark}>
+                                &lt;
+                              </SelectItem>
+                              <SelectItem value=">=" isDark={isDark}>
+                                &gt;=
+                              </SelectItem>
+                              <SelectItem value="<=" isDark={isDark}>
+                                &lt;=
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {isEarningsField || isMoneyField ? (
+                            <div className="flex flex-1">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center justify-center px-2 text-xs border border-r-0 rounded-l-md",
+                                  isDark
+                                    ? "bg-[#07031D] border-gray-700 text-white"
+                                    : "bg-gray-50 text-gray-700 border-gray-300"
+                                )}
+                              >
+                                $
+                              </span>
+                              <Input
+                                type="text"
+                                value={emptyFilterValue}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  setEmptyFilterValue(value);
+                                  const selectedColumn =
+                                    emptyFilterColumn ||
+                                    allColumns[
+                                      activeTab as keyof typeof allColumns
+                                    ].filter(
+                                      (column) => column.id !== "profile"
+                                    )[0]?.id ||
+                                    "";
+                                  if (selectedColumn && value) {
+                                    setFilters([
+                                      {
+                                        id: `filter-${Date.now()}-${Math.random()}`,
+                                        column: selectedColumn,
+                                        value: value,
+                                        operator: emptyFilterOperator,
+                                      },
+                                    ]);
+                                    setEmptyFilterValue("");
+                                    setEmptyFilterColumn("");
+                                    setEmptyFilterOperator("=");
+                                  }
+                                }}
+                                placeholder="Enter amount..."
+                                className={cn(
+                                  "rounded-l-none border-l-0 flex-1",
+                                  isDark
+                                    ? "bg-[#07031D] border-gray-700 text-white"
+                                    : "bg-white border-gray-300"
+                                )}
+                              />
+                            </div>
+                          ) : isDateField ? (
+                            <Input
+                              type="date"
+                              value={emptyFilterValue}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setEmptyFilterValue(value);
+                                const selectedColumn =
+                                  emptyFilterColumn ||
+                                  allColumns[
+                                    activeTab as keyof typeof allColumns
+                                  ].filter(
+                                    (column) => column.id !== "profile"
+                                  )[0]?.id ||
+                                  "";
+                                if (selectedColumn && value) {
+                                  setFilters([
+                                    {
+                                      id: `filter-${Date.now()}-${Math.random()}`,
+                                      column: selectedColumn,
+                                      value: value,
+                                      operator: emptyFilterOperator,
+                                    },
+                                  ]);
+                                  setEmptyFilterValue("");
+                                  setEmptyFilterColumn("");
+                                  setEmptyFilterOperator("=");
+                                }
+                              }}
+                              placeholder="Select date..."
+                              className={cn(
+                                "flex-1",
+                                isDark
+                                  ? "bg-[#07031D] border-gray-700 text-white"
+                                  : "bg-white border-gray-300"
+                              )}
+                            />
+                          ) : (
+                            <Input
+                              type="text"
+                              value={emptyFilterValue}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setEmptyFilterValue(value);
+                                const selectedColumn =
+                                  emptyFilterColumn ||
+                                  allColumns[
+                                    activeTab as keyof typeof allColumns
+                                  ].filter(
+                                    (column) => column.id !== "profile"
+                                  )[0]?.id ||
+                                  "";
+                                if (selectedColumn && value) {
+                                  setFilters([
+                                    {
+                                      id: `filter-${Date.now()}-${Math.random()}`,
+                                      column: selectedColumn,
+                                      value: value,
+                                      operator: emptyFilterOperator,
+                                    },
+                                  ]);
+                                  setEmptyFilterValue("");
+                                  setEmptyFilterColumn("");
+                                  setEmptyFilterOperator("=");
+                                }
+                              }}
+                              placeholder="Enter value..."
+                              className={cn(
+                                "flex-1",
+                                isDark
+                                  ? "bg-[#07031D] border-gray-700 text-white"
+                                  : "bg-white border-gray-300"
+                              )}
+                            />
+                          )}
+                        </div>
                       );
                     }
 
@@ -4294,6 +4642,7 @@ export default function AdminUsersPage() {
                                   // Clear the previous text/value when changing the column,
                                   // so old filter text doesn't remain attached to the new field.
                                   value: "",
+                                  operator: undefined,
                                 }
                               : f
                           )
@@ -4394,78 +4743,291 @@ export default function AdminUsersPage() {
                           </SelectItem>
                         </SelectContent>
                       </Select>
-                    ) : [
-                        "affiliate_earnings",
-                        "other_earnings",
-                        "total_money_spent",
-                        "available_deposit_balance",
-                        "withdrawable_balance",
-                        "total_money_won",
-                      ].includes(filter.column) ? (
-                      <div className="flex">
-                        <span
-                          className={cn(
-                            "inline-flex items-center justify-center px-2 text-xs border border-r-0 rounded-l-md",
-                            isDark
-                              ? "bg-[#07031D] border-gray-700 text-white"
-                              : "bg-gray-50 text-gray-700 border-gray-300"
-                          )}
-                        >
-                          $
-                        </span>
-                        <Input
-                          type="text"
-                          value={filter.value}
-                          onChange={(e) => {
-                            setFilters(
-                              filters.map((f) =>
-                                f.id === filter.id
-                                  ? { ...f, value: e.target.value }
-                                  : f
-                              )
-                            );
-                          }}
-                          placeholder="Enter amount..."
-                          className={cn(
-                            "rounded-l-none border-l-0 flex-1",
-                            isDark
-                              ? "bg-[#07031D] border-gray-700 text-white"
-                              : "bg-white border-gray-300"
-                          )}
-                        />
-                      </div>
                     ) : (
-                      <Input
-                        type={
-                          filter.column === "created_at" ||
-                          filter.column === "updated_at" ||
-                          filter.column === "date_of_birth"
-                            ? "date"
-                            : "text"
-                        }
-                        value={filter.value}
-                        onChange={(e) => {
-                          setFilters(
-                            filters.map((f) =>
-                              f.id === filter.id
-                                ? { ...f, value: e.target.value }
-                                : f
-                            )
+                      (() => {
+                        const earningsFields = [
+                          "affiliate_earnings",
+                          "other_earnings",
+                        ];
+                        const integerFields = [
+                          "coins",
+                          "advertisers_referred",
+                          "creators_referred",
+                          "total_lifetime_coins",
+                          "total_contests_run",
+                          "contests_participated",
+                          "contests_won",
+                          "total_views",
+                          "total_submissions_made",
+                          "total_submissions_won",
+                        ];
+                        const moneyFields = [
+                          "total_money_spent",
+                          "available_deposit_balance",
+                          "withdrawable_balance",
+                          "total_money_won",
+                        ];
+                        const dateFields = [
+                          "created_at",
+                          "updated_at",
+                          "date_of_birth",
+                        ];
+                        const isEarningsField = earningsFields.includes(
+                          filter.column
+                        );
+                        const isIntegerField = integerFields.includes(
+                          filter.column
+                        );
+                        const isMoneyField = moneyFields.includes(
+                          filter.column
+                        );
+                        const isDateField = dateFields.includes(filter.column);
+                        const supportsOperators =
+                          isEarningsField ||
+                          isMoneyField ||
+                          isIntegerField ||
+                          isDateField;
+
+                        if (isEarningsField || isMoneyField) {
+                          return (
+                            <div className="flex gap-2">
+                              {supportsOperators && (
+                                <Select
+                                  value={filter.operator || "="}
+                                  onValueChange={(value) => {
+                                    setFilters(
+                                      filters.map((f) =>
+                                        f.id === filter.id
+                                          ? { ...f, operator: value }
+                                          : f
+                                      )
+                                    );
+                                  }}
+                                >
+                                  <SelectTrigger
+                                    isDark={isDark}
+                                    className="w-24"
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent isDark={isDark}>
+                                    <SelectItem value="=" isDark={isDark}>
+                                      =
+                                    </SelectItem>
+                                    <SelectItem value="!=" isDark={isDark}>
+                                      &ne;
+                                    </SelectItem>
+                                    <SelectItem value=">" isDark={isDark}>
+                                      &gt;
+                                    </SelectItem>
+                                    <SelectItem value="<" isDark={isDark}>
+                                      &lt;
+                                    </SelectItem>
+                                    <SelectItem value=">=" isDark={isDark}>
+                                      &gt;=
+                                    </SelectItem>
+                                    <SelectItem value="<=" isDark={isDark}>
+                                      &lt;=
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              <div className="flex flex-1">
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center justify-center px-2 text-xs border border-r-0 rounded-l-md",
+                                    isDark
+                                      ? "bg-[#07031D] border-gray-700 text-white"
+                                      : "bg-gray-50 text-gray-700 border-gray-300"
+                                  )}
+                                >
+                                  $
+                                </span>
+                                <Input
+                                  type="text"
+                                  value={filter.value}
+                                  onChange={(e) => {
+                                    setFilters(
+                                      filters.map((f) =>
+                                        f.id === filter.id
+                                          ? { ...f, value: e.target.value }
+                                          : f
+                                      )
+                                    );
+                                  }}
+                                  placeholder="Enter amount..."
+                                  className={cn(
+                                    "rounded-l-none border-l-0 flex-1",
+                                    isDark
+                                      ? "bg-[#07031D] border-gray-700 text-white"
+                                      : "bg-white border-gray-300"
+                                  )}
+                                />
+                              </div>
+                            </div>
                           );
-                        }}
-                        placeholder={
-                          filter.column === "created_at" ||
-                          filter.column === "updated_at" ||
-                          filter.column === "date_of_birth"
-                            ? "Select date..."
-                            : "Enter filter value..."
                         }
-                        className={cn(
-                          isDark
-                            ? "bg-[#07031D] border-gray-700 text-white"
-                            : "bg-white"
-                        )}
-                      />
+
+                        if (isIntegerField) {
+                          return (
+                            <div className="flex gap-2">
+                              <Select
+                                value={filter.operator || "="}
+                                onValueChange={(value) => {
+                                  setFilters(
+                                    filters.map((f) =>
+                                      f.id === filter.id
+                                        ? { ...f, operator: value }
+                                        : f
+                                    )
+                                  );
+                                }}
+                              >
+                                <SelectTrigger isDark={isDark} className="w-24">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent isDark={isDark}>
+                                  <SelectItem value="=" isDark={isDark}>
+                                    =
+                                  </SelectItem>
+                                  <SelectItem value="!=" isDark={isDark}>
+                                    &ne;
+                                  </SelectItem>
+                                  <SelectItem value=">" isDark={isDark}>
+                                    &gt;
+                                  </SelectItem>
+                                  <SelectItem value="<" isDark={isDark}>
+                                    &lt;
+                                  </SelectItem>
+                                  <SelectItem value=">=" isDark={isDark}>
+                                    &gt;=
+                                  </SelectItem>
+                                  <SelectItem value="<=" isDark={isDark}>
+                                    &lt;=
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Input
+                                type="text"
+                                value={filter.value}
+                                onChange={(e) => {
+                                  setFilters(
+                                    filters.map((f) =>
+                                      f.id === filter.id
+                                        ? { ...f, value: e.target.value }
+                                        : f
+                                    )
+                                  );
+                                }}
+                                placeholder="Enter value..."
+                                className={cn(
+                                  "flex-1",
+                                  isDark
+                                    ? "bg-[#07031D] border-gray-700 text-white"
+                                    : "bg-white border-gray-300"
+                                )}
+                              />
+                            </div>
+                          );
+                        }
+
+                        if (isDateField) {
+                          return (
+                            <div className="flex gap-2">
+                              <Select
+                                value={filter.operator || "="}
+                                onValueChange={(value) => {
+                                  setFilters(
+                                    filters.map((f) =>
+                                      f.id === filter.id
+                                        ? { ...f, operator: value }
+                                        : f
+                                    )
+                                  );
+                                }}
+                              >
+                                <SelectTrigger isDark={isDark} className="w-24">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent isDark={isDark}>
+                                  <SelectItem value="=" isDark={isDark}>
+                                    =
+                                  </SelectItem>
+                                  <SelectItem value="!=" isDark={isDark}>
+                                    &ne;
+                                  </SelectItem>
+                                  <SelectItem value=">" isDark={isDark}>
+                                    &gt;
+                                  </SelectItem>
+                                  <SelectItem value="<" isDark={isDark}>
+                                    &lt;
+                                  </SelectItem>
+                                  <SelectItem value=">=" isDark={isDark}>
+                                    &gt;=
+                                  </SelectItem>
+                                  <SelectItem value="<=" isDark={isDark}>
+                                    &lt;=
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Input
+                                type="date"
+                                value={filter.value}
+                                onChange={(e) => {
+                                  setFilters(
+                                    filters.map((f) =>
+                                      f.id === filter.id
+                                        ? { ...f, value: e.target.value }
+                                        : f
+                                    )
+                                  );
+                                }}
+                                placeholder="Select date..."
+                                className={cn(
+                                  "flex-1",
+                                  isDark
+                                    ? "bg-[#07031D] border-gray-700 text-white"
+                                    : "bg-white border-gray-300"
+                                )}
+                              />
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <Input
+                            type={
+                              filter.column === "created_at" ||
+                              filter.column === "updated_at" ||
+                              filter.column === "date_of_birth"
+                                ? "date"
+                                : "text"
+                            }
+                            value={filter.value}
+                            onChange={(e) => {
+                              setFilters(
+                                filters.map((f) =>
+                                  f.id === filter.id
+                                    ? { ...f, value: e.target.value }
+                                    : f
+                                )
+                              );
+                            }}
+                            placeholder={
+                              filter.column === "created_at" ||
+                              filter.column === "updated_at" ||
+                              filter.column === "date_of_birth"
+                                ? "Select date..."
+                                : "Enter filter value..."
+                            }
+                            className={cn(
+                              isDark
+                                ? "bg-[#07031D] border-gray-700 text-white"
+                                : "bg-white"
+                            )}
+                          />
+                        );
+                      })()
                     )}
                   </div>
                   <Button
