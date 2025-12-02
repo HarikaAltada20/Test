@@ -2387,6 +2387,11 @@ export default function ProfilePage({
                           ? "bg-[#180438] text-white border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                           : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                       )}
+                      style={
+                        {
+                          colorScheme: isDark ? "dark" : "light",
+                        } as React.CSSProperties
+                      }
                     />
                     <label
                       htmlFor="dateOfBirth"
@@ -2941,6 +2946,7 @@ export default function ProfilePage({
                         >
                           <SelectTrigger
                             id="languageSelect"
+                            
                             className={cn(
                               "w-full text-[14px]",
                               isDark
@@ -2951,17 +2957,13 @@ export default function ProfilePage({
                             <SelectValue placeholder="Select a language" />
                           </SelectTrigger>
                           <SelectContent
-                            className={cn(
-                              "max-h-[300px]",
-                              isDark
-                                ? "bg-[#180438] text-white"
-                                : "bg-white text-gray-900"
-                            )}
+                            isDark={isDark}
                           >
                             {allLanguages.map((language) => (
                               <SelectItem
                                 key={language}
                                 value={language}
+                                isDark={isDark}
                                 disabled={editedLanguages.includes(language)}
                                 className={cn(
                                   isDark
