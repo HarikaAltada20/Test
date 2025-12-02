@@ -4173,13 +4173,16 @@ export function ContestClientPage({
             ) : (
               <div className="space-y-3">
                 {/* Earnings View Mode Toggle - Show for both CPM and leaderboard contests with bonus */}
+                {/* Only show if contest is ended and payouts are processed */}
                 {(contest?.contest_type === "leaderboard" ||
                   contest?.contest_type === "cpm") &&
                   (contest.contest_based_details?.leaderboard_contest
                     ?.flat_fee_bonus ||
                     contest.contest_based_details?.cpm_contest
                       ?.flat_fee_bonus ||
-                    (contest as any).bonus_details?.description_html) && (
+                    (contest as any).bonus_details?.description_html) &&
+                  contest?.status?.toLowerCase() === "ended" &&
+                  contest?.post_contest_status === "payouts_processed" && (
                     <div
                       className={cn(
                         "flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 p-4 rounded-xl border shadow-sm",
