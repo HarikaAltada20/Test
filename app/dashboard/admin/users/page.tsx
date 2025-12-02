@@ -375,6 +375,9 @@ export default function AdminUsersPage() {
   const [isInterestsDialogOpen, setIsInterestsDialogOpen] = useState(false);
   const [editingUserType, setEditingUserType] = useState<string | null>(null);
   const [updatingUserType, setUpdatingUserType] = useState<string | null>(null);
+  const [selectOpenState, setSelectOpenState] = useState<
+    Record<string, boolean>
+  >({});
   const [availableSubscriptionPlans, setAvailableSubscriptionPlans] = useState<
     { id: string; name: string }[]
   >([]);
@@ -3575,14 +3578,20 @@ export default function AdminUsersPage() {
                             {isColumnVisible("created_at") && (
                               <TableCell className="whitespace-nowrap border-r">
                                 {r.created_at
-                                  ? new Date(r.created_at).toLocaleString()
+                                  ? new Date(r.created_at).toLocaleString(
+                                      "en-US",
+                                      { timeZone: "UTC" }
+                                    )
                                   : "-"}
                               </TableCell>
                             )}
                             {isColumnVisible("updated_at") && (
                               <TableCell className="whitespace-nowrap">
                                 {r.updated_at
-                                  ? new Date(r.updated_at).toLocaleString()
+                                  ? new Date(r.updated_at).toLocaleString(
+                                      "en-US",
+                                      { timeZone: "UTC" }
+                                    )
                                   : "-"}
                               </TableCell>
                             )}
@@ -3970,14 +3979,20 @@ export default function AdminUsersPage() {
                             {isColumnVisible("created_at") && (
                               <TableCell className="whitespace-nowrap border-r">
                                 {r.created_at
-                                  ? new Date(r.created_at).toLocaleString()
+                                  ? new Date(r.created_at).toLocaleString(
+                                      "en-US",
+                                      { timeZone: "UTC" }
+                                    )
                                   : "-"}
                               </TableCell>
                             )}
                             {isColumnVisible("updated_at") && (
                               <TableCell className="whitespace-nowrap">
                                 {r.updated_at
-                                  ? new Date(r.updated_at).toLocaleString()
+                                  ? new Date(r.updated_at).toLocaleString(
+                                      "en-US",
+                                      { timeZone: "UTC" }
+                                    )
                                   : "-"}
                               </TableCell>
                             )}
@@ -3985,20 +4000,38 @@ export default function AdminUsersPage() {
                         ) : (
                           <>
                             {isColumnVisible("user_type") && (
-                              <TableCell className="whitespace-nowrap border-r">
+                              <TableCell
+                                className="whitespace-nowrap border-r"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {editingUserType === r.id ? (
                                   <Select
                                     value={r.user_type}
+                                    open={selectOpenState[r.id] || false}
+                                    onOpenChange={(open) => {
+                                      setSelectOpenState((prev) => ({
+                                        ...prev,
+                                        [r.id]: open,
+                                      }));
+                                      if (!open && updatingUserType !== r.id) {
+                                        setEditingUserType(null);
+                                        setSelectOpenState((prev) => {
+                                          const newState = { ...prev };
+                                          delete newState[r.id];
+                                          return newState;
+                                        });
+                                      }
+                                    }}
                                     onValueChange={(value) => {
                                       if (value !== r.user_type) {
                                         updateUserType(r.id, value);
                                       } else {
                                         setEditingUserType(null);
-                                      }
-                                    }}
-                                    onOpenChange={(open) => {
-                                      if (!open && updatingUserType !== r.id) {
-                                        setEditingUserType(null);
+                                        setSelectOpenState((prev) => {
+                                          const newState = { ...prev };
+                                          delete newState[r.id];
+                                          return newState;
+                                        });
                                       }
                                     }}
                                     disabled={updatingUserType === r.id}
@@ -4006,6 +4039,7 @@ export default function AdminUsersPage() {
                                     <SelectTrigger
                                       isDark={isDark}
                                       className="w-[140px]"
+                                      onClick={(e) => e.stopPropagation()}
                                     >
                                       <SelectValue />
                                     </SelectTrigger>
@@ -4030,7 +4064,16 @@ export default function AdminUsersPage() {
                                 ) : (
                                   <div
                                     className="cursor-pointer"
-                                    onClick={() => setEditingUserType(r.id)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      e.preventDefault();
+                                      setEditingUserType(r.id);
+                                      // Don't open the select immediately - user must click the trigger
+                                      setSelectOpenState((prev) => ({
+                                        ...prev,
+                                        [r.id]: false,
+                                      }));
+                                    }}
                                   >
                                     <Badge
                                       variant={
@@ -4040,6 +4083,7 @@ export default function AdminUsersPage() {
                                           ? "default"
                                           : "secondary"
                                       }
+                                      onClick={(e) => e.stopPropagation()}
                                     >
                                       {r.user_type}
                                     </Badge>
@@ -4096,14 +4140,20 @@ export default function AdminUsersPage() {
                             {isColumnVisible("created_at") && (
                               <TableCell className="whitespace-nowrap border-r">
                                 {r.created_at
-                                  ? new Date(r.created_at).toLocaleString()
+                                  ? new Date(r.created_at).toLocaleString(
+                                      "en-US",
+                                      { timeZone: "UTC" }
+                                    )
                                   : "-"}
                               </TableCell>
                             )}
                             {isColumnVisible("updated_at") && (
                               <TableCell className="whitespace-nowrap">
                                 {r.updated_at
-                                  ? new Date(r.updated_at).toLocaleString()
+                                  ? new Date(r.updated_at).toLocaleString(
+                                      "en-US",
+                                      { timeZone: "UTC" }
+                                    )
                                   : "-"}
                               </TableCell>
                             )}
