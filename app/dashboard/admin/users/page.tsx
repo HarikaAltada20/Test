@@ -374,11 +374,6 @@ export default function AdminUsersPage() {
     useState(false);
   const [selectedInterests, setSelectedInterests] = useState<any | null>(null);
   const [isInterestsDialogOpen, setIsInterestsDialogOpen] = useState(false);
-  const [editingUserType, setEditingUserType] = useState<string | null>(null);
-  const [updatingUserType, setUpdatingUserType] = useState<string | null>(null);
-  const [selectOpenState, setSelectOpenState] = useState<
-    Record<string, boolean>
-  >({});
   const [availableSubscriptionPlans, setAvailableSubscriptionPlans] = useState<
     { id: string; name: string }[]
   >([]);
@@ -1983,36 +1978,6 @@ export default function AdminUsersPage() {
     }
   };
 
-  const updateUserType = async (userId: string, newUserType: string) => {
-    try {
-      setUpdatingUserType(userId);
-      const res = await fetch(`/api/admin/users`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId,
-          userType: newUserType,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to update user type");
-
-      // Update the row in state
-      setRows((prevRows) =>
-        prevRows.map((row) =>
-          row.id === userId ? { ...row, user_type: newUserType } : row
-        )
-      );
-      setEditingUserType(null);
-    } catch (e) {
-      console.error("Error updating user type:", e);
-      alert("Failed to update user type. Please try again.");
-    } finally {
-      setUpdatingUserType(null);
-    }
-  };
 
   useEffect(() => {
     load();
@@ -4024,95 +3989,18 @@ export default function AdminUsersPage() {
                         ) : (
                           <>
                             {isColumnVisible("user_type") && (
-                              <TableCell
-                                className="whitespace-nowrap border-r"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {editingUserType === r.id ? (
-                                  <Select
-                                    value={r.user_type}
-                                    open={selectOpenState[r.id] || false}
-                                    onOpenChange={(open) => {
-                                      setSelectOpenState((prev) => ({
-                                        ...prev,
-                                        [r.id]: open,
-                                      }));
-                                      if (!open && updatingUserType !== r.id) {
-                                        setEditingUserType(null);
-                                        setSelectOpenState((prev) => {
-                                          const newState = { ...prev };
-                                          delete newState[r.id];
-                                          return newState;
-                                        });
-                                      }
-                                    }}
-                                    onValueChange={(value) => {
-                                      if (value !== r.user_type) {
-                                        updateUserType(r.id, value);
-                                      } else {
-                                        setEditingUserType(null);
-                                        setSelectOpenState((prev) => {
-                                          const newState = { ...prev };
-                                          delete newState[r.id];
-                                          return newState;
-                                        });
-                                      }
-                                    }}
-                                    disabled={updatingUserType === r.id}
-                                  >
-                                    <SelectTrigger
-                                      isDark={isDark}
-                                      className="w-[140px]"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent isDark={isDark}>
-                                      <SelectItem
-                                        value="creator"
-                                        isDark={isDark}
-                                      >
-                                        Creator
-                                      </SelectItem>
-                                      <SelectItem
-                                        value="advertiser"
-                                        isDark={isDark}
-                                      >
-                                        Advertiser
-                                      </SelectItem>
-                                      <SelectItem value="admin" isDark={isDark}>
-                                        Admin
-                                      </SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                ) : (
-                                  <div
-                                    className="cursor-pointer"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      e.preventDefault();
-                                      setEditingUserType(r.id);
-                                      // Don't open the select immediately - user must click the trigger
-                                      setSelectOpenState((prev) => ({
-                                        ...prev,
-                                        [r.id]: false,
-                                      }));
-                                    }}
-                                  >
-                                    <Badge
-                                      variant={
-                                        r.user_type === "admin"
-                                          ? "destructive"
-                                          : r.user_type === "advertiser"
-                                            ? "default"
-                                            : "secondary"
-                                      }
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      {r.user_type}
-                                    </Badge>
-                                  </div>
-                                )}
+                              <TableCell className="whitespace-nowrap border-r">
+                                <Badge
+                                  variant={
+                                    r.user_type === "admin"
+                                      ? "destructive"
+                                      : r.user_type === "advertiser"
+                                        ? "default"
+                                        : "secondary"
+                                  }
+                                >
+                                  {r.user_type}
+                                </Badge>
                               </TableCell>
                             )}
                             {isColumnVisible("username") && (
