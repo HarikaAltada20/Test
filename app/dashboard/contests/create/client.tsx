@@ -831,6 +831,21 @@ export default function CreateContestPage({
     }
   };
 
+  // Handler to uncheck all countries in a specific region
+  const handleUncheckAllCountriesInRegion = (region: string) => {
+    const regionKey = region as keyof typeof REGIONS_AND_COUNTRIES;
+    const regionCountries = REGIONS_AND_COUNTRIES[regionKey] || [];
+    const countriesArray = Array.isArray(regionCountries)
+      ? [...regionCountries]
+      : [];
+
+    // Remove all countries from this region from selectedCountries
+    // Keep the region selected so users can manually select specific countries
+    setSelectedCountries(
+      selectedCountries.filter((country) => !countriesArray.includes(country))
+    );
+  };
+
   // Helper function to delete thumbnail from Supabase storage
   const deleteFromStorage = async (thumbnailUrl: string) => {
     try {
@@ -2729,11 +2744,7 @@ export default function CreateContestPage({
 
   // Update nextStep to auto-save basics as draft before moving to brief
   const nextStep = async () => {
-    setFormFeedback(null); // Clear previous global form feedback
-    setFormFeedbackType(null);
-    setToastErrorMessage(null); // Clear previous toast error
-
-    // Helper function to set both form and toast error
+    // Helper function to set error for UI display (for steps other than basics)
     const setError = (message: string) => {
       setFormFeedback(message);
       setFormFeedbackType("error");
@@ -2741,15 +2752,32 @@ export default function CreateContestPage({
       toast({ title: "Error", description: message, variant: "destructive" });
     };
 
+    // Helper function to show only toast (for basics step)
+    const setToastError = (message: string) => {
+      toast({
+        title: "Validation Error",
+        description: message,
+        variant: "destructive",
+        duration: 5000,
+      });
+    };
+
     // Validate only what's needed for the current step
     if (step === "basics") {
-      if (!title) {
-        setError("Please enter a contest title");
-        return;
+      // Collect all missing required fields
+      const missingFields: string[] = [];
+
+      if (!title || !title.trim()) {
+        missingFields.push("Contest Title");
+      }
+      if (!platform || platform.trim() === "") {
+        missingFields.push("Platform");
+      }
+      if (!category || category.trim() === "") {
+        missingFields.push("Category");
       }
       if (!thumbnail && !thumbnailPreview) {
-        setError("Please upload a thumbnail for your contest");
-        return;
+        missingFields.push("Thumbnail");
       }
 
       // Validate contest type access
@@ -2760,11 +2788,24 @@ export default function CreateContestPage({
           planFeatures.contestTypes.includes("cpm");
 
         if (!hasCpmAccess) {
-          setError(
+          setToastError(
             "CPM-based contests are only available with paid plans. Please upgrade your subscription or select Leaderboard contest type."
           );
           return;
         }
+      }
+
+      // Show comprehensive error if any fields are missing
+      if (missingFields.length > 0) {
+        const errorMessage =
+          missingFields.length === 1
+            ? `Please fill in the following required field: ${missingFields[0]}`
+            : `Please fill in the following required fields: ${missingFields.join(
+                ", "
+              )}`;
+        // Use toast-only error for basics step (no CardFooter alert)
+        setToastError(errorMessage);
+        return;
       }
 
       // Auto-save basics as draft before moving to next step
@@ -6591,7 +6632,7 @@ export default function CreateContestPage({
                         <CollapsibleTrigger
                           className={cn(
                             "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                            isDark ? "" : "hover:bg-gray-50"
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -6767,7 +6808,7 @@ export default function CreateContestPage({
                         <CollapsibleTrigger
                           className={cn(
                             "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                            isDark ? "" : "hover:bg-gray-50"
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -6968,7 +7009,7 @@ export default function CreateContestPage({
                         <CollapsibleTrigger
                           className={cn(
                             "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                            isDark ? "" : "hover:bg-gray-50"
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -7104,7 +7145,7 @@ export default function CreateContestPage({
                         <CollapsibleTrigger
                           className={cn(
                             "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                            isDark ? "" : "hover:bg-gray-50"
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -7194,44 +7235,71 @@ export default function CreateContestPage({
 
                             return (
                               <div key={region} className="space-y-2">
-                                <div className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={`region-${region}`}
-                                    checked={isRegionSelected}
-                                    disabled={isLoading}
-                                    onCheckedChange={(checked) => {
-                                      handleRegionToggle(
-                                        region,
-                                        checked as boolean
-                                      );
-                                    }}
-                                    className={cn(
-                                      isDark
-                                        ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                        : "border-gray-400 data-[state=checked]:bg-purple-600"
-                                    )}
-                                  />
-                                  <label
-                                    htmlFor={`region-${region}`}
-                                    className={cn(
-                                      "text-sm font-semibold cursor-pointer flex items-center gap-2",
-                                      isDark ? "text-gray-300" : "text-gray-700"
-                                    )}
-                                  >
-                                    <span>{region}</span>
-                                    {hasAnySelected && (
-                                      <span
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-2 flex-1">
+                                    <Checkbox
+                                      id={`region-${region}`}
+                                      checked={isRegionSelected}
+                                      disabled={isLoading}
+                                      onCheckedChange={(checked) => {
+                                        handleRegionToggle(
+                                          region,
+                                          checked as boolean
+                                        );
+                                      }}
                                       className={cn(
-                                        "text-xs px-2 py-0.5 rounded-full",
                                         isDark
-                                          ? "bg-purple-600 text-white"
-                                          : "bg-purple-100 text-purple-700"
+                                          ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                          : "border-gray-400 data-[state=checked]:bg-purple-600"
                                       )}
-                                      >
-                                        {selectedCountriesInRegion.length} selected
-                                      </span>
-                                    )}
-                                  </label>
+                                    />
+                                    <label
+                                      htmlFor={`region-${region}`}
+                                      className={cn(
+                                        "text-sm font-semibold cursor-pointer flex items-center gap-2",
+                                        isDark
+                                          ? "text-gray-300"
+                                          : "text-gray-700"
+                                      )}
+                                    >
+                                      <span>{region}</span>
+                                      {hasAnySelected && (
+                                        <span
+                                          className={cn(
+                                            "text-xs px-2 py-0.5 rounded-full",
+                                            isDark
+                                              ? "bg-purple-600 text-white"
+                                              : "bg-purple-100 text-purple-700"
+                                          )}
+                                        >
+                                          {selectedCountriesInRegion.length}{" "}
+                                          selected
+                                        </span>
+                                      )}
+                                    </label>
+                                  </div>
+                                  {hasAnySelected && (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUncheckAllCountriesInRegion(
+                                          region
+                                        );
+                                      }}
+                                      disabled={isLoading}
+                                      className={cn(
+                                        "h-7 px-2 text-xs",
+                                        isDark
+                                          ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800"
+                                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                                      )}
+                                    >
+                                      Uncheck all
+                                    </Button>
+                                  )}
                                 </div>
                                 {(isRegionSelected || hasAnySelected) && (
                                   <div className="ml-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -7416,9 +7484,33 @@ export default function CreateContestPage({
                 </div>
               </div>
 
-              <CardFooter className="flex justify-between items-center pt-6">
-                {/* Only show red styled error, removed black error display */}
-                <div className="flex gap-2 ml-auto">
+              <CardFooter className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-6">
+                {/* Display error message if validation fails (not shown in basics step - uses toast only) */}
+                {formFeedback &&
+                  formFeedbackType === "error" &&
+                  step !== "basics" && (
+                    <div className="w-full sm:w-auto sm:mr-auto">
+                      <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/50 dark:to-red-900/50 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                            <AlertTriangle className="h-3 w-3 text-white" />
+                          </div>
+                          <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                            {formFeedback}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                <div
+                  className={`flex gap-2 ${
+                    formFeedback &&
+                    formFeedbackType === "error" &&
+                    step !== "basics"
+                      ? "ml-auto"
+                      : "ml-auto"
+                  }`}
+                >
                   <button
                     className={cn(
                       "border font-semibold px-4 py-2 rounded-lg text-md",
@@ -7445,14 +7537,15 @@ export default function CreateContestPage({
                   </button>
                   <button
                     className={cn(
-                      "cursor-pointer px-8 py-2 rounded-lg text-md ",
+                      "px-8 py-2 rounded-lg text-md cursor-pointer",
                       isDark
-                        ? "bg-[#7F39EC] text-white"
-                        : "bg-[#4A00BE] text-white"
+                        ? "bg-[#7F39EC] text-white hover:bg-[#6B2FD6]"
+                        : "bg-[#4A00BE] text-white hover:bg-[#3A00A0]",
+                      isLoading && "opacity-50 cursor-not-allowed"
                     )}
                     type="button"
                     onClick={nextStep}
-                    disabled={isNextDisabled() || isLoading}
+                    disabled={isLoading}
                   >
                     Next
                   </button>
