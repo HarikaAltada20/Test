@@ -248,7 +248,11 @@ export function ContestCreationModal({
     <Dialog open={isOpen} onOpenChange={onClose} isdark={isDark}>
       <DialogContent className="max-w-md md:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-xl">Create Contest</DialogTitle>
+          <DialogTitle
+          className={cn(
+            "text-xl",
+            isDark ? "text-white" : "text-gray-900"
+          )}>Create Contest</DialogTitle>
           <DialogDescription className="text-md">
             You have multiple drafts. Choose how you'd like to proceed.
           </DialogDescription>
@@ -257,7 +261,11 @@ export function ContestCreationModal({
           <div className="p-4 border border-[#7F39EC] bg-[#D9C0FF26] rounded-lg">
             <div className="flex items-center gap-2 mb-2">
               {/* <Clock className="h-4 w-4 text-muted-foreground" /> */}
-              <span className="font-medium">Recent Draft</span>
+              <span 
+              className={cn(
+                "font-medium",
+                isDark ? "text-white" : "text-gray-900"
+              )}>Recent Draft</span>
             </div>
             <div className="flex items-center gap-4 text-sm">
               <div className="rounded-full flex-shrink-0 h-14 w-14 md:w-16 md:h-16 overflow-hidden">
@@ -268,7 +276,11 @@ export function ContestCreationModal({
                 />
               </div>
               <div className="flex-1">
-                <p className="font-medium text-[13px]">
+                <p 
+                className={cn(
+                  "font-medium text-[13px]",
+                  isDark ? "text-white" : "text-gray-900"
+                )}>
                   {recentDraft.title || "Untitled Draft"}
                 </p>
                 <p className="text-muted-foreground">
@@ -283,7 +295,10 @@ export function ContestCreationModal({
           <div className="flex flex-col gap-4">
             <Button
               onClick={() => handleContinueDraft(recentDraft.id)}
-              className="w-full bg-[#D9C0FF61] text-md py-3 rounded-full text-[#7F39EC]"
+              className={cn(
+                "w-full text-md py-3 rounded-full",
+                isDark ? "bg-[#7F39EC]" : " bg-[#D9C0FF61] text-[#7F39EC]"
+              )}
               disabled={isNavigating}
             >
               {isNavigating ? (

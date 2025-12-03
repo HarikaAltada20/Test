@@ -1462,6 +1462,21 @@ export default function EditContestPage({
     }
   };
 
+  // Handler to uncheck all countries in a specific region
+  const handleUncheckAllCountriesInRegion = (region: string) => {
+    const regionKey = region as keyof typeof REGIONS_AND_COUNTRIES;
+    const regionCountries = REGIONS_AND_COUNTRIES[regionKey] || [];
+    const countriesArray = Array.isArray(regionCountries)
+      ? [...regionCountries]
+      : [];
+
+    // Remove all countries from this region from selectedCountries
+    // Keep the region selected so users can manually select specific countries
+    setSelectedCountries(
+      selectedCountries.filter((country) => !countriesArray.includes(country))
+    );
+  };
+
   // Form submission - show toast + bottom error on every save click
   const handleSubmit = async () => {
     const showError = (message: string) => {
@@ -4814,12 +4829,11 @@ export default function EditContestPage({
                           : "bg-white border-gray-300"
                       )}
                     >
-                      <CollapsibleTrigger asChild>
-                        <button
-                          type="button"
+                      <div className="relative">
+                        <CollapsibleTrigger
                           className={cn(
-                            "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
-                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                            "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
+                            isDark ? "" : "hover:bg-gray-50"
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -4842,15 +4856,26 @@ export default function EditContestPage({
                               </span>
                             )}
                           </div>
-                          <ChevronDown
+                        </CollapsibleTrigger>
+                        <div
+                          className="absolute right-4 top-1/2 -translate-y-1/2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            id="edit-categories-checkbox"
+                            checked={categoriesOpen}
+                            disabled={isSubmitting}
+                            onCheckedChange={(checked) =>
+                              setCategoriesOpen(checked as boolean)
+                            }
                             className={cn(
-                              "h-4 w-4 transition-transform",
-                              categoriesOpen && "transform rotate-180",
-                              isDark ? "text-gray-300" : "text-gray-600"
+                              isDark
+                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600"
                             )}
                           />
-                        </button>
-                      </CollapsibleTrigger>
+                        </div>
+                      </div>
                       <CollapsibleContent className="px-4 pb-4 space-y-3">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           {CONTENT_TYPE_CATEGORIES.map((cat) => {
@@ -4981,12 +5006,11 @@ export default function EditContestPage({
                           : "bg-white border-gray-300"
                       )}
                     >
-                      <CollapsibleTrigger asChild>
-                        <button
-                          type="button"
+                      <div className="relative">
+                        <CollapsibleTrigger
                           className={cn(
-                            "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
-                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                            "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
+                            isDark ? "" : "hover:bg-gray-50"
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -5006,15 +5030,26 @@ export default function EditContestPage({
                               </span>
                             )}
                           </div>
-                          <ChevronDown
+                        </CollapsibleTrigger>
+                        <div
+                          className="absolute right-4 top-1/2 -translate-y-1/2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            id="edit-subcategories-checkbox"
+                            checked={subcategoriesOpen}
+                            disabled={isSubmitting}
+                            onCheckedChange={(checked) =>
+                              setSubcategoriesOpen(checked as boolean)
+                            }
                             className={cn(
-                              "h-4 w-4 transition-transform",
-                              subcategoriesOpen && "transform rotate-180",
-                              isDark ? "text-gray-300" : "text-gray-600"
+                              isDark
+                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600"
                             )}
                           />
-                        </button>
-                      </CollapsibleTrigger>
+                        </div>
+                      </div>
                       <CollapsibleContent className="px-4 pb-4 space-y-3">
                         <Accordion type="multiple" className="w-full">
                           {CONTENT_TYPE_CATEGORIES.map((category) => {
@@ -5173,12 +5208,11 @@ export default function EditContestPage({
                           : "bg-white border-gray-300"
                       )}
                     >
-                      <CollapsibleTrigger asChild>
-                        <button
-                          type="button"
+                      <div className="relative">
+                        <CollapsibleTrigger
                           className={cn(
-                            "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
-                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                            "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
+                            isDark ? "" : "hover:bg-gray-50"
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -5198,15 +5232,26 @@ export default function EditContestPage({
                               </span>
                             )}
                           </div>
-                          <ChevronDown
+                        </CollapsibleTrigger>
+                        <div
+                          className="absolute right-4 top-1/2 -translate-y-1/2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            id="edit-interests-checkbox"
+                            checked={interestsOpen}
+                            disabled={isSubmitting}
+                            onCheckedChange={(checked) =>
+                              setInterestsOpen(checked as boolean)
+                            }
                             className={cn(
-                              "h-4 w-4 transition-transform",
-                              interestsOpen && "transform rotate-180",
-                              isDark ? "text-gray-300" : "text-gray-600"
+                              isDark
+                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600"
                             )}
                           />
-                        </button>
-                      </CollapsibleTrigger>
+                        </div>
+                      </div>
                       <CollapsibleContent className="px-4 pb-4 space-y-3">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                           {INTERESTS.map((interest) => {
@@ -5300,12 +5345,11 @@ export default function EditContestPage({
                           : "bg-white border-gray-300"
                       )}
                     >
-                      <CollapsibleTrigger asChild>
-                        <button
-                          type="button"
+                      <div className="relative">
+                        <CollapsibleTrigger
                           className={cn(
-                            "w-full flex items-center justify-between p-4 hover:bg-opacity-80 transition-colors",
-                            isDark ? "hover:bg-[#2a0a5a]" : "hover:bg-gray-50"
+                            "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
+                            isDark ? "" : "hover:bg-gray-50"
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -5325,15 +5369,26 @@ export default function EditContestPage({
                               </span>
                             )}
                           </div>
-                          <ChevronDown
+                        </CollapsibleTrigger>
+                        <div
+                          className="absolute right-4 top-1/2 -translate-y-1/2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            id="edit-regions-checkbox"
+                            checked={regionsOpen}
+                            disabled={isSubmitting}
+                            onCheckedChange={(checked) =>
+                              setRegionsOpen(checked as boolean)
+                            }
                             className={cn(
-                              "h-4 w-4 transition-transform",
-                              regionsOpen && "transform rotate-180",
-                              isDark ? "text-gray-300" : "text-gray-600"
+                              isDark
+                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600"
                             )}
                           />
-                        </button>
-                      </CollapsibleTrigger>
+                        </div>
+                      </div>
                       <CollapsibleContent className="px-4 pb-4 space-y-4">
                         {/* <p
                           className={cn(
@@ -5373,45 +5428,71 @@ export default function EditContestPage({
 
                             return (
                               <div key={region} className="space-y-2">
-                                <div className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={`region-${region}`}
-                                    checked={isRegionSelected}
-                                    disabled={isSubmitting}
-                                    onCheckedChange={(checked) => {
-                                      handleRegionToggle(
-                                        region,
-                                        checked as boolean
-                                      );
-                                    }}
-                                    className={cn(
-                                      isDark
-                                        ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                        : "border-gray-400 data-[state=checked]:bg-purple-600"
-                                    )}
-                                  />
-                                  <label
-                                    htmlFor={`region-${region}`}
-                                    className={cn(
-                                      "text-sm font-semibold cursor-pointer flex items-center gap-2",
-                                      isDark ? "text-gray-300" : "text-gray-700"
-                                    )}
-                                  >
-                                    <span>{region}</span>
-                                    {hasAnySelected && (
-                                      <span
-                                        className={cn(
-                                          "text-xs px-2 py-0.5 rounded-full",
-                                          isDark
-                                            ? "bg-purple-600 text-white"
-                                            : "bg-purple-100 text-purple-700"
-                                        )}
-                                      >
-                                        {selectedCountriesInRegion.length}{" "}
-                                        selected
-                                      </span>
-                                    )}
-                                  </label>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-2 flex-1">
+                                    <Checkbox
+                                      id={`region-${region}`}
+                                      checked={isRegionSelected}
+                                      disabled={isSubmitting}
+                                      onCheckedChange={(checked) => {
+                                        handleRegionToggle(
+                                          region,
+                                          checked as boolean
+                                        );
+                                      }}
+                                      className={cn(
+                                        isDark
+                                          ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                                          : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                      )}
+                                    />
+                                    <label
+                                      htmlFor={`region-${region}`}
+                                      className={cn(
+                                        "text-sm font-semibold cursor-pointer flex items-center gap-2",
+                                        isDark
+                                          ? "text-gray-300"
+                                          : "text-gray-700"
+                                      )}
+                                    >
+                                      <span>{region}</span>
+                                      {hasAnySelected && (
+                                        <span
+                                          className={cn(
+                                            "text-xs px-2 py-0.5 rounded-full",
+                                            isDark
+                                              ? "bg-purple-600 text-white"
+                                              : "bg-purple-100 text-purple-700"
+                                          )}
+                                        >
+                                          {selectedCountriesInRegion.length}{" "}
+                                          selected
+                                        </span>
+                                      )}
+                                    </label>
+                                  </div>
+                                  {hasAnySelected && (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUncheckAllCountriesInRegion(
+                                          region
+                                        );
+                                      }}
+                                      disabled={isSubmitting}
+                                      className={cn(
+                                        "h-7 px-2 text-xs",
+                                        isDark
+                                          ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800"
+                                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                                      )}
+                                    >
+                                      Uncheck all
+                                    </Button>
+                                  )}
                                 </div>
                                 {(isRegionSelected || hasAnySelected) && (
                                   <div className="ml-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">

@@ -56,6 +56,7 @@ import {
   getAllSubscriptionPlans,
   getSubscriptionPlanById,
 } from "@/lib/subscription-utils-client";
+import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
 
 type AdvertiserProfile = {
   id: string;
@@ -96,6 +97,7 @@ type User = {
   email: string;
   username?: string | null;
   full_name: string;
+  // Basic user type and status
   user_type: string;
   is_active: boolean;
   coins: number;
@@ -111,6 +113,9 @@ type User = {
   ip_address?: string | null;
   affiliate_earnings?: number | null;
   other_earnings?: number | null;
+  // Registration metadata captured during signup (JSONB in DB)
+  // We specifically use registration_info.country for the Country column
+  registration_info?: Record<string, any> | null;
   // Supabase may return this as an array or a single object depending on the relationship
   advertiser_profiles?: AdvertiserProfile[] | AdvertiserProfile | null;
   creator_profiles?: CreatorProfile[] | CreatorProfile | null;
@@ -240,6 +245,15 @@ function InterestsCell({
   );
 }
 
+// Pre-computed list of all countries for dropdown filters
+const ALL_COUNTRIES: string[] = Array.from(
+  new Set(
+    Object.values(REGIONS_AND_COUNTRIES_DATA)
+      .flat()
+      .map((c) => String(c))
+  )
+).sort((a, b) => a.localeCompare(b));
+
 // Column definitions for each tab
 const allColumns = {
   all: [
@@ -257,6 +271,8 @@ const allColumns = {
     { id: "total_lifetime_coins", label: "Total Lifetime Coins" },
     { id: "affiliate_earnings", label: "Affiliate Earnings" },
     { id: "other_earnings", label: "Other Earnings" },
+    // Country from users.registration_info.country
+    { id: "country", label: "Country" },
     { id: "created_at", label: "Created At" },
     { id: "updated_at", label: "Updated At" },
   ],
@@ -515,7 +531,7 @@ export default function AdminUsersPage() {
   const [timezone, setTimezone] = useState<"UTC" | "local">(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("users-management-timezone");
-      return (saved === "UTC" || saved === "local") ? saved : "UTC";
+      return saved === "UTC" || saved === "local" ? saved : "UTC";
     }
     return "UTC";
   });
@@ -623,6 +639,35 @@ export default function AdminUsersPage() {
         return row.username;
       case "user_type":
         return row.user_type;
+      case "country": {
+     
+        if (activeTab === "creators") {
+          if (row.creator_profiles) {
+            const profiles = Array.isArray(row.creator_profiles)
+              ? row.creator_profiles
+              : [row.creator_profiles];
+            return profiles[0]?.country || null;
+          }
+          return null;
+        }
+
+        // Default behaviour for "all" / "advertisers" tabs:
+        // Prefer country from registration_info (set at registration/IP enrichment)
+        const regCountry =
+          row.registration_info &&
+          (row.registration_info as Record<string, any>)?.country;
+        if (typeof regCountry === "string" && regCountry.trim()) {
+          return regCountry;
+        }
+        // Fallback to creator profile country when available
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.country || null;
+        }
+        return null;
+      }
       case "referral_code":
         return row.referral_code;
       case "referred_by":
@@ -770,14 +815,6 @@ export default function AdminUsersPage() {
             ? row.creator_profiles
             : [row.creator_profiles];
           return profiles[0]?.gender;
-        }
-        return null;
-      case "country":
-        if (row.creator_profiles) {
-          const profiles = Array.isArray(row.creator_profiles)
-            ? row.creator_profiles
-            : [row.creator_profiles];
-          return profiles[0]?.country;
         }
         return null;
       case "state":
@@ -993,6 +1030,51 @@ export default function AdminUsersPage() {
               aValue = a.email?.toLowerCase() || "";
               bValue = b.email?.toLowerCase() || "";
               break;
+            case "country": {
+              const getCountryMeta = (
+                user: User
+              ): { hasCountry: boolean; value: string } => {
+                const regCountry =
+                  user.registration_info &&
+                  (user.registration_info as Record<string, any>)?.country;
+                if (typeof regCountry === "string" && regCountry.trim()) {
+                  return {
+                    hasCountry: true,
+                    value: regCountry.toLowerCase(),
+                  };
+                }
+                // Fallback to creator profile country
+                const creatorProfiles = user.creator_profiles
+                  ? Array.isArray(user.creator_profiles)
+                    ? user.creator_profiles
+                    : [user.creator_profiles]
+                  : [];
+                const profileCountry =
+                  creatorProfiles[0]?.country?.toLowerCase() || "";
+                if (profileCountry.trim()) {
+                  return { hasCountry: true, value: profileCountry };
+                }
+                return { hasCountry: false, value: "" };
+              };
+
+              const aMeta = getCountryMeta(a);
+              const bMeta = getCountryMeta(b);
+
+              // First, ensure all users WITH a country come before those WITHOUT
+              if (aMeta.hasCountry !== bMeta.hasCountry) {
+                // hasCountry=true (1) should come before hasCountry=false (0)
+                return aMeta.hasCountry ? -1 : 1;
+              }
+
+              // If both have (or both don't have) a country, sort alphabetically
+              if (!aMeta.hasCountry && !bMeta.hasCountry) {
+                return 0; // both missing -> consider equal
+              }
+
+              const cmp = aMeta.value.localeCompare(bMeta.value);
+              if (cmp === 0) return 0;
+              return sortOrder === "asc" ? cmp : -cmp;
+            }
             case "user_type":
               aValue = a.user_type?.toLowerCase() || "";
               bValue = b.user_type?.toLowerCase() || "";
@@ -1978,7 +2060,6 @@ export default function AdminUsersPage() {
     }
   };
 
-
   useEffect(() => {
     load();
   }, []);
@@ -2096,7 +2177,10 @@ export default function AdminUsersPage() {
         <CardHeader className="py-3 px-3 sm:px-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
             <CardTitle
-              className={cn("text-xl sm:text-2xl", isDark ? "text-white" : "text-black")}
+              className={cn(
+                "text-xl sm:text-2xl",
+                isDark ? "text-white" : "text-black"
+              )}
             >
               Users Management
             </CardTitle>
@@ -2169,11 +2253,16 @@ export default function AdminUsersPage() {
                 onClick={() => {
                   const newTimezone = timezone === "UTC" ? "local" : "UTC";
                   setTimezone(newTimezone);
-                  localStorage.setItem("users-management-timezone", newTimezone);
+                  localStorage.setItem(
+                    "users-management-timezone",
+                    newTimezone
+                  );
                 }}
                 className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3"
                 size="sm"
-                title={`Current timezone: ${timezone === "UTC" ? "UTC" : "Local"}. Click to switch.`}
+                title={`Current timezone: ${
+                  timezone === "UTC" ? "UTC" : "Local"
+                }. Click to switch.`}
               >
                 <Clock className="w-4 h-4" />
                 <span className="text-xs font-medium hidden sm:inline">
@@ -2296,8 +2385,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_money_spent" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -2309,8 +2398,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_money_spent" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -2350,8 +2439,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_contests_run" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -2363,8 +2452,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_contests_run" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -2404,9 +2493,9 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn ===
-                                    "available_deposit_balance" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      "available_deposit_balance" &&
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -2418,9 +2507,9 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn ===
-                                    "available_deposit_balance" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      "available_deposit_balance" &&
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -2460,8 +2549,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "withdrawable_balance" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -2473,8 +2562,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "withdrawable_balance" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -2551,8 +2640,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "contests_participated" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -2564,8 +2653,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "contests_participated" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -2605,8 +2694,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "contests_won" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -2618,8 +2707,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "contests_won" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -2659,8 +2748,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_views" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -2672,8 +2761,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_views" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -2713,8 +2802,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_money_won" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -2726,8 +2815,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_money_won" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -2767,8 +2856,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "withdrawable_balance" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -2780,8 +2869,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "withdrawable_balance" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -2821,8 +2910,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_submissions_made" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -2834,8 +2923,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_submissions_made" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -2875,8 +2964,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_submissions_won" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -2888,8 +2977,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_submissions_won" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -3017,8 +3106,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "coins" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -3030,8 +3119,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "coins" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -3071,8 +3160,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "advertisers_referred" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -3084,8 +3173,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "advertisers_referred" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -3125,8 +3214,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "creators_referred" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -3138,8 +3227,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "creators_referred" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -3179,8 +3268,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_lifetime_coins" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -3192,8 +3281,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "total_lifetime_coins" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -3233,8 +3322,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "affiliate_earnings" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -3246,8 +3335,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "affiliate_earnings" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -3287,8 +3376,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "other_earnings" &&
-                                    sortOrder === "asc" &&
-                                    "bg-accent"
+                                      sortOrder === "asc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Ascending
@@ -3300,8 +3389,8 @@ export default function AdminUsersPage() {
                                   }}
                                   className={cn(
                                     sortColumn === "other_earnings" &&
-                                    sortOrder === "desc" &&
-                                    "bg-accent"
+                                      sortOrder === "desc" &&
+                                      "bg-accent"
                                   )}
                                 >
                                   Sort by Descending
@@ -3318,6 +3407,9 @@ export default function AdminUsersPage() {
                             </DropdownMenu>
                           </div>
                         </TableHead>
+                      )}
+                      {isColumnVisible("country") && (
+                        <SortableHeader columnId="country" label="Country" />
                       )}
                       {isColumnVisible("created_at") && (
                         <SortableHeader
@@ -3723,11 +3815,11 @@ export default function AdminUsersPage() {
                                         )}
                                         {account?.followers_count !==
                                           undefined && (
-                                            <div className="text-xs text-muted-foreground">
-                                              {account.followers_count.toLocaleString()}{" "}
-                                              followers
-                                            </div>
-                                          )}
+                                          <div className="text-xs text-muted-foreground">
+                                            {account.followers_count.toLocaleString()}{" "}
+                                            followers
+                                          </div>
+                                        )}
                                         {account?.account_type && (
                                           <div className="text-xs text-muted-foreground">
                                             {account.account_type}
@@ -3793,8 +3885,8 @@ export default function AdminUsersPage() {
                               <TableCell className="whitespace-nowrap border-r">
                                 {creatorProfile?.date_of_birth
                                   ? new Date(
-                                    creatorProfile.date_of_birth
-                                  ).toLocaleDateString()
+                                      creatorProfile.date_of_birth
+                                    ).toLocaleDateString()
                                   : "-"}
                               </TableCell>
                             )}
@@ -3842,8 +3934,8 @@ export default function AdminUsersPage() {
                                       ? creatorProfile.categories.join(", ")
                                       : typeof creatorProfile.categories ===
                                         "string"
-                                        ? creatorProfile.categories
-                                        : JSON.stringify(
+                                      ? creatorProfile.categories
+                                      : JSON.stringify(
                                           creatorProfile.categories
                                         )
                                     : "-"}
@@ -3995,8 +4087,8 @@ export default function AdminUsersPage() {
                                     r.user_type === "admin"
                                       ? "destructive"
                                       : r.user_type === "advertiser"
-                                        ? "default"
-                                        : "secondary"
+                                      ? "default"
+                                      : "secondary"
                                   }
                                 >
                                   {r.user_type}
@@ -4047,6 +4139,28 @@ export default function AdminUsersPage() {
                             {isColumnVisible("other_earnings") && (
                               <TableCell className="whitespace-nowrap border-r">
                                 ${((r.other_earnings || 0) / 100).toFixed(2)}
+                              </TableCell>
+                            )}
+                            {isColumnVisible("country") && (
+                              <TableCell className="whitespace-nowrap border-r">
+                                {(() => {
+                                  const regCountry =
+                                    r.registration_info &&
+                                    (r.registration_info as Record<string, any>)
+                                      ?.country;
+                                  if (
+                                    typeof regCountry === "string" &&
+                                    regCountry.trim()
+                                  ) {
+                                    return regCountry;
+                                  }
+                                  const creatorProfile = Array.isArray(
+                                    r.creator_profiles
+                                  )
+                                    ? r.creator_profiles[0]
+                                    : r.creator_profiles || null;
+                                  return creatorProfile?.country || "-";
+                                })()}
                               </TableCell>
                             )}
                             {isColumnVisible("created_at") && (
@@ -4105,8 +4219,8 @@ export default function AdminUsersPage() {
               {activeTab === "all"
                 ? "Users"
                 : activeTab === "advertisers"
-                  ? "Advertisers"
-                  : "Creators"}{" "}
+                ? "Advertisers"
+                : "Creators"}{" "}
               Columns
             </DialogTitle>
             <DialogDescription
@@ -4116,8 +4230,8 @@ export default function AdminUsersPage() {
               {activeTab === "all"
                 ? "Users"
                 : activeTab === "advertisers"
-                  ? "Advertisers"
-                  : "Creators"}{" "}
+                ? "Advertisers"
+                : "Creators"}{" "}
               table. Click on a column to toggle its visibility.
             </DialogDescription>
           </DialogHeader>
@@ -4136,8 +4250,8 @@ export default function AdminUsersPage() {
                             ? "bg-[#391A6A] border-purple-500 text-white"
                             : "bg-purple-50 border-purple-200 text-gray-900"
                           : isDark
-                            ? "border-gray-600 hover:bg-[#2A1249] text-gray-300"
-                            : "border-gray-300 hover:bg-gray-100 text-gray-700"
+                          ? "border-gray-600 hover:bg-[#2A1249] text-gray-300"
+                          : "border-gray-300 hover:bg-gray-100 text-gray-700"
                       )}
                       onClick={() => toggleColumn(column.id)}
                     >
@@ -4148,8 +4262,8 @@ export default function AdminUsersPage() {
                             isVisible
                               ? "bg-purple-600 border-purple-600"
                               : isDark
-                                ? "border-gray-500"
-                                : "border-gray-400"
+                              ? "border-gray-500"
+                              : "border-gray-400"
                           )}
                         >
                           {isVisible && (
@@ -4189,8 +4303,8 @@ export default function AdminUsersPage() {
               {activeTab === "all"
                 ? "Users"
                 : activeTab === "advertisers"
-                  ? "Advertisers"
-                  : "Creators"}
+                ? "Advertisers"
+                : "Creators"}
             </DialogTitle>
             <DialogDescription
               className={cn(isDark ? "text-gray-300" : "text-gray-600")}
@@ -4260,6 +4374,7 @@ export default function AdminUsersPage() {
                       "";
                     const isUserType = selectedColumnId === "user_type";
                     const isGender = selectedColumnId === "gender";
+                    const isCountry = selectedColumnId === "country";
 
                     // Check if this field supports comparison operators
                     const earningsFields = [
@@ -4366,6 +4481,30 @@ export default function AdminUsersPage() {
                             <SelectItem value="Female" isDark={isDark}>
                               Female
                             </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      );
+                    }
+
+                    if (isCountry) {
+                      return (
+                        <Select
+                          value={emptyFilterValue}
+                          onValueChange={commonOnSelectValueChange}
+                        >
+                          <SelectTrigger isDark={isDark} className="w-full">
+                            <SelectValue placeholder="Select country..." />
+                          </SelectTrigger>
+                          <SelectContent isDark={isDark}>
+                            {ALL_COUNTRIES.map((country) => (
+                              <SelectItem
+                                key={country}
+                                value={country}
+                                isDark={isDark}
+                              >
+                                {country}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       );
@@ -4608,13 +4747,13 @@ export default function AdminUsersPage() {
                           filters.map((f) =>
                             f.id === filter.id
                               ? {
-                                ...f,
-                                column: value,
-                                // Clear the previous text/value when changing the column,
-                                // so old filter text doesn't remain attached to the new field.
-                                value: "",
-                                operator: undefined,
-                              }
+                                  ...f,
+                                  column: value,
+                                  // Clear the previous text/value when changing the column,
+                                  // so old filter text doesn't remain attached to the new field.
+                                  value: "",
+                                  operator: undefined,
+                                }
                               : f
                           )
                         );
@@ -4712,6 +4851,32 @@ export default function AdminUsersPage() {
                           <SelectItem value="Female" isDark={isDark}>
                             Female
                           </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : filter.column === "country" ? (
+                      <Select
+                        value={filter.value}
+                        onValueChange={(value) => {
+                          setFilters(
+                            filters.map((f) =>
+                              f.id === filter.id ? { ...f, value } : f
+                            )
+                          );
+                        }}
+                      >
+                        <SelectTrigger isDark={isDark} className="w-full">
+                          <SelectValue placeholder="Select country..." />
+                        </SelectTrigger>
+                        <SelectContent isDark={isDark}>
+                          {ALL_COUNTRIES.map((country) => (
+                            <SelectItem
+                              key={country}
+                              value={country}
+                              isDark={isDark}
+                            >
+                              {country}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     ) : (
@@ -5002,8 +5167,8 @@ export default function AdminUsersPage() {
                           <Input
                             type={
                               filter.column === "created_at" ||
-                                filter.column === "updated_at" ||
-                                filter.column === "date_of_birth"
+                              filter.column === "updated_at" ||
+                              filter.column === "date_of_birth"
                                 ? "date"
                                 : "text"
                             }
@@ -5019,8 +5184,8 @@ export default function AdminUsersPage() {
                             }}
                             placeholder={
                               filter.column === "created_at" ||
-                                filter.column === "updated_at" ||
-                                filter.column === "date_of_birth"
+                              filter.column === "updated_at" ||
+                              filter.column === "date_of_birth"
                                 ? "Select date..."
                                 : "Enter filter value..."
                             }
@@ -5156,8 +5321,8 @@ export default function AdminUsersPage() {
                   typeof info?.price_amount === "number"
                     ? info.price_amount
                     : typeof info?.amount_cents === "number"
-                      ? info.amount_cents
-                      : undefined;
+                    ? info.amount_cents
+                    : undefined;
                 const formattedAmount =
                   amountCents !== undefined
                     ? `$${(amountCents / 100).toFixed(2)}`
@@ -5195,16 +5360,16 @@ export default function AdminUsersPage() {
                       ? "bg-emerald-900/60 text-emerald-200 border-emerald-700"
                       : "bg-emerald-50 text-emerald-700 border-emerald-300"
                     : status === "canceled" || status === "incomplete_expired"
-                      ? isDark
-                        ? "bg-rose-900/60 text-rose-200 border-rose-700"
-                        : "bg-rose-50 text-rose-700 border-rose-300"
-                      : status === "past_due" || status === "unpaid"
-                        ? isDark
-                          ? "bg-amber-900/60 text-amber-200 border-amber-700"
-                          : "bg-amber-50 text-amber-700 border-amber-300"
-                        : isDark
-                          ? "bg-slate-800 text-slate-100 border-slate-700"
-                          : "bg-slate-50 text-slate-700 border-slate-300";
+                    ? isDark
+                      ? "bg-rose-900/60 text-rose-200 border-rose-700"
+                      : "bg-rose-50 text-rose-700 border-rose-300"
+                    : status === "past_due" || status === "unpaid"
+                    ? isDark
+                      ? "bg-amber-900/60 text-amber-200 border-amber-700"
+                      : "bg-amber-50 text-amber-700 border-amber-300"
+                    : isDark
+                    ? "bg-slate-800 text-slate-100 border-slate-700"
+                    : "bg-slate-50 text-slate-700 border-slate-300";
 
                 return (
                   <div className="space-y-6">
