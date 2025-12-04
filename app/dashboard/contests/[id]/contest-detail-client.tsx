@@ -70,6 +70,7 @@ import RejectionReasonModal from "@/components/RejectionReasonModal";
 import PaymentModal from "@/components/PaymentModal";
 import { CreatorSubmissionsModal } from "@/components/CreatorSubmissionsModal";
 import { BudgetProgress } from "@/components/BudgetProgress";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   ArrowLeft,
   Calendar,
@@ -122,20 +123,20 @@ interface Contest {
   title: string;
   // Moderation status (admin workflow)
   moderation_status:
-  | "draft"
-  | "pending_approval"
-  | "approved"
-  | "published"
-  | "rejected";
+    | "draft"
+    | "pending_approval"
+    | "approved"
+    | "published"
+    | "rejected";
   // Contest lifecycle status (only for published contests)
   status: "upcoming" | "active" | "ended" | "incomplete" | "unknown" | null;
   // Post-contest status for ended contests
   post_contest_status?:
-  | "pending_review"
-  | "in_review"
-  | "verification_complete"
-  | "payouts_processed"
-  | null;
+    | "pending_review"
+    | "in_review"
+    | "verification_complete"
+    | "payouts_processed"
+    | null;
   contest_type?: "leaderboard" | "cpm" | null;
   thumbnail_url?: string | null;
   brief_html?: string | null;
@@ -325,6 +326,12 @@ export default function ContestDetailClient({
     averageInteractions: false,
   });
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [creatorWisePage, setCreatorWisePage] = useState(1);
+  const [creatorWiseItemsPerPage, setCreatorWiseItemsPerPage] = useState(25);
+
   const cooldownInfo = getMetricsRefreshCooldownInfoOwner(
     currentContest.last_metrics_updated
   );
@@ -337,6 +344,36 @@ export default function ContestDetailClient({
     }
     return submission.status === activeStatusTab;
   });
+
+  // Sort filtered submissions
+  const sortedSubmissions = [...filteredSubmissions].sort((a, b) => {
+    switch (sortOption) {
+      case "views_asc":
+        return (a.views || 0) - (b.views || 0);
+      case "time_desc": {
+        const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bt - at;
+      }
+      case "time_asc": {
+        const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return at - bt;
+      }
+      case "views_desc":
+      default:
+        return (b.views || 0) - (a.views || 0);
+    }
+  });
+
+  // Pagination calculations for normal view
+  const totalPages = Math.ceil(sortedSubmissions.length / itemsPerPage);
+  const hasNextPage = currentPage < totalPages;
+  const hasPreviousPage = currentPage > 1;
+  const paginatedSubmissions = sortedSubmissions.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   // Filter submissions for analytics based on active analytics tab
   const filteredAnalyticsSubmissions = currentSubmissions.filter(
@@ -470,9 +507,9 @@ export default function ContestDetailClient({
       const flatFeeBonus =
         currentContest?.contest_type === "cpm"
           ? (currentContest?.contest_based_details as any)?.cpm_contest
-            ?.flat_fee_bonus || 0
+              ?.flat_fee_bonus || 0
           : (currentContest?.contest_based_details as any)?.leaderboard_contest
-            ?.flat_fee_bonus || 0;
+              ?.flat_fee_bonus || 0;
 
       if (flatFeeBonus > 0 && (status === "verified" || status === "paid")) {
         group.bonus.expected += flatFeeBonus;
@@ -506,6 +543,25 @@ export default function ContestDetailClient({
 
     return Object.values(grouped);
   }, [filteredSubmissions, viewMode, currentContest, activeStatusTab]);
+
+  // Pagination calculations for creator-wise view
+  const creatorWiseTotalPages = groupSubmissionsByCreator
+    ? Math.ceil(groupSubmissionsByCreator.length / creatorWiseItemsPerPage)
+    : 0;
+  const creatorWiseHasNextPage = creatorWisePage < creatorWiseTotalPages;
+  const creatorWiseHasPreviousPage = creatorWisePage > 1;
+  const paginatedCreatorGroups = groupSubmissionsByCreator
+    ? groupSubmissionsByCreator.slice(
+        (creatorWisePage - 1) * creatorWiseItemsPerPage,
+        creatorWisePage * creatorWiseItemsPerPage
+      )
+    : [];
+
+  // Reset to page 1 when filter or sort changes
+  useEffect(() => {
+    setCurrentPage(1);
+    setCreatorWisePage(1);
+  }, [activeStatusTab, viewMode, sortOption]);
 
   // Watch for theme changes from parent layout
   useEffect(() => {
@@ -708,7 +764,7 @@ export default function ContestDetailClient({
           typeof result === "string" && result.trim().length > 0
             ? result
             : result?.error ||
-            `Failed to update submission status (HTTP ${response.status})`;
+              `Failed to update submission status (HTTP ${response.status})`;
         throw new Error(message);
       }
 
@@ -1048,8 +1104,9 @@ export default function ContestDetailClient({
     if (!cooldownInfo.canRefresh) {
       toast({
         title: "Please Wait",
-        description: `You can refresh again in ${cooldownInfo.remainingMinutes
-          } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
+        description: `You can refresh again in ${
+          cooldownInfo.remainingMinutes
+        } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
         variant: "destructive",
       });
       return;
@@ -1786,63 +1843,63 @@ export default function ContestDetailClient({
                   {/* Total Budget (if set) */}
                   {currentContest.contest_based_details?.leaderboard_contest
                     ?.total_budget && (
-                      <div
-                        className={cn(
-                          "pt-4 mb-4",
-                          isDark
-                            ? "border-t border-white/30"
-                            : "border-t border-yellow-200"
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <p
-                              className={cn(
-                                "text-sm font-medium uppercase tracking-wide",
-                                isDark
-                                  ? "text-white/90 drop-shadow-sm"
-                                  : "text-gray-500"
-                              )}
-                            >
-                              Total Budget
-                            </p>
-                            <p
-                              className={cn(
-                                "text-xl font-bold mt-1",
-                                isDark
-                                  ? "text-cyan-300 drop-shadow-sm"
-                                  : "text-blue-600"
-                              )}
-                            >
-                              {formatMoney(
-                                currentContest.contest_based_details
-                                  .leaderboard_contest.total_budget
-                              )}
-                            </p>
-                            <p
-                              className={cn(
-                                "text-xs mt-1",
-                                isDark
-                                  ? "text-white/70 drop-shadow-sm"
-                                  : "text-gray-600"
-                              )}
-                            >
-                              For bonuses & extras
-                            </p>
-                          </div>
-                          <div
+                    <div
+                      className={cn(
+                        "pt-4 mb-4",
+                        isDark
+                          ? "border-t border-white/30"
+                          : "border-t border-yellow-200"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p
                             className={cn(
-                              "w-10 h-10 flex items-center justify-center rounded-lg",
+                              "text-sm font-medium uppercase tracking-wide",
                               isDark
-                                ? "bg-cyan-400/30 text-cyan-300 backdrop-blur-sm"
-                                : "bg-blue-100 text-blue-600"
+                                ? "text-white/90 drop-shadow-sm"
+                                : "text-gray-500"
                             )}
                           >
-                            <span className="text-lg">💰</span>
-                          </div>
+                            Total Budget
+                          </p>
+                          <p
+                            className={cn(
+                              "text-xl font-bold mt-1",
+                              isDark
+                                ? "text-cyan-300 drop-shadow-sm"
+                                : "text-blue-600"
+                            )}
+                          >
+                            {formatMoney(
+                              currentContest.contest_based_details
+                                .leaderboard_contest.total_budget
+                            )}
+                          </p>
+                          <p
+                            className={cn(
+                              "text-xs mt-1",
+                              isDark
+                                ? "text-white/70 drop-shadow-sm"
+                                : "text-gray-600"
+                            )}
+                          >
+                            For bonuses & extras
+                          </p>
+                        </div>
+                        <div
+                          className={cn(
+                            "w-10 h-10 flex items-center justify-center rounded-lg",
+                            isDark
+                              ? "bg-cyan-400/30 text-cyan-300 backdrop-blur-sm"
+                              : "bg-blue-100 text-blue-600"
+                          )}
+                        >
+                          <span className="text-lg">💰</span>
                         </div>
                       </div>
-                    )}
+                    </div>
+                  )}
 
                   <div
                     className={cn(
@@ -1872,7 +1929,7 @@ export default function ContestDetailClient({
 
           {currentContest.contest_type === "cpm" &&
             currentContest.contest_based_details?.cpm_contest?.total_budget !=
-            null && (
+              null && (
               <div
                 className={cn(
                   "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
@@ -1984,9 +2041,9 @@ export default function ContestDetailClient({
           {/* Budget Progress Tracker - Two-Color Visualization (CPM) */}
           {currentContest.contest_type === "cpm" &&
             currentContest.contest_based_details?.cpm_contest?.total_budget !=
-            null &&
+              null &&
             currentContest.contest_based_details.cpm_contest.total_budget >
-            0 && (
+              0 && (
               <div
                 className={cn(
                   "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
@@ -2736,46 +2793,46 @@ export default function ContestDetailClient({
                         </div>
                         {currentContest.contest_based_details.cpm_contest
                           .min_views != null && (
-                            <div
+                          <div
+                            className={cn(
+                              "flex justify-between items-center p-3 rounded border rounded-md",
+                              isDark ? "border-gray-600" : "border-gray-400"
+                            )}
+                          >
+                            <span
                               className={cn(
-                                "flex justify-between items-center p-3 rounded border rounded-md",
-                                isDark ? "border-gray-600" : "border-gray-400"
+                                "text-md font-medium",
+                                isDark ? "text-white" : "text-black"
                               )}
                             >
-                              <span
-                                className={cn(
-                                  "text-md font-medium",
-                                  isDark ? "text-white" : "text-black"
-                                )}
-                              >
-                                Min Views:
-                              </span>
-                              <span className="font-semibold text-md text-foreground">
-                                {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
+                              Min Views:
+                            </span>
+                            <span className="font-semibold text-md text-foreground">
+                              {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
                         {currentContest.contest_based_details.cpm_contest
                           .max_views != null && (
-                            <div
+                          <div
+                            className={cn(
+                              "flex justify-between items-center p-3 rounded border rounded-md",
+                              isDark ? "border-gray-600" : "border-gray-400"
+                            )}
+                          >
+                            <span
                               className={cn(
-                                "flex justify-between items-center p-3 rounded border rounded-md",
-                                isDark ? "border-gray-600" : "border-gray-400"
+                                "text-md font-medium",
+                                isDark ? "text-white" : "text-black"
                               )}
                             >
-                              <span
-                                className={cn(
-                                  "text-md font-medium",
-                                  isDark ? "text-white" : "text-black"
-                                )}
-                              >
-                                Max Views (Cap):
-                              </span>
-                              <span className="font-semibold text-md text-foreground">
-                                {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
+                              Max Views (Cap):
+                            </span>
+                            <span className="font-semibold text-md text-foreground">
+                              {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
                         {/* <div>
                           <h4 className="text-sm font-medium mt-3 mb-2 text-foreground">
                             Terms & Conditions
@@ -2866,8 +2923,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                      (currentContest as any).payment_details
-                                    )
+                                        (currentContest as any).payment_details
+                                      )
                                     : (currentContest as any).payment_details;
                                 return formatMoney(
                                   paymentDetails.total_prize_pool || 0
@@ -2904,8 +2961,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                      (currentContest as any).payment_details
-                                    )
+                                        (currentContest as any).payment_details
+                                      )
                                     : (currentContest as any).payment_details;
                                 return (
                                   paymentDetails.commission_percentage || 0
@@ -2924,8 +2981,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                      (currentContest as any).payment_details
-                                    )
+                                        (currentContest as any).payment_details
+                                      )
                                     : (currentContest as any).payment_details;
                                 return formatMoney(
                                   paymentDetails.commission_amount || 0
@@ -2978,9 +3035,9 @@ export default function ContestDetailClient({
                                     typeof (currentContest as any)
                                       .payment_details === "string"
                                       ? JSON.parse(
-                                        (currentContest as any)
-                                          .payment_details
-                                      )
+                                          (currentContest as any)
+                                            .payment_details
+                                        )
                                       : (currentContest as any).payment_details;
                                   return formatMoney(
                                     paymentDetails.total_amount_paid || 0
@@ -2993,10 +3050,10 @@ export default function ContestDetailClient({
                           {(() => {
                             const paymentDetails =
                               typeof (currentContest as any).payment_details ===
-                                "string"
+                              "string"
                                 ? JSON.parse(
-                                  (currentContest as any).payment_details
-                                )
+                                    (currentContest as any).payment_details
+                                  )
                                 : (currentContest as any).payment_details;
                             const walletUsed =
                               paymentDetails.wallet_amount_used || 0;
@@ -3212,8 +3269,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                      (currentContest as any).payment_details
-                                    )
+                                        (currentContest as any).payment_details
+                                      )
                                     : (currentContest as any).payment_details;
                                 return paymentDetails.payment_status ===
                                   "completed"
@@ -3225,10 +3282,10 @@ export default function ContestDetailClient({
                           {(() => {
                             const paymentDetails =
                               typeof (currentContest as any).payment_details ===
-                                "string"
+                              "string"
                                 ? JSON.parse(
-                                  (currentContest as any).payment_details
-                                )
+                                    (currentContest as any).payment_details
+                                  )
                                 : (currentContest as any).payment_details;
                             return paymentDetails.paid_at ? (
                               <span
@@ -3314,8 +3371,8 @@ export default function ContestDetailClient({
                         {(currentContest as any).content_type === "ugc"
                           ? "User Generated Content"
                           : (currentContest as any).content_type === "clipping"
-                            ? "Clipping/Editing"
-                            : "Other"}{" "}
+                          ? "Clipping/Editing"
+                          : "Other"}{" "}
                         type submissions.{" "}
                         {(currentContest as any).content_type === "other"
                           ? "( Check rules for more details what kind of content you can create ) "
@@ -3488,51 +3545,51 @@ export default function ContestDetailClient({
                   ?.flat_fee_bonus ||
                   currentContest.contest_based_details?.leaderboard_contest
                     ?.flat_fee_bonus) && (
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                        <Gift className="h-5 w-5 text-green-600" />
-                        Guaranteed Flat Bonus
-                      </h3>
-                      <div
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                      <Gift className="h-5 w-5 text-green-600" />
+                      Guaranteed Flat Bonus
+                    </h3>
+                    <div
+                      className={cn(
+                        "border p-4 rounded-lg",
+                        isDark
+                          ? "bg-green-950/40 border-green-800"
+                          : "border-green-300 bg-green-50/50 rounded-xl p-4"
+                      )}
+                    >
+                      <p
                         className={cn(
-                          "border p-4 rounded-lg",
-                          isDark
-                            ? "bg-green-950/40 border-green-800"
-                            : "border-green-300 bg-green-50/50 rounded-xl p-4"
+                          "text-2xl font-bold mb-2",
+                          isDark ? "text-green-300" : "text-green-900"
                         )}
                       >
-                        <p
-                          className={cn(
-                            "text-2xl font-bold mb-2",
-                            isDark ? "text-green-300" : "text-green-900"
-                          )}
-                        >
-                          {formatMoney(
-                            (
-                              currentContest.contest_based_details
-                                ?.cpm_contest as any
-                            )?.flat_fee_bonus ||
+                        {formatMoney(
+                          (
+                            currentContest.contest_based_details
+                              ?.cpm_contest as any
+                          )?.flat_fee_bonus ||
                             (
                               currentContest.contest_based_details
                                 ?.leaderboard_contest as any
                             )?.flat_fee_bonus ||
                             0
-                          )}{" "}
-                          per verified submission
-                        </p>
-                        <p
-                          className={cn(
-                            "text-sm",
-                            isDark ? "text-green-400" : "text-green-700"
-                          )}
-                        >
-                          🎁 Each creator earns this guaranteed amount for EVERY
-                          verified submission, regardless of views or ranking!
-                          Paid after the contest ends along with other earnings.
-                        </p>
-                      </div>
+                        )}{" "}
+                        per verified submission
+                      </p>
+                      <p
+                        className={cn(
+                          "text-sm",
+                          isDark ? "text-green-400" : "text-green-700"
+                        )}
+                      >
+                        🎁 Each creator earns this guaranteed amount for EVERY
+                        verified submission, regardless of views or ranking!
+                        Paid after the contest ends along with other earnings.
+                      </p>
                     </div>
-                  )}
+                  </div>
+                )}
 
                 {/* Multiple Submissions Section */}
                 {(currentContest as any).multiple_submissions_enabled && (
@@ -3862,12 +3919,12 @@ export default function ContestDetailClient({
                         {(Array.isArray(currentContest.resources)
                           ? currentContest.resources
                           : Object.entries(currentContest.resources).map(
-                            ([description, url]) => ({
-                              url,
-                              description,
-                              type: "external",
-                            })
-                          )
+                              ([description, url]) => ({
+                                url,
+                                description,
+                                type: "external",
+                              })
+                            )
                         ).map((resource, idx) => {
                           const isImage =
                             resource.url.startsWith("data:image") ||
@@ -3985,10 +4042,10 @@ export default function ContestDetailClient({
                                     {isPdf
                                       ? "Open PDF"
                                       : isVideo
-                                        ? "Play Video"
-                                        : isImage
-                                          ? "View Image"
-                                          : "View Resource"}
+                                      ? "Play Video"
+                                      : isImage
+                                      ? "View Image"
+                                      : "View Resource"}
                                   </a>
                                 </Button>
                               </div>
@@ -4068,25 +4125,28 @@ export default function ContestDetailClient({
                           currentSubmissions.length > 0 &&
                           currentContest.post_contest_status !== "in_review" &&
                           currentContest.post_contest_status !==
-                          "verification_complete" &&
+                            "verification_complete" &&
                           currentContest.post_contest_status !==
-                          "payouts_processed" && (
+                            "payouts_processed" && (
                             <button
                               onClick={handleRefreshMetrics}
                               disabled={
                                 isRefreshingMetrics || !cooldownInfo.canRefresh
                               }
-                              className={`flex items-center py-2 px-4 gap-2 rounded-2xl ${cooldownInfo.canRefresh && !isRefreshingMetrics
-                                ? "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
-                                : "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
-                                }`}
+                              className={`flex items-center py-2 px-4 gap-2 rounded-2xl ${
+                                cooldownInfo.canRefresh && !isRefreshingMetrics
+                                  ? "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
+                                  : "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
+                              }`}
                               title={
                                 !cooldownInfo.canRefresh
-                                  ? `Please wait ${cooldownInfo.remainingMinutes
-                                  } more minute${cooldownInfo.remainingMinutes !== 1
-                                    ? "s"
-                                    : ""
-                                  }`
+                                  ? `Please wait ${
+                                      cooldownInfo.remainingMinutes
+                                    } more minute${
+                                      cooldownInfo.remainingMinutes !== 1
+                                        ? "s"
+                                        : ""
+                                    }`
                                   : undefined
                               }
                             >
@@ -4098,8 +4158,8 @@ export default function ContestDetailClient({
                               {isRefreshingMetrics
                                 ? "Updating..."
                                 : !cooldownInfo.canRefresh
-                                  ? `Wait ${cooldownInfo.remainingMinutes}m`
-                                  : "Refresh Metrics"}
+                                ? `Wait ${cooldownInfo.remainingMinutes}m`
+                                : "Refresh Metrics"}
                             </button>
                           )}
                       </div>
@@ -4413,22 +4473,22 @@ export default function ContestDetailClient({
                               {currentContest.platform
                                 ?.toLowerCase()
                                 .includes("instagram") && (
-                                  <>
-                                    <TableHead className="text-center">
-                                      Shares
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Saves
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Reach
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Interactions
-                                    </TableHead>
-                                    {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
-                                  </>
-                                )}
+                                <>
+                                  <TableHead className="text-center">
+                                    Shares
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Saves
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Reach
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Interactions
+                                  </TableHead>
+                                  {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
+                                </>
+                              )}
                               <TableHead className="text-center">
                                 Expected Reward
                               </TableHead>
@@ -4447,109 +4507,42 @@ export default function ContestDetailClient({
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {filteredSubmissions
-                              .sort((a, b) => {
-                                switch (sortOption) {
-                                  case "views_asc":
-                                    return (a.views || 0) - (b.views || 0);
-                                  case "time_desc": {
-                                    const at = a.created_at
-                                      ? new Date(a.created_at).getTime()
-                                      : 0;
-                                    const bt = b.created_at
-                                      ? new Date(b.created_at).getTime()
-                                      : 0;
-                                    return bt - at;
-                                  }
-                                  case "time_asc": {
-                                    const at = a.created_at
-                                      ? new Date(a.created_at).getTime()
-                                      : 0;
-                                    const bt = b.created_at
-                                      ? new Date(b.created_at).getTime()
-                                      : 0;
-                                    return at - bt;
-                                  }
-                                  case "views_desc":
-                                  default:
-                                    return (b.views || 0) - (a.views || 0);
-                                }
-                              })
-                              .map((submission, index) => {
-                                const metrics =
-                                  extractPlatformMetrics(submission);
-                                const submissionStatus =
-                                  getSubmissionStatusBadge(submission.status);
-                                const isLoading =
-                                  isLoadingSubmission[submission.id] || false;
-                                const rank = index + 1;
+                            {paginatedSubmissions.map((submission, index) => {
+                              const globalIndex =
+                                (currentPage - 1) * itemsPerPage + index;
+                              const metrics =
+                                extractPlatformMetrics(submission);
+                              const submissionStatus = getSubmissionStatusBadge(
+                                submission.status
+                              );
+                              const isLoading =
+                                isLoadingSubmission[submission.id] || false;
+                              const rank = globalIndex + 1;
 
-                                // Compute expected and granted rewards separately
-                                const getExpectedReward = () => {
+                              // Compute expected and granted rewards separately
+                              const getExpectedReward = () => {
+                                if (
+                                  currentContest.contest_type === "leaderboard"
+                                ) {
+                                  const contestDetails =
+                                    currentContest.contest_based_details
+                                      ?.leaderboard_contest;
                                   if (
-                                    currentContest.contest_type ===
-                                    "leaderboard"
+                                    contestDetails?.prizes &&
+                                    Array.isArray(contestDetails.prizes)
                                   ) {
-                                    const contestDetails =
-                                      currentContest.contest_based_details
-                                        ?.leaderboard_contest;
-                                    if (
-                                      contestDetails?.prizes &&
-                                      Array.isArray(contestDetails.prizes)
-                                    ) {
-                                      const currentRank = index + 1; // 1-based ranking
-                                      const prizeForRank =
-                                        contestDetails.prizes.find(
-                                          (prize: any) =>
-                                            prize.position === currentRank
-                                        );
-                                      if (prizeForRank) {
-                                        const prizeAmount = centsToDollars(
-                                          prizeForRank.amount
-                                        );
-                                        return {
-                                          amount: prizeAmount,
-                                          label: "Expected",
-                                          className:
-                                            "text-slate-700 font-semibold",
-                                        };
-                                      }
+                                    const currentRank = index + 1; // 1-based ranking
+                                    const prizeForRank =
+                                      contestDetails.prizes.find(
+                                        (prize: any) =>
+                                          prize.position === currentRank
+                                      );
+                                    if (prizeForRank) {
+                                      const prizeAmount = centsToDollars(
+                                        prizeForRank.amount
+                                      );
                                       return {
-                                        amount: 0,
-                                        label: "No Prize",
-                                        className: "text-slate-500",
-                                      };
-                                    }
-                                    return {
-                                      amount: 0,
-                                      label: "N/A",
-                                      className: "text-slate-500",
-                                    };
-                                  }
-                                  if (currentContest.contest_type === "cpm") {
-                                    const cpmConfig =
-                                      currentContest.contest_based_details
-                                        ?.cpm_contest;
-                                    const views = submission.views || 0;
-                                    if (cpmConfig?.cpm_rate_usd) {
-                                      let effectiveViews = views;
-                                      if (
-                                        cpmConfig.min_views != null &&
-                                        views < cpmConfig.min_views
-                                      ) {
-                                        effectiveViews = 0;
-                                      } else if (
-                                        cpmConfig.max_views != null &&
-                                        views > cpmConfig.max_views
-                                      ) {
-                                        effectiveViews = cpmConfig.max_views;
-                                      }
-                                      const calculatedEarnings =
-                                        (effectiveViews *
-                                          cpmConfig.cpm_rate_usd) /
-                                        1000;
-                                      return {
-                                        amount: calculatedEarnings,
+                                        amount: prizeAmount,
                                         label: "Expected",
                                         className:
                                           "text-slate-700 font-semibold",
@@ -4557,7 +4550,7 @@ export default function ContestDetailClient({
                                     }
                                     return {
                                       amount: 0,
-                                      label: "N/A",
+                                      label: "No Prize",
                                       className: "text-slate-500",
                                     };
                                   }
@@ -4566,610 +4559,665 @@ export default function ContestDetailClient({
                                     label: "N/A",
                                     className: "text-slate-500",
                                   };
-                                };
-
-                                const getGrantedReward = () => {
-                                  if (submission.status === "rejected") {
+                                }
+                                if (currentContest.contest_type === "cpm") {
+                                  const cpmConfig =
+                                    currentContest.contest_based_details
+                                      ?.cpm_contest;
+                                  const views = submission.views || 0;
+                                  if (cpmConfig?.cpm_rate_usd) {
+                                    let effectiveViews = views;
+                                    if (
+                                      cpmConfig.min_views != null &&
+                                      views < cpmConfig.min_views
+                                    ) {
+                                      effectiveViews = 0;
+                                    } else if (
+                                      cpmConfig.max_views != null &&
+                                      views > cpmConfig.max_views
+                                    ) {
+                                      effectiveViews = cpmConfig.max_views;
+                                    }
+                                    const calculatedEarnings =
+                                      (effectiveViews *
+                                        cpmConfig.cpm_rate_usd) /
+                                      1000;
                                     return {
-                                      amount: 0,
-                                      label: "No Reward",
-                                      className: "text-red-600 font-semibold",
-                                    };
-                                  }
-                                  if (submission.status === "paid") {
-                                    const dollars = submission.earnings
-                                      ? centsToDollars(submission.earnings)
-                                      : 0;
-                                    return {
-                                      amount: dollars,
-                                      label: "Paid",
-                                      className: "text-blue-600 font-semibold",
-                                    };
-                                  }
-                                  if (
-                                    submission.earnings !== null &&
-                                    submission.earnings !== undefined &&
-                                    submission.earnings > 0
-                                  ) {
-                                    return {
-                                      amount: centsToDollars(
-                                        submission.earnings
-                                      ),
-                                      label: "Pending",
-                                      className: "text-amber-600 font-semibold",
+                                      amount: calculatedEarnings,
+                                      label: "Expected",
+                                      className: "text-slate-700 font-semibold",
                                     };
                                   }
                                   return {
                                     amount: 0,
-                                    label: "—",
+                                    label: "N/A",
                                     className: "text-slate-500",
                                   };
+                                }
+                                return {
+                                  amount: 0,
+                                  label: "N/A",
+                                  className: "text-slate-500",
                                 };
+                              };
 
-                                const expectedInfo = getExpectedReward();
-                                const grantedInfo = getGrantedReward();
+                              const getGrantedReward = () => {
+                                if (submission.status === "rejected") {
+                                  return {
+                                    amount: 0,
+                                    label: "No Reward",
+                                    className: "text-red-600 font-semibold",
+                                  };
+                                }
+                                if (submission.status === "paid") {
+                                  const dollars = submission.earnings
+                                    ? centsToDollars(submission.earnings)
+                                    : 0;
+                                  return {
+                                    amount: dollars,
+                                    label: "Paid",
+                                    className: "text-blue-600 font-semibold",
+                                  };
+                                }
+                                if (
+                                  submission.earnings !== null &&
+                                  submission.earnings !== undefined &&
+                                  submission.earnings > 0
+                                ) {
+                                  return {
+                                    amount: centsToDollars(submission.earnings),
+                                    label: "Pending",
+                                    className: "text-amber-600 font-semibold",
+                                  };
+                                }
+                                return {
+                                  amount: 0,
+                                  label: "—",
+                                  className: "text-slate-500",
+                                };
+                              };
 
-                                return (
-                                  <TableRow
-                                    key={submission.id}
-                                    className={cn(
-                                      "transition-colors duration-200",
-                                      isDark
-                                        ? ""
-                                        : "bg-white hover:bg-slate-100",
-                                      rank <= 3 &&
+                              const expectedInfo = getExpectedReward();
+                              const grantedInfo = getGrantedReward();
+
+                              return (
+                                <TableRow
+                                  key={submission.id}
+                                  className={cn(
+                                    "transition-colors duration-200",
+                                    isDark ? "" : "bg-white hover:bg-slate-100",
+                                    rank <= 3 &&
                                       (isDark
                                         ? "bg-gradient-to-r from-violet-900/20 to-transparent border-l-4 border-l-violet-400"
                                         : "bg-gradient-to-r from-yellow-50 to-transparent border-l-4 border-l-yellow-400")
-                                    )}
-                                  >
-                                    <TableCell className="font-bold text-center">
-                                      <div className="flex items-center justify-center">
-                                        {rank <= 3 && (
-                                          <Trophy
-                                            className={cn(
-                                              "h-4 w-4 mr-1",
-                                              rank === 1
-                                                ? isDark
-                                                  ? "text-yellow-400"
-                                                  : "text-yellow-500"
-                                                : rank === 2
-                                                  ? "text-gray-400"
-                                                  : "text-amber-600"
-                                            )}
-                                          />
-                                        )}
-                                        {rank}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="flex items-center gap-3">
-                                        <Avatar
+                                  )}
+                                >
+                                  <TableCell className="font-bold text-center">
+                                    <div className="flex items-center justify-center">
+                                      {rank <= 3 && (
+                                        <Trophy
                                           className={cn(
-                                            "h-12 w-12 border-2 shadow-sm",
+                                            "h-4 w-4 mr-1",
+                                            rank === 1
+                                              ? isDark
+                                                ? "text-yellow-400"
+                                                : "text-yellow-500"
+                                              : rank === 2
+                                              ? "text-gray-400"
+                                              : "text-amber-600"
+                                          )}
+                                        />
+                                      )}
+                                      {rank}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center gap-3">
+                                      <Avatar
+                                        className={cn(
+                                          "h-12 w-12 border-2 shadow-sm",
+                                          isDark
+                                            ? "border-slate-600"
+                                            : "border-slate-200"
+                                        )}
+                                      >
+                                        <AvatarImage
+                                          src={
+                                            submission.creator_avatar_url ||
+                                            undefined
+                                          }
+                                          alt={
+                                            submission.creator_display_name ||
+                                            submission.creator_username ||
+                                            "Creator"
+                                          }
+                                        />
+                                        <AvatarFallback
+                                          className={cn(
+                                            "text-sm font-semibold",
                                             isDark
-                                              ? "border-slate-600"
-                                              : "border-slate-200"
+                                              ? "bg-gradient-to-br from-slate-700 to-slate-800 text-slate-200"
+                                              : "bg-gradient-to-br from-slate-100 to-slate-200 text-slate-800"
                                           )}
                                         >
-                                          <AvatarImage
-                                            src={
-                                              submission.creator_avatar_url ||
-                                              undefined
-                                            }
-                                            alt={
-                                              submission.creator_display_name ||
-                                              submission.creator_username ||
-                                              "Creator"
-                                            }
-                                          />
-                                          <AvatarFallback
-                                            className={cn(
-                                              "text-sm font-semibold",
-                                              isDark
-                                                ? "bg-gradient-to-br from-slate-700 to-slate-800 text-slate-200"
-                                                : "bg-gradient-to-br from-slate-100 to-slate-200 text-slate-800"
-                                            )}
-                                          >
-                                            {(
-                                              submission.creator_display_name ||
-                                              submission.creator_username
-                                            )
-                                              ?.charAt(0)
-                                              .toUpperCase() || "C"}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <div className="flex-1 min-w-0">
-                                          <p
-                                            className={cn(
-                                              "font-semibold text-sm truncate",
-                                              isDark
-                                                ? "text-white"
-                                                : "text-slate-900"
-                                            )}
-                                          >
-                                            {submission.creator_display_name ||
-                                              "Unknown Creator"}
-                                          </p>
-                                          <p
-                                            className={cn(
-                                              "text-xs font-mono",
-                                              isDark
-                                                ? "text-white"
-                                                : "text-slate-600"
-                                            )}
-                                          >
-                                            {submission.creator_username ||
-                                              "unknown"}
-                                          </p>
-                                          {submission.video_thumbnail_url && (
-                                            <a
-                                              href={submission.content_link}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className={cn(
-                                                "text-xs hover:underline flex items-center gap-1 mt-1 transition-colors",
-                                                isDark
-                                                  ? "text-purple-400"
-                                                  : "text-blue-600 hover:text-blue-800"
-                                              )}
-                                            >
-                                              <PlayCircle className="h-3 w-3" />
-                                              View Content
-                                            </a>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                      <div className="flex flex-col items-center">
-                                        <span
+                                          {(
+                                            submission.creator_display_name ||
+                                            submission.creator_username
+                                          )
+                                            ?.charAt(0)
+                                            .toUpperCase() || "C"}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <div className="flex-1 min-w-0">
+                                        <p
                                           className={cn(
-                                            "font-bold  text-sm",
+                                            "font-semibold text-sm truncate",
                                             isDark
                                               ? "text-white"
                                               : "text-slate-900"
                                           )}
                                         >
-                                          {formatMetricValue(metrics.views)}
+                                          {submission.creator_display_name ||
+                                            "Unknown Creator"}
+                                        </p>
+                                        <p
+                                          className={cn(
+                                            "text-xs font-mono",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-slate-600"
+                                          )}
+                                        >
+                                          {submission.creator_username ||
+                                            "unknown"}
+                                        </p>
+                                        {submission.video_thumbnail_url && (
+                                          <a
+                                            href={submission.content_link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={cn(
+                                              "text-xs hover:underline flex items-center gap-1 mt-1 transition-colors",
+                                              isDark
+                                                ? "text-purple-400"
+                                                : "text-blue-600 hover:text-blue-800"
+                                            )}
+                                          >
+                                            <PlayCircle className="h-3 w-3" />
+                                            View Content
+                                          </a>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <div className="flex flex-col items-center">
+                                      <span
+                                        className={cn(
+                                          "font-bold  text-sm",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-slate-900"
+                                        )}
+                                      >
+                                        {formatMetricValue(metrics.views)}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          "text-xs ",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-slate-500"
+                                        )}
+                                      >
+                                        views
+                                      </span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <div className="flex flex-col items-center">
+                                      <div className="flex items-center gap-1">
+                                        <ThumbsUp className="h-3 w-3 text-purple-400" />
+                                        <span
+                                          className={cn(
+                                            "font-bold text-sm",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-slate-900"
+                                          )}
+                                        >
+                                          {formatMetricValue(metrics.likes)}
+                                        </span>
+                                      </div>
+                                      <span
+                                        className={cn(
+                                          "text-xs ",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-slate-500"
+                                        )}
+                                      >
+                                        likes
+                                      </span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <div className="flex flex-col items-center">
+                                      <div className="flex items-center gap-1">
+                                        <MessageCircle className="h-3 w-3 text-purple-400" />
+                                        <span
+                                          className={cn(
+                                            "font-bold text-sm",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-slate-900 dark:text-slate-100"
+                                          )}
+                                        >
+                                          {formatMetricValue(metrics.comments)}
+                                        </span>
+                                      </div>
+                                      <span
+                                        className={cn(
+                                          "text-xs ",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-slate-500"
+                                        )}
+                                      >
+                                        comments
+                                      </span>
+                                    </div>
+                                  </TableCell>
+                                  {/* Dynamic data cells based on contest platform */}
+                                  {currentContest.platform
+                                    ?.toLowerCase()
+                                    .includes("instagram") && (
+                                    <>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        <div className="flex items-center justify-center gap-1">
+                                          <Share2 className="h-3 w-3 text-purple-500" />
+                                          {formatMetricValue(metrics.shares)}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {formatMetricValue(
+                                          (metrics as any).saves
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {formatMetricValue(
+                                          (metrics as any).reach
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {formatMetricValue(
+                                          (metrics as any).total_interactions
+                                        )}
+                                      </TableCell>
+                                      {/* <TableCell className="text-center font-mono text-sm">
+                                                                            {formatMetricValue(metrics.engagement_rate, true)}
+                                                                        </TableCell> */}
+                                    </>
+                                  )}
+                                  <TableCell className="text-center">
+                                    <div className="flex flex-col items-center">
+                                      <div className="flex flex-col items-center">
+                                        <span
+                                          className={cn(
+                                            "text-lg font-bold tracking-wide",
+                                            expectedInfo.className.includes(
+                                              "text-slate-500"
+                                            )
+                                              ? isDark
+                                                ? "text-slate-400"
+                                                : "text-slate-500"
+                                              : expectedInfo.className.includes(
+                                                  "text-slate-700"
+                                                )
+                                              ? isDark
+                                                ? "text-slate-200"
+                                                : "text-slate-700"
+                                              : isDark
+                                              ? "text-white"
+                                              : "text-slate-900"
+                                          )}
+                                        >
+                                          ${expectedInfo.amount.toFixed(2)}
                                         </span>
                                         <span
                                           className={cn(
-                                            "text-xs ",
+                                            "text-xs uppercase tracking-wide",
                                             isDark
                                               ? "text-white"
-                                              : "text-slate-500"
+                                              : "text-slate-800"
                                           )}
                                         >
-                                          views
+                                          {expectedInfo.label}
                                         </span>
                                       </div>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                      <div className="flex flex-col items-center">
-                                        <div className="flex items-center gap-1">
-                                          <ThumbsUp className="h-3 w-3 text-purple-400" />
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <div className="flex flex-col items-center">
+                                      {grantedInfo.amount > 0 ? (
+                                        <div className="flex flex-col items-center">
                                           <span
                                             className={cn(
-                                              "font-bold text-sm",
-                                              isDark
+                                              "text-lg font-bold",
+                                              grantedInfo.className.includes(
+                                                "text-red-600"
+                                              )
+                                                ? isDark
+                                                  ? "text-red-400"
+                                                  : "text-red-600"
+                                                : grantedInfo.className.includes(
+                                                    "text-blue-600"
+                                                  )
+                                                ? isDark
+                                                  ? "text-blue-400"
+                                                  : "text-blue-600"
+                                                : grantedInfo.className.includes(
+                                                    "text-amber-600"
+                                                  )
+                                                ? isDark
+                                                  ? "text-amber-400"
+                                                  : "text-amber-600"
+                                                : grantedInfo.className.includes(
+                                                    "text-slate-500"
+                                                  )
+                                                ? isDark
+                                                  ? "text-slate-400"
+                                                  : "text-slate-500"
+                                                : isDark
                                                 ? "text-white"
                                                 : "text-slate-900"
                                             )}
                                           >
-                                            {formatMetricValue(metrics.likes)}
-                                          </span>
-                                        </div>
-                                        <span
-                                          className={cn(
-                                            "text-xs ",
-                                            isDark
-                                              ? "text-white"
-                                              : "text-slate-500"
-                                          )}
-                                        >
-                                          likes
-                                        </span>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                      <div className="flex flex-col items-center">
-                                        <div className="flex items-center gap-1">
-                                          <MessageCircle className="h-3 w-3 text-purple-400" />
-                                          <span
-                                            className={cn(
-                                              "font-bold text-sm",
-                                              isDark
-                                                ? "text-white"
-                                                : "text-slate-900 dark:text-slate-100"
-                                            )}
-                                          >
-                                            {formatMetricValue(
-                                              metrics.comments
-                                            )}
-                                          </span>
-                                        </div>
-                                        <span
-                                          className={cn(
-                                            "text-xs ",
-                                            isDark
-                                              ? "text-white"
-                                              : "text-slate-500"
-                                          )}
-                                        >
-                                          comments
-                                        </span>
-                                      </div>
-                                    </TableCell>
-                                    {/* Dynamic data cells based on contest platform */}
-                                    {currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("instagram") && (
-                                        <>
-                                          <TableCell className="text-center font-mono text-sm">
-                                            <div className="flex items-center justify-center gap-1">
-                                              <Share2 className="h-3 w-3 text-purple-500" />
-                                              {formatMetricValue(metrics.shares)}
-                                            </div>
-                                          </TableCell>
-                                          <TableCell className="text-center font-mono text-sm">
-                                            {formatMetricValue(
-                                              (metrics as any).saves
-                                            )}
-                                          </TableCell>
-                                          <TableCell className="text-center font-mono text-sm">
-                                            {formatMetricValue(
-                                              (metrics as any).reach
-                                            )}
-                                          </TableCell>
-                                          <TableCell className="text-center font-mono text-sm">
-                                            {formatMetricValue(
-                                              (metrics as any).total_interactions
-                                            )}
-                                          </TableCell>
-                                          {/* <TableCell className="text-center font-mono text-sm">
-                                                                            {formatMetricValue(metrics.engagement_rate, true)}
-                                                                        </TableCell> */}
-                                        </>
-                                      )}
-                                    <TableCell className="text-center">
-                                      <div className="flex flex-col items-center">
-                                        <div className="flex flex-col items-center">
-                                          <span
-                                            className={cn(
-                                              "text-lg font-bold tracking-wide",
-                                              expectedInfo.className.includes(
-                                                "text-slate-500"
-                                              )
-                                                ? isDark
-                                                  ? "text-slate-400"
-                                                  : "text-slate-500"
-                                                : expectedInfo.className.includes(
-                                                  "text-slate-700"
-                                                )
-                                                  ? isDark
-                                                    ? "text-slate-200"
-                                                    : "text-slate-700"
-                                                  : isDark
-                                                    ? "text-white"
-                                                    : "text-slate-900"
-                                            )}
-                                          >
-                                            ${expectedInfo.amount.toFixed(2)}
+                                            ${grantedInfo.amount.toFixed(2)}
                                           </span>
                                           <span
                                             className={cn(
                                               "text-xs uppercase tracking-wide",
                                               isDark
-                                                ? "text-white"
-                                                : "text-slate-800"
+                                                ? "text-slate-400"
+                                                : "text-slate-500"
                                             )}
                                           >
-                                            {expectedInfo.label}
+                                            {grantedInfo.label}
                                           </span>
                                         </div>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                      <div className="flex flex-col items-center">
-                                        {grantedInfo.amount > 0 ? (
-                                          <div className="flex flex-col items-center">
-                                            <span
-                                              className={cn(
-                                                "text-lg font-bold",
-                                                grantedInfo.className.includes(
-                                                  "text-red-600"
-                                                )
-                                                  ? isDark
-                                                    ? "text-red-400"
-                                                    : "text-red-600"
-                                                  : grantedInfo.className.includes(
+                                      ) : (
+                                        <div className="flex flex-col items-center">
+                                          <span
+                                            className={cn(
+                                              "text-sm font-semibold",
+                                              grantedInfo.className.includes(
+                                                "text-red-600"
+                                              )
+                                                ? isDark
+                                                  ? "text-red-400"
+                                                  : "text-red-600"
+                                                : grantedInfo.className.includes(
                                                     "text-blue-600"
                                                   )
-                                                    ? isDark
-                                                      ? "text-blue-400"
-                                                      : "text-blue-600"
-                                                    : grantedInfo.className.includes(
-                                                      "text-amber-600"
-                                                    )
-                                                      ? isDark
-                                                        ? "text-amber-400"
-                                                        : "text-amber-600"
-                                                      : grantedInfo.className.includes(
-                                                        "text-slate-500"
-                                                      )
-                                                        ? isDark
-                                                          ? "text-slate-400"
-                                                          : "text-slate-500"
-                                                        : isDark
-                                                          ? "text-white"
-                                                          : "text-slate-900"
-                                              )}
-                                            >
-                                              ${grantedInfo.amount.toFixed(2)}
-                                            </span>
-                                            <span
-                                              className={cn(
-                                                "text-xs uppercase tracking-wide",
-                                                isDark
+                                                ? isDark
+                                                  ? "text-blue-400"
+                                                  : "text-blue-600"
+                                                : grantedInfo.className.includes(
+                                                    "text-amber-600"
+                                                  )
+                                                ? isDark
+                                                  ? "text-amber-400"
+                                                  : "text-amber-600"
+                                                : grantedInfo.className.includes(
+                                                    "text-slate-500"
+                                                  )
+                                                ? isDark
                                                   ? "text-slate-400"
                                                   : "text-slate-500"
-                                              )}
-                                            >
-                                              {grantedInfo.label}
-                                            </span>
-                                          </div>
-                                        ) : (
-                                          <div className="flex flex-col items-center">
-                                            <span
-                                              className={cn(
-                                                "text-sm font-semibold",
-                                                grantedInfo.className.includes(
-                                                  "text-red-600"
-                                                )
-                                                  ? isDark
-                                                    ? "text-red-400"
-                                                    : "text-red-600"
-                                                  : grantedInfo.className.includes(
-                                                    "text-blue-600"
-                                                  )
-                                                    ? isDark
-                                                      ? "text-blue-400"
-                                                      : "text-blue-600"
-                                                    : grantedInfo.className.includes(
-                                                      "text-amber-600"
-                                                    )
-                                                      ? isDark
-                                                        ? "text-amber-400"
-                                                        : "text-amber-600"
-                                                      : grantedInfo.className.includes(
-                                                        "text-slate-500"
-                                                      )
-                                                        ? isDark
-                                                          ? "text-slate-400"
-                                                          : "text-slate-500"
-                                                        : isDark
-                                                          ? "text-white"
-                                                          : "text-slate-900"
-                                              )}
-                                            >
-                                              {grantedInfo.label}
-                                            </span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                      <div className="flex flex-col items-center">
-                                        <Badge
-                                          variant="outline"
-                                          className={cn(
-                                            "text-xs inline-flex items-center gap-1 px-3 py-1 font-medium",
-                                            submissionStatus.className
-                                          )}
-                                        >
-                                          {submissionStatus.icon}{" "}
-                                          {submissionStatus.text}
-                                        </Badge>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell
-                                      className={cn(
-                                        "text-center text-xs",
-                                        isDark ? "text-white" : "text-slate-700"
-                                      )}
-                                    >
-                                      <div className="flex flex-col">
-                                        <span>
-                                          {formatLocalDateTime(
-                                            submission.created_at,
-                                            { dateStyle: "short" }
-                                          )}
-                                        </span>
-                                        <span className="text-xs">
-                                          {formatLocalDateTime(
-                                            submission.created_at,
-                                            { timeStyle: "short" }
-                                          )}
-                                        </span>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            disabled={isLoading}
+                                                : isDark
+                                                ? "text-white"
+                                                : "text-slate-900"
+                                            )}
                                           >
-                                            {isLoading ? (
-                                              <Loader2 className="h-4 w-4 animate-spin" />
-                                            ) : (
-                                              <MoreVertical className="h-4 w-4" />
-                                            )}
-                                            <span className="sr-only">
-                                              Actions
-                                            </span>
-                                          </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent
-                                          className={cn(
-                                            "border",
-                                            isDark ? "bg-black" : "bg-white"
-                                          )}
-                                          align="end"
+                                            {grantedInfo.label}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <div className="flex flex-col items-center">
+                                      <Badge
+                                        variant="outline"
+                                        className={cn(
+                                          "text-xs inline-flex items-center gap-1 px-3 py-1 font-medium",
+                                          submissionStatus.className
+                                        )}
+                                      >
+                                        {submissionStatus.icon}{" "}
+                                        {submissionStatus.text}
+                                      </Badge>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell
+                                    className={cn(
+                                      "text-center text-xs",
+                                      isDark ? "text-white" : "text-slate-700"
+                                    )}
+                                  >
+                                    <div className="flex flex-col">
+                                      <span>
+                                        {formatLocalDateTime(
+                                          submission.created_at,
+                                          { dateStyle: "short" }
+                                        )}
+                                      </span>
+                                      <span className="text-xs">
+                                        {formatLocalDateTime(
+                                          submission.created_at,
+                                          { timeStyle: "short" }
+                                        )}
+                                      </span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          disabled={isLoading}
                                         >
-                                          {currentContest.post_contest_status !==
-                                            "payouts_processed" && (
-                                              <>
-                                                <DropdownMenuLabel className="text-purple-500">
-                                                  Change Status
-                                                </DropdownMenuLabel>
-                                                <DropdownMenuSeparator />
-                                              </>
-                                            )}
-                                          {submission.status !== "verified" &&
-                                            currentContest.post_contest_status !==
+                                          {isLoading ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          ) : (
+                                            <MoreVertical className="h-4 w-4" />
+                                          )}
+                                          <span className="sr-only">
+                                            Actions
+                                          </span>
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent
+                                        className={cn(
+                                          "border",
+                                          isDark ? "bg-black" : "bg-white"
+                                        )}
+                                        align="end"
+                                      >
+                                        {currentContest.post_contest_status !==
+                                          "payouts_processed" && (
+                                          <>
+                                            <DropdownMenuLabel className="text-purple-500">
+                                              Change Status
+                                            </DropdownMenuLabel>
+                                            <DropdownMenuSeparator />
+                                          </>
+                                        )}
+                                        {submission.status !== "verified" &&
+                                          currentContest.post_contest_status !==
                                             "payouts_processed" &&
-                                            (submission.status === "paid" ? (
-                                              <DropdownMenuItem
-                                                disabled={isLoading}
-                                                onClick={() =>
-                                                  setConfirmReversal({
-                                                    id: submission.id,
-                                                    target: "verified",
-                                                  })
-                                                }
-                                              >
-                                                Mark as Verified
-                                              </DropdownMenuItem>
-                                            ) : (
+                                          (submission.status === "paid" ? (
+                                            <DropdownMenuItem
+                                              disabled={isLoading}
+                                              onClick={() =>
+                                                setConfirmReversal({
+                                                  id: submission.id,
+                                                  target: "verified",
+                                                })
+                                              }
+                                            >
+                                              Mark as Verified
+                                            </DropdownMenuItem>
+                                          ) : (
+                                            <DropdownMenuItem
+                                              disabled={isLoading}
+                                              onClick={() =>
+                                                handleUpdateSubmissionStatus(
+                                                  submission.id,
+                                                  "verified"
+                                                )
+                                              }
+                                            >
+                                              Mark as Verified
+                                            </DropdownMenuItem>
+                                          ))}
+                                        {submission.status !== "rejected" &&
+                                          currentContest.post_contest_status !==
+                                            "payouts_processed" &&
+                                          (submission.status === "paid" ? (
+                                            <DropdownMenuItem
+                                              disabled={isLoading}
+                                              onClick={() =>
+                                                setConfirmReversal({
+                                                  id: submission.id,
+                                                  target: "rejected",
+                                                  needRejectionReason: true,
+                                                })
+                                              }
+                                              className="text-red-600"
+                                            >
+                                              Mark as Rejected
+                                            </DropdownMenuItem>
+                                          ) : (
+                                            <DropdownMenuItem
+                                              disabled={isLoading}
+                                              onClick={() =>
+                                                handleRejectSubmission(
+                                                  submission.id
+                                                )
+                                              }
+                                              className="text-red-600"
+                                            >
+                                              Mark as Rejected
+                                            </DropdownMenuItem>
+                                          ))}
+                                        {submission.status !== "pending" &&
+                                          currentContest.post_contest_status !==
+                                            "payouts_processed" &&
+                                          (submission.status === "paid" ? (
+                                            <DropdownMenuItem
+                                              disabled={isLoading}
+                                              onClick={() =>
+                                                setConfirmReversal({
+                                                  id: submission.id,
+                                                  target: "pending",
+                                                })
+                                              }
+                                            >
+                                              Set to Pending
+                                            </DropdownMenuItem>
+                                          ) : (
+                                            <DropdownMenuItem
+                                              disabled={isLoading}
+                                              onClick={() =>
+                                                handleUpdateSubmissionStatus(
+                                                  submission.id,
+                                                  "pending"
+                                                )
+                                              }
+                                            >
+                                              Set to Pending
+                                            </DropdownMenuItem>
+                                          ))}
+                                        {submission.status !== "paid" &&
+                                          isAdminView &&
+                                          (currentContest.post_contest_status ===
+                                            "in_review" ||
+                                            currentContest.post_contest_status ===
+                                              "verification_complete" ||
+                                            currentContest.post_contest_status ===
+                                              "payouts_processed") && (
+                                            <>
                                               <DropdownMenuItem
                                                 disabled={isLoading}
                                                 onClick={() =>
                                                   handleUpdateSubmissionStatus(
                                                     submission.id,
-                                                    "verified"
+                                                    "paid"
                                                   )
                                                 }
                                               >
-                                                Mark as Verified
+                                                Mark as Paid
                                               </DropdownMenuItem>
-                                            ))}
-                                          {submission.status !== "rejected" &&
-                                            currentContest.post_contest_status !==
-                                            "payouts_processed" &&
-                                            (submission.status === "paid" ? (
                                               <DropdownMenuItem
                                                 disabled={isLoading}
                                                 onClick={() =>
-                                                  setConfirmReversal({
-                                                    id: submission.id,
-                                                    target: "rejected",
-                                                    needRejectionReason: true,
-                                                  })
-                                                }
-                                                className="text-red-600"
-                                              >
-                                                Mark as Rejected
-                                              </DropdownMenuItem>
-                                            ) : (
-                                              <DropdownMenuItem
-                                                disabled={isLoading}
-                                                onClick={() =>
-                                                  handleRejectSubmission(
+                                                  handleMarkAsPaid(
                                                     submission.id
                                                   )
                                                 }
-                                                className="text-red-600"
                                               >
-                                                Mark as Rejected
+                                                Mark as Custom Paid
                                               </DropdownMenuItem>
-                                            ))}
-                                          {submission.status !== "pending" &&
-                                            currentContest.post_contest_status !==
-                                            "payouts_processed" &&
-                                            (submission.status === "paid" ? (
-                                              <DropdownMenuItem
-                                                disabled={isLoading}
-                                                onClick={() =>
-                                                  setConfirmReversal({
-                                                    id: submission.id,
-                                                    target: "pending",
-                                                  })
-                                                }
-                                              >
-                                                Set to Pending
-                                              </DropdownMenuItem>
-                                            ) : (
-                                              <DropdownMenuItem
-                                                disabled={isLoading}
-                                                onClick={() =>
-                                                  handleUpdateSubmissionStatus(
-                                                    submission.id,
-                                                    "pending"
-                                                  )
-                                                }
-                                              >
-                                                Set to Pending
-                                              </DropdownMenuItem>
-                                            ))}
-                                          {submission.status !== "paid" &&
-                                            isAdminView &&
-                                            (currentContest.post_contest_status ===
-                                              "in_review" ||
-                                              currentContest.post_contest_status ===
-                                              "verification_complete" ||
-                                              currentContest.post_contest_status ===
-                                              "payouts_processed") && (
-                                              <>
-                                                <DropdownMenuItem
-                                                  disabled={isLoading}
-                                                  onClick={() =>
-                                                    handleUpdateSubmissionStatus(
-                                                      submission.id,
-                                                      "paid"
-                                                    )
-                                                  }
-                                                >
-                                                  Mark as Paid
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                  disabled={isLoading}
-                                                  onClick={() =>
-                                                    handleMarkAsPaid(
-                                                      submission.id
-                                                    )
-                                                  }
-                                                >
-                                                  Mark as Custom Paid
-                                                </DropdownMenuItem>
-                                              </>
-                                            )}
-                                          {currentContest.post_contest_status !==
-                                            "payouts_processed" && (
-                                              <DropdownMenuSeparator />
-                                            )}
-                                          <DropdownMenuItem asChild>
-                                            <a
-                                              href={submission.content_link}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="flex items-center"
-                                            >
-                                              <ExternalLink className="h-3 w-3 mr-2" />
-                                              View Content
-                                            </a>
-                                          </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
+                                            </>
+                                          )}
+                                        {currentContest.post_contest_status !==
+                                          "payouts_processed" && (
+                                          <DropdownMenuSeparator />
+                                        )}
+                                        <DropdownMenuItem asChild>
+                                          <a
+                                            href={submission.content_link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center"
+                                          >
+                                            <ExternalLink className="h-3 w-3 mr-2" />
+                                            View Content
+                                          </a>
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
                           </TableBody>
                         </Table>
                       )}
+
+                      {/* Pagination Controls for Normal View */}
+                      {viewMode === "normal" &&
+                        sortedSubmissions.length > 0 && (
+                          <div className="mt-6 px-4">
+                            <PaginationControls
+                              page={currentPage}
+                              limit={itemsPerPage}
+                              total={sortedSubmissions.length}
+                              totalPages={totalPages}
+                              hasNextPage={hasNextPage}
+                              hasPreviousPage={hasPreviousPage}
+                              onPageChange={setCurrentPage}
+                              onLimitChange={(limit) => {
+                                setItemsPerPage(limit);
+                                setCurrentPage(1);
+                              }}
+                              isDark={isDark}
+                            />
+                          </div>
+                        )}
 
                       {/* Creator-wise View Table */}
                       {viewMode === "creator-wise" &&
@@ -5211,22 +5259,22 @@ export default function ContestDetailClient({
                                   const flatFeeBonus =
                                     currentContest.contest_type === "cpm"
                                       ? (
-                                        currentContest.contest_based_details as any
-                                      )?.cpm_contest?.flat_fee_bonus
+                                          currentContest.contest_based_details as any
+                                        )?.cpm_contest?.flat_fee_bonus
                                       : (
-                                        currentContest.contest_based_details as any
-                                      )?.leaderboard_contest?.flat_fee_bonus;
+                                          currentContest.contest_based_details as any
+                                        )?.leaderboard_contest?.flat_fee_bonus;
                                   return flatFeeBonus > 0;
                                 })() && (
-                                    <>
-                                      <TableHead className="text-center">
-                                        Bonus Expected
-                                      </TableHead>
-                                      <TableHead className="text-center">
-                                        Bonus Granted
-                                      </TableHead>
-                                    </>
-                                  )}
+                                  <>
+                                    <TableHead className="text-center">
+                                      Bonus Expected
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      Bonus Granted
+                                    </TableHead>
+                                  </>
+                                )}
                                 <TableHead className="text-center">
                                   First Submitted
                                 </TableHead>
@@ -5236,8 +5284,7 @@ export default function ContestDetailClient({
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {(groupSubmissionsByCreator as any[]).length ===
-                                0 ? (
+                              {paginatedCreatorGroups.length === 0 ? (
                                 <TableRow>
                                   <TableCell
                                     colSpan={12}
@@ -5248,145 +5295,181 @@ export default function ContestDetailClient({
                                   </TableCell>
                                 </TableRow>
                               ) : (
-                                (groupSubmissionsByCreator as any[]).map(
-                                  (group: any, index: number) => (
-                                    <TableRow key={group.creator.id}>
-                                      <TableCell className="font-medium">
-                                        {index + 1}
-                                      </TableCell>
-                                      <TableCell>
-                                        <div className="flex items-center gap-2">
-                                          <Avatar className="h-8 w-8">
-                                            <AvatarImage
-                                              src={
-                                                group.creator
-                                                  .profile_picture_url ||
-                                                undefined
-                                              }
-                                            />
-                                            <AvatarFallback>
-                                              {group.creator.username?.[0]?.toUpperCase() ||
-                                                "U"}
-                                            </AvatarFallback>
-                                          </Avatar>
-                                          <span className="font-medium">
-                                            {group.creator.username}
-                                          </span>
-                                        </div>
-                                      </TableCell>
-                                      <TableCell className="text-center font-semibold">
-                                        {group.totalCount}
-                                      </TableCell>
-                                      <TableCell>
-                                        <div className="flex flex-wrap gap-1 justify-center">
-                                          <Badge
-                                            variant="outline"
-                                            className="text-xs"
-                                          >
-                                            All: {group.statusCounts.all}
-                                          </Badge>
-                                          {group.statusCounts.verified > 0 && (
-                                            <Badge className="bg-green-500 text-white text-xs">
-                                              V: {group.statusCounts.verified}
-                                            </Badge>
-                                          )}
-                                          {group.statusCounts.paid > 0 && (
-                                            <Badge className="bg-blue-500 text-white text-xs">
-                                              P: {group.statusCounts.paid}
-                                            </Badge>
-                                          )}
-                                          {group.statusCounts.pending > 0 && (
-                                            <Badge className="bg-yellow-500 text-white text-xs">
-                                              Pend: {group.statusCounts.pending}
-                                            </Badge>
-                                          )}
-                                          {group.statusCounts.rejected > 0 && (
-                                            <Badge className="bg-red-500 text-white text-xs">
-                                              R: {group.statusCounts.rejected}
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      </TableCell>
-                                      <TableCell className="text-center">
-                                        {group.metrics.views.toLocaleString()}
-                                      </TableCell>
-                                      <TableCell className="text-center">
-                                        {group.metrics.likes.toLocaleString()}
-                                      </TableCell>
-                                      <TableCell className="text-center">
-                                        {group.metrics.comments.toLocaleString()}
-                                      </TableCell>
-                                      <TableCell className="text-center font-medium">
-                                        <div className="flex items-center justify-center gap-1">
-                                          {formatMoney(group.earnings.expected)}
-                                          {group.isCapped && (
-                                            <span
-                                              className="text-amber-600 cursor-help"
-                                              title={`Capped at ${formatMoney(
-                                                currentContest.max_earnings_per_creator
-                                              )}. Original: ${formatMoney(
-                                                group.earningsBeforeCap
-                                              )}`}
-                                            >
-                                              ⚠️
+                                paginatedCreatorGroups.map(
+                                  (group: any, index: number) => {
+                                    const globalIndex =
+                                      (creatorWisePage - 1) *
+                                        creatorWiseItemsPerPage +
+                                      index;
+                                    return (
+                                      <TableRow key={group.creator.id}>
+                                        <TableCell className="font-medium">
+                                          {globalIndex + 1}
+                                        </TableCell>
+                                        <TableCell>
+                                          <div className="flex items-center gap-2">
+                                            <Avatar className="h-8 w-8">
+                                              <AvatarImage
+                                                src={
+                                                  group.creator
+                                                    .profile_picture_url ||
+                                                  undefined
+                                                }
+                                              />
+                                              <AvatarFallback>
+                                                {group.creator.username?.[0]?.toUpperCase() ||
+                                                  "U"}
+                                              </AvatarFallback>
+                                            </Avatar>
+                                            <span className="font-medium">
+                                              {group.creator.username}
                                             </span>
-                                          )}
-                                        </div>
-                                      </TableCell>
-                                      <TableCell className="text-center font-medium text-green-600">
-                                        {formatMoney(group.earnings.granted)}
-                                      </TableCell>
-                                      {(() => {
-                                        const flatFeeBonus =
-                                          currentContest.contest_type === "cpm"
-                                            ? (
-                                              currentContest.contest_based_details as any
-                                            )?.cpm_contest?.flat_fee_bonus
-                                            : (
-                                              currentContest.contest_based_details as any
-                                            )?.leaderboard_contest
-                                              ?.flat_fee_bonus;
-                                        return flatFeeBonus > 0;
-                                      })() && (
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-center font-semibold">
+                                          {group.totalCount}
+                                        </TableCell>
+                                        <TableCell>
+                                          <div className="flex flex-wrap gap-1 justify-center">
+                                            <Badge
+                                              variant="outline"
+                                              className="text-xs"
+                                            >
+                                              All: {group.statusCounts.all}
+                                            </Badge>
+                                            {group.statusCounts.verified >
+                                              0 && (
+                                              <Badge className="bg-green-500 text-white text-xs">
+                                                V: {group.statusCounts.verified}
+                                              </Badge>
+                                            )}
+                                            {group.statusCounts.paid > 0 && (
+                                              <Badge className="bg-blue-500 text-white text-xs">
+                                                P: {group.statusCounts.paid}
+                                              </Badge>
+                                            )}
+                                            {group.statusCounts.pending > 0 && (
+                                              <Badge className="bg-yellow-500 text-white text-xs">
+                                                Pend:{" "}
+                                                {group.statusCounts.pending}
+                                              </Badge>
+                                            )}
+                                            {group.statusCounts.rejected >
+                                              0 && (
+                                              <Badge className="bg-red-500 text-white text-xs">
+                                                R: {group.statusCounts.rejected}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                          {group.metrics.views.toLocaleString()}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                          {group.metrics.likes.toLocaleString()}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                          {group.metrics.comments.toLocaleString()}
+                                        </TableCell>
+                                        <TableCell className="text-center font-medium">
+                                          <div className="flex items-center justify-center gap-1">
+                                            {formatMoney(
+                                              group.earnings.expected
+                                            )}
+                                            {group.isCapped && (
+                                              <span
+                                                className="text-amber-600 cursor-help"
+                                                title={`Capped at ${formatMoney(
+                                                  currentContest.max_earnings_per_creator
+                                                )}. Original: ${formatMoney(
+                                                  group.earningsBeforeCap
+                                                )}`}
+                                              >
+                                                ⚠️
+                                              </span>
+                                            )}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-center font-medium text-green-600">
+                                          {formatMoney(group.earnings.granted)}
+                                        </TableCell>
+                                        {(() => {
+                                          const flatFeeBonus =
+                                            currentContest.contest_type ===
+                                            "cpm"
+                                              ? (
+                                                  currentContest.contest_based_details as any
+                                                )?.cpm_contest?.flat_fee_bonus
+                                              : (
+                                                  currentContest.contest_based_details as any
+                                                )?.leaderboard_contest
+                                                  ?.flat_fee_bonus;
+                                          return flatFeeBonus > 0;
+                                        })() && (
                                           <>
                                             <TableCell className="text-center font-medium">
-                                              {formatMoney(group.bonus.expected)}
+                                              {formatMoney(
+                                                group.bonus.expected
+                                              )}
                                             </TableCell>
                                             <TableCell className="text-center font-medium text-green-600">
                                               {formatMoney(group.bonus.granted)}
                                             </TableCell>
                                           </>
                                         )}
-                                      <TableCell className="text-center text-sm">
-                                        {formatLocalDateTime(
-                                          group.firstSubmittedAt
-                                        )}
-                                      </TableCell>
-                                      <TableCell className="text-center">
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          className={cn(
-                                            "border",
-                                            isDark
-                                              ? "bg-[#170337] border-gray-600 text-white"
-                                              : "border-gray-400 bg-white text-gray-800"
+                                        <TableCell className="text-center text-sm">
+                                          {formatLocalDateTime(
+                                            group.firstSubmittedAt
                                           )}
-                                          onClick={() =>
-                                            setSelectedCreatorForModal(
-                                              group.creator.id
-                                            )
-                                          }
-                                        >
-                                          View All ({group.totalCount})
-                                        </Button>
-                                      </TableCell>
-                                    </TableRow>
-                                  )
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className={cn(
+                                              "border",
+                                              isDark
+                                                ? "bg-[#170337] border-gray-600 text-white"
+                                                : "border-gray-400 bg-white text-gray-800"
+                                            )}
+                                            onClick={() =>
+                                              setSelectedCreatorForModal(
+                                                group.creator.id
+                                              )
+                                            }
+                                          >
+                                            View All ({group.totalCount})
+                                          </Button>
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  }
                                 )
                               )}
                             </TableBody>
                           </Table>
+                        )}
+
+                      {/* Pagination Controls for Creator-wise View */}
+                      {viewMode === "creator-wise" &&
+                        groupSubmissionsByCreator &&
+                        groupSubmissionsByCreator.length > 0 && (
+                          <div className="mt-6 px-4">
+                            <PaginationControls
+                              page={creatorWisePage}
+                              limit={creatorWiseItemsPerPage}
+                              total={groupSubmissionsByCreator.length}
+                              totalPages={creatorWiseTotalPages}
+                              hasNextPage={creatorWiseHasNextPage}
+                              hasPreviousPage={creatorWiseHasPreviousPage}
+                              onPageChange={setCreatorWisePage}
+                              onLimitChange={(limit) => {
+                                setCreatorWiseItemsPerPage(limit);
+                                setCreatorWisePage(1);
+                              }}
+                              isDark={isDark}
+                            />
+                          </div>
                         )}
                     </div>
                   </CardContent>
@@ -5761,11 +5844,11 @@ export default function ContestDetailClient({
                             >
                               {filteredAnalyticsSubmissions?.length > 0
                                 ? Math.round(
-                                  filteredAnalyticsSubmissions.reduce(
-                                    (sum, s) => sum + (s.views || 0),
-                                    0
-                                  ) / filteredAnalyticsSubmissions.length
-                                ).toLocaleString()
+                                    filteredAnalyticsSubmissions.reduce(
+                                      (sum, s) => sum + (s.views || 0),
+                                      0
+                                    ) / filteredAnalyticsSubmissions.length
+                                  ).toLocaleString()
                                 : 0}
                             </p>
                           </div>
@@ -5809,10 +5892,10 @@ export default function ContestDetailClient({
                             >
                               {filteredAnalyticsSubmissions?.length > 0
                                 ? Math.max(
-                                  ...filteredAnalyticsSubmissions.map(
-                                    (s) => s.views || 0
-                                  )
-                                ).toLocaleString()
+                                    ...filteredAnalyticsSubmissions.map(
+                                      (s) => s.views || 0
+                                    )
+                                  ).toLocaleString()
                                 : 0}
                             </p>
                           </div>
@@ -5849,14 +5932,14 @@ export default function ContestDetailClient({
                               {activeAnalyticsTab === "verified"
                                 ? "Verified Views"
                                 : activeAnalyticsTab === "paid"
-                                  ? "Paid Views"
-                                  : activeAnalyticsTab === "pending"
-                                    ? "Pending Views"
-                                    : activeAnalyticsTab === "rejected"
-                                      ? "Rejected Views"
-                                      : activeAnalyticsTab === "verified_or_paid"
-                                        ? "Verified/Paid Views"
-                                        : "Filtered Views"}
+                                ? "Paid Views"
+                                : activeAnalyticsTab === "pending"
+                                ? "Pending Views"
+                                : activeAnalyticsTab === "rejected"
+                                ? "Rejected Views"
+                                : activeAnalyticsTab === "verified_or_paid"
+                                ? "Verified/Paid Views"
+                                : "Filtered Views"}
                             </p>
                             <p
                               className={cn(
@@ -6023,16 +6106,16 @@ export default function ContestDetailClient({
                                   {activeAnalyticsTab === "all"
                                     ? "All Submissions"
                                     : activeAnalyticsTab === "verified"
-                                      ? "Verified Only"
-                                      : activeAnalyticsTab === "paid"
-                                        ? "Paid Only"
-                                        : activeAnalyticsTab === "pending"
-                                          ? "Pending Only"
-                                          : activeAnalyticsTab === "rejected"
-                                            ? "Rejected Only"
-                                            : activeAnalyticsTab === "verified_or_paid"
-                                              ? "Verified/Paid"
-                                              : "Filtered"}
+                                    ? "Verified Only"
+                                    : activeAnalyticsTab === "paid"
+                                    ? "Paid Only"
+                                    : activeAnalyticsTab === "pending"
+                                    ? "Pending Only"
+                                    : activeAnalyticsTab === "rejected"
+                                    ? "Rejected Only"
+                                    : activeAnalyticsTab === "verified_or_paid"
+                                    ? "Verified/Paid"
+                                    : "Filtered"}
                                 </p>
                               </div>
                               <div
@@ -6585,8 +6668,8 @@ export default function ContestDetailClient({
               type === "bonus"
                 ? "mark_bonus_paid"
                 : type === "both"
-                  ? "mark_both_paid"
-                  : "paid";
+                ? "mark_both_paid"
+                : "paid";
             await handleUpdateSubmissionStatus(submissionId, action);
           }}
           onCustomPayment={(submissionId: string) => {

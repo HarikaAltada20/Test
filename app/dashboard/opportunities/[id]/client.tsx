@@ -211,7 +211,9 @@ export function ContestClientPage({
   const [modalCurrentPage, setModalCurrentPage] = useState(1);
   const [modalItemsPerPage] = useState(10); // Show 10 submissions per page
   const [showCreatorVideosModal, setShowCreatorVideosModal] = useState(false);
-  const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);
+  const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(
+    null
+  );
   const [creatorVideosCurrentPage, setCreatorVideosCurrentPage] = useState(1);
   const [creatorVideosItemsPerPage] = useState(10);
   const { activeTab, setActiveTab } = useTabState(tabs, {
@@ -2078,34 +2080,37 @@ export function ContestClientPage({
                 >
                   <div className="p-6">
                     {/* Header with Icon and Title */}
-                    <div className="flex items-center gap-4 mb-6">
-                      <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
-                        <DollarSign className="h-6 w-6 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <h3
-                          className={cn(
-                            "text-xl font-bold text-slate-900 dark:text-slate-100 mb-1",
-                            isDark ? "text-white" : "text-slate-900"
-                          )}
-                        >
-                          Earning Opportunities
-                        </h3>
-                        <p
-                          className={cn(
-                            "text-sm",
-                            isDark ? "text-gray-300" : "text-slate-600"
-                          )}
-                        >
-                          {contest.contest_type === "cpm"
-                            ? "Performance-based earnings"
-                            : "Competition-based prizes"}
-                        </p>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-6">
+                      <div className="flex items-center gap-3 sm:gap-4 flex-1">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                          <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                        </div>
+
+                        <div className="flex-1">
+                          <h3
+                            className={cn(
+                              "text-xl font-bold text-slate-900 dark:text-slate-100 mb-1",
+                              isDark ? "text-white" : "text-slate-900"
+                            )}
+                          >
+                            Earning Opportunities
+                          </h3>
+                          <p
+                            className={cn(
+                              "text-sm",
+                              isDark ? "text-gray-300" : "text-slate-600"
+                            )}
+                          >
+                            {contest.contest_type === "cpm"
+                              ? "Performance-based earnings"
+                              : "Competition-based prizes"}
+                          </p>
+                        </div>
                       </div>
                       {/* Platform Badge */}
                       <div
                         className={cn(
-                          "flex items-center gap-2 px-3 py-2 rounded-lg",
+                          "flex items-center gap-2 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg flex-shrink-0 self-start sm:self-auto",
                           isDark
                             ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
                             : "bg-slate-100"
@@ -2522,13 +2527,13 @@ export function ContestClientPage({
                       {(contest as any).multiple_submissions_enabled && (
                         <div
                           className={cn(
-                            "flex items-center justify-between p-3 rounded-lg border transition-all duration-300",
+                            "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-2.5 sm:p-3 rounded-lg border transition-all duration-300",
                             isDark
                               ? "bg-gradient-to-r from-purple-500/20 to-violet-500/20 border-purple-400/50"
                               : "bg-gradient-to-r from-purple-50 to-violet-50 border-purple-200"
                           )}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                             <CheckCheck
                               className={cn(
                                 "h-5 w-5",
@@ -2537,22 +2542,22 @@ export function ContestClientPage({
                             />
                             <span
                               className={cn(
-                                "font-medium",
+                                "font-medium text-sm sm:text-base",
                                 isDark ? "text-slate-100" : "text-slate-900"
                               )}
                             >
                               Multiple Submissions
                             </span>
-                            <div className="group relative">
+                            <div className="group relative flex-shrink-0">
                               <Info
                                 className={cn(
-                                  "h-4 w-4 cursor-help",
+                                  "h-3.5 w-3.5 sm:h-4 sm:w-4 cursor-help",
                                   isDark ? "text-purple-400" : "text-purple-600"
                                 )}
                               />
                               <div
                                 className={cn(
-                                  "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center",
+                                  "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2.5 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 w-[180px] sm:w-auto sm:min-w-64 sm:max-w-80 text-center",
                                   isDark
                                     ? "bg-slate-800 text-slate-100 border border-slate-700"
                                     : "bg-slate-900 text-white"
@@ -2565,10 +2570,10 @@ export function ContestClientPage({
                               </div>
                             </div>
                           </div>
-                          <div className="text-right">
+                          <div className="text-left sm:text-right">
                             <div
                               className={cn(
-                                "text-lg font-bold",
+                                "text-base sm:text-lg font-bold",
                                 isDark ? "text-purple-100" : "text-purple-900"
                               )}
                             >
@@ -2579,7 +2584,7 @@ export function ContestClientPage({
                             {(contest as any).max_earnings_per_creator && (
                               <div
                                 className={cn(
-                                  "text-xs",
+                                  "text-[10px] sm:text-xs mt-0.5",
                                   isDark ? "text-purple-300" : "text-purple-700"
                                 )}
                               >
@@ -4392,66 +4397,103 @@ export function ContestClientPage({
                     displayEntry && (
                       <Card
                         key={`my-rank-${displayEntry.id}`}
-                        className="shadow-lg border-2 border-primary/50 bg-primary/5 dark:bg-primary/10 overflow-hidden mb-6"
+                        className={cn(
+                          "overflow-hidden mb-6 border",
+                          isDark
+                            ? "border-[#C9A7FF] bg-[#000000]"
+                            : "border-[#D9C0FF] bg-white"
+                        )}
                       >
-                        <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:space-x-4">
-                          <div className="flex items-center gap-3 sm:gap-4">
-                            <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0">
-                              #
-                              {bestSubmission
-                                ? rankLookupMap.get(bestSubmission.id)
-                                : myLeaderboardEntry?.rank || "?"}
+                        <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-1 sm:space-x-1">
+                          
+                          <div className="flex flex-1 items-center gap-3 sm:gap-4 min-w-0">
+                            <div
+                              className={cn(
+                                "flex flex-col items-center justify-center w-10 sm:w-12 flex-shrink-0 rounded-xl px-1 py-1.5",
+                                isDark
+                                  ? "bg-[#C9A7FF26] text-[#F5EBFF]"
+                                  : "bg-[#D9C0FF40] text-[#4A00BE]"
+                              )}
+                            >
+                              <div className="text-lg sm:text-xl font-extrabold leading-none">
+                                #
+                                {bestSubmission
+                                  ? rankLookupMap.get(bestSubmission.id)
+                                  : myLeaderboardEntry?.rank || "?"}
+                              </div>
                               {bestSubmission &&
                                 myLeaderboardEntry &&
                                 bestSubmission.id !== myLeaderboardEntry.id && (
-                                  <div className="text-xs text-primary/70 mt-1">
+                                  <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/15 text-primary">
                                     Best
-                                  </div>
+                                  </span>
                                 )}
                             </div>
-                            <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
-                              <AvatarImage
-                                src={
-                                  displayEntry.creator_pfp_url ??
-                                  displayEntry.user_platform_pfp_url ??
-                                  undefined
-                                }
-                                alt={displayEntry.user_platform_username}
-                              />
-                              <AvatarFallback className="bg-primary/20 text-primary">
-                                {displayEntry.user_platform_username?.[0]?.toUpperCase() ||
-                                  "U"}
-                              </AvatarFallback>
-                            </Avatar>
-                          </div>
 
-                          <div className="flex-grow min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <p
-                                className="text-sm sm:text-base font-semibold text-primary dark:text-primary-foreground truncate"
-                                title={displayEntry.user_platform_username}
-                              >
-                                {displayEntry.user_platform_username} (You)
-                                {bestSubmission &&
-                                  myLeaderboardEntry &&
-                                  bestSubmission.id !==
-                                    myLeaderboardEntry.id && (
-                                    <span className="text-xs text-primary/70 ml-2">
-                                      • Best Performance
-                                    </span>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
+                                <AvatarImage
+                                  src={
+                                    displayEntry.creator_pfp_url ??
+                                    displayEntry.user_platform_pfp_url ??
+                                    undefined
+                                  }
+                                  alt={displayEntry.user_platform_username}
+                                />
+                                <AvatarFallback 
+                                className={cn(
+                                  "bg-primary/20",
+                                  isDark
+                                    ? "text-white"
+                                    : "text-gray-900"
+                                )}>
+                                  {displayEntry.user_platform_username?.[0]?.toUpperCase() ||
+                                    "U"}
+                                </AvatarFallback>
+                              </Avatar>
+
+                              <div className="flex flex-col min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p                  
+                                    className={cn(
+                                      "text-sm sm:text-base font-semibold truncate",
+                                      isDark
+                                        ? "text-white"
+                                        : "text-gray-900"
+                                    )}
+                                    title={displayEntry.user_platform_username}
+                                  >
+                                    {displayEntry.user_platform_username} (You)
+                                    {bestSubmission &&
+                                      myLeaderboardEntry &&
+                                      bestSubmission.id !==
+                                        myLeaderboardEntry.id && (
+                                        <span className="text-xs text-primary/70 ml-2">
+                                          • Best Performance
+                                        </span>
+                                      )}
+                                  </p>
+                                  {renderVerificationBadges(
+                                    displayEntry.status
                                   )}
-                              </p>
-                              {renderVerificationBadges(displayEntry.status)}
+                                </div>
+                                <p className={cn(
+                                      "text-xs",
+                                      isDark ? "text-gray-300" : "text-slate-500"
+                                    )}>
+                                  Submitted:{" "}
+                                  {formatTimeAgo(displayEntry.created_at)}
+                                </p>
+                              </div>
                             </div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Submitted:{" "}
-                              {formatTimeAgo(displayEntry.created_at)}
-                            </p>
                           </div>
 
                           <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
                             <div className="flex items-center space-x-2">
-                              <p className="text-base sm:text-lg font-bold text-primary dark:text-primary-foreground">
+                              <p className={cn(
+                                "text-base sm:text-lg font-bold",
+                                isDark ? "text-white" : "text-gray-900"
+                              )}>
                                 {displayEntry.views
                                   ? displayEntry.views.toLocaleString()
                                   : "0"}{" "}
@@ -5123,16 +5165,18 @@ export function ContestClientPage({
                 >
                   <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
                     <DialogHeader className="flex-shrink-0">
-                      <DialogTitle 
-                       className={cn(
-                        "flex items-center gap-2",
-                        isDark ? "text-white" : "text-gray-700"
-                      )}>
+                      <DialogTitle
+                        className={cn(
+                          "flex items-center gap-2",
+                          isDark ? "text-white" : "text-gray-700"
+                        )}
+                      >
                         <Eye className="h-5 w-5" />
                         {(() => {
-                          const creatorGroup = groupedLeaderboardByCreator?.find(
-                            (group) => group.creator_id === selectedCreatorId
-                          );
+                          const creatorGroup =
+                            groupedLeaderboardByCreator?.find(
+                              (group) => group.creator_id === selectedCreatorId
+                            );
                           return creatorGroup
                             ? `All Videos by ${creatorGroup.creator_username} (${getCreatorVideos.length})`
                             : "Creator Videos";
@@ -5161,14 +5205,16 @@ export function ContestClientPage({
                           const startIndex =
                             (creatorVideosCurrentPage - 1) *
                             creatorVideosItemsPerPage;
-                          const endIndex = startIndex + creatorVideosItemsPerPage;
+                          const endIndex =
+                            startIndex + creatorVideosItemsPerPage;
                           const currentVideos = getCreatorVideos.slice(
                             startIndex,
                             endIndex
                           );
-                          const creatorGroup = groupedLeaderboardByCreator?.find(
-                            (group) => group.creator_id === selectedCreatorId
-                          );
+                          const creatorGroup =
+                            groupedLeaderboardByCreator?.find(
+                              (group) => group.creator_id === selectedCreatorId
+                            );
 
                           return (
                             <>
@@ -5176,7 +5222,8 @@ export function ContestClientPage({
                                 // Calculate sequential rank within the modal (starting from 1)
                                 const modalRank = startIndex + index + 1;
                                 // Get actual leaderboard rank for prize lookup
-                                const actualRank = rankLookupMap.get(video.id) || null;
+                                const actualRank =
+                                  rankLookupMap.get(video.id) || null;
 
                                 // Earnings display - match leaderboard format
                                 let prizeDisplay = null;
@@ -5196,7 +5243,8 @@ export function ContestClientPage({
                                         ?.cpm_contest?.flat_fee_bonus || 0;
 
                                     // Calculate total earnings (CPM + Bonus if applicable)
-                                    const totalEarnings = video.earnings + flatFeeBonus;
+                                    const totalEarnings =
+                                      video.earnings + flatFeeBonus;
 
                                     // Show detailed breakdown if in detailed mode and bonus exists
                                     if (
@@ -5206,7 +5254,8 @@ export function ContestClientPage({
                                       prizeDisplay = (
                                         <div className="space-y-1">
                                           <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                            {earningsLabel}: {formatMoney(totalEarnings)}
+                                            {earningsLabel}:{" "}
+                                            {formatMoney(totalEarnings)}
                                           </div>
                                           <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
                                             <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
@@ -5225,7 +5274,8 @@ export function ContestClientPage({
                                     } else {
                                       prizeDisplay = (
                                         <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                          {earningsLabel}: {formatMoney(totalEarnings)}
+                                          {earningsLabel}:{" "}
+                                          {formatMoney(totalEarnings)}
                                         </div>
                                       );
                                     }
@@ -5238,7 +5288,8 @@ export function ContestClientPage({
                                       // Check for flat fee bonus in leaderboard contests
                                       const flatFeeBonus =
                                         (contest.contest_based_details as any)
-                                          ?.leaderboard_contest?.flat_fee_bonus || 0;
+                                          ?.leaderboard_contest
+                                          ?.flat_fee_bonus || 0;
 
                                       if (flatFeeBonus > 0) {
                                         const totalEarnings =
@@ -5253,18 +5304,21 @@ export function ContestClientPage({
                                                   : "text-green-600"
                                               )}
                                             >
-                                              Earned: {formatMoney(totalEarnings)}
+                                              Earned:{" "}
+                                              {formatMoney(totalEarnings)}
                                             </div>
                                             <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
                                               <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                                               <span className="whitespace-nowrap">
-                                                {formatMoney(video.earnings)} Prize
+                                                {formatMoney(video.earnings)}{" "}
+                                                Prize
                                               </span>
                                               <span className="text-green-600 dark:text-green-400">
                                                 +
                                               </span>
                                               <span className="whitespace-nowrap">
-                                                {formatMoney(flatFeeBonus)} Bonus
+                                                {formatMoney(flatFeeBonus)}{" "}
+                                                Bonus
                                               </span>
                                             </div>
                                           </div>
@@ -5272,7 +5326,8 @@ export function ContestClientPage({
                                       } else {
                                         prizeDisplay = (
                                           <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                            Earned: {formatMoney(video.earnings)}
+                                            Earned:{" "}
+                                            {formatMoney(video.earnings)}
                                           </div>
                                         );
                                       }
@@ -5288,13 +5343,14 @@ export function ContestClientPage({
                                 } else if (
                                   contest.contest_type === "leaderboard" &&
                                   Array.isArray(
-                                    contest.contest_based_details?.leaderboard_contest
-                                      ?.prizes
+                                    contest.contest_based_details
+                                      ?.leaderboard_contest?.prizes
                                   )
                                 ) {
                                   const prizeInfo = actualRank
                                     ? (
-                                        contest.contest_based_details.leaderboard_contest
+                                        contest.contest_based_details
+                                          .leaderboard_contest
                                           .prizes as PrizeInfo[]
                                       ).find((p) => p.position === actualRank)
                                     : null;
@@ -5308,7 +5364,8 @@ export function ContestClientPage({
                                     if (leaderboardViewMode === "detailed") {
                                       const flatFeeBonus =
                                         (contest.contest_based_details as any)
-                                          ?.leaderboard_contest?.flat_fee_bonus || 0;
+                                          ?.leaderboard_contest
+                                          ?.flat_fee_bonus || 0;
 
                                       if (flatFeeBonus > 0) {
                                         const totalEarnings =
@@ -5318,11 +5375,14 @@ export function ContestClientPage({
                                             <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                             <div>
                                               <div>
-                                                {prizeText}: {formatMoney(totalEarnings)}
+                                                {prizeText}:{" "}
+                                                {formatMoney(totalEarnings)}
                                               </div>
                                               <div className="text-xs text-amber-600 dark:text-amber-500">
-                                                ({formatMoney(prizeInfo.amount)} Prize +{" "}
-                                                {formatMoney(flatFeeBonus)} Bonus)
+                                                ({formatMoney(prizeInfo.amount)}{" "}
+                                                Prize +{" "}
+                                                {formatMoney(flatFeeBonus)}{" "}
+                                                Bonus)
                                               </div>
                                             </div>
                                           </div>
@@ -5331,7 +5391,8 @@ export function ContestClientPage({
                                         prizeDisplay = (
                                           <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
                                             <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                            {prizeText}: {formatMoney(prizeInfo.amount)}
+                                            {prizeText}:{" "}
+                                            {formatMoney(prizeInfo.amount)}
                                           </span>
                                         );
                                       }
@@ -5340,7 +5401,8 @@ export function ContestClientPage({
                                       prizeDisplay = (
                                         <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
                                           <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                          {prizeText}: {formatMoney(prizeInfo.amount)}
+                                          {prizeText}:{" "}
+                                          {formatMoney(prizeInfo.amount)}
                                         </span>
                                       );
                                     }
@@ -5377,20 +5439,27 @@ export function ContestClientPage({
                                             <p
                                               className={cn(
                                                 "text-sm sm:text-base font-semibold truncate",
-                                                isDark ? "text-white" : "text-gray-700"
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-gray-700"
                                               )}
                                             >
                                               {video.user_platform_username}
                                             </p>
-                                            {renderVerificationBadges(video.status)}
+                                            {renderVerificationBadges(
+                                              video.status
+                                            )}
                                           </div>
                                           <p
                                             className={cn(
                                               "text-xs",
-                                              isDark ? "text-gray-300" : "text-slate-500"
+                                              isDark
+                                                ? "text-gray-300"
+                                                : "text-slate-500"
                                             )}
                                           >
-                                            Submitted: {formatTimeAgo(video.created_at)}
+                                            Submitted:{" "}
+                                            {formatTimeAgo(video.created_at)}
                                           </p>
                                         </div>
                                       </div>
@@ -5399,7 +5468,9 @@ export function ContestClientPage({
                                           <p
                                             className={cn(
                                               "text-base sm:text-lg font-bold",
-                                              isDark ? "text-white" : "text-gray-700"
+                                              isDark
+                                                ? "text-white"
+                                                : "text-gray-700"
                                             )}
                                           >
                                             {video.views
@@ -5408,7 +5479,8 @@ export function ContestClientPage({
                                             views
                                           </p>
                                           {video.content_link &&
-                                            (contest?.status?.toLowerCase() === "ended" ||
+                                            (contest?.status?.toLowerCase() ===
+                                              "ended" ||
                                               contest?.status?.toLowerCase() ===
                                                 "completed") && (
                                               <Button
@@ -5878,17 +5950,21 @@ export function ContestClientPage({
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => {
-                                    setSelectedCreatorId(creatorGroup.creator_id);
+                                    setSelectedCreatorId(
+                                      creatorGroup.creator_id
+                                    );
                                     setShowCreatorVideosModal(true);
                                     setCreatorVideosCurrentPage(1);
                                   }}
                                   className="h-6 w-6 p-0"
                                   title="View all videos"
                                 >
-                                  <Eye className={cn(
-                                    "h-4 w-4",
-                                    isDark ? "text-gray-400" : "text-gray-600"
-                                  )} />
+                                  <Eye
+                                    className={cn(
+                                      "h-4 w-4",
+                                      isDark ? "text-gray-400" : "text-gray-600"
+                                    )}
+                                  />
                                 </Button>
                               </div>
                               {prizeDisplay && (
@@ -6184,13 +6260,12 @@ export function ContestClientPage({
                     >
                       Previous
                     </Button>
-                    <span 
-                     className={cn(
-                      "text-sm font-medium",
-                      isDark
-                        ? "text-gray-300"
-                        : "text-slate-500"
-                    )}>
+                    <span
+                      className={cn(
+                        "text-sm font-medium",
+                        isDark ? "text-gray-300" : "text-slate-500"
+                      )}
+                    >
                       Page {leaderboardCurrentPage} of {totalLeaderboardPages}
                     </span>
                     <Button

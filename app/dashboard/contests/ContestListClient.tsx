@@ -50,6 +50,7 @@ import {
   Submission,
 } from "@/lib/contest-utils-client";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 
 // Define the type for a contest
 type Contest = {
@@ -193,6 +194,9 @@ export function ContestListClient({
   const [filteredAndSortedContests, setFilteredAndSortedContests] = useState<
     Contest[]
   >([]);
+  const [page, setPage] = useState<number>(1);
+  // Show 4 cards per page for contests
+  const [limit, setLimit] = useState<number>(6);
 
   const availablePlatforms = useMemo(() => {
     const platforms = new Set(
@@ -1327,6 +1331,26 @@ export function ContestListClient({
 
   const displayContests = sortedCurrentContests;
 
+  // Reset to first page whenever filters, sort, or tab changes
+  useEffect(() => {
+    setPage(1);
+  }, [
+    selectedTab,
+    contestStatusFilter,
+    platformFilter,
+    contestTypeFilter,
+    sortOption,
+  ]);
+
+  const total = displayContests.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const hasPreviousPage = page > 1;
+  const hasNextPage = page < totalPages;
+  const paginatedContests = displayContests.slice(
+    (page - 1) * limit,
+    page * limit
+  );
+
   return (
     <div className="w-full no-theme-transition">
       {/* Header with filters */}
@@ -1587,42 +1611,78 @@ export function ContestListClient({
         </TabsList>
         {Object.keys(contestsByStatus).map((tabValue) => (
           <TabsContent key={tabValue} value={tabValue} className="mt-4">
-            <div
-              className="grid gap-6"
-              style={{
-                gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-              }}
-            >
-              {displayContests.length > 0 ? (
-                displayContests.map((contest) => renderContestCard(contest))
-              ) : (
-                <div className="col-span-full text-center py-12">
-                  <h3
-                    className="text-lg font-semibold"
+            <div>
+              <div
+                className="grid gap-6"
+                style={{
+                  gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+                }}
+              >
+                {total > 0 ? (
+                  paginatedContests.map((contest) => renderContestCard(contest))
+                ) : (
+                  <div className="col-span-full text-center py-12">
+                    <h3
+                      className="text-lg font-semibold"
+                      style={{
+                        color: isDark ? "white" : "black",
+                        transition: "none",
+                      }}
+                    >
+                      No Contests Found
+                    </h3>
+                    <p
+                      className="mt-2"
+                      style={{
+                        color: isDark ? "#94a3b8" : "#64748b",
+                        transition: "none",
+                      }}
+                    >
+                      {platformFilter !== "all" ||
+                      contestStatusFilter !== "all" ||
+                      contestTypeFilter !== "all"
+                        ? `No contests match the current filters for ${tabValue
+                            .split("_")
+                            .join(" ")} status.`
+                        : `No contests found for ${tabValue
+                            .split("_")
+                            .join(" ")} status.`}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {total > limit && (
+                <div className="mt-6 flex flex-col gap-2 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
+                  <div
+                    className="text-sm"
                     style={{
-                      color: isDark ? "white" : "black",
+                      color: isDark ? "#cbd5e1" : "#4b5563",
                       transition: "none",
                     }}
                   >
-                    No Contests Found
-                  </h3>
-                  <p
-                    className="mt-2"
-                    style={{
-                      color: isDark ? "#94a3b8" : "#64748b",
-                      transition: "none",
-                    }}
-                  >
-                    {platformFilter !== "all" ||
-                    contestStatusFilter !== "all" ||
-                    contestTypeFilter !== "all"
-                      ? `No contests match the current filters for ${tabValue
-                          .split("_")
-                          .join(" ")} status.`
-                      : `No contests found for ${tabValue
-                          .split("_")
-                          .join(" ")} status.`}
-                  </p>
+                    {(() => {
+                      const startItem = (page - 1) * limit + 1;
+                      const endItem = Math.min(page * limit, total);
+                      return `Showing ${startItem}-${endItem} of ${total} contests`;
+                    })()}
+                  </div>
+                  <PaginationControls
+                    page={page}
+                    limit={limit}
+                    total={total}
+                    totalPages={totalPages}
+                    hasNextPage={hasNextPage}
+                    hasPreviousPage={hasPreviousPage}
+                    onPageChange={setPage}
+                    onLimitChange={setLimit}
+                    loading={false}
+                    isDark={isDark}
+                    showResultInfo={false}
+                    showPageSizeSelector={false}
+                    showEdgeButtons={false}
+                    showPrevNextButtons={true}
+                  />
                 </div>
               )}
             </div>

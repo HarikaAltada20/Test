@@ -28,6 +28,11 @@ interface PaginationControlsProps {
   // When true, hide the 200 items per-page option (useful for specific pages like leaderboard)
   hide200Option?: boolean;
   isDark?: boolean;
+  // Optional visibility controls (default to true)
+  showResultInfo?: boolean;
+  showPageSizeSelector?: boolean;
+  showEdgeButtons?: boolean; // first/last buttons
+  showPrevNextButtons?: boolean; // previous/next buttons
 }
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
@@ -44,6 +49,10 @@ export function PaginationControls({
   loading = false,
   hide200Option = false,
   isDark = false,
+  showResultInfo = true,
+  showPageSizeSelector = true,
+  showEdgeButtons = true,
+  showPrevNextButtons = true,
 }: PaginationControlsProps) {
   const startItem = Math.min((page - 1) * limit + 1, total);
   const endItem = Math.min(page * limit, total);
@@ -99,107 +108,113 @@ export function PaginationControls({
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       {/* Results info and page size selector */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-        <div
-          className={cn(
-            "text-sm text-muted-foreground",
-            isDark && "text-slate-300"
+      {(showResultInfo || showPageSizeSelector) && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+          {showResultInfo && (
+            <div
+              className={cn(
+                "text-sm text-muted-foreground",
+                isDark && "text-slate-300"
+              )}
+            >
+              Showing {total > 0 ? startItem : 0} to {endItem} of {total}{" "}
+              results
+            </div>
           )}
-        >
-          Showing {total > 0 ? startItem : 0} to {endItem} of {total} results
-        </div>
 
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              "text-sm text-muted-foreground",
-              isDark && "text-slate-300"
-            )}
-          >
-            Show:
-          </span>
-          <Select
-            value={limit.toString()}
-            onValueChange={handlePageSizeChange}
-            disabled={loading}
-          >
-            <SelectTrigger
-              
-              className={cn(
-                "w-20",
-                isDark && "border border-gray-600"
-              )}
-               
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent
-              isDark={isDark}
-              className={cn(
-                isDark && "border-gray-600 bg-[#07031D] text-white"
-              )}
-            >
-              {(hide200Option
-                ? PAGE_SIZE_OPTIONS.filter((size) => size !== 200)
-                : PAGE_SIZE_OPTIONS
-              ).map((size) => (
-                <SelectItem
+          {showPageSizeSelector && (
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "text-sm text-muted-foreground",
+                  isDark && "text-slate-300"
+                )}
+              >
+                Show:
+              </span>
+              <Select
+                value={limit.toString()}
+                onValueChange={handlePageSizeChange}
+                disabled={loading}
+              >
+                <SelectTrigger
+                  className={cn("w-20", isDark && "border border-gray-600")}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent
                   isDark={isDark}
-                  key={size}
-                  value={size.toString()}
                   className={cn(
-                    isDark &&
-                      "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
+                    isDark && "border-gray-600 bg-[#07031D] text-white"
                   )}
                 >
-                  {size}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span
-            className={cn(
-              "text-sm text-muted-foreground",
-              isDark && "text-slate-300"
-            )}
-          >
-            per page
-          </span>
+                  {(hide200Option
+                    ? PAGE_SIZE_OPTIONS.filter((size) => size !== 200)
+                    : PAGE_SIZE_OPTIONS
+                  ).map((size) => (
+                    <SelectItem
+                      isDark={isDark}
+                      key={size}
+                      value={size.toString()}
+                      className={cn(
+                        isDark &&
+                          "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
+                      )}
+                    >
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span
+                className={cn(
+                  "text-sm text-muted-foreground",
+                  isDark && "text-slate-300"
+                )}
+              >
+                per page
+              </span>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Page navigation */}
       {totalPages > 1 && (
         <div className="flex items-center gap-1">
           {/* First page */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onPageChange(1)}
-            disabled={!hasPreviousPage || loading}
-            className={cn(
-              "h-8 w-8 p-0",
-              isDark &&
-                "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
-            )}
-          >
-            <ChevronsLeft className="h-4 w-4" />
-          </Button>
+          {showEdgeButtons && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(1)}
+              disabled={!hasPreviousPage || loading}
+              className={cn(
+                "h-8 w-8 p-0",
+                isDark &&
+                  "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
+              )}
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </Button>
+          )}
 
           {/* Previous page */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onPageChange(page - 1)}
-            disabled={!hasPreviousPage || loading}
-            className={cn(
-              "h-8 w-8 p-0",
-              isDark &&
-                "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
-            )}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
+          {showPrevNextButtons && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(page - 1)}
+              disabled={!hasPreviousPage || loading}
+              className={cn(
+                "h-8 w-8 p-0",
+                isDark &&
+                  "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
+              )}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          )}
 
           {/* Page numbers */}
           <div className="flex items-center gap-1">
@@ -236,34 +251,38 @@ export function PaginationControls({
           </div>
 
           {/* Next page */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onPageChange(page + 1)}
-            disabled={!hasNextPage || loading}
-            className={cn(
-              "h-8 w-8 p-0",
-              isDark &&
-                "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
-            )}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+          {showPrevNextButtons && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(page + 1)}
+              disabled={!hasNextPage || loading}
+              className={cn(
+                "h-8 w-8 p-0",
+                isDark &&
+                  "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
+              )}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          )}
 
           {/* Last page */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onPageChange(totalPages)}
-            disabled={!hasNextPage || loading}
-            className={cn(
-              "h-8 w-8 p-0",
-              isDark &&
-                "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
-            )}
-          >
-            <ChevronsRight className="h-4 w-4" />
-          </Button>
+          {showEdgeButtons && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(totalPages)}
+              disabled={!hasNextPage || loading}
+              className={cn(
+                "h-8 w-8 p-0",
+                isDark &&
+                  "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
+              )}
+            >
+              <ChevronsRight className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
@@ -347,6 +347,29 @@ export default function BillingClientPage({
     };
   }, [mode]);
 
+  // Pagination for coin transactions (client-side)
+  const [coinPage, setCoinPage] = useState(1);
+  const [coinLimit, setCoinLimit] = useState(25);
+
+  const totalCoinTransactions = coinTransactions.length;
+  const coinTotalPages =
+    totalCoinTransactions > 0
+      ? Math.ceil(totalCoinTransactions / coinLimit)
+      : 0;
+  const coinHasNextPage = coinPage < coinTotalPages;
+  const coinHasPreviousPage = coinPage > 1;
+
+  const paginatedCoinTransactions = useMemo(
+    () =>
+      coinTransactions.slice((coinPage - 1) * coinLimit, coinPage * coinLimit),
+    [coinTransactions, coinPage, coinLimit]
+  );
+
+  // Reset coin page when data changes
+  useEffect(() => {
+    setCoinPage(1);
+  }, [totalCoinTransactions]);
+
   // Pagination for cash transactions
   const {
     data: paginatedCashTransactions,
@@ -378,8 +401,10 @@ export default function BillingClientPage({
         return `Bank: ...${
           method.details?.account_number?.slice(-4) || "XXXX"
         } (${method.friendly_name || "Bank"})`;
-        case "phantom":
-          return `Phantom: ...${method.details?.wallet_address?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Phantom Wallet'})`;
+      case "phantom":
+        return `Phantom: ...${
+          method.details?.wallet_address?.slice(-4) || "XXXX"
+        } (${method.friendly_name || "Phantom Wallet"})`;
       default:
         return "Unknown Method Type";
     }
@@ -1677,7 +1702,7 @@ export default function BillingClientPage({
                       </TableCell>
                     </TableRow>
                   ) : (
-                    coinTransactions.map((transaction) => (
+                    paginatedCoinTransactions.map((transaction) => (
                       <TableRow key={transaction.id}>
                         <TableCell>
                           {formatDateTime(transaction.created_at)}
@@ -1740,6 +1765,25 @@ export default function BillingClientPage({
                   )}
                 </TableBody>
               </Table>
+
+              {coinTotalPages > 0 && (
+                <div className="mt-4">
+                  <PaginationControls
+                    page={coinPage}
+                    limit={coinLimit}
+                    total={totalCoinTransactions}
+                    totalPages={coinTotalPages}
+                    hasNextPage={coinHasNextPage}
+                    hasPreviousPage={coinHasPreviousPage}
+                    onPageChange={setCoinPage}
+                    onLimitChange={(limit) => {
+                      setCoinLimit(limit);
+                      setCoinPage(1);
+                    }}
+                    isDark={isDark}
+                  />
+                </div>
+              )}
             </CardContent>
           </div>
 

@@ -34,12 +34,6 @@ import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import {
-  EnhancedTabs as Tabs,
-  EnhancedTabsContent as TabsContent,
-  EnhancedTabsList as TabsList,
-  EnhancedTabsTrigger as TabsTrigger,
-} from "@/components/ui/enhanced-tabs";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -55,6 +49,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 
 import {
   isCountryInContestRegions,
@@ -141,6 +136,9 @@ export default function OpportunitiesPage({
   const [sortOption, setSortOption] =
     useState<SortOptionType>("relevance_desc");
   const [displayedContests, setDisplayedContests] = useState<any[]>([]);
+  const [page, setPage] = useState<number>(1);
+  // Match contests page: 6 cards per page
+  const [limit, setLimit] = useState<number>(6);
   const [mode, setMode] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {
       const modeElement = document.querySelector("[data-mode]");
@@ -1008,6 +1006,20 @@ export default function OpportunitiesPage({
     userCountry,
   ]);
 
+  // Reset to first page whenever filters or sort change
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, platformFilter, typeFilter, sortOption]);
+
+  const total = displayedContests.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const hasPreviousPage = page > 1;
+  const hasNextPage = page < totalPages;
+  const paginatedContests = displayedContests.slice(
+    (page - 1) * limit,
+    page * limit
+  );
+
   const handleViewDetails = (id: string) => {
     router.push(`/dashboard/opportunities/${id}`);
   };
@@ -1254,10 +1266,10 @@ export default function OpportunitiesPage({
         </Select>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {displayedContests && displayedContests.length > 0 ? (
-          displayedContests
-            .map((contest) => (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {paginatedContests && paginatedContests.length > 0 ? (
+            paginatedContests.map((contest) => (
               <Card
                 key={contest.id}
                 onClick={() => handleViewDetails(contest.id)}
@@ -1470,7 +1482,9 @@ export default function OpportunitiesPage({
                         </div>
                       )}
                     {(() => {
-                      const contestCategories = Array.isArray(contest.categories)
+                      const contestCategories = Array.isArray(
+                        contest.categories
+                      )
                         ? contest.categories
                         : [];
                       const contestSubcategories =
@@ -1762,40 +1776,74 @@ export default function OpportunitiesPage({
                 </CardContent>
               </Card>
             ))
-            .slice(0, 50) // Limit to 50 contests for performance
-        ) : (
-          <div className="col-span-full text-center py=-12">
-            <Trophy className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <h2
-              className="text-xl font-medium mb-2"
+          ) : (
+            <div className="col-span-full text-center py=-12">
+              <Trophy className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+              <h2
+                className="text-xl font-medium mb-2"
+                style={{
+                  color: isDark ? "white" : "black",
+                  transition: "none",
+                }}
+              >
+                No contests match your criteria
+              </h2>
+              <p
+                className="mb-3"
+                style={{
+                  color: isDark ? "#94a3b8" : "#64748b",
+                  transition: "none",
+                }}
+              >
+                Try adjusting your filters or check back later.
+              </p>
+              <Button
+                onClick={resetFilters}
+                className="mt-4 text-md"
+                style={{
+                  backgroundColor: isDark ? "#7F39EC" : "#7F39EC",
+                  color: "white",
+                  transition: "none",
+                }}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {total > limit && (
+          <div className="mt-2 flex flex-col gap-2 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
+            <div
+              className="text-sm"
               style={{
-                color: isDark ? "white" : "black",
+                color: isDark ? "#cbd5e1" : "#4b5563",
                 transition: "none",
               }}
             >
-              No contests match your criteria
-            </h2>
-            <p
-              className="mb-3"
-              style={{
-                color: isDark ? "#94a3b8" : "#64748b",
-                transition: "none",
-              }}
-            >
-              Try adjusting your filters or check back later.
-            </p>
-            <Button
-              onClick={resetFilters}
-              className="mt-4 text-md"
-              style={{
-                backgroundColor: isDark ? "#7F39EC" : "#7F39EC",
-                color: "white",
-                transition: "none",
-              }}
-            >
-              <RotateCcw className="h-4 w-4" />
-              Reset
-            </Button>
+              {(() => {
+                const startItem = (page - 1) * limit + 1;
+                const endItem = Math.min(page * limit, total);
+                return `Showing ${startItem}-${endItem} of ${total} opportunities`;
+              })()}
+            </div>
+            <PaginationControls
+              page={page}
+              limit={limit}
+              total={total}
+              totalPages={totalPages}
+              hasNextPage={hasNextPage}
+              hasPreviousPage={hasPreviousPage}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
+              loading={false}
+              isDark={isDark}
+              showResultInfo={false}
+              showPageSizeSelector={false}
+              showEdgeButtons={false}
+              showPrevNextButtons={true}
+            />
           </div>
         )}
       </div>
