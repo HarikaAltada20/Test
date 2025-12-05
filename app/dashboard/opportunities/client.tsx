@@ -19,6 +19,11 @@ import {
   Play,
   GraduationCap,
   RotateCcw,
+  LayoutGrid,
+  List,
+  Eye,
+  Search,
+  X,
 } from "lucide-react";
 import { User, UserResponse } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "@/lib/utils";
@@ -40,6 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
@@ -135,10 +141,12 @@ export default function OpportunitiesPage({
   const [typeFilter, setTypeFilter] = useState<ContestTypeFilterType>("all");
   const [sortOption, setSortOption] =
     useState<SortOptionType>("relevance_desc");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [displayedContests, setDisplayedContests] = useState<any[]>([]);
   const [page, setPage] = useState<number>(1);
   // Match contests page: 6 cards per page
   const [limit, setLimit] = useState<number>(6);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [mode, setMode] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {
       const modeElement = document.querySelector("[data-mode]");
@@ -819,6 +827,15 @@ export default function OpportunitiesPage({
   useEffect(() => {
     let contestsToDisplay = [...availableContests];
 
+    // Search Filter - filter by title (case-insensitive)
+    if (searchQuery.trim() !== "") {
+      const searchTerm = searchQuery.trim().toLowerCase();
+      contestsToDisplay = contestsToDisplay.filter((contest) => {
+        const title = contest.title?.toLowerCase() || "";
+        return title.includes(searchTerm);
+      });
+    }
+
     // Status Filter - only for published contests with valid lifecycle status
     if (statusFilter !== "all") {
       contestsToDisplay = contestsToDisplay.filter((contest) => {
@@ -1000,6 +1017,7 @@ export default function OpportunitiesPage({
     platformFilter,
     typeFilter,
     sortOption,
+    searchQuery,
     creatorCategories,
     creatorSubcategories,
     creatorInterests,
@@ -1009,7 +1027,7 @@ export default function OpportunitiesPage({
   // Reset to first page whenever filters or sort change
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, platformFilter, typeFilter, sortOption]);
+  }, [statusFilter, platformFilter, typeFilter, sortOption, searchQuery]);
 
   const total = displayedContests.length;
   const totalPages = Math.max(1, Math.ceil(total / limit));
@@ -1027,7 +1045,428 @@ export default function OpportunitiesPage({
     setPlatformFilter("all");
     setTypeFilter("all");
     setSortOption("relevance_desc");
+    setSearchQuery("");
   };
+
+  // Render list view item for opportunities
+  const renderOpportunityListItem = (contest: any) => {
+    return (
+      <Card
+        key={contest.id}
+        className={cn(
+          "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer relative",
+          isDark ? "bg-[#06021D] border-slate-700" : "bg-white border-slate-200"
+        )}
+        onClick={() => handleViewDetails(contest.id)}
+      >
+        {/* Status Badge - Top Right Corner */}
+        {(contest.status === "active" ||
+          contest.status === "upcoming" ||
+          contest.status === "ended") && (
+          <div className="absolute top-3 right-3 z-10 flex flex-row gap-2">
+            <Badge
+              className={cn(
+                "capitalize text-sm px-3 py-1 font-medium border",
+                contest.status === "active" && "bg-[#7F39EC] text-white",
+                contest.status === "upcoming" && "bg-[#7F39EC] text-white",
+                contest.status === "ended" && "bg-[#7F39EC] text-white"
+              )}
+            >
+              {contest.status === "active"
+                ? "Live"
+                : contest.status === "upcoming"
+                ? "Upcoming"
+                : contest.status === "ended"
+                ? "Ended"
+                : contest.status || "Unknown"}
+            </Badge>
+            {contest.post_contest_status === "payouts_processed" && (
+              <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
+                Completed
+              </Badge>
+            )}
+          </div>
+        )}
+        {/* Thumbnail */}
+        <div className="w-full sm:w-64 md:w-80 lg:w-72 xl:w-96 sm:h-[200px] md:h-[220px] lg:h-[250px] min-h-[12rem] flex-shrink-0 flex items-center justify-center overflow-hidden relative">
+          {contest.thumbnail_url ? (
+            <img
+              src={contest.thumbnail_url || "/placeholder.svg"}
+              alt={contest.title || "Contest thumbnail"}
+              className="w-full h-full object-contain transition-transform duration-300 ease-in-out group-hover:scale-105"
+            />
+          ) : (
+            <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 flex flex-col p-3 sm:p-4">
+          <CardHeader className="p-0 pb-2">
+            <CardTitle
+              className="text-base sm:text-lg font-bold leading-tight mb-2"
+              style={{
+                color: isDark ? "white" : "#1e293b",
+                transition: "none",
+              }}
+            >
+              {contest.title || "Untitled Contest"}
+            </CardTitle>
+            {/* Badges */}
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              {contest.multiple_submissions_enabled && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-sm px-3 py-1 font-medium",
+                    isDark
+                      ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                      : "bg-purple-50 text-purple-700 border-purple-200"
+                  )}
+                >
+                  <CheckCheck className="h-3 w-3 mr-1" />
+                  {(contest.max_submissions_per_creator ?? 1) > 1
+                    ? `${contest.max_submissions_per_creator} Submissions`
+                    : "Multiple Entries"}
+                </Badge>
+              )}
+              {contest.content_type && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-sm px-3 py-1 font-medium",
+                    isDark
+                      ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
+                      : "bg-blue-50 text-blue-700 border-blue-200"
+                  )}
+                >
+                  <Tag className="h-3 w-3 mr-1" />
+                  {contest.content_type.toUpperCase()}
+                </Badge>
+              )}
+              {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
+                contest.contest_based_details?.leaderboard_contest
+                  ?.flat_fee_bonus) && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-sm px-3 py-1 font-medium",
+                    isDark
+                      ? "bg-green-900/30 text-green-300 border-green-700/50"
+                      : "bg-green-50 text-green-700 border-green-200"
+                  )}
+                >
+                  <Gift className="h-3 w-3 mr-1" />
+                  {formatMoney(
+                    contest.contest_based_details?.cpm_contest
+                      ?.flat_fee_bonus ||
+                      contest.contest_based_details?.leaderboard_contest
+                        ?.flat_fee_bonus ||
+                      0
+                  )}
+                  /submission
+                </Badge>
+              )}
+              {contest.bonus_details?.description_html && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-sm px-3 py-1 font-medium",
+                    isDark
+                      ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
+                      : "bg-amber-50 text-amber-700 border-amber-200"
+                  )}
+                >
+                  <Star className="h-3 w-3 mr-1" />
+                  Bonus Available
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="p-0 pt-2 flex-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-sm sm:text-md">
+              <div className="flex items-center">
+                <div className="mr-2 flex-shrink-0">
+                  {getPlatformIconWithFallback(contest.platform, "sm")}
+                </div>
+                <span
+                  style={{
+                    color: isDark ? "white" : "#475569",
+                    transition: "none",
+                  }}
+                >
+                  Platform:{" "}
+                  <span className="font-medium">
+                    {contest.platform || "N/A"}
+                  </span>
+                </span>
+              </div>
+              {contest.start_date && (
+                <div className="flex items-center">
+                  <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <span
+                    style={{
+                      color: isDark ? "white" : "#475569",
+                      transition: "none",
+                    }}
+                  >
+                    Starts:{" "}
+                    <span className="font-medium">
+                      {formatLocalDateTime(contest.start_date, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </span>
+                </div>
+              )}
+              {contest.end_date && (
+                <div className="flex items-center">
+                  <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <span
+                    style={{
+                      color: isDark ? "white" : "#475569",
+                      transition: "none",
+                    }}
+                  >
+                    Ends:{" "}
+                    <span className="font-medium">
+                      {formatLocalDateTime(contest.end_date, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </span>
+                </div>
+              )}
+              {contest.live_submission_count !== null &&
+                contest.live_submission_count !== undefined && (
+                  <div className="flex items-center">
+                    <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span
+                      style={{
+                        color: isDark ? "white" : "#475569",
+                        transition: "none",
+                      }}
+                    >
+                      Submissions:{" "}
+                      <span className="font-medium">
+                        {contest.live_submission_count}
+                      </span>
+                    </span>
+                  </div>
+                )}
+              {(() => {
+                const contestCategories = Array.isArray(contest.categories)
+                  ? contest.categories
+                  : [];
+                const contestSubcategories =
+                  typeof contest.subcategories === "object" &&
+                  contest.subcategories !== null
+                    ? (contest.subcategories as Record<string, string[]>)
+                    : {};
+                const contestInterests = Array.isArray(contest.interests)
+                  ? contest.interests
+                  : [];
+                const contestHasPreferences =
+                  contestCategories.length > 0 ||
+                  Object.keys(contestSubcategories).length > 0 ||
+                  contestInterests.length > 0;
+
+                return contestHasPreferences ? (
+                  <div className="flex items-center">
+                    <Star className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span
+                      style={{
+                        color: isDark ? "white" : "#475569",
+                        transition: "none",
+                      }}
+                    >
+                      Relevance Score:{" "}
+                      <span className="font-medium">
+                        {calculateRelevanceScore(contest)}
+                      </span>
+                      {(() => {
+                        const matchDetails = getMatchDetails(contest);
+                        return matchDetails.matchLabel ? (
+                          <span className="ml-1">
+                            ({matchDetails.matchLabel})
+                          </span>
+                        ) : null;
+                      })()}
+                    </span>
+                  </div>
+                ) : null;
+              })()}
+              <div className="flex items-center">
+                <Info className="h-4 w-4 mr-2 flex-shrink-0" />
+                <span
+                  style={{
+                    color: isDark ? "white" : "#475569",
+                    transition: "none",
+                  }}
+                >
+                  Contest Type:{" "}
+                  <span className="font-medium">
+                    {contest.contest_type === "cpm"
+                      ? "CPM Based"
+                      : contest.contest_type === "leaderboard"
+                      ? "Leaderboard"
+                      : contest.contest_type
+                      ? contest.contest_type.charAt(0).toUpperCase() +
+                        contest.contest_type.slice(1)
+                      : "N/A"}
+                  </span>
+                </span>
+              </div>
+              {contest.contest_type === "cpm" &&
+                contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
+                  null && (
+                  <div className="flex items-center">
+                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span
+                      style={{
+                        color: isDark ? "white" : "#475569",
+                        transition: "none",
+                      }}
+                    >
+                      CPM Rate:{" "}
+                      <span className="font-medium">
+                        {formatMoney(
+                          contest.contest_based_details.cpm_contest
+                            .cpm_rate_usd * 100
+                        )}{" "}
+                        / 1k views
+                      </span>
+                    </span>
+                  </div>
+                )}
+              {contest.contest_type === "cpm" &&
+                contest.contest_based_details?.cpm_contest?.total_budget !=
+                  null &&
+                contest.contest_based_details.cpm_contest.total_budget > 0 && (
+                  <div className="flex items-center">
+                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span
+                      style={{
+                        color: isDark ? "white" : "#475569",
+                        transition: "none",
+                      }}
+                    >
+                      Total Budget:{" "}
+                      <span className="font-medium">
+                        {formatMoney(
+                          contest.contest_based_details.cpm_contest.total_budget
+                        )}
+                      </span>
+                    </span>
+                  </div>
+                )}
+              {contest.contest_type === "leaderboard" &&
+                contest.contest_based_details?.leaderboard_contest
+                  ?.total_prize != null &&
+                contest.contest_based_details.leaderboard_contest.total_prize >
+                  0 && (
+                  <div className="flex items-center">
+                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span
+                      style={{
+                        color: isDark ? "white" : "#475569",
+                        transition: "none",
+                      }}
+                    >
+                      Total Prize Pool:{" "}
+                      <span className="font-medium">
+                        {formatMoney(
+                          contest.contest_based_details.leaderboard_contest
+                            .total_prize
+                        )}
+                      </span>
+                    </span>
+                  </div>
+                )}
+            </div>
+
+            {/* Budget Spent Progress Bar for CPM contests */}
+            {contest.contest_type === "cpm" &&
+              contest.contest_based_details?.cpm_contest?.total_budget !=
+                null &&
+              contest.contest_based_details.cpm_contest.total_budget > 0 &&
+              (() => {
+                const totalBudget =
+                  contest.contest_based_details.cpm_contest.total_budget;
+                const budgetSpent =
+                  contest.contest_based_details.cpm_contest.budget_spent || 0;
+                const percentage = (budgetSpent / totalBudget) * 100;
+                const remaining = totalBudget - budgetSpent;
+
+                return (
+                  <div className="mt-3">
+                    <div
+                      className="flex justify-between text-sm mb-2"
+                      style={{
+                        color: isDark ? "#d1d5db" : "#374151",
+                        transition: "none",
+                      }}
+                    >
+                      <span className="font-medium">Budget Tracker</span>
+                      <span className="font-semibold">
+                        {formatMoney(budgetSpent)} / {formatMoney(totalBudget)}
+                      </span>
+                    </div>
+                    <div
+                      className={cn(
+                        "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                        isDark ? "bg-[#FFFFFF42]" : "bg-slate-200"
+                      )}
+                    >
+                      <div
+                        className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                      ></div>
+                    </div>
+                    <div
+                      className="flex justify-between text-xs mt-1.5"
+                      style={{
+                        color: isDark ? "#d1d5db" : "#64748b",
+                        transition: "none",
+                      }}
+                    >
+                      <span>{percentage.toFixed(1)}% used</span>
+                      <span>{formatMoney(remaining)} remaining</span>
+                    </div>
+                  </div>
+                );
+              })()}
+          </CardContent>
+        </div>
+
+        {/* Third Column - View Details Button */}
+        <div className="flex flex-col items-center justify-center gap-3 p-4 w-32 sm:w-40 flex-shrink-0">
+          <button
+            className={cn(
+              "flex items-center justify-center gap-2 px-4 py-3 rounded-full whitespace-nowrap",
+              isDark
+                ? "bg-[#7F39EC] text-white"
+                : "bg-[#D9C0FF61] text-[#7F39EC]"
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleViewDetails(contest.id);
+            }}
+          >
+            <Eye className="h-4 w-4" />
+            <span className="text-sm font-medium">View Details</span>
+          </button>
+        </div>
+      </Card>
+    );
+  };
+
   if (isFetchingData) {
     return (
       <div className="flex items-center justify-center h-[76vh]">
@@ -1078,35 +1517,105 @@ export default function OpportunitiesPage({
   const isDark = mode === "dark";
   return (
     <div className="w-full no-theme-transition">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">
-        <h1 className="text-2xl font-bold">Opportunities</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <a
-            href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(
-              "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
-              isDark
-                ? "text-white border-gray-600"
-                : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]"
+      <div className="mb-6">
+        {/* Heading Row - Heading on left, buttons on right */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <h1 className="text-2xl font-bold">Opportunities</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
+                isDark
+                  ? "text-white border-gray-600"
+                  : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]"
+              )}
+            >
+              <Play className="h-3.5 w-3.5" />
+              How it works
+            </a>
+            <Link
+              href="/dashboard/getting-started"
+              className={cn(
+                "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
+                isDark
+                  ? "text-white border-gray-600"
+                  : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]"
+              )}
+            >
+              <GraduationCap className="h-3.5 w-3.5" />
+              Learn how to participate
+            </Link>
+          </div>
+        </div>
+        {/* Search and View Toggle Row */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          {/* Search Input - Left Side */}
+          <div className="relative max-w-md w-full">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
             )}
-          >
-            <Play className="h-3.5 w-3.5" />
-            How it works
-          </a>
-          <Link
-            href="/dashboard/getting-started"
-            className={cn(
-              "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
-              isDark
-                ? "text-white border-gray-600"
-                : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]"
-            )}
-          >
-            <GraduationCap className="h-3.5 w-3.5" />
-            Learn how to participate
-          </Link>
+            <Input
+              type="text"
+              placeholder="Search opportunities by title..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={cn(
+                "pl-10 border w-full",
+                searchQuery && "pr-10",
+                isDark
+                  ? "border-gray-500 bg-[#020817] text-white"
+                  : "border-gray-400 text-black"
+              )}
+            />
+          </div>
+          {/* View Toggle Buttons - Right Side */}
+          <div className="hidden md:flex items-center gap-1 border border-gray-400 rounded-md p-1">
+            <button
+              onClick={() => setViewMode("grid")}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                viewMode === "grid"
+                  ? isDark
+                    ? "bg-[#7F39EC] text-white"
+                    : "bg-[#7F39EC] text-white"
+                  : isDark
+                  ? "text-gray-300 hover:text-white"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              )}
+              title="Grid View"
+            >
+              <LayoutGrid className="h-4 w-4" />
+              <span>Grid View</span>
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                viewMode === "list"
+                  ? isDark
+                    ? "bg-[#7F39EC] text-white"
+                    : "bg-[#7F39EC] text-white"
+                  : isDark
+                  ? "text-gray-300 hover:text-white"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              )}
+              title="List View"
+            >
+              <List className="h-4 w-4" />
+              <span>List View</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1135,7 +1644,7 @@ export default function OpportunitiesPage({
         isDark={isDark}
         light={!isDark}
         onTabChange={(value) => setStatusFilter(value as StatusFilterType)}
-        className="mt-10 mb-8 w-full overflow-x-auto scrollbar-hide"
+        className="mt-6 mb-8 w-full overflow-x-auto scrollbar-hide"
       />
 
       {/* Enhanced Status Filter Tabs with better visual distinction */}
@@ -1157,7 +1666,7 @@ export default function OpportunitiesPage({
       </Tabs> */}
 
       {/* Enhanced Filter and Sort Select Dropdowns */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         {/* Platform Filter */}
         <Select
           value={platformFilter}
@@ -1267,551 +1776,608 @@ export default function OpportunitiesPage({
       </div>
 
       <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {paginatedContests && paginatedContests.length > 0 ? (
-            paginatedContests.map((contest) => (
-              <Card
-                key={contest.id}
-                onClick={() => handleViewDetails(contest.id)}
-                className={cn(
-                  "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
-                  isDark
-                    ? "bg-[#06021D] border-slate-700"
-                    : "bg-white border-slate-200"
-                )}
-              >
-                <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
-                  {contest.thumbnail_url ? (
-                    <img
-                      src={contest.thumbnail_url || "/placeholder.svg"}
-                      alt={contest.title}
-                      className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
-                    />
-                  ) : (
-                    <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
+        {viewMode === "grid" ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {paginatedContests && paginatedContests.length > 0 ? (
+              paginatedContests.map((contest) => (
+                <Card
+                  key={contest.id}
+                  onClick={() => handleViewDetails(contest.id)}
+                  className={cn(
+                    "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
+                    isDark
+                      ? "bg-[#06021D] border-slate-700"
+                      : "bg-white border-slate-200"
                   )}
-                  <div className="absolute top-2 right-2 flex gap-2">
-                    <Badge
-                      className={cn(
-                        "capitalize text-sm px-3 py-1 font-medium border",
-                        contest.status === "active" &&
-                          "bg-[#7F39EC] text-white",
-                        contest.status === "upcoming" &&
-                          "bg-[#7F39EC] text-white",
-                        contest.status === "ended" && "bg-[#7F39EC] text-white",
-                        !["active", "upcoming", "ended"].includes(
-                          contest.status
-                        ) && "bg-[#7F39EC] text-white"
-                      )}
-                    >
-                      {contest.status === "active" ? "Live" : contest.status}
-                    </Badge>
-                    {contest.post_contest_status === "payouts_processed" && (
-                      <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
-                        Completed
-                      </Badge>
+                >
+                  <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
+                    {contest.thumbnail_url ? (
+                      <img
+                        src={contest.thumbnail_url || "/placeholder.svg"}
+                        alt={contest.title}
+                        className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+                      />
+                    ) : (
+                      <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
                     )}
+                    <div className="absolute top-2 right-2 flex gap-2">
+                      <Badge
+                        className={cn(
+                          "capitalize text-sm px-3 py-1 font-medium border",
+                          contest.status === "active" &&
+                            "bg-[#7F39EC] text-white",
+                          contest.status === "upcoming" &&
+                            "bg-[#7F39EC] text-white",
+                          contest.status === "ended" &&
+                            "bg-[#7F39EC] text-white",
+                          !["active", "upcoming", "ended"].includes(
+                            contest.status
+                          ) && "bg-[#7F39EC] text-white"
+                        )}
+                      >
+                        {contest.status === "active" ? "Live" : contest.status}
+                      </Badge>
+                      {contest.post_contest_status === "payouts_processed" && (
+                        <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
+                          Completed
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <CardHeader className="p-4 pb-2">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <CardTitle
-                      className="text-lg font-bold leading-tight flex-1"
+                  <CardHeader className="p-4 pb-2">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <CardTitle
+                        className="text-lg font-bold leading-tight flex-1"
+                        style={{
+                          color: isDark ? "white" : "#1e293b",
+                          transition: "none",
+                        }}
+                      >
+                        {contest.title}
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
+                    <div
+                      className="space-y-2.5 text-md mb-3"
                       style={{
-                        color: isDark ? "white" : "#1e293b",
+                        color: isDark ? "white" : "#475569",
                         transition: "none",
                       }}
                     >
-                      {contest.title}
-                    </CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
-                  <div
-                    className="space-y-2.5 text-md mb-3"
-                    style={{
-                      color: isDark ? "white" : "#475569",
-                      transition: "none",
-                    }}
-                  >
-                    {/* New Features Indicators */}
-                    <div className="flex flex-wrap items-center gap-2 mb-3">
-                      {contest.multiple_submissions_enabled && (
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[12px]",
-                            isDark
-                              ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                              : "bg-purple-50 text-purple-700 border-purple-200"
-                          )}
-                        >
-                          <CheckCheck className="h-3 w-3 mr-1" />
-                          {contest.max_submissions_per_creator > 1
-                            ? `${contest.max_submissions_per_creator} Submissions`
-                            : "Multiple Entries"}
-                        </Badge>
-                      )}
-                      {(contest.contest_based_details?.cpm_contest
-                        ?.flat_fee_bonus ||
-                        contest.contest_based_details?.leaderboard_contest
-                          ?.flat_fee_bonus) && (
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[12px]",
-                            isDark
-                              ? "bg-green-900/30 text-green-300 border-green-700/50"
-                              : "bg-green-50 text-green-700 border-green-200"
-                          )}
-                        >
-                          <Gift className="h-3 w-3 mr-1" />
-                          {formatMoney(
-                            contest.contest_based_details?.cpm_contest
-                              ?.flat_fee_bonus ||
-                              contest.contest_based_details?.leaderboard_contest
+                      {/* New Features Indicators */}
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        {contest.multiple_submissions_enabled && (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[12px]",
+                              isDark
+                                ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                                : "bg-purple-50 text-purple-700 border-purple-200"
+                            )}
+                          >
+                            <CheckCheck className="h-3 w-3 mr-1" />
+                            {contest.max_submissions_per_creator > 1
+                              ? `${contest.max_submissions_per_creator} Submissions`
+                              : "Multiple Entries"}
+                          </Badge>
+                        )}
+                        {(contest.contest_based_details?.cpm_contest
+                          ?.flat_fee_bonus ||
+                          contest.contest_based_details?.leaderboard_contest
+                            ?.flat_fee_bonus) && (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[12px]",
+                              isDark
+                                ? "bg-green-900/30 text-green-300 border-green-700/50"
+                                : "bg-green-50 text-green-700 border-green-200"
+                            )}
+                          >
+                            <Gift className="h-3 w-3 mr-1" />
+                            {formatMoney(
+                              contest.contest_based_details?.cpm_contest
                                 ?.flat_fee_bonus ||
-                              0
-                          )}
-                          /submission
-                        </Badge>
-                      )}
-                      {contest.content_type && (
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[12px]",
-                            isDark
-                              ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
-                              : "bg-blue-50 text-blue-700 border-blue-200"
-                          )}
-                        >
-                          <Tag className="h-3 w-3 mr-1" />
-                          {contest.content_type.toUpperCase()}
-                        </Badge>
-                      )}
-                      {contest.bonus_details?.description_html && (
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[12px]",
-                            isDark
-                              ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
-                              : "bg-amber-50 text-amber-700 border-amber-200"
-                          )}
-                        >
-                          <Star className="h-3 w-3 mr-1" />
-                          Bonus Available
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className="flex items-center">
-                      <div className="mr-2 flex-shrink-0">
-                        {getPlatformIconWithFallback(contest.platform, "sm")}
+                                contest.contest_based_details
+                                  ?.leaderboard_contest?.flat_fee_bonus ||
+                                0
+                            )}
+                            /submission
+                          </Badge>
+                        )}
+                        {contest.content_type && (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[12px]",
+                              isDark
+                                ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
+                                : "bg-blue-50 text-blue-700 border-blue-200"
+                            )}
+                          >
+                            <Tag className="h-3 w-3 mr-1" />
+                            {contest.content_type.toUpperCase()}
+                          </Badge>
+                        )}
+                        {contest.bonus_details?.description_html && (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[12px]",
+                              isDark
+                                ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
+                                : "bg-amber-50 text-amber-700 border-amber-200"
+                            )}
+                          >
+                            <Star className="h-3 w-3 mr-1" />
+                            Bonus Available
+                          </Badge>
+                        )}
                       </div>
-                      <span>
-                        Platform:{" "}
-                        <span
-                          className={cn(
-                            "font-medium",
-                            isDark ? "text-white" : "text-slate-700"
-                          )}
-                        >
-                          {contest.platform || "N/A"}
-                        </span>
-                      </span>
-                    </div>
-                    {contest.start_date && (
+
                       <div className="flex items-center">
-                        <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
+                        <div className="mr-2 flex-shrink-0">
+                          {getPlatformIconWithFallback(contest.platform, "sm")}
+                        </div>
                         <span>
-                          Starts:{" "}
+                          Platform:{" "}
                           <span
                             className={cn(
                               "font-medium",
                               isDark ? "text-white" : "text-slate-700"
                             )}
                           >
-                            {formatLocalDateTime(contest.start_date, {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                            {contest.platform || "N/A"}
                           </span>
                         </span>
                       </div>
-                    )}
-                    {contest.end_date && (
+                      {contest.start_date && (
+                        <div className="flex items-center">
+                          <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
+                          <span>
+                            Starts:{" "}
+                            <span
+                              className={cn(
+                                "font-medium",
+                                isDark ? "text-white" : "text-slate-700"
+                              )}
+                            >
+                              {formatLocalDateTime(contest.start_date, {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </span>
+                        </div>
+                      )}
+                      {contest.end_date && (
+                        <div className="flex items-center">
+                          <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+                          <span>
+                            Ends:{" "}
+                            <span
+                              className={cn(
+                                "font-medium",
+                                isDark ? "text-white" : "text-slate-700"
+                              )}
+                            >
+                              {formatLocalDateTime(contest.end_date, {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </span>
+                        </div>
+                      )}
+                      {contest.live_submission_count !== null &&
+                        contest.live_submission_count !== undefined && (
+                          <div className="flex items-center">
+                            <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                            <span>
+                              Submissions:{" "}
+                              <span
+                                className={cn(
+                                  "font-medium",
+                                  isDark ? "text-white" : "text-slate-700"
+                                )}
+                              >
+                                {contest.live_submission_count}
+                              </span>
+                            </span>
+                          </div>
+                        )}
+                      {(() => {
+                        const contestCategories = Array.isArray(
+                          contest.categories
+                        )
+                          ? contest.categories
+                          : [];
+                        const contestSubcategories =
+                          typeof contest.subcategories === "object" &&
+                          contest.subcategories !== null
+                            ? (contest.subcategories as Record<
+                                string,
+                                string[]
+                              >)
+                            : {};
+                        const contestInterests = Array.isArray(
+                          contest.interests
+                        )
+                          ? contest.interests
+                          : [];
+                        const contestHasPreferences =
+                          contestCategories.length > 0 ||
+                          Object.keys(contestSubcategories).length > 0 ||
+                          contestInterests.length > 0;
+
+                        return contestHasPreferences ? (
+                          <div className="flex items-center">
+                            <Star className="h-4 w-4 mr-2 flex-shrink-0" />
+                            <span>
+                              Relevance Score:{" "}
+                              <span
+                                className={cn(
+                                  "font-medium",
+                                  isDark ? "text-white" : "text-slate-700"
+                                )}
+                              >
+                                {calculateRelevanceScore(contest)}
+                              </span>
+                              {(() => {
+                                const matchDetails = getMatchDetails(contest);
+                                return matchDetails.matchLabel ? (
+                                  <span className="ml-1">
+                                    ({matchDetails.matchLabel})
+                                  </span>
+                                ) : null;
+                              })()}
+                            </span>
+                          </div>
+                        ) : null;
+                      })()}
                       <div className="flex items-center">
-                        <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+                        <Info className="h-4 w-4 mr-2 flex-shrink-0" />
                         <span>
-                          Ends:{" "}
+                          Contest Type:{" "}
                           <span
                             className={cn(
                               "font-medium",
                               isDark ? "text-white" : "text-slate-700"
                             )}
                           >
-                            {formatLocalDateTime(contest.end_date, {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                            {contest.contest_type === "cpm"
+                              ? "CPM Based"
+                              : contest.contest_type === "leaderboard"
+                              ? "Leaderboard"
+                              : contest.contest_type
+                              ? contest.contest_type.charAt(0).toUpperCase() +
+                                contest.contest_type.slice(1)
+                              : "N/A"}
                           </span>
                         </span>
                       </div>
-                    )}
-                    {contest.live_submission_count !== null &&
-                      contest.live_submission_count !== undefined && (
-                        <div className="flex items-center">
-                          <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                          <span>
-                            Submissions:{" "}
-                            <span
-                              className={cn(
-                                "font-medium",
-                                isDark ? "text-white" : "text-slate-700"
-                              )}
-                            >
-                              {contest.live_submission_count}
+                      {contest.contest_type === "cpm" &&
+                        contest.contest_based_details?.cpm_contest
+                          ?.cpm_rate_usd != null && (
+                          <div className="flex items-center">
+                            <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                            <span>
+                              CPM Rate:{" "}
+                              <span
+                                className={cn(
+                                  "font-medium",
+                                  isDark ? "text-white" : "text-slate-700"
+                                )}
+                              >
+                                {formatMoney(
+                                  contest.contest_based_details.cpm_contest
+                                    .cpm_rate_usd * 100
+                                )}{" "}
+                                / 1k views
+                              </span>
                             </span>
-                          </span>
-                        </div>
-                      )}
-                    {(() => {
-                      const contestCategories = Array.isArray(
-                        contest.categories
-                      )
-                        ? contest.categories
-                        : [];
-                      const contestSubcategories =
-                        typeof contest.subcategories === "object" &&
-                        contest.subcategories !== null
-                          ? (contest.subcategories as Record<string, string[]>)
-                          : {};
-                      const contestInterests = Array.isArray(contest.interests)
-                        ? contest.interests
-                        : [];
-                      const contestHasPreferences =
-                        contestCategories.length > 0 ||
-                        Object.keys(contestSubcategories).length > 0 ||
-                        contestInterests.length > 0;
-
-                      return contestHasPreferences ? (
-                        <div className="flex items-center">
-                          <Star className="h-4 w-4 mr-2 flex-shrink-0" />
-                          <span>
-                            Relevance Score:{" "}
-                            <span
-                              className={cn(
-                                "font-medium",
-                                isDark ? "text-white" : "text-slate-700"
-                              )}
-                            >
-                              {calculateRelevanceScore(contest)}
+                          </div>
+                        )}
+                      {contest.contest_type === "cpm" &&
+                        contest.contest_based_details?.cpm_contest
+                          ?.total_budget != null &&
+                        contest.contest_based_details.cpm_contest.total_budget >
+                          0 && (
+                          <div className="flex items-center">
+                            <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                            <span>
+                              Total Budget:{" "}
+                              <span
+                                className={cn(
+                                  "font-medium",
+                                  isDark ? "text-white" : "text-slate-700"
+                                )}
+                              >
+                                {formatMoney(
+                                  contest.contest_based_details.cpm_contest
+                                    .total_budget
+                                )}
+                              </span>
                             </span>
-                            {(() => {
-                              const matchDetails = getMatchDetails(contest);
-                              return matchDetails.matchLabel ? (
-                                <span className="ml-1">
-                                  ({matchDetails.matchLabel})
-                                </span>
-                              ) : null;
-                            })()}
-                          </span>
-                        </div>
-                      ) : null;
-                    })()}
-                    <div className="flex items-center">
-                      <Info className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span>
-                        Contest Type:{" "}
-                        <span
-                          className={cn(
-                            "font-medium",
-                            isDark ? "text-white" : "text-slate-700"
-                          )}
-                        >
-                          {contest.contest_type === "cpm"
-                            ? "CPM Based"
-                            : contest.contest_type === "leaderboard"
-                            ? "Leaderboard"
-                            : contest.contest_type
-                            ? contest.contest_type.charAt(0).toUpperCase() +
-                              contest.contest_type.slice(1)
-                            : "N/A"}
-                        </span>
-                      </span>
+                          </div>
+                        )}
+                      {contest.contest_type === "leaderboard" &&
+                        contest.contest_based_details?.leaderboard_contest
+                          ?.total_prize != null &&
+                        contest.contest_based_details.leaderboard_contest
+                          .total_prize > 0 && (
+                          <div className="flex items-center">
+                            <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                            <span>
+                              Total Prize Pool:{" "}
+                              <span
+                                className={cn(
+                                  "font-medium",
+                                  isDark ? "text-white" : "text-slate-700"
+                                )}
+                              >
+                                {formatMoney(
+                                  contest.contest_based_details
+                                    .leaderboard_contest.total_prize
+                                )}
+                              </span>
+                            </span>
+                          </div>
+                        )}
+                      {contest.contest_type === "leaderboard" &&
+                        contest.contest_based_details?.leaderboard_contest
+                          ?.total_budget != null &&
+                        contest.contest_based_details.leaderboard_contest
+                          .total_budget > 0 && (
+                          <div className="flex items-center">
+                            <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
+                            <span>
+                              Total Bonus Budget:{" "}
+                              <span
+                                className={cn(
+                                  "font-medium",
+                                  isDark ? "text-white" : "text-green-600"
+                                )}
+                              >
+                                {formatMoney(
+                                  contest.contest_based_details
+                                    .leaderboard_contest.total_budget
+                                )}
+                              </span>
+                            </span>
+                          </div>
+                        )}
                     </div>
-                    {contest.contest_type === "cpm" &&
-                      contest.contest_based_details?.cpm_contest
-                        ?.cpm_rate_usd != null && (
-                        <div className="flex items-center">
-                          <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                          <span>
-                            CPM Rate:{" "}
-                            <span
-                              className={cn(
-                                "font-medium",
-                                isDark ? "text-white" : "text-slate-700"
-                              )}
-                            >
-                              {formatMoney(
-                                contest.contest_based_details.cpm_contest
-                                  .cpm_rate_usd * 100
-                              )}{" "}
-                              / 1k views
-                            </span>
-                          </span>
-                        </div>
-                      )}
+
+                    {/* Budget Spent Progress Bar for CPM contests */}
                     {contest.contest_type === "cpm" &&
                       contest.contest_based_details?.cpm_contest
                         ?.total_budget != null &&
                       contest.contest_based_details.cpm_contest.total_budget >
-                        0 && (
-                        <div className="flex items-center">
-                          <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                          <span>
-                            Total Budget:{" "}
-                            <span
-                              className={cn(
-                                "font-medium",
-                                isDark ? "text-white" : "text-slate-700"
-                              )}
+                        0 &&
+                      (() => {
+                        const totalBudget =
+                          contest.contest_based_details.cpm_contest
+                            .total_budget;
+                        // Use real-time updated budget_spent field
+                        const budgetSpent =
+                          contest.contest_based_details.cpm_contest
+                            .budget_spent || 0;
+                        const percentage = (budgetSpent / totalBudget) * 100;
+                        const remaining = totalBudget - budgetSpent;
+
+                        return (
+                          <div className="mt-3 mb-3">
+                            <div
+                              className="flex justify-between text-sm mb-2"
+                              style={{
+                                color: isDark ? "#d1d5db" : "#374151",
+                                transition: "none",
+                              }}
                             >
-                              {formatMoney(
-                                contest.contest_based_details.cpm_contest
-                                  .total_budget
-                              )}
-                            </span>
-                          </span>
-                        </div>
-                      )}
-                    {contest.contest_type === "leaderboard" &&
-                      contest.contest_based_details?.leaderboard_contest
-                        ?.total_prize != null &&
-                      contest.contest_based_details.leaderboard_contest
-                        .total_prize > 0 && (
-                        <div className="flex items-center">
-                          <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                          <span>
-                            Total Prize Pool:{" "}
-                            <span
+                              <span className="font-medium">
+                                Budget Tracker
+                              </span>
+                              <span className="font-semibold">
+                                {formatMoney(budgetSpent)} /{" "}
+                                {formatMoney(totalBudget)}
+                              </span>
+                            </div>
+                            <div
                               className={cn(
-                                "font-medium",
-                                isDark ? "text-white" : "text-slate-700"
+                                "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                                isDark ? "bg-[#FFFFFF42]" : "bg-slate-200"
                               )}
+                              title={`Total Budget Spent: ${formatMoney(
+                                budgetSpent
+                              )}`}
                             >
-                              {formatMoney(
-                                contest.contest_based_details
-                                  .leaderboard_contest.total_prize
-                              )}
-                            </span>
-                          </span>
-                        </div>
-                      )}
+                              <div
+                                className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                                style={{
+                                  width: `${Math.min(percentage, 100)}%`,
+                                }}
+                              ></div>
+                            </div>
+                            <div
+                              className="flex justify-between text-xs mt-1.5"
+                              style={{
+                                color: isDark ? "#d1d5db" : "#64748b",
+                                transition: "none",
+                              }}
+                            >
+                              <span>{percentage.toFixed(1)}% used</span>
+                              <span>{formatMoney(remaining)} remaining</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                    {/* Bonus Budget Tracker for Leaderboard contests */}
                     {contest.contest_type === "leaderboard" &&
                       contest.contest_based_details?.leaderboard_contest
                         ?.total_budget != null &&
                       contest.contest_based_details.leaderboard_contest
-                        .total_budget > 0 && (
-                        <div className="flex items-center">
-                          <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
-                          <span>
-                            Total Bonus Budget:{" "}
-                            <span
-                              className={cn(
-                                "font-medium",
-                                isDark ? "text-white" : "text-green-600"
-                              )}
+                        .total_budget > 0 &&
+                      (() => {
+                        const totalBudget =
+                          contest.contest_based_details.leaderboard_contest
+                            .total_budget;
+                        const budgetSpent =
+                          contest.contest_based_details.leaderboard_contest
+                            .budget_spent || 0;
+                        const percentage = (budgetSpent / totalBudget) * 100;
+                        const remaining = totalBudget - budgetSpent;
+
+                        return (
+                          <div className="mt-3 mb-3">
+                            <div
+                              className="flex justify-between text-sm mb-2"
+                              style={{
+                                color: isDark ? "#cbd5e1" : "#475569",
+                                transition: "none",
+                              }}
                             >
-                              {formatMoney(
-                                contest.contest_based_details
-                                  .leaderboard_contest.total_budget
-                              )}
-                            </span>
-                          </span>
-                        </div>
-                      )}
-                  </div>
-
-                  {/* Budget Spent Progress Bar for CPM contests */}
-                  {contest.contest_type === "cpm" &&
-                    contest.contest_based_details?.cpm_contest?.total_budget !=
-                      null &&
-                    contest.contest_based_details.cpm_contest.total_budget >
-                      0 &&
-                    (() => {
-                      const totalBudget =
-                        contest.contest_based_details.cpm_contest.total_budget;
-                      // Use real-time updated budget_spent field
-                      const budgetSpent =
-                        contest.contest_based_details.cpm_contest
-                          .budget_spent || 0;
-                      const percentage = (budgetSpent / totalBudget) * 100;
-                      const remaining = totalBudget - budgetSpent;
-
-                      return (
-                        <div className="mt-3 mb-3">
-                          <div
-                            className="flex justify-between text-sm mb-2"
-                            style={{
-                              color: isDark ? "#d1d5db" : "#374151",
-                              transition: "none",
-                            }}
-                          >
-                            <span className="font-medium">Budget Tracker</span>
-                            <span className="font-semibold">
-                              {formatMoney(budgetSpent)} /{" "}
-                              {formatMoney(totalBudget)}
-                            </span>
-                          </div>
-                          <div
-                            className={cn(
-                              "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
-                              isDark ? "bg-[#FFFFFF42]" : "bg-slate-200"
-                            )}
-                            title={`Total Budget Spent: ${formatMoney(
-                              budgetSpent
-                            )}`}
-                          >
+                              <span className="font-medium">
+                                Flat Fee Bonus Budget Tracker
+                              </span>
+                              <span className="font-semibold">
+                                {formatMoney(budgetSpent)} /{" "}
+                                {formatMoney(totalBudget)}
+                              </span>
+                            </div>
                             <div
-                              className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                              style={{ width: `${Math.min(percentage, 100)}%` }}
-                            ></div>
-                          </div>
-                          <div
-                            className="flex justify-between text-xs mt-1.5"
-                            style={{
-                              color: isDark ? "#d1d5db" : "#64748b",
-                              transition: "none",
-                            }}
-                          >
-                            <span>{percentage.toFixed(1)}% used</span>
-                            <span>{formatMoney(remaining)} remaining</span>
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                  {/* Bonus Budget Tracker for Leaderboard contests */}
-                  {contest.contest_type === "leaderboard" &&
-                    contest.contest_based_details?.leaderboard_contest
-                      ?.total_budget != null &&
-                    contest.contest_based_details.leaderboard_contest
-                      .total_budget > 0 &&
-                    (() => {
-                      const totalBudget =
-                        contest.contest_based_details.leaderboard_contest
-                          .total_budget;
-                      const budgetSpent =
-                        contest.contest_based_details.leaderboard_contest
-                          .budget_spent || 0;
-                      const percentage = (budgetSpent / totalBudget) * 100;
-                      const remaining = totalBudget - budgetSpent;
-
-                      return (
-                        <div className="mt-3 mb-3">
-                          <div
-                            className="flex justify-between text-sm mb-2"
-                            style={{
-                              color: isDark ? "#cbd5e1" : "#475569",
-                              transition: "none",
-                            }}
-                          >
-                            <span className="font-medium">
-                              Flat Fee Bonus Budget Tracker
-                            </span>
-                            <span className="font-semibold">
-                              {formatMoney(budgetSpent)} /{" "}
-                              {formatMoney(totalBudget)}
-                            </span>
-                          </div>
-                          <div
-                            className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
-                            title={`Flat Fee Bonus Budget Spent: ${formatMoney(
-                              budgetSpent
-                            )}`}
-                          >
+                              className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
+                              title={`Flat Fee Bonus Budget Spent: ${formatMoney(
+                                budgetSpent
+                              )}`}
+                            >
+                              <div
+                                className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
+                                style={{
+                                  width: `${Math.min(percentage, 100)}%`,
+                                }}
+                              ></div>
+                            </div>
                             <div
-                              className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
-                              style={{ width: `${Math.min(percentage, 100)}%` }}
-                            ></div>
+                              className="flex justify-between text-xs mt-1.5"
+                              style={{
+                                color: isDark ? "#94a3b8" : "#64748b",
+                                transition: "none",
+                              }}
+                            >
+                              <span>{percentage.toFixed(1)}% used</span>
+                              <span>{formatMoney(remaining)} remaining</span>
+                            </div>
                           </div>
-                          <div
-                            className="flex justify-between text-xs mt-1.5"
-                            style={{
-                              color: isDark ? "#94a3b8" : "#64748b",
-                              transition: "none",
-                            }}
-                          >
-                            <span>{percentage.toFixed(1)}% used</span>
-                            <span>{formatMoney(remaining)} remaining</span>
-                          </div>
-                        </div>
-                      );
-                    })()}
+                        );
+                      })()}
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleViewDetails(contest.id);
-                    }}
-                    // size="sm"
-                    // variant="white"
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewDetails(contest.id);
+                      }}
+                      // size="sm"
+                      // variant="white"
 
-                    className="flex w-full items-center justify-center gap-2 px-3 py-3 rounded-full"
-                    style={{
-                      backgroundColor: isDark ? "#7F39EC" : "#D9C0FF61",
-                      color: isDark ? "white" : "#7F39EC",
-                      transition: "none",
-                    }}
-                  >
-                    View Details
-                  </button>
-                </CardContent>
-              </Card>
-            ))
-          ) : (
-            <div className="col-span-full text-center py=-12">
-              <Trophy className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-              <h2
-                className="text-xl font-medium mb-2"
-                style={{
-                  color: isDark ? "white" : "black",
-                  transition: "none",
-                }}
-              >
-                No contests match your criteria
-              </h2>
-              <p
-                className="mb-3"
-                style={{
-                  color: isDark ? "#94a3b8" : "#64748b",
-                  transition: "none",
-                }}
-              >
-                Try adjusting your filters or check back later.
-              </p>
-              <Button
-                onClick={resetFilters}
-                className="mt-4 text-md"
-                style={{
-                  backgroundColor: isDark ? "#7F39EC" : "#7F39EC",
-                  color: "white",
-                  transition: "none",
-                }}
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset
-              </Button>
-            </div>
-          )}
-        </div>
+                      className="flex w-full items-center justify-center gap-2 px-3 py-3 rounded-full"
+                      style={{
+                        backgroundColor: isDark ? "#7F39EC" : "#D9C0FF61",
+                        color: isDark ? "white" : "#7F39EC",
+                        transition: "none",
+                      }}
+                    >
+                      View Details
+                    </button>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <div className="col-span-full text-center py=-12">
+                <Trophy className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                <h2
+                  className="text-xl font-medium mb-2"
+                  style={{
+                    color: isDark ? "white" : "black",
+                    transition: "none",
+                  }}
+                >
+                  No contests match your criteria
+                </h2>
+                <p
+                  className="mb-3"
+                  style={{
+                    color: isDark ? "#94a3b8" : "#64748b",
+                    transition: "none",
+                  }}
+                >
+                  Try adjusting your filters or check back later.
+                </p>
+                <Button
+                  onClick={resetFilters}
+                  className="mt-4 text-md"
+                  style={{
+                    backgroundColor: isDark ? "#7F39EC" : "#7F39EC",
+                    color: "white",
+                    transition: "none",
+                  }}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {paginatedContests && paginatedContests.length > 0 ? (
+              paginatedContests.map((contest) =>
+                renderOpportunityListItem(contest)
+              )
+            ) : (
+              <div className="text-center py-12">
+                <Trophy className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                <h2
+                  className="text-xl font-medium mb-2"
+                  style={{
+                    color: isDark ? "white" : "black",
+                    transition: "none",
+                  }}
+                >
+                  No contests match your criteria
+                </h2>
+                <p
+                  className="mb-3"
+                  style={{
+                    color: isDark ? "#94a3b8" : "#64748b",
+                    transition: "none",
+                  }}
+                >
+                  Try adjusting your filters or check back later.
+                </p>
+                <Button
+                  onClick={resetFilters}
+                  className="mt-4 text-md"
+                  style={{
+                    backgroundColor: isDark ? "#7F39EC" : "#7F39EC",
+                    color: "white",
+                    transition: "none",
+                  }}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
 
         {total > limit && (
           <div className="mt-2 flex flex-col gap-2 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">

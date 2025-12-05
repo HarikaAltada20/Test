@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import {
   Edit,
   Trophy,
@@ -41,6 +42,10 @@ import {
   PlayCircle,
   StopCircle,
   Building,
+  LayoutGrid,
+  List,
+  Search,
+  X,
 } from "lucide-react";
 import { DeleteContestButton } from "@/components/delete-contest-button";
 import { formatLocalDateTime, cn } from "@/lib/utils";
@@ -98,6 +103,8 @@ interface ContestListClientProps {
   isAdminView?: boolean;
   selectedTab?: string;
   onTabChange?: (tab: string) => void;
+  viewMode?: "grid" | "list";
+  onViewModeChange?: (mode: "grid" | "list") => void;
 }
 
 type SortOptionType =
@@ -160,6 +167,8 @@ export function ContestListClient({
   isAdminView = false,
   selectedTab: externalSelectedTab,
   onTabChange,
+  viewMode: externalViewMode,
+  onViewModeChange,
 }: ContestListClientProps) {
   const router = useRouter();
   const [sortOption, setSortOption] =
@@ -191,12 +200,21 @@ export function ContestListClient({
   const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [contestStatusFilter, setContestStatusFilter] = useState<string>("all"); // New contest status filter
   const [contestTypeFilter, setContestTypeFilter] = useState<string>("all"); // New contest type filter
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [filteredAndSortedContests, setFilteredAndSortedContests] = useState<
     Contest[]
   >([]);
   const [page, setPage] = useState<number>(1);
   // Show 4 cards per page for contests
   const [limit, setLimit] = useState<number>(6);
+  const [internalViewMode, setInternalViewMode] = useState<"grid" | "list">(
+    "grid"
+  );
+
+  // Use external viewMode if provided, otherwise use internal state
+  const viewMode =
+    externalViewMode !== undefined ? externalViewMode : internalViewMode;
+  const setViewMode = onViewModeChange || setInternalViewMode;
 
   const availablePlatforms = useMemo(() => {
     const platforms = new Set(
@@ -344,6 +362,15 @@ export function ContestListClient({
   useEffect(() => {
     let contestsToDisplay = [...initialContests];
 
+    // Search Filter - filter by title (case-insensitive)
+    if (searchQuery.trim() !== "") {
+      const searchTerm = searchQuery.trim().toLowerCase();
+      contestsToDisplay = contestsToDisplay.filter((contest) => {
+        const title = contest.title?.toLowerCase() || "";
+        return title.includes(searchTerm);
+      });
+    }
+
     // Apply contest status filter (Live, Upcoming, Ended, All)
     if (contestStatusFilter !== "all") {
       contestsToDisplay = contestsToDisplay.filter((contest) => {
@@ -483,6 +510,7 @@ export function ContestListClient({
     platformFilter,
     contestTypeFilter,
     sortOption,
+    searchQuery,
   ]);
 
   const getModerationStatusBadge = (moderationStatus: string) => {
@@ -987,7 +1015,7 @@ export function ContestListClient({
       );
     }
 
-    // Modified design for unpublished contests with moderation status
+   
     return (
       <Card
         key={contest.id}
@@ -1079,10 +1107,42 @@ export function ContestListClient({
                   <span>Dates not set</span>
                 </div>
               )}
+              {contest.submitted_for_approval_at && (
+                <div className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  <span>
+                    Submitted:{" "}
+                    <span className="font-medium">
+                      {formatLocalDateTime(contest.submitted_for_approval_at, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </span>
+                </div>
+              )}
+              {contest.published_at && (
+                <div className="flex items-center gap-1">
+                  <Eye className="h-3 w-3" />
+                  <span>
+                    Published:{" "}
+                    <span className="font-medium">
+                      {formatLocalDateTime(contest.published_at, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </span>
+                </div>
+              )}
               {contest.contest_based_details && (
                 <div className="flex items-center gap-1">
                   <DollarSign className="h-3 w-3" />
-                  <span>
+                  <span >
                     {contest.contest_type === "leaderboard"
                       ? `Prize: ${formatMoney(
                           contest.contest_based_details.leaderboard_contest
@@ -1209,6 +1269,713 @@ export function ContestListClient({
     );
   };
 
+  const renderContestListItem = (contest: Contest) => {
+    const isPublished = contest.moderation_status === "published";
+
+    if (isPublished) {
+      return (
+        <Card
+          key={contest.id}
+          className={cn(
+            "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer relative",
+            isDark
+              ? "bg-[#06021D] border-slate-700"
+              : "bg-white border-slate-200"
+          )}
+          onClick={() => {
+            const href = isAdminView
+              ? `/dashboard/admin/contests/${contest.id}`
+              : `/dashboard/contests/${contest.id}`;
+            router.push(href);
+          }}
+        >
+          {/* Status Badge - Top Right Corner */}
+          {(contest.status === "active" ||
+            contest.status === "upcoming" ||
+            contest.status === "ended") && (
+            <div className="absolute top-3 right-3 z-10">
+              <Badge
+                className={cn(
+                  "capitalize text-sm px-3 py-1 font-medium border",
+                  contest.status === "active" && "bg-[#7F39EC] text-white",
+                  contest.status === "upcoming" && "bg-[#7F39EC] text-white",
+                  contest.status === "ended" && "bg-[#7F39EC] text-white"
+                )}
+              >
+                {contest.status === "active"
+                  ? "Live"
+                  : contest.status === "upcoming"
+                  ? "Upcoming"
+                  : contest.status === "ended"
+                  ? "Ended"
+                  : contest.status || "Unknown"}
+              </Badge>
+            </div>
+          )}
+          {/* Thumbnail */}
+          <div className="w-full sm:w-64 md:w-80 lg:w-72 xl:w-96 sm:h-[200px] md:h-[220px] lg:h-[250px] min-h-[12rem] flex-shrink-0 flex items-center justify-center overflow-hidden relative">
+            {contest.thumbnail_url ? (
+              <img
+                src={contest.thumbnail_url || "/placeholder.svg"}
+                alt={contest.title || "Contest thumbnail"}
+                className="w-full h-full object-contain transition-transform duration-300 ease-in-out group-hover:scale-105"
+              />
+            ) : (
+              <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 flex flex-col p-3 sm:p-4">
+            <CardHeader className="p-0 pb-2">
+              <CardTitle
+                className="text-base sm:text-lg font-bold leading-tight mb-2"
+                style={{
+                  color: isDark ? "white" : "#1e293b",
+                  transition: "none",
+                }}
+              >
+                {contest.title || "Untitled Contest"}
+              </CardTitle>
+              {/* Badges */}
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                {/* Submissions Badge */}
+                {contest.multiple_submissions_enabled && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-sm px-3 py-1 font-medium",
+                      isDark
+                        ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                        : "bg-purple-50 text-purple-700 border-purple-200"
+                    )}
+                  >
+                    <CheckCheck className="h-3 w-3 mr-1" />
+                    {(contest.max_submissions_per_creator ?? 1) > 1
+                      ? `${contest.max_submissions_per_creator} Submissions`
+                      : "Multiple Entries"}
+                  </Badge>
+                )}
+                {/* Content Type Badge (UGC, Clipping, etc.) */}
+                {contest.content_type && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-sm px-3 py-1 font-medium",
+                      isDark
+                        ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
+                        : "bg-blue-50 text-blue-700 border-blue-200"
+                    )}
+                  >
+                    <Tag className="h-3 w-3 mr-1" />
+                    {contest.content_type.toUpperCase()}
+                  </Badge>
+                )}
+                {/* Flat Fee Bonus Badge */}
+                {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
+                  contest.contest_based_details?.leaderboard_contest
+                    ?.flat_fee_bonus) && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-sm px-3 py-1 font-medium",
+                      isDark
+                        ? "bg-green-900/30 text-green-300 border-green-700/50"
+                        : "bg-green-50 text-green-700 border-green-200"
+                    )}
+                  >
+                    <Gift className="h-3 w-3 mr-1" />
+                    {formatMoney(
+                      contest.contest_based_details?.cpm_contest
+                        ?.flat_fee_bonus ||
+                        contest.contest_based_details?.leaderboard_contest
+                          ?.flat_fee_bonus ||
+                        0
+                    )}
+                    /submission
+                  </Badge>
+                )}
+                {/* Bonus Available Badge */}
+                {contest.bonus_details?.description_html && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-sm px-3 py-1 font-medium",
+                      isDark
+                        ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
+                        : "bg-amber-50 text-amber-700 border-amber-200"
+                    )}
+                  >
+                    <Star className="h-3 w-3 mr-1" />
+                    Bonus Available
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 pt-2 flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-md">
+                <div className="flex items-center">
+                  <div className="mr-2 flex-shrink-0">
+                    {getPlatformIconWithFallback(contest.platform, "sm")}
+                  </div>
+                  <span
+                    style={{
+                      color: isDark ? "white" : "#475569",
+                      transition: "none",
+                    }}
+                  >
+                    Platform:{" "}
+                    <span className="font-medium">
+                      {contest.platform || "N/A"}
+                    </span>
+                  </span>
+                </div>
+                {contest.start_date && (
+                  <div className="flex items-center">
+                    <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span
+                      style={{
+                        color: isDark ? "white" : "#475569",
+                        transition: "none",
+                      }}
+                    >
+                      Starts:{" "}
+                      <span className="font-medium">
+                        {formatLocalDateTime(contest.start_date, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </span>
+                  </div>
+                )}
+                {contest.end_date && (
+                  <div className="flex items-center">
+                    <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span
+                      style={{
+                        color: isDark ? "white" : "#475569",
+                        transition: "none",
+                      }}
+                    >
+                      Ends:{" "}
+                      <span className="font-medium">
+                        {formatLocalDateTime(contest.end_date, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </span>
+                  </div>
+                )}
+                {contest.live_submission_count !== null &&
+                  contest.live_submission_count !== undefined && (
+                    <div className="flex items-center">
+                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Submissions:{" "}
+                        <span className="font-medium">
+                          {contest.live_submission_count}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                <div className="flex items-center">
+                  <Info className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <span
+                    style={{
+                      color: isDark ? "white" : "#475569",
+                      transition: "none",
+                    }}
+                  >
+                    Contest Type:{" "}
+                    <span className="font-medium">
+                      {contest.contest_type === "cpm"
+                        ? "CPM Based"
+                        : contest.contest_type === "leaderboard"
+                        ? "Leaderboard"
+                        : contest.contest_type
+                        ? contest.contest_type.charAt(0).toUpperCase() +
+                          contest.contest_type.slice(1)
+                        : "N/A"}
+                    </span>
+                  </span>
+                </div>
+                {contest.contest_type === "cpm" &&
+                  contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
+                    null && (
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        CPM Rate:{" "}
+                        <span className="font-medium">
+                          {formatMoney(
+                            contest.contest_based_details.cpm_contest
+                              .cpm_rate_usd * 100
+                          )}{" "}
+                          / 1k views
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                {contest.contest_type === "cpm" &&
+                  contest.contest_based_details?.cpm_contest?.total_budget !=
+                    null &&
+                  contest.contest_based_details.cpm_contest.total_budget >
+                    0 && (
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Total Budget:{" "}
+                        <span className="font-medium">
+                          {formatMoney(
+                            contest.contest_based_details.cpm_contest
+                              .total_budget
+                          )}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                {contest.contest_type === "leaderboard" &&
+                  contest.contest_based_details?.leaderboard_contest
+                    ?.total_prize != null &&
+                  contest.contest_based_details.leaderboard_contest
+                    .total_prize > 0 && (
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Total Prize Pool:{" "}
+                        <span className="font-medium">
+                          {formatMoney(
+                            contest.contest_based_details.leaderboard_contest
+                              .total_prize
+                          )}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+              </div>
+
+              {/* Budget Spent Progress Bar for CPM contests */}
+              {contest.contest_type === "cpm" &&
+                contest.contest_based_details?.cpm_contest?.total_budget !=
+                  null &&
+                contest.contest_based_details.cpm_contest.total_budget > 0 &&
+                (() => {
+                  const totalBudget =
+                    contest.contest_based_details.cpm_contest.total_budget;
+                  const budgetSpent =
+                    contest.contest_based_details.cpm_contest.budget_spent || 0;
+                  const percentage = (budgetSpent / totalBudget) * 100;
+                  const remaining = totalBudget - budgetSpent;
+
+                  return (
+                    <div className="mt-3">
+                      <div
+                        className="flex justify-between text-sm mb-2"
+                        style={{
+                          color: isDark ? "#d1d5db" : "#374151",
+                          transition: "none",
+                        }}
+                      >
+                        <span className="font-medium">Budget Tracker</span>
+                        <span className="font-semibold">
+                          {formatMoney(budgetSpent)} /{" "}
+                          {formatMoney(totalBudget)}
+                        </span>
+                      </div>
+                      <div
+                        className={cn(
+                          "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                          isDark ? "bg-[#FFFFFF42]" : "bg-slate-200"
+                        )}
+                      >
+                        <div
+                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${Math.min(percentage, 100)}%` }}
+                        ></div>
+                      </div>
+                      <div
+                        className="flex justify-between text-xs mt-1.5"
+                        style={{
+                          color: isDark ? "#d1d5db" : "#64748b",
+                          transition: "none",
+                        }}
+                      >
+                        <span>{percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(remaining)} remaining</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+              {/* Bonus Budget Tracker for Leaderboard contests */}
+              {contest.contest_type === "leaderboard" &&
+                contest.contest_based_details?.leaderboard_contest
+                  ?.total_budget != null &&
+                contest.contest_based_details.leaderboard_contest.total_budget >
+                  0 &&
+                (() => {
+                  const totalBudget =
+                    contest.contest_based_details.leaderboard_contest
+                      .total_budget;
+                  const budgetSpent =
+                    contest.contest_based_details.leaderboard_contest
+                      .budget_spent || 0;
+                  const percentage = (budgetSpent / totalBudget) * 100;
+                  const remaining = totalBudget - budgetSpent;
+
+                  return (
+                    <div className="mt-3">
+                      <div
+                        className="flex justify-between text-sm mb-2"
+                        style={{
+                          color: isDark ? "#cbd5e1" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        <span className="font-medium">
+                          Flat Fee Bonus Budget Tracker
+                        </span>
+                        <span className="font-semibold">
+                          {formatMoney(budgetSpent)} /{" "}
+                          {formatMoney(totalBudget)}
+                        </span>
+                      </div>
+                      <div className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                        <div
+                          className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${Math.min(percentage, 100)}%` }}
+                        ></div>
+                      </div>
+                      <div
+                        className="flex justify-between text-xs mt-1.5"
+                        style={{
+                          color: isDark ? "#94a3b8" : "#64748b",
+                          transition: "none",
+                        }}
+                      >
+                        <span>{percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(remaining)} remaining</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+            </CardContent>
+          </div>
+
+          {/* Third Column - View Details Button */}
+          <div className="flex flex-col items-center justify-center gap-3 p-4 w-32 sm:w-40 flex-shrink-0">
+            <button
+              className={cn(
+                "flex items-center justify-center gap-2 px-4 py-3 rounded-full whitespace-nowrap",
+                isDark
+                  ? "bg-[#7F39EC] text-white"
+                  : "bg-[#D9C0FF61] text-[#7F39EC]"
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                const href = isAdminView
+                  ? `/dashboard/admin/contests/${contest.id}`
+                  : `/dashboard/contests/${contest.id}`;
+                router.push(href);
+              }}
+            >
+              <Eye className="h-4 w-4" />
+              <span className="text-sm font-medium">View Details</span>
+            </button>
+          </div>
+        </Card>
+      );
+    }
+
+    // List view for unpublished contests
+    return (
+      <Card
+        key={contest.id}
+        className={cn(
+          "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer relative",
+          isDark ? "bg-[#06021D] border-slate-700" : "bg-white border-slate-200"
+        )}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("button")) {
+            return;
+          }
+          const href = isAdminView
+            ? `/dashboard/admin/contests/${contest.id}`
+            : `/dashboard/contests/${contest.id}`;
+          router.push(href);
+        }}
+      >
+       
+        <div className="absolute top-4 right-3 z-10">
+          {getModerationStatusBadge(contest.moderation_status)}
+        </div>
+        {/* Thumbnail */}
+        <div className="w-full sm:w-64 md:w-80 lg:w-72 xl:w-96 sm:h-[200px] md:h-[220px] lg:h-[250px] min-h-[12rem] flex-shrink-0 flex items-center justify-center overflow-hidden relative">
+          {contest.thumbnail_url ? (
+            <img
+              src={contest.thumbnail_url || "/placeholder.svg"}
+              alt={contest.title || "Contest thumbnail"}
+              className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">
+              <Trophy className="h-12 w-12 mb-2" />
+              <span className="text-sm font-medium">No Image</span>
+            </div>
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 flex flex-col p-4">
+          <div className="mb-3">
+            <h3
+              className="font-bold text-lg leading-tight line-clamp-2"
+              style={{
+                color: isDark ? "white" : "#0f172a",
+                transition: "none",
+              }}
+            >
+              {contest.title || "Untitled Contest"}
+            </h3>
+          </div>
+
+          <div className="flex items-center gap-2 mb-3">
+            <Badge
+              variant="outline"
+              className="text-sm bg-[#7F39EC] text-white py-1 capitalize"
+            >
+              {contest.platform || "Platform"}
+            </Badge>
+            <Badge
+              variant="outline"
+              className="text-sm bg-[#7F39EC] text-white py-1 capitalize"
+            >
+              {contest.contest_type || "Type"}
+            </Badge>
+          </div>
+
+          <div
+            className="space-y-2 flex-grow"
+            style={{
+              color: isDark ? "white" : "#475569",
+              transition: "none",
+            }}
+          >
+            {contest.start_date && contest.end_date ? (
+              <div className="flex items-center gap-1 text-base">
+                <Calendar className="h-3 w-3" />
+                <span>
+                  {formatLocalDateTime(contest.start_date)} -{" "}
+                  {formatLocalDateTime(contest.end_date)}
+                </span>
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  "flex items-center gap-1 text-base",
+                  isDark ? "text-amber-400" : "text-amber-600"
+                )}
+              >
+                <AlertTriangle className="h-3 w-3" />
+                <span>Dates not set</span>
+              </div>
+            )}
+            {contest.submitted_for_approval_at && (
+              <div className="flex items-center gap-1 text-base">
+                <Clock className="h-3 w-3" />
+                <span>
+                  Submitted:{" "}
+                  <span className="font-medium">
+                    {formatLocalDateTime(contest.submitted_for_approval_at, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </span>
+              </div>
+            )}
+            {contest.published_at && (
+              <div className="flex items-center gap-1 text-base">
+                <Eye className="h-3 w-3" />
+                <span>
+                  Published:{" "}
+                  <span className="font-medium">
+                    {formatLocalDateTime(contest.published_at, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </span>
+              </div>
+            )}
+            {contest.contest_based_details && (
+              <div className="flex items-center gap-1 text-base">
+                <DollarSign className="h-3 w-3" />
+                <span>
+                  {contest.contest_type === "leaderboard"
+                    ? `Prize: ${formatMoney(
+                        contest.contest_based_details.leaderboard_contest
+                          ?.total_prize || 0
+                      )}`
+                    : `Budget: ${formatMoney(
+                        contest.contest_based_details.cpm_contest
+                          ?.total_budget || 0
+                      )}`}
+                </span>
+              </div>
+            )}
+            {contest.rejection_reason && (
+              <div className="flex items-start gap-1 text-red-600 dark:text-red-400">
+                <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                <span className="text-xs">{contest.rejection_reason}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Third Column - Action Buttons */}
+        <div
+          className={cn(
+            "flex items-center justify-center gap-2 p-4 flex-shrink-0",
+            contest.moderation_status === "approved" ||
+              contest.moderation_status !== "published"
+              ? "flex-row w-auto sm:w-auto"
+              : "flex-col w-32 sm:w-40"
+          )}
+        >
+          {contest.moderation_status === "approved" ? (
+            <>
+              <button
+                className={cn(
+                  "flex items-center justify-center gap-2 px-3 py-3 rounded-full text-sm font-medium whitespace-nowrap",
+                  isDark
+                    ? "bg-[#7F39EC] text-white"
+                    : "bg-[#D9C0FF61] text-[#7F39EC]"
+                )}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    const response = await fetch(
+                      `/api/contests/${contest.id}/publish`,
+                      {
+                        method: "POST",
+                      }
+                    );
+                    if (response.ok) {
+                      window.location.reload();
+                    } else {
+                      const error = await response.json();
+                      alert(error.error || "Failed to publish contest");
+                    }
+                  } catch (error) {
+                    alert("Failed to publish contest");
+                  }
+                }}
+              >
+                <PlayCircle className="h-4 w-4" />
+                <span>Publish</span>
+              </button>
+              <Button
+                variant="outline"
+                size="md"
+                className={cn(
+                  "text-[13px] whitespace-nowrap",
+                  isDark ? "text-purple-400 border-gray-700" : "text-purple-500"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  router.push(
+                    `/dashboard/contests/${contest.id}/edit?dates=true`
+                  );
+                }}
+              >
+                <Calendar className="h-4 w-4" />
+                <span>Edit Dates</span>
+              </Button>
+              <DeleteContestButton
+                contestId={contest.id}
+                contestTitle={contest.title || "this contest"}
+                isDeletable={true}
+                className="flex items-center gap-2 justify-center"
+              />
+            </>
+          ) : contest.moderation_status !== "published" ? (
+            <>
+              <button
+                className={cn(
+                  "flex items-center justify-center gap-2 px-5 py-3 rounded-full text-sm font-medium whitespace-nowrap min-w-[140px]",
+                  isDark
+                    ? "bg-[#7F39EC] text-white"
+                    : "bg-[#D9C0FF61] text-[#7F39EC]"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const href = isAdminView
+                    ? `/dashboard/contests/${contest.id}/edit`
+                    : `/dashboard/contests/${contest.id}/edit`;
+                  router.push(href);
+                }}
+              >
+                <Edit className="h-4 w-4" />
+                <span>Edit Contest</span>
+              </button>
+              <DeleteContestButton
+                contestId={contest.id}
+                contestTitle={contest.title || "this contest"}
+                isDeletable={true}
+                className="flex items-center gap-2 justify-center"
+              />
+            </>
+          ) : (
+            <button
+              className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full text-sm font-medium"
+              onClick={(e) => {
+                e.stopPropagation();
+                const href = isAdminView
+                  ? `/dashboard/admin/contests/${contest.id}`
+                  : `/dashboard/contests/${contest.id}`;
+                router.push(href);
+              }}
+            >
+              <Eye className="h-4 w-4" />
+              <span>View Details</span>
+            </button>
+          )}
+        </div>
+      </Card>
+    );
+  };
+
   const currentContests =
     contestsByStatus[selectedTab as keyof typeof contestsByStatus] || [];
 
@@ -1217,7 +1984,8 @@ export function ContestListClient({
     if (
       contestStatusFilter !== "all" ||
       platformFilter !== "all" ||
-      contestTypeFilter !== "all"
+      contestTypeFilter !== "all" ||
+      searchQuery.trim() !== ""
     ) {
       return filteredAndSortedContests; // Use filtered and sorted results
     }
@@ -1326,6 +2094,7 @@ export function ContestListClient({
     contestStatusFilter,
     platformFilter,
     contestTypeFilter,
+    searchQuery,
     selectedTab,
   ]);
 
@@ -1340,6 +2109,7 @@ export function ContestListClient({
     platformFilter,
     contestTypeFilter,
     sortOption,
+    searchQuery,
   ]);
 
   const total = displayContests.length;
@@ -1354,114 +2124,180 @@ export function ContestListClient({
   return (
     <div className="w-full no-theme-transition">
       {/* Header with filters */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-3">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-            <Select
-              value={sortOption}
-              onValueChange={(value) => setSortOption(value as SortOptionType)}
-            >
-              <SelectTrigger className="w-full sm:w-[200px] border border-gray-400">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent isDark={isDark}>
-                <SelectItem isDark={isDark} value="created_at_desc">
-                  Date Created: Latest
-                </SelectItem>
-                <SelectItem isDark={isDark} value="created_at_asc">
-                  Date Created: Earliest
-                </SelectItem>
-                <SelectItem isDark={isDark} value="start_date_asc">
-                  Launch Date: Closest
-                </SelectItem>
-                <SelectItem isDark={isDark} value="start_date_desc">
-                  Launch Date: Farthest
-                </SelectItem>
-                <SelectItem isDark={isDark} value="end_date_asc">
-                  End Date: Closest
-                </SelectItem>
-                <SelectItem isDark={isDark} value="end_date_desc">
-                  End Date: Farthest
-                </SelectItem>
-                <SelectItem isDark={isDark} value="value_desc">
-                  Prize/Budget: High to Low
-                </SelectItem>
-                <SelectItem isDark={isDark} value="value_asc">
-                  Prize/Budget: Low to High
-                </SelectItem>
-                <SelectItem isDark={isDark} value="cpm_rate_desc">
-                  CPM Rate: High to Low
-                </SelectItem>
-                <SelectItem isDark={isDark} value="cpm_rate_asc">
-                  CPM Rate: Low to High
-                </SelectItem>
-                <SelectItem isDark={isDark} value="submissions_desc">
-                  Submissions: High to Low
-                </SelectItem>
-                <SelectItem isDark={isDark} value="submissions_asc">
-                  Submissions: Low to High
-                </SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={platformFilter} onValueChange={setPlatformFilter}>
-              <SelectTrigger className="w-full sm:w-[150px] border border-gray-400">
-                <SelectValue placeholder="Platform" />
-              </SelectTrigger>
-              <SelectContent isDark={isDark}>
-                {availablePlatforms.map((p) => (
-                  <SelectItem isDark={isDark} key={p} value={p}>
-                    {p === "all" ? "All Platforms" : p}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Contest Status Filter */}
-            <Select
-              value={contestStatusFilter}
-              onValueChange={setContestStatusFilter}
-            >
-              <SelectTrigger className="w-full sm:w-[150px] border border-gray-400">
-                <SelectValue placeholder="Contest Status" />
-              </SelectTrigger>
-              <SelectContent isDark={isDark}>
-                <SelectItem isDark={isDark} value="all">
-                  All Status
-                </SelectItem>
-                <SelectItem isDark={isDark} value="live">
-                  Live
-                </SelectItem>
-                <SelectItem isDark={isDark} value="upcoming">
-                  Upcoming
-                </SelectItem>
-                <SelectItem isDark={isDark} value="ended">
-                  Ended
-                </SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Contest Type Filter */}
-            <Select
-              value={contestTypeFilter}
-              onValueChange={setContestTypeFilter}
-            >
-              <SelectTrigger className="w-full sm:w-[150px] border border-gray-400">
-                <SelectValue placeholder="Contest Type" />
-              </SelectTrigger>
-              <SelectContent isDark={isDark}>
-                <SelectItem isDark={isDark} value="all">
-                  All Types
-                </SelectItem>
-                <SelectItem isDark={isDark} value="leaderboard">
-                  Leaderboard
-                </SelectItem>
-                <SelectItem isDark={isDark} value="cpm">
-                  CPM
-                </SelectItem>
-              </SelectContent>
-            </Select>
+      <div className="flex flex-col gap-4 mb-3">
+        {/* Search and View Toggle Row */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          {/* Search Input */}
+          <div className="relative max-w-md w-full">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+            <Input
+              type="text"
+              placeholder="Search contests by title..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={cn(
+                "pl-10 border w-full",
+                searchQuery && "pr-10",
+                isDark
+                  ? "border-gray-500 bg-[#020817] text-white"
+                  : "border-gray-400 text-black"
+              )}
+            />
           </div>
+          {/* View Toggle Buttons */}
+          <div className="hidden min-[650px]:flex items-center gap-1 border border-gray-400 rounded-md p-1">
+            <button
+              onClick={() => setViewMode("grid")}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                viewMode === "grid"
+                  ? isDark
+                    ? "bg-[#7F39EC] text-white"
+                    : "bg-[#7F39EC] text-white"
+                  : isDark
+                  ? "text-gray-300 hover:text-white"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              )}
+              title="Grid View"
+            >
+              <LayoutGrid className="h-4 w-4" />
+              <span className="hidden sm:inline">Grid View</span>
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                viewMode === "list"
+                  ? isDark
+                    ? "bg-[#7F39EC] text-white"
+                    : "bg-[#7F39EC] text-white"
+                  : isDark
+                  ? "text-gray-300 hover:text-white"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              )}
+              title="List View"
+            >
+              <List className="h-4 w-4" />
+              <span className="hidden sm:inline">List View</span>
+            </button>
+          </div>
+        </div>
+        {/* Filters - Wraps to next row when overflow */}
+        <div className="flex flex-wrap items-center gap-2 w-full">
+          <Select
+            value={sortOption}
+            onValueChange={(value) => setSortOption(value as SortOptionType)}
+          >
+            <SelectTrigger className="w-full sm:w-[200px] min-w-[150px] border border-gray-400">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent isDark={isDark}>
+              <SelectItem isDark={isDark} value="created_at_desc">
+                Date Created: Latest
+              </SelectItem>
+              <SelectItem isDark={isDark} value="created_at_asc">
+                Date Created: Earliest
+              </SelectItem>
+              <SelectItem isDark={isDark} value="start_date_asc">
+                Launch Date: Closest
+              </SelectItem>
+              <SelectItem isDark={isDark} value="start_date_desc">
+                Launch Date: Farthest
+              </SelectItem>
+              <SelectItem isDark={isDark} value="end_date_asc">
+                End Date: Closest
+              </SelectItem>
+              <SelectItem isDark={isDark} value="end_date_desc">
+                End Date: Farthest
+              </SelectItem>
+              <SelectItem isDark={isDark} value="value_desc">
+                Prize/Budget: High to Low
+              </SelectItem>
+              <SelectItem isDark={isDark} value="value_asc">
+                Prize/Budget: Low to High
+              </SelectItem>
+              <SelectItem isDark={isDark} value="cpm_rate_desc">
+                CPM Rate: High to Low
+              </SelectItem>
+              <SelectItem isDark={isDark} value="cpm_rate_asc">
+                CPM Rate: Low to High
+              </SelectItem>
+              <SelectItem isDark={isDark} value="submissions_desc">
+                Submissions: High to Low
+              </SelectItem>
+              <SelectItem isDark={isDark} value="submissions_asc">
+                Submissions: Low to High
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={platformFilter} onValueChange={setPlatformFilter}>
+            <SelectTrigger className="w-full sm:w-[150px] min-w-[120px] border border-gray-400">
+              <SelectValue placeholder="Platform" />
+            </SelectTrigger>
+            <SelectContent isDark={isDark}>
+              {availablePlatforms.map((p) => (
+                <SelectItem isDark={isDark} key={p} value={p}>
+                  {p === "all" ? "All Platforms" : p}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Contest Status Filter */}
+          <Select
+            value={contestStatusFilter}
+            onValueChange={setContestStatusFilter}
+          >
+            <SelectTrigger className="w-full sm:w-[150px] min-w-[120px] border border-gray-400">
+              <SelectValue placeholder="Contest Status" />
+            </SelectTrigger>
+            <SelectContent isDark={isDark}>
+              <SelectItem isDark={isDark} value="all">
+                All Status
+              </SelectItem>
+              <SelectItem isDark={isDark} value="live">
+                Live
+              </SelectItem>
+              <SelectItem isDark={isDark} value="upcoming">
+                Upcoming
+              </SelectItem>
+              <SelectItem isDark={isDark} value="ended">
+                Ended
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Contest Type Filter */}
+          <Select
+            value={contestTypeFilter}
+            onValueChange={setContestTypeFilter}
+          >
+            <SelectTrigger className="w-full sm:w-[150px] min-w-[120px] border border-gray-400">
+              <SelectValue placeholder="Contest Type" />
+            </SelectTrigger>
+            <SelectContent isDark={isDark}>
+              <SelectItem isDark={isDark} value="all">
+                All Types
+              </SelectItem>
+              <SelectItem isDark={isDark} value="leaderboard">
+                Leaderboard
+              </SelectItem>
+              <SelectItem isDark={isDark} value="cpm">
+                CPM
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -1612,45 +2448,87 @@ export function ContestListClient({
         {Object.keys(contestsByStatus).map((tabValue) => (
           <TabsContent key={tabValue} value={tabValue} className="mt-4">
             <div>
-              <div
-                className="grid gap-6"
-                style={{
-                  gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-                }}
-              >
-                {total > 0 ? (
-                  paginatedContests.map((contest) => renderContestCard(contest))
-                ) : (
-                  <div className="col-span-full text-center py-12">
-                    <h3
-                      className="text-lg font-semibold"
-                      style={{
-                        color: isDark ? "white" : "black",
-                        transition: "none",
-                      }}
-                    >
-                      No Contests Found
-                    </h3>
-                    <p
-                      className="mt-2"
-                      style={{
-                        color: isDark ? "#94a3b8" : "#64748b",
-                        transition: "none",
-                      }}
-                    >
-                      {platformFilter !== "all" ||
-                      contestStatusFilter !== "all" ||
-                      contestTypeFilter !== "all"
-                        ? `No contests match the current filters for ${tabValue
-                            .split("_")
-                            .join(" ")} status.`
-                        : `No contests found for ${tabValue
-                            .split("_")
-                            .join(" ")} status.`}
-                    </p>
-                  </div>
-                )}
-              </div>
+              {viewMode === "grid" ? (
+                <div
+                  className="grid gap-6"
+                  style={{
+                    gridTemplateColumns:
+                      "repeat(auto-fill, minmax(320px, 1fr))",
+                  }}
+                >
+                  {total > 0 ? (
+                    paginatedContests.map((contest) =>
+                      renderContestCard(contest)
+                    )
+                  ) : (
+                    <div className="col-span-full text-center py-12">
+                      <h3
+                        className="text-lg font-semibold"
+                        style={{
+                          color: isDark ? "white" : "black",
+                          transition: "none",
+                        }}
+                      >
+                        No Contests Found
+                      </h3>
+                      <p
+                        className="mt-2"
+                        style={{
+                          color: isDark ? "#94a3b8" : "#64748b",
+                          transition: "none",
+                        }}
+                      >
+                        {platformFilter !== "all" ||
+                        contestStatusFilter !== "all" ||
+                        contestTypeFilter !== "all"
+                          ? `No contests match the current filters for ${tabValue
+                              .split("_")
+                              .join(" ")} status.`
+                          : `No contests found for ${tabValue
+                              .split("_")
+                              .join(" ")} status.`}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {total > 0 ? (
+                    paginatedContests.map((contest) =>
+                      renderContestListItem(contest)
+                    )
+                  ) : (
+                    <div className="text-center py-12">
+                      <h3
+                        className="text-lg font-semibold"
+                        style={{
+                          color: isDark ? "white" : "black",
+                          transition: "none",
+                        }}
+                      >
+                        No Contests Found
+                      </h3>
+                      <p
+                        className="mt-2"
+                        style={{
+                          color: isDark ? "#94a3b8" : "#64748b",
+                          transition: "none",
+                        }}
+                      >
+                        {platformFilter !== "all" ||
+                        contestStatusFilter !== "all" ||
+                        contestTypeFilter !== "all"
+                          ? `No contests match the current filters for ${tabValue
+                              .split("_")
+                              .join(" ")} status.`
+                          : `No contests found for ${tabValue
+                              .split("_")
+                              .join(" ")} status.`}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {total > limit && (
                 <div className="mt-6 flex flex-col gap-2 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
