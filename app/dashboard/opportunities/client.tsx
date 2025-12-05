@@ -1184,7 +1184,7 @@ export default function OpportunitiesPage({
             </div>
           </CardHeader>
           <CardContent className="p-0 pt-2 flex-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-sm sm:text-md">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-md">
               <div className="flex items-center">
                 <div className="mr-2 flex-shrink-0">
                   {getPlatformIconWithFallback(contest.platform, "sm")}
