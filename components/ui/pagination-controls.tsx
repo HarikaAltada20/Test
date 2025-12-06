@@ -33,6 +33,8 @@ interface PaginationControlsProps {
   showPageSizeSelector?: boolean;
   showEdgeButtons?: boolean; // first/last buttons
   showPrevNextButtons?: boolean; // previous/next buttons
+  // Custom page size options (defaults to [25, 50, 100, 200])
+  pageSizeOptions?: number[];
 }
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
@@ -53,6 +55,7 @@ export function PaginationControls({
   showPageSizeSelector = true,
   showEdgeButtons = true,
   showPrevNextButtons = true,
+  pageSizeOptions = PAGE_SIZE_OPTIONS,
 }: PaginationControlsProps) {
   const startItem = Math.min((page - 1) * limit + 1, total);
   const endItem = Math.min(page * limit, total);
@@ -149,8 +152,8 @@ export function PaginationControls({
                   )}
                 >
                   {(hide200Option
-                    ? PAGE_SIZE_OPTIONS.filter((size) => size !== 200)
-                    : PAGE_SIZE_OPTIONS
+                    ? pageSizeOptions.filter((size) => size !== 200)
+                    : pageSizeOptions
                   ).map((size) => (
                     <SelectItem
                       isDark={isDark}

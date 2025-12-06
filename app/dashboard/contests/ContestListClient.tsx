@@ -205,8 +205,8 @@ export function ContestListClient({
     Contest[]
   >([]);
   const [page, setPage] = useState<number>(1);
-  // Show 4 cards per page for contests
-  const [limit, setLimit] = useState<number>(6);
+  // Default to 9 campaigns per page with options: 9, 15, 21, 30
+  const [limit, setLimit] = useState<number>(9);
   const [internalViewMode, setInternalViewMode] = useState<"grid" | "list">(
     "grid"
   );
@@ -358,6 +358,27 @@ export function ContestListClient({
     };
   }, [mode]);
   const isDark = mode === "dark";
+
+  // Responsive view mode: switch to grid view on smaller screens if in list view
+  useEffect(() => {
+    const checkScreenSize = () => {
+      // Use 650px as the breakpoint (matches min-[650px] used for view toggle buttons)
+      if (window.innerWidth < 650 && viewMode === "list") {
+        setViewMode("grid");
+      }
+    };
+
+    // Check on mount
+    checkScreenSize();
+
+    // Check on resize
+    window.addEventListener("resize", checkScreenSize);
+
+    return () => {
+      window.removeEventListener("resize", checkScreenSize);
+    };
+  }, [viewMode, setViewMode]);
+
   // useEffect for filtering and sorting - copied from opportunities
   useEffect(() => {
     let contestsToDisplay = [...initialContests];
@@ -1015,7 +1036,6 @@ export function ContestListClient({
       );
     }
 
-   
     return (
       <Card
         key={contest.id}
@@ -1142,7 +1162,7 @@ export function ContestListClient({
               {contest.contest_based_details && (
                 <div className="flex items-center gap-1">
                   <DollarSign className="h-3 w-3" />
-                  <span >
+                  <span>
                     {contest.contest_type === "leaderboard"
                       ? `Prize: ${formatMoney(
                           contest.contest_based_details.leaderboard_contest
@@ -1413,7 +1433,7 @@ export function ContestListClient({
               </div>
             </CardHeader>
             <CardContent className="p-0 pt-2 flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-md">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-resp">
                 <div className="flex items-center">
                   <div className="mr-2 flex-shrink-0">
                     {getPlatformIconWithFallback(contest.platform, "sm")}
@@ -1731,7 +1751,6 @@ export function ContestListClient({
           router.push(href);
         }}
       >
-       
         <div className="absolute top-4 right-3 z-10">
           {getModerationStatusBadge(contest.moderation_status)}
         </div>
@@ -2530,37 +2549,99 @@ export function ContestListClient({
                 </div>
               )}
 
-              {total > limit && (
+              {total > 0 && (
                 <div className="mt-6 flex flex-col gap-2 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
-                  <div
-                    className="text-sm"
-                    style={{
-                      color: isDark ? "#cbd5e1" : "#4b5563",
-                      transition: "none",
-                    }}
-                  >
-                    {(() => {
-                      const startItem = (page - 1) * limit + 1;
-                      const endItem = Math.min(page * limit, total);
-                      return `Showing ${startItem}-${endItem} of ${total} contests`;
-                    })()}
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                    <div
+                      className="text-sm"
+                      style={{
+                        color: isDark ? "#cbd5e1" : "#4b5563",
+                        transition: "none",
+                      }}
+                    >
+                      {(() => {
+                        const startItem = (page - 1) * limit + 1;
+                        const endItem = Math.min(page * limit, total);
+                        return `Showing ${startItem}-${endItem} of ${total} contests`;
+                      })()}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-sm"
+                        style={{
+                          color: isDark ? "#cbd5e1" : "#4b5563",
+                          transition: "none",
+                        }}
+                      >
+                        Show:
+                      </span>
+                      <Select
+                        value={limit.toString()}
+                        onValueChange={(value) => {
+                          const newLimit = parseInt(value, 10);
+                          setLimit(newLimit);
+                          setPage(1);
+                        }}
+                      >
+                        <SelectTrigger
+                          className={cn(
+                            "w-20",
+                            isDark && "border border-gray-600"
+                          )}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent
+                          isDark={isDark}
+                          className={cn(
+                            isDark && "border-gray-600 bg-[#07031D] text-white"
+                          )}
+                        >
+                          {[9, 15, 21, 30].map((size) => (
+                            <SelectItem
+                              isDark={isDark}
+                              key={size}
+                              value={size.toString()}
+                              className={cn(
+                                isDark &&
+                                  "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
+                              )}
+                            >
+                              {size}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span
+                        className="text-sm"
+                        style={{
+                          color: isDark ? "#cbd5e1" : "#4b5563",
+                          transition: "none",
+                        }}
+                      >
+                        per page
+                      </span>
+                    </div>
                   </div>
-                  <PaginationControls
-                    page={page}
-                    limit={limit}
-                    total={total}
-                    totalPages={totalPages}
-                    hasNextPage={hasNextPage}
-                    hasPreviousPage={hasPreviousPage}
-                    onPageChange={setPage}
-                    onLimitChange={setLimit}
-                    loading={false}
-                    isDark={isDark}
-                    showResultInfo={false}
-                    showPageSizeSelector={false}
-                    showEdgeButtons={false}
-                    showPrevNextButtons={true}
-                  />
+                  {totalPages > 1 && (
+                    <PaginationControls
+                      page={page}
+                      limit={limit}
+                      total={total}
+                      totalPages={totalPages}
+                      hasNextPage={hasNextPage}
+                      hasPreviousPage={hasPreviousPage}
+                      onPageChange={setPage}
+                      onLimitChange={setLimit}
+                      loading={false}
+                      isDark={isDark}
+                      showResultInfo={false}
+                      showPageSizeSelector={false}
+                      showEdgeButtons={false}
+                      showPrevNextButtons={true}
+                      pageSizeOptions={[9, 15, 21, 30]}
+                    />
+                  )}
                 </div>
               )}
             </div>

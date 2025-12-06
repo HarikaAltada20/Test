@@ -319,6 +319,7 @@ export default function EditContestPage({
 
   // Common contest fields
   const [title, setTitle] = useState("");
+  const [platform, setPlatform] = useState<string>("");
   // Categories, subcategories, and interests state
   const [contestCategories, setContestCategories] = useState<string[]>([]);
   const [contestSubcategories, setContestSubcategories] = useState<
@@ -773,6 +774,7 @@ export default function EditContestPage({
           } else {
             setContest(data as ContestData);
             setTitle(data.title || "");
+            setPlatform(data.platform || "");
 
             // Handle rich text content loading
             if (data.brief_html && data.brief_json) {
@@ -1599,6 +1601,7 @@ export default function EditContestPage({
 
       updatePayload = {
         title,
+        platform: platform || null,
         brief_html: briefHtml,
         brief_json: briefJson,
         rules_html: rulesHtml,
@@ -3777,6 +3780,7 @@ export default function EditContestPage({
 
       updatePayload = {
         title,
+        platform: platform || null,
         brief_html: briefHtml,
         brief_json: briefJson,
         rules_html: rulesHtml,
@@ -4712,6 +4716,33 @@ export default function EditContestPage({
                   )}
                   required
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="platform">Platform</Label>
+                <Select value={platform} onValueChange={setPlatform}>
+                  <SelectTrigger
+                    id="platform"
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600"
+                        : "bg-white"
+                    )}
+                  >
+                    <SelectValue placeholder="Select contest platform" />
+                  </SelectTrigger>
+                  <SelectContent isDark={isDark}>
+                    <SelectItem isDark={isDark} value="youtube">
+                      YouTube
+                    </SelectItem>
+                    <SelectItem isDark={isDark} value="instagram">
+                      Instagram
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Choose the platform where creators will submit content.
+                </p>
               </div>
 
               <div className="space-y-2">

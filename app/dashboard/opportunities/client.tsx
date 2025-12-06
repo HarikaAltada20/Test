@@ -144,8 +144,8 @@ export default function OpportunitiesPage({
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [displayedContests, setDisplayedContests] = useState<any[]>([]);
   const [page, setPage] = useState<number>(1);
-  // Match contests page: 6 cards per page
-  const [limit, setLimit] = useState<number>(6);
+  // Default to 9 campaigns per page with options: 9, 15, 21, 30
+  const [limit, setLimit] = useState<number>(9);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [mode, setMode] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {
@@ -263,6 +263,26 @@ export default function OpportunitiesPage({
       clearInterval(intervalId);
     };
   }, [mode]);
+
+  // Responsive view mode: switch to grid view on smaller screens if in list view
+  useEffect(() => {
+    const checkScreenSize = () => {
+      // Use 768px as the breakpoint (matches md:flex used for view toggle buttons)
+      if (window.innerWidth < 768 && viewMode === "list") {
+        setViewMode("grid");
+      }
+    };
+
+    // Check on mount
+    checkScreenSize();
+
+    // Check on resize
+    window.addEventListener("resize", checkScreenSize);
+
+    return () => {
+      window.removeEventListener("resize", checkScreenSize);
+    };
+  }, [viewMode]);
 
   // Cache invalidation on user change
   useEffect(() => {
@@ -1184,7 +1204,7 @@ export default function OpportunitiesPage({
             </div>
           </CardHeader>
           <CardContent className="p-0 pt-2 flex-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-md">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-resp">
               <div className="flex items-center">
                 <div className="mr-2 flex-shrink-0">
                   {getPlatformIconWithFallback(contest.platform, "sm")}
@@ -2379,37 +2399,96 @@ export default function OpportunitiesPage({
           </div>
         )}
 
-        {total > limit && (
+        {total > 0 && (
           <div className="mt-2 flex flex-col gap-2 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
-            <div
-              className="text-sm"
-              style={{
-                color: isDark ? "#cbd5e1" : "#4b5563",
-                transition: "none",
-              }}
-            >
-              {(() => {
-                const startItem = (page - 1) * limit + 1;
-                const endItem = Math.min(page * limit, total);
-                return `Showing ${startItem}-${endItem} of ${total} opportunities`;
-              })()}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+              <div
+                className="text-sm"
+                style={{
+                  color: isDark ? "#cbd5e1" : "#4b5563",
+                  transition: "none",
+                }}
+              >
+                {(() => {
+                  const startItem = (page - 1) * limit + 1;
+                  const endItem = Math.min(page * limit, total);
+                  return `Showing ${startItem}-${endItem} of ${total} opportunities`;
+                })()}
+              </div>
+              <div className="flex items-center gap-2">
+                <span
+                  className="text-sm"
+                  style={{
+                    color: isDark ? "#cbd5e1" : "#4b5563",
+                    transition: "none",
+                  }}
+                >
+                  Show:
+                </span>
+                <Select
+                  value={limit.toString()}
+                  onValueChange={(value) => {
+                    const newLimit = parseInt(value, 10);
+                    setLimit(newLimit);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger
+                    className={cn("w-20", isDark && "border border-gray-600")}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent
+                    isDark={isDark}
+                    className={cn(
+                      isDark && "border-gray-600 bg-[#07031D] text-white"
+                    )}
+                  >
+                    {[9, 15, 21, 30].map((size) => (
+                      <SelectItem
+                        isDark={isDark}
+                        key={size}
+                        value={size.toString()}
+                        className={cn(
+                          isDark &&
+                            "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
+                        )}
+                      >
+                        {size}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span
+                  className="text-sm"
+                  style={{
+                    color: isDark ? "#cbd5e1" : "#4b5563",
+                    transition: "none",
+                  }}
+                >
+                  per page
+                </span>
+              </div>
             </div>
-            <PaginationControls
-              page={page}
-              limit={limit}
-              total={total}
-              totalPages={totalPages}
-              hasNextPage={hasNextPage}
-              hasPreviousPage={hasPreviousPage}
-              onPageChange={setPage}
-              onLimitChange={setLimit}
-              loading={false}
-              isDark={isDark}
-              showResultInfo={false}
-              showPageSizeSelector={false}
-              showEdgeButtons={false}
-              showPrevNextButtons={true}
-            />
+            {totalPages > 1 && (
+              <PaginationControls
+                page={page}
+                limit={limit}
+                total={total}
+                totalPages={totalPages}
+                hasNextPage={hasNextPage}
+                hasPreviousPage={hasPreviousPage}
+                onPageChange={setPage}
+                onLimitChange={setLimit}
+                loading={false}
+                isDark={isDark}
+                showResultInfo={false}
+                showPageSizeSelector={false}
+                showEdgeButtons={false}
+                showPrevNextButtons={true}
+                pageSizeOptions={[9, 15, 21, 30]}
+              />
+            )}
           </div>
         )}
       </div>
