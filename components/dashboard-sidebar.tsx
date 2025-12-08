@@ -213,27 +213,65 @@ export function DashboardSidebar({
       ? adminLinks
       : creatorLinks;
 
+  // Ensure scroll container is properly sized and can scroll
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+      // Force browser to recalculate scroll height
+      const checkScroll = () => {
+        if (container.scrollHeight > container.clientHeight) {
+          // Content overflows, ensure scrolling is enabled
+          container.style.overflowY = "auto";
+        }
+      };
+
+      // Check immediately and after a short delay
+      checkScroll();
+      const timeout = setTimeout(checkScroll, 100);
+
+      // Also check on resize
+      window.addEventListener("resize", checkScroll);
+
+      return () => {
+        clearTimeout(timeout);
+        window.removeEventListener("resize", checkScroll);
+      };
+    }
+  }, [links, userRole, collapsed]);
+
   return (
     <div
-      className="dashboard-sidebar flex h-full flex-col min-h-0 overflow-hidden max-h-screen"
+      className="dashboard-sidebar flex h-full w-full flex-col min-h-0 overflow-hidden"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      style={{
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+      }}
     >
       {/* Navigation Links - Full Height */}
       <div
         ref={scrollContainerRef}
         className={cn(
-          "flex-1 overflow-y-auto overflow-x-hidden transition-all duration-300 min-h-0",
+          "flex-1 overflow-y-auto overflow-x-hidden transition-all duration-300",
           "scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100",
           isMobile || showScrollbar
             ? "sidebar-scrollbar"
             : "sidebar-scrollbar-hidden",
-          "sm:hover:scrollbar-thumb-gray-400",
-          "max-h-full"
+          "sm:hover:scrollbar-thumb-gray-400"
         )}
+        style={{
+          minHeight: 0,
+          height: 0,
+          flex: "1 1 0%",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
+          boxSizing: "border-box",
+        }}
       >
         {/* Removed Getting Started link for admin */}
-        <div className="p-4">
+        <div className="p-4 pb-2">
           {!collapsed && (
             <h3
               className="px-3 py-2 text-xs font-semibold uppercase tracking-wider"
@@ -352,12 +390,12 @@ export function DashboardSidebar({
             })}
           </nav>
         </div>
-        <div>
+        <div className="px-4 pb-8 mb-4">
           {/* Sidebar Content: hide chat widget for admin */}
           {userRole !== "admin" && (
             <div
               className={cn(
-                "chat-card p-4 rounded-2xl mr-4 ml-4 shadow-lg",
+                "chat-card p-4 rounded-2xl shadow-lg",
                 isDark
                   ? "border border-purple-500 bg-[rgba(127,57,236,0.10)] shadow-purple-900/30"
                   : "border border-purple-500 bg-purple-100 shadow-purple-200"
@@ -438,6 +476,8 @@ export function DashboardSidebar({
             </div>
           )}
         </div>
+        {/* Spacer to ensure scroll reaches bottom */}
+        <div style={{ height: "48px", minHeight: "48px", flexShrink: 0 }} />
       </div>
     </div>
   );
