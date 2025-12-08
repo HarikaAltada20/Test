@@ -31,6 +31,7 @@ import {
   DollarSign,
   ExternalLink,
   ArrowUpDown,
+  Download,
 } from "lucide-react";
 import {
   Select,
@@ -40,6 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
 
 interface Creator {
   id: string;
@@ -145,6 +147,83 @@ export function CreatorSubmissionsModal({
       setSelectedSubmissions(new Set(submissions.map((s) => s.id)));
     }
     setSelectAll(!selectAll);
+  };
+
+  const handleDownloadReel = async (submissionId: string) => {
+    // Show downloading toast
+    toast({
+      title: "Downloading...",
+      description: "Please wait while downloading.",
+    });
+
+    try {
+      const response = await fetch(
+        `/api/admin/download-reel?submissionId=${submissionId}`
+      );
+
+      const contentType = response.headers.get("content-type");
+
+      if (!response.ok || contentType?.includes("application/json")) {
+        // Handle error response
+        const errorData = await response.json();
+
+        // Special handling for "no video found" errors
+        if (errorData.noVideoFound || response.status === 404) {
+          toast({
+            title: "Download Failed",
+            description:
+              errorData.error ||
+              errorData.message ||
+              "The video has been deleted and is no longer available.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Download Failed",
+            description:
+              errorData.message ||
+              errorData.error ||
+              "Failed to download video",
+            variant: "destructive",
+          });
+        }
+        return;
+      }
+
+      const contentDisposition = response.headers.get("content-disposition");
+      let filename = "video.mp4";
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      // Show success toast
+      toast({
+        title: "Download Started",
+        description: "Your video download has started.",
+      });
+    } catch (error: any) {
+      console.error("Error downloading reel:", error);
+      toast({
+        title: "Download Failed",
+        description:
+          error.message || "Failed to download video. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCheckboxChange = (submissionId: string, checked: boolean) => {
@@ -1049,15 +1128,29 @@ export function CreatorSubmissionsModal({
                                 {submission.video_title || "Untitled"}
                               </p>
                               {submission.content_link && (
-                                <a
-                                  href={submission.content_link}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-                                >
-                                  View Content
-                                  <ExternalLink className="h-3 w-3" />
-                                </a>
+                                <div className="flex items-center gap-2">
+                                  <a
+                                    href={submission.content_link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                  >
+                                    View Content
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                  {isAdminView && (
+                                    <button
+                                      onClick={() =>
+                                        handleDownloadReel(submission.id)
+                                      }
+                                      className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                      title="Download Reel/Short"
+                                    >
+                                      <Download className="h-3 w-3" />
+                                      Download
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </div>
@@ -1236,6 +1329,16 @@ export function CreatorSubmissionsModal({
                                       View Content
                                     </a>
                                   </DropdownMenuItem>
+                                  {isAdminView && (
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        handleDownloadReel(submission.id)
+                                      }
+                                    >
+                                      <Download className="h-4 w-4 mr-2" />
+                                      Download Reel/Short
+                                    </DropdownMenuItem>
+                                  )}
                                 </>
                               )}
                             </DropdownMenuContent>

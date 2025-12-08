@@ -102,6 +102,7 @@ import {
   Loader2,
   Info,
   RefreshCw,
+  Download,
   Trash2,
   Monitor,
   Play,
@@ -949,6 +950,81 @@ export default function ContestDetailClient({
       );
       setPaymentModalOpen(false);
       setPendingPaymentSubmission(null);
+    }
+  };
+
+  const handleDownloadReel = async (submissionId: string) => {
+    try {
+      toast({
+        title: "Downloading...",
+        description: "Please wait while downloading.",
+      });
+
+      const response = await fetch(
+        `/api/admin/download-reel?submissionId=${submissionId}`
+      );
+
+      const contentType = response.headers.get("content-type");
+
+      if (!response.ok || contentType?.includes("application/json")) {
+        // Handle error response
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (parseError) {
+          // If response is not JSON, create a generic error
+          throw new Error(
+            `Server returned ${response.status}: ${response.statusText}`
+          );
+        }
+
+        // Special handling for "no video found" errors
+        if (errorData.noVideoFound || response.status === 404) {
+          throw new Error(
+            errorData.error ||
+              errorData.message ||
+              "No video found at this URL. The video may be private, deleted, or unavailable."
+          );
+        }
+
+        throw new Error(
+          errorData.message || errorData.error || "Failed to download video"
+        );
+      }
+
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get("content-disposition");
+      let filename = "video.mp4";
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast({
+        title: "Download Started",
+        description: "Your video download has started.",
+      });
+    } catch (error: any) {
+      console.error("Error downloading reel:", error);
+      toast({
+        title: "Download Failed",
+        description:
+          error.message || "Failed to download video. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -4732,20 +4808,41 @@ export default function ContestDetailClient({
                                             "unknown"}
                                         </p>
                                         {submission.video_thumbnail_url && (
-                                          <a
-                                            href={submission.content_link}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className={cn(
-                                              "text-xs hover:underline flex items-center gap-1 mt-1 transition-colors",
-                                              isDark
-                                                ? "text-purple-400"
-                                                : "text-blue-600 hover:text-blue-800"
+                                          <div className="flex items-center gap-2 mt-1">
+                                            <a
+                                              href={submission.content_link}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className={cn(
+                                                "text-xs hover:underline flex items-center gap-1 transition-colors whitespace-nowrap",
+                                                isDark
+                                                  ? "text-purple-400"
+                                                  : "text-blue-600 hover:text-blue-800"
+                                              )}
+                                            >
+                                              <PlayCircle className="h-3 w-3" />
+                                              View Content
+                                            </a>
+                                            {isAdminView && (
+                                              <button
+                                                onClick={() =>
+                                                  handleDownloadReel(
+                                                    submission.id
+                                                  )
+                                                }
+                                                className={cn(
+                                                  "text-xs hover:underline flex items-center gap-1 transition-colors whitespace-nowrap",
+                                                  isDark
+                                                    ? "text-purple-400 hover:text-purple-300"
+                                                    : "text-blue-600 hover:text-blue-800"
+                                                )}
+                                                title="Download Reel/Short"
+                                              >
+                                                <Download className="h-3 w-3" />
+                                                Download
+                                              </button>
                                             )}
-                                          >
-                                            <PlayCircle className="h-3 w-3" />
-                                            View Content
-                                          </a>
+                                          </div>
                                         )}
                                       </div>
                                     </div>
