@@ -776,10 +776,16 @@ function DashboardPage() {
           </div>
         )}
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div
+        className={cn(
+          "grid gap-6",
+          isAdvertiser ? "md:grid-cols-2" : "md:grid-cols-1"
+        )}
+      >
         <div
           className={cn(
-            "min-h-[300px] rounded-xl shadow-md flex flex-col",
+            "rounded-xl shadow-md flex flex-col",
+            isAdvertiser ? "min-h-[300px]" : "min-h-[350px]",
             isDark ? "bg-[#210B43]" : "bg-white"
           )}
         >
@@ -849,8 +855,8 @@ function DashboardPage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center">
-                <p className="text-md text-muted-foreground">
+              <div className="flex items-center justify-center h-full">
+                <p className="text-md text-muted-foreground text-center">
                   {isAdvertiser
                     ? "No contests created yet"
                     : "No contest activity yet"}
@@ -860,43 +866,47 @@ function DashboardPage() {
           </div>
         </div>
 
-        <div
-          className={cn(
-            "rounded-xl shadow-md",
-            isDark ? "bg-[#210B43]" : "bg-white"
-          )}
-        >
-          <CardHeader>
-            <CardTitle className={cn(isDark ? "text-white" : "text-slate-900")}>
-              Analytics Overview
-            </CardTitle>
-            <CardDescription
-              className={cn(isDark ? "text-gray-300" : "text-slate-600")}
-            >
-              Performance insights for your{" "}
-              {isAdvertiser ? "contests" : "content"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={cn(
-                "flex h-[270px] items-center justify-center border rounded-xl",
-                isDark
-                  ? "bg-[#170337] border-[#170337]"
-                  : "bg-[#7F39EC26] border-[#D1B7F9]"
-              )}
-            >
-              <p
+        {isAdvertiser && (
+          <div
+            className={cn(
+              "rounded-xl shadow-md",
+              isDark ? "bg-[#210B43]" : "bg-white"
+            )}
+          >
+            <CardHeader>
+              <CardTitle
+                className={cn(isDark ? "text-white" : "text-slate-900")}
+              >
+                Analytics Overview
+              </CardTitle>
+              <CardDescription
+                className={cn(isDark ? "text-gray-300" : "text-slate-600")}
+              >
+                Performance insights for your{" "}
+                {isAdvertiser ? "contests" : "content"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div
                 className={cn(
-                  "text-lg font-semibold",
-                  isDark ? "text-white" : "text-black"
+                  "flex h-[270px] items-center justify-center border rounded-xl",
+                  isDark
+                    ? "bg-[#170337] border-[#170337]"
+                    : "bg-[#7F39EC26] border-[#D1B7F9]"
                 )}
               >
-                Detailed analytics available soon
-              </p>
-            </div>
-          </CardContent>
-        </div>
+                <p
+                  className={cn(
+                    "text-lg font-semibold",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                >
+                  Detailed analytics available soon
+                </p>
+              </div>
+            </CardContent>
+          </div>
+        )}
       </div>
       <ContestCreationModal
         isOpen={showModal}

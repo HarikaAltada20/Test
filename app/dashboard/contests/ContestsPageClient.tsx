@@ -22,6 +22,7 @@ export function ContestsPageClient({
   const [selectedTab, setSelectedTab] = useState("all");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"light" | "dark">("light");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   // Read mode from data attribute
   useEffect(() => {
     const checkMode = () => {
@@ -63,7 +64,7 @@ export function ContestsPageClient({
   const handleViewAllDrafts = () => {
     setSelectedTab("draft");
   };
-  
+
   const isDark = mode === "dark";
 
   return (
@@ -74,21 +75,23 @@ export function ContestsPageClient({
             My Contests
           </h1>
         </div>
-        <button
-          onClick={handleCreateContestClick}
-          disabled={loading}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2.5 text-md rounded-xl text-white font-medium",
-            isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
-          )}
-        >
-          {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Plus className="h-4 w-4" />
-          )}
-          Create Contest
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCreateContestClick}
+            disabled={loading}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 text-md rounded-xl text-white font-medium",
+              isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+            )}
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            Create Contest
+          </button>
+        </div>
       </div>
       <Suspense fallback={<div>Loading contests...</div>}>
         <ContestListClient
@@ -96,6 +99,8 @@ export function ContestsPageClient({
           isAdminView={false}
           selectedTab={selectedTab}
           onTabChange={setSelectedTab}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
         />
       </Suspense>
 
