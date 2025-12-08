@@ -973,23 +973,17 @@ export default function ContestDetailClient({
           errorData = await response.json();
         } catch (parseError) {
           // If response is not JSON, create a generic error
-          throw new Error(
-            `Server returned ${response.status}: ${response.statusText}`
-          );
+          errorData = { error: "Failed to download video. Please try again." };
         }
 
-        // Special handling for "no video found" errors
-        if (errorData.noVideoFound || response.status === 404) {
-          throw new Error(
-            errorData.error ||
-              errorData.message ||
-              "No video found at this URL. The video may be private, deleted, or unavailable."
-          );
-        }
-
-        throw new Error(
-          errorData.message || errorData.error || "Failed to download video"
-        );
+        // Show error toast with message from API
+        toast({
+          title: "Download Failed",
+          description:
+            errorData.error || "Failed to download video. Please try again.",
+          variant: "destructive",
+        });
+        return;
       }
 
       // Get filename from Content-Disposition header or use default

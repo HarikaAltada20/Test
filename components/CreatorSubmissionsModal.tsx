@@ -165,28 +165,20 @@ export function CreatorSubmissionsModal({
 
       if (!response.ok || contentType?.includes("application/json")) {
         // Handle error response
-        const errorData = await response.json();
-
-        // Special handling for "no video found" errors
-        if (errorData.noVideoFound || response.status === 404) {
-          toast({
-            title: "Download Failed",
-            description:
-              errorData.error ||
-              errorData.message ||
-              "The video has been deleted and is no longer available.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Download Failed",
-            description:
-              errorData.message ||
-              errorData.error ||
-              "Failed to download video",
-            variant: "destructive",
-          });
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (parseError) {
+          // If response is not JSON, create a generic error
+          errorData = { error: "Failed to download video. Please try again." };
         }
+
+        // Show error toast with message from API
+        toast({
+          title: "Download Failed",
+          description: errorData.error || "Failed to download video. Please try again.",
+          variant: "destructive",
+        });
         return;
       }
 
@@ -219,8 +211,7 @@ export function CreatorSubmissionsModal({
       console.error("Error downloading reel:", error);
       toast({
         title: "Download Failed",
-        description:
-          error.message || "Failed to download video. Please try again.",
+        description: error.message || "Failed to download video. Please try again.",
         variant: "destructive",
       });
     }
