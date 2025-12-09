@@ -6,7 +6,49 @@ import { readFile, writeFile, unlink, stat } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
-import { existsSync } from "fs";
+import { existsSync, statSync } from "fs";
+
+// ⭐ ADDED: Get yt-dlp binary path (bundled for Vercel)
+function getYtDlpBinaryPath(): string | undefined {
+  // Only use bundled binary on Linux (Vercel serverless environment)
+  // On Windows/Mac, let ytdlp-nodejs handle it automatically
+  const isLinux = process.platform === 'linux';
+  
+  if (!isLinux) {
+    console.log(`[YTDLP] Platform is ${process.platform}, letting ytdlp-nodejs handle binary automatically`);
+    return undefined;
+  }
+
+  // On Linux (Vercel), check for bundled binary
+  const possiblePaths = [
+    // Bundled binary in bin directory (for Vercel deployment)
+    join(process.cwd(), "bin", "yt-dlp"),
+    // Alternative: check if we're in a Next.js build
+    join(process.cwd(), "..", "bin", "yt-dlp"),
+    // Local development (if running on Linux)
+    join(__dirname, "..", "..", "..", "bin", "yt-dlp"),
+  ];
+
+  for (const path of possiblePaths) {
+    if (existsSync(path)) {
+      // Verify it's actually a file (not a directory)
+      try {
+        const stats = statSync(path);
+        if (stats.isFile()) {
+          console.log(`[YTDLP] Found binary at: ${path}`);
+          return path;
+        }
+      } catch (err) {
+        // File exists but can't stat it, skip
+        continue;
+      }
+    }
+  }
+
+  // If no binary found, ytdlp-nodejs will try to download it or use system PATH
+  console.log(`[YTDLP] No bundled binary found on Linux, using system PATH or auto-download`);
+  return undefined;
+}
 
 // ⭐ ADDED: Instagram reliability info
 function getInstagramStatusMessage() {
@@ -347,10 +389,14 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
   });
 
   try {
-    const ytdlp = new YtDlp();
+    // ⭐ FIXED: Configure yt-dlp with bundled binary path for Vercel
+    const binaryPath = getYtDlpBinaryPath();
+    const ytdlp = new YtDlp(binaryPath ? { binaryPath } : undefined);
     const downloadStartTime = Date.now();
 
-    console.log(`[YT-${downloadId}] [DEBUG] Calling yt-dlp...`);
+    console.log(`[YT-${downloadId}] [DEBUG] Calling yt-dlp...`, {
+      binaryPath: binaryPath || "system PATH",
+    });
     await ytdlp.downloadAsync(url, {
       format: "best[ext=mp4]/best",
       output: tempFile,
@@ -474,7 +520,9 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
   });
 
   try {
-    const ytdlp = new YtDlp();
+    // ⭐ FIXED: Configure yt-dlp with bundled binary path for Vercel
+    const binaryPath = getYtDlpBinaryPath();
+    const ytdlp = new YtDlp(binaryPath ? { binaryPath } : undefined);
     const cookieStatus = await checkCookieStatus();
 
     // Log cookie status for debugging
@@ -491,6 +539,7 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
         path: cookieStatus.path,
         error: cookieStatus.error,
         cookiePath: INSTAGRAM_COOKIES,
+        binaryPath: binaryPath || "system PATH",
       }
     );
 
@@ -743,7 +792,8 @@ export async function GET(request: Request) {
 
       try {
         // Attempt to download a small portion to verify cookies work
-        const ytdlp = new YtDlp();
+        const binaryPath = getYtDlpBinaryPath();
+        const ytdlp = new YtDlp(binaryPath ? { binaryPath } : undefined);
         const tempFile = join(tmpdir(), `test_${randomUUID()}.mp4`);
 
         await ytdlp.downloadAsync(testUrl, {
