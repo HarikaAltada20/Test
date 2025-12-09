@@ -2,11 +2,20 @@ import { NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createClient } from "@/utils/supabase/server";
 import { YtDlp } from "ytdlp-nodejs";
-import { readFile, unlink, stat } from "fs/promises";
+import { readFile, unlink, stat, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
 import { existsSync } from "fs";
+
+// Serverless-compatible temp directory
+function getTempDir(): string {
+  // In serverless (Vercel), use /tmp explicitly
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return "/tmp";
+  }
+  return tmpdir();
+}
 
 // ⭐ ADDED: Instagram reliability info
 function getInstagramStatusMessage() {
@@ -171,7 +180,7 @@ interface CookieStatus {
 }
 
 async function checkCookieStatus(): Promise<CookieStatus> {
-  const cookiePath = "cookies.txt";
+  const cookiePath = getCookiesPath() || "cookies.txt";
   const status: CookieStatus = {
     exists: false,
     path: null,
@@ -273,7 +282,27 @@ async function checkCookieStatus(): Promise<CookieStatus> {
 }
 
 // ⭐ ADDED: Auto-load cookies if available
-const INSTAGRAM_COOKIES = existsSync("cookies.txt") ? "cookies.txt" : null;
+// Check both project root and /tmp for cookies.txt (serverless environments)
+function getCookiesPath(): string | null {
+  const paths = [
+    "cookies.txt",
+    "/tmp/cookies.txt",
+    join(process.cwd(), "cookies.txt"),
+  ];
+
+  for (const path of paths) {
+    try {
+      if (existsSync(path)) {
+        return path;
+      }
+    } catch {
+      // Ignore errors checking file existence
+    }
+  }
+  return null;
+}
+
+const INSTAGRAM_COOKIES = getCookiesPath();
 
 function sanitizeFilename(filename: string): string {
   return filename
@@ -288,16 +317,35 @@ function sanitizeFilename(filename: string): string {
 // ---------------------------
 
 async function downloadYouTubeVideo(url: string): Promise<Buffer> {
-  const tempFile = join(tmpdir(), `video_${randomUUID()}.mp4`);
+  const tempDir = getTempDir();
+  const tempFile = join(tempDir, `video_${randomUUID()}.mp4`);
   let downloadedFile: string | null = null;
 
   try {
+    // Ensure temp directory exists (important for serverless)
+    try {
+      await mkdir(tempDir, { recursive: true });
+    } catch {
+      // Directory might already exist, ignore
+    }
+
     const ytdlp = new YtDlp();
 
-    await ytdlp.downloadAsync(url, {
+    // Add timeout for serverless environments (60 seconds max for Vercel Pro)
+    const downloadPromise = ytdlp.downloadAsync(url, {
       format: "best[ext=mp4]/best",
       output: tempFile,
     });
+
+    // Add timeout wrapper
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(
+        () => reject(new Error("Download timeout: exceeded 50 seconds")),
+        50000
+      );
+    });
+
+    await Promise.race([downloadPromise, timeoutPromise]);
 
     const { access, constants, readdir, stat } = await import("fs/promises");
     let videoBuffer: Buffer;
@@ -307,7 +355,7 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
       downloadedFile = tempFile;
       videoBuffer = await readFile(tempFile);
     } catch {
-      const files = await readdir(tmpdir());
+      const files = await readdir(tempDir);
       const videoFiles = files
         .filter((f) => {
           const lower = f.toLowerCase();
@@ -320,7 +368,7 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
               lower.endsWith(".webm"))
           );
         })
-        .map((f) => join(tmpdir(), f));
+        .map((f) => join(tempDir, f));
 
       if (videoFiles.length > 0) {
         const fileStats = await Promise.all(
@@ -356,7 +404,23 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
   } catch (error: any) {
     if (downloadedFile) await unlink(downloadedFile).catch(() => {});
     await unlink(tempFile).catch(() => {});
-    throw new Error(`Failed to download YouTube video: ${error.message}`);
+
+    // Provide more specific error messages for serverless environments
+    const errorMessage = error.message || "Unknown error";
+    if (
+      errorMessage.includes("timeout") ||
+      errorMessage.includes("ETIMEDOUT")
+    ) {
+      throw new Error(
+        `Download timeout: The video download took too long. This may be due to serverless function limits.`
+      );
+    }
+    if (errorMessage.includes("ENOENT") || errorMessage.includes("not found")) {
+      throw new Error(
+        `yt-dlp binary not found. This may not work in serverless environments. Error: ${errorMessage}`
+      );
+    }
+    throw new Error(`Failed to download YouTube video: ${errorMessage}`);
   }
 }
 
@@ -365,10 +429,18 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
 // ---------------------------
 
 async function downloadInstagramVideo(url: string): Promise<Buffer> {
-  const tempFile = join(tmpdir(), `video_${randomUUID()}.mp4`);
+  const tempDir = getTempDir();
+  const tempFile = join(tempDir, `video_${randomUUID()}.mp4`);
   let downloadedFile: string | null = null;
 
   try {
+    // Ensure temp directory exists (important for serverless)
+    try {
+      await mkdir(tempDir, { recursive: true });
+    } catch {
+      // Directory might already exist, ignore
+    }
+
     const ytdlp = new YtDlp();
     const cookieStatus = await checkCookieStatus();
 
@@ -381,13 +453,25 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
       expired: cookieStatus.expired,
       expiresSoon: cookieStatus.expiresSoon,
       error: cookieStatus.error,
+      cookiesPath: INSTAGRAM_COOKIES,
+      tempDir: tempDir,
     });
 
-    await ytdlp.downloadAsync(url, {
+    const downloadPromise = ytdlp.downloadAsync(url, {
       format: "best[ext=mp4]/best",
       output: tempFile,
       cookies: INSTAGRAM_COOKIES || undefined,
     });
+
+    // Add timeout wrapper (50 seconds to stay under Vercel's 60s limit)
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(
+        () => reject(new Error("Download timeout: exceeded 50 seconds")),
+        50000
+      );
+    });
+
+    await Promise.race([downloadPromise, timeoutPromise]);
 
     const { access, constants, readdir, stat } = await import("fs/promises");
     let videoBuffer: Buffer;
@@ -397,7 +481,7 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
       downloadedFile = tempFile;
       videoBuffer = await readFile(tempFile);
     } catch {
-      const files = await readdir(tmpdir());
+      const files = await readdir(tempDir);
       const videoFiles = files
         .filter((f) => {
           const lower = f.toLowerCase();
@@ -408,7 +492,7 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
               lower.endsWith(".webm"))
           );
         })
-        .map((f) => join(tmpdir(), f));
+        .map((f) => join(tempDir, f));
 
       if (videoFiles.length > 0) {
         const fileStats = await Promise.all(
@@ -445,11 +529,48 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
     if (downloadedFile) await unlink(downloadedFile).catch(() => {});
     await unlink(tempFile).catch(() => {});
 
+    // Provide more specific error messages for serverless environments
+    const errorMessage = error.message || "Unknown error";
+    if (
+      errorMessage.includes("timeout") ||
+      errorMessage.includes("ETIMEDOUT")
+    ) {
+      const timeoutError = new Error(
+        "Download timeout: The video download took too long. This may be due to serverless function limits."
+      );
+      (timeoutError as any).parsedError = {
+        userMessage:
+          "Download timeout: The video download exceeded the time limit. Please try again or contact support.",
+        reason: "Serverless function timeout",
+        suggestions: [
+          "Try downloading again",
+          "The video might be too large or slow to download",
+          "Contact support if the issue persists",
+        ],
+      };
+      throw timeoutError;
+    }
+    if (errorMessage.includes("ENOENT") || errorMessage.includes("not found")) {
+      const binaryError = new Error(
+        "yt-dlp binary not found. This may not work in serverless environments."
+      );
+      (binaryError as any).parsedError = {
+        userMessage:
+          "Video download service is not available. This feature may not work in serverless environments.",
+        reason: "yt-dlp binary not available",
+        suggestions: [
+          "This feature requires system dependencies that may not be available in serverless environments",
+          "Contact support for alternative solutions",
+        ],
+      };
+      throw binaryError;
+    }
+
     // Parse error to get user-friendly message
-    const parsedError = parseInstagramError(error.message);
+    const parsedError = parseInstagramError(errorMessage);
     const enhancedError = new Error(parsedError.userMessage);
     (enhancedError as any).parsedError = parsedError;
-    (enhancedError as any).originalError = error.message;
+    (enhancedError as any).originalError = errorMessage;
     throw enhancedError;
   }
 }
@@ -495,13 +616,16 @@ export async function GET(request: Request) {
 
     const supabase = await createClient();
 
-    const { data: submission, error: submissionError } = await supabase
+    // First, try to fetch the submission with relationships
+    let { data: submission, error: submissionError } = await supabase
       .from("submissions")
       .select(
         `
         id,
         content_link,
         platform,
+        contest_id,
+        creator_id,
         contests!inner(id, title),
         users!creator_id(username)
       `
@@ -509,7 +633,58 @@ export async function GET(request: Request) {
       .eq("id", submissionId)
       .single();
 
-    if (submissionError || !submission) {
+    // If the query fails due to missing relationships, try a simpler query
+    if (submissionError) {
+      console.warn("Initial query failed, trying fallback:", submissionError);
+      const fallbackResult = await supabase
+        .from("submissions")
+        .select("id, content_link, platform, contest_id, creator_id")
+        .eq("id", submissionId)
+        .single();
+
+      if (fallbackResult.error || !fallbackResult.data) {
+        console.error(
+          "Submission fetch error:",
+          submissionError || fallbackResult.error
+        );
+        return NextResponse.json(
+          {
+            error: "Submission not found",
+            details:
+              (submissionError || fallbackResult.error)?.message ||
+              "Unknown error",
+          },
+          { status: 404 }
+        );
+      }
+
+      // Fetch contest and user separately
+      const [contestResult, userResult] = await Promise.all([
+        fallbackResult.data.contest_id
+          ? supabase
+              .from("contests")
+              .select("id, title")
+              .eq("id", fallbackResult.data.contest_id)
+              .single()
+          : Promise.resolve({ data: null, error: null }),
+        fallbackResult.data.creator_id
+          ? supabase
+              .from("users")
+              .select("username")
+              .eq("id", fallbackResult.data.creator_id)
+              .single()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
+
+      submission = {
+        ...fallbackResult.data,
+        contests: contestResult.data as any,
+        users: userResult.data as any,
+      } as any;
+    }
+
+    if (!submission) {
+      console.error("Submission not found after fallback");
       return NextResponse.json(
         { error: "Submission not found" },
         { status: 404 }
@@ -517,6 +692,13 @@ export async function GET(request: Request) {
     }
 
     const contentLink = submission.content_link;
+    if (!contentLink) {
+      return NextResponse.json(
+        { error: "Submission has no content link" },
+        { status: 400 }
+      );
+    }
+
     const isInstagram = contentLink.includes("instagram.com");
     const isYouTube =
       contentLink.includes("youtube.com") || contentLink.includes("youtu.be");
@@ -572,6 +754,12 @@ export async function GET(request: Request) {
       return new NextResponse(new Uint8Array(videoBuffer), { headers });
     } catch (error: any) {
       console.error("Video download error:", error);
+      console.error("Error stack:", error.stack);
+      console.error("Error details:", {
+        message: error.message,
+        name: error.name,
+        cause: error.cause,
+      });
 
       if (isInstagram) {
         // Get parsed error to provide user-friendly message
@@ -581,20 +769,30 @@ export async function GET(request: Request) {
         return NextResponse.json(
           {
             error: parsedError.userMessage,
+            reason: parsedError.reason,
+            suggestions: parsedError.suggestions,
           },
           { status: 500 }
         );
       }
 
       return NextResponse.json(
-        { error: "Failed to download video. Please try again." },
+        {
+          error: "Failed to download video. Please try again.",
+          details: error.message || "Unknown error",
+        },
         { status: 500 }
       );
     }
   } catch (error: any) {
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    console.error("Route handler error:", error);
+    console.error("Error stack:", error.stack);
+    console.error("Error details:", {
+      message: error.message,
+      name: error.name,
+      cause: error.cause,
+    });
+
+    return NextResponse.json({ status: 500 });
   }
 }
