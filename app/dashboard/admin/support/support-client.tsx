@@ -1,5 +1,6 @@
 "use client";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useState } from "react";
+import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 
 type Query = {
   id: string;
@@ -28,8 +29,14 @@ export default function SupportClient({
   initialQueries: Query[] | null | undefined;
   initialContacts: Contact[] | null | undefined;
 }) {
+  const [activeTab, setActiveTab] = useState("queries");
   const queries = initialQueries || [];
   const contacts = initialContacts || [];
+
+  const tabs = [
+    { id: "queries", label: "Queries", count: queries.length },
+    { id: "contacts", label: "Contacts", count: contacts.length },
+  ];
 
   const renderQueries = () => (
     <div className="overflow-x-auto">
@@ -90,13 +97,17 @@ export default function SupportClient({
   );
 
   return (
-    <Tabs defaultValue="queries">
-      <TabsList>
-        <TabsTrigger value="queries">Queries</TabsTrigger>
-        <TabsTrigger value="contacts">Contacts</TabsTrigger>
-      </TabsList>
-      <TabsContent value="queries">{renderQueries()}</TabsContent>
-      <TabsContent value="contacts">{renderContacts()}</TabsContent>
-    </Tabs>
+    <div className="space-y-6">
+      <EnhancedTabs
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        className="w-full max-w-md"
+      />
+      <div className="mt-6">
+        {activeTab === "queries" && renderQueries()}
+        {activeTab === "contacts" && renderContacts()}
+      </div>
+    </div>
   );
 }

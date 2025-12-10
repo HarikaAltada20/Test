@@ -13,12 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  EnhancedTabs,
-  EnhancedTabsList,
-  EnhancedTabsTrigger,
-  EnhancedTabsContent,
-} from "@/components/ui/enhanced-tabs";
+import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import {
   Dialog,
   DialogContent,
@@ -640,7 +635,6 @@ export default function AdminUsersPage() {
       case "user_type":
         return row.user_type;
       case "country": {
-     
         if (activeTab === "creators") {
           if (row.creator_profiles) {
             const profiles = Array.isArray(row.creator_profiles)
@@ -2170,7 +2164,7 @@ export default function AdminUsersPage() {
     <div className="space-y-6">
       <Card
         className={cn(
-          "rounded-xl shadow",
+          "rounded-xl shadow pb-3",
           isDark ? "bg-[#170337]" : "bg-white"
         )}
       >
@@ -2273,28 +2267,16 @@ export default function AdminUsersPage() {
           </div>
         </CardHeader>
         <CardContent className="py-2 px-6">
-          <EnhancedTabs value={activeTab} onValueChange={setActiveTab}>
-            <EnhancedTabsList>
-              <EnhancedTabsTrigger value="all">
-                Users
-                <Badge variant="secondary" className="ml-2">
-                  {allUsersCount}
-                </Badge>
-              </EnhancedTabsTrigger>
-              <EnhancedTabsTrigger value="advertisers">
-                Advertisers
-                <Badge variant="secondary" className="ml-2">
-                  {advertisersCount}
-                </Badge>
-              </EnhancedTabsTrigger>
-              <EnhancedTabsTrigger value="creators">
-                Creators
-                <Badge variant="secondary" className="ml-2">
-                  {creatorsCount}
-                </Badge>
-              </EnhancedTabsTrigger>
-            </EnhancedTabsList>
-          </EnhancedTabs>
+          <EnhancedTabs
+            tabs={[
+              { id: "all", label: `Users (${allUsersCount})` },
+              { id: "advertisers", label: `Advertisers (${advertisersCount})` },
+              { id: "creators", label: `Creators (${creatorsCount})` },
+            ]}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            className="w-full"
+          />
         </CardContent>
       </Card>
 
