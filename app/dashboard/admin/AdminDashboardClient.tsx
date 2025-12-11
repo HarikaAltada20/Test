@@ -24,7 +24,7 @@ import {
 import ContestTypeFilter from "@/components/admin/ContestTypeFilter";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 
 interface AdminDashboardClientProps {
   totalContests: number;
@@ -65,6 +65,16 @@ interface AdminDashboardClientProps {
   contestTypeFilter: string;
 }
 
+const readIsDarkFromDom = () => {
+  const modeElement = document.querySelector("[data-mode]");
+  if (modeElement) {
+    return modeElement.getAttribute("data-mode") === "dark";
+  }
+
+  const themeElement = document.documentElement;
+  return themeElement.getAttribute("data-theme") === "dark";
+};
+
 export default function AdminDashboardClient({
   totalContests,
   totalPublishedContests,
@@ -100,33 +110,18 @@ export default function AdminDashboardClient({
   contestTypeFilter,
 }: AdminDashboardClientProps) {
   // Get theme from parent layout
-  const [isDark, setIsDark] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      // Check data-mode attribute from parent layout
-      const modeElement = document.querySelector("[data-mode]");
-      if (modeElement) {
-        const dataMode = modeElement.getAttribute("data-mode");
-        return dataMode === "dark";
-      }
-      // Fallback to data-theme attribute
-      const themeElement = document.documentElement;
-      const dataTheme = themeElement.getAttribute("data-theme");
-      return dataTheme === "dark";
-    }
-    return false; // Default to light mode
-  });
+  const [isDark, setIsDark] = useState<boolean | null>(null);
+
+  // Resolve theme before first paint to avoid flash between modes
+  useLayoutEffect(() => {
+    setIsDark(readIsDarkFromDom());
+  }, []);
 
   // Watch for theme changes from parent layout
   useEffect(() => {
     const checkTheme = () => {
-      const modeElement = document.querySelector("[data-mode]");
-      if (modeElement) {
-        const currentMode = modeElement.getAttribute("data-mode");
-        const newIsDark = currentMode === "dark";
-        if (newIsDark !== isDark) {
-          setIsDark(newIsDark);
-        }
-      }
+      const newIsDark = readIsDarkFromDom();
+      setIsDark((prev) => (prev === newIsDark ? prev : newIsDark));
     };
 
     checkTheme();
@@ -143,6 +138,10 @@ export default function AdminDashboardClient({
 
     return () => observer.disconnect();
   }, [isDark]);
+
+  if (isDark === null) {
+    return null;
+  }
 
   return (
     <div className="space-y-8 pb-8">
