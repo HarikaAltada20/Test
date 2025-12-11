@@ -384,3 +384,5 @@ END $$;
 -- JOIN users u ON u.id = l.creator_id
 -- WHERE contest_id = (SELECT id FROM contests WHERE platform = 'twitter' LIMIT 1)
 -- ORDER BY total_points DESC;
+
+
