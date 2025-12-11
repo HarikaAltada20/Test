@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 type Earner = {
   user_id: string;
@@ -24,6 +25,23 @@ type Earner = {
 };
 
 export default function AffiliateEarnersPage() {
+    // Get theme from parent layout instead of managing independent state
+    const [isDark, setIsDark] = useState<boolean>(() => {
+      if (typeof window !== "undefined") {
+        // Check data-mode attribute from parent layout
+        const modeElement = document.querySelector("[data-mode]");
+        if (modeElement) {
+          const dataMode = modeElement.getAttribute("data-mode");
+          return dataMode === "dark";
+        }
+        // Fallback to data-theme attribute
+        const themeElement = document.documentElement;
+        const dataTheme = themeElement.getAttribute("data-theme");
+        return dataTheme === "dark";
+      }
+      return false; // Default to light mode
+    });
+  
   const [rows, setRows] = useState<Earner[]>([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
@@ -55,6 +73,35 @@ export default function AffiliateEarnersPage() {
   useEffect(() => {
     load();
   }, []);
+
+   // Watch for theme changes from parent layout
+   useEffect(() => {
+    const checkTheme = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode");
+        const newIsDark = currentMode === "dark";
+        if (newIsDark !== isDark) {
+          setIsDark(newIsDark);
+        }
+      }
+    };
+
+    checkTheme();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkTheme);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, [isDark]);
+
 
   const exportCsv = () => {
     const header = [
@@ -94,7 +141,12 @@ export default function AffiliateEarnersPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card
+        className={cn(
+          "shadow-md hover:shadow-lg transition-shadow duration-200",
+          isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+        )}
+      >
         <CardHeader>
           <CardTitle>Affiliate Earners</CardTitle>
         </CardHeader>
@@ -104,6 +156,11 @@ export default function AffiliateEarnersPage() {
               placeholder="Search by username/name"
               value={q}
               onChange={(e) => setQ(e.target.value)}
+              className={cn(
+                isDark
+                  ? "bg-[#170337] border border-gray-600 text-white"
+                  : "bg-white text-black"
+              )}
             />
             <Button onClick={load} disabled={loading}>
               Refresh
@@ -119,7 +176,12 @@ export default function AffiliateEarnersPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card
+        className={cn(
+          "shadow-md hover:shadow-lg transition-shadow duration-200",
+          isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+        )}
+      >
         <CardContent>
           <div className="overflow-x-auto">
             <Table>

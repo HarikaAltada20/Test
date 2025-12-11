@@ -3,7 +3,13 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import {
+  useState,
+  useMemo,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+} from "react";
 import {
   Table,
   TableBody,
@@ -60,6 +66,23 @@ export default function AffiliateLandingPage() {
     0
   );
 
+  // Get theme from parent layout instead of managing independent state
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      // Check data-mode attribute from parent layout
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const dataMode = modeElement.getAttribute("data-mode");
+        return dataMode === "dark";
+      }
+      // Fallback to data-theme attribute
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme");
+      return dataTheme === "dark";
+    }
+    return false; // Default to light mode
+  });
+
   // Debounced search for contests
   const searchContests = useCallback(async (query: string) => {
     if (!query || query.trim().length === 0) {
@@ -96,6 +119,34 @@ export default function AffiliateLandingPage() {
     setContestSearch(contest.title);
     setOpen(false);
   };
+
+  // Watch for theme changes from parent layout
+  useEffect(() => {
+    const checkTheme = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode");
+        const newIsDark = currentMode === "dark";
+        if (newIsDark !== isDark) {
+          setIsDark(newIsDark);
+        }
+      }
+    };
+
+    checkTheme();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkTheme);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, [isDark]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -183,7 +234,12 @@ export default function AffiliateLandingPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card
+        className={cn(
+          "shadow-md hover:shadow-lg transition-shadow duration-200",
+          isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+        )}
+      >
         <CardHeader>
           <CardTitle>Affiliate Commissions</CardTitle>
         </CardHeader>
@@ -206,12 +262,26 @@ export default function AffiliateLandingPage() {
                 onFocus={() => {
                   if (contestSearch) setOpen(true);
                 }}
-                className="w-full"
+                className={cn(
+                  "w-full",
+                  isDark
+                    ? "bg-[#170337] border border-gray-600 text-white"
+                    : "bg-white text-black"
+                )}
               />
               {open && contestSearch && (
-                <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-[300px] overflow-auto">
+                <div
+                  className={cn(
+                    "absolute z-50 w-full mt-1 border rounded-md shadow-md",
+                    isDark
+                      ? "bg-[#170337] border-gray-700"
+                      : "bg-popover border-gray-200"
+                  )}
+                >
                   <Command shouldFilter={false}>
-                    <CommandList>
+                    <CommandList
+                      className={cn(isDark ? "bg-[#020817]" : "bg-white")}
+                    >
                       <CommandEmpty>
                         {searching ? "Searching..." : "No contests found."}
                       </CommandEmpty>
@@ -278,7 +348,12 @@ export default function AffiliateLandingPage() {
       </Card>
 
       {rows.length > 0 && (
-        <Card>
+        <Card
+          className={cn(
+            "shadow-md hover:shadow-lg transition-shadow duration-200",
+            isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+          )}
+        >
           <CardHeader>
             <CardTitle>Results</CardTitle>
           </CardHeader>

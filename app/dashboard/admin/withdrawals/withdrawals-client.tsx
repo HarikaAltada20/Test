@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import {useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import {
@@ -46,7 +46,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
+
 
 type Request = {
   id: string;
@@ -74,7 +74,7 @@ export default function WithdrawalsClient({
 }: {
   initialRequests: Request[];
 }) {
-  const { isDark } = useAnalyticsDarkMode();
+
   const [requests, setRequests] = useState<Request[]>(initialRequests || []);
   const [selectedTab, setSelectedTab] = useState<string>("all");
   const [detailsOpen, setDetailsOpen] = useState<boolean>(false);
@@ -82,6 +82,23 @@ export default function WithdrawalsClient({
   const [adminNotes, setAdminNotes] = useState<string>("");
   const [txRef, setTxRef] = useState<string>("");
   const [updating, setUpdating] = useState<boolean>(false);
+// Get theme from parent layout instead of managing independent state
+const [isDark, setIsDark] = useState<boolean>(() => {
+  if (typeof window !== "undefined") {
+    // Check data-mode attribute from parent layout
+    const modeElement = document.querySelector("[data-mode]");
+    if (modeElement) {
+      const dataMode = modeElement.getAttribute("data-mode");
+      return dataMode === "dark";
+    }
+    // Fallback to data-theme attribute
+    const themeElement = document.documentElement;
+    const dataTheme = themeElement.getAttribute("data-theme");
+    return dataTheme === "dark";
+  }
+  return false; // Default to light mode
+});
+
 
   const totals = useMemo(() => {
     const all = requests.reduce(
@@ -99,6 +116,34 @@ export default function WithdrawalsClient({
       .reduce((s, r) => s + (r.amount_type === "cash" ? r.amount : 0), 0);
     return { all, pending, paid, rejected };
   }, [requests]);
+
+   // Watch for theme changes from parent layout
+   useEffect(() => {
+    const checkTheme = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode");
+        const newIsDark = currentMode === "dark";
+        if (newIsDark !== isDark) {
+          setIsDark(newIsDark);
+        }
+      }
+    };
+
+    checkTheme();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkTheme);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, [isDark]);
 
   const updateStatus = async (
     id: string,
@@ -345,8 +390,8 @@ export default function WithdrawalsClient({
   const renderTable = (rows: Request[]) => (
     <div
       className={cn(
-        "rounded-xl shadow overflow-x-auto border",
-        isDark ? "bg-[#170337] border-gray-700" : "bg-white border-gray-200"
+        "rounded-xl shadow overflow-x-auto",
+        isDark ? "bg-[#170337]" : "bg-white  border border-gray-200"
       )}
     >
       <Table>

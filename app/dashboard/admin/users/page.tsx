@@ -2165,7 +2165,7 @@ export default function AdminUsersPage() {
       <Card
         className={cn(
           "rounded-xl shadow pb-3",
-          isDark ? "bg-[#170337]" : "bg-white"
+          isDark ? "bg-[#020817]" : "bg-white"
         )}
       >
         <CardHeader className="py-3 px-3 sm:px-6">
@@ -2276,6 +2276,7 @@ export default function AdminUsersPage() {
             activeTab={activeTab}
             onTabChange={setActiveTab}
             className="w-full"
+            isDark={isDark}
           />
         </CardContent>
       </Card>
@@ -3411,36 +3412,30 @@ export default function AdminUsersPage() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={getVisibleColumnsCount()}
-                      className="text-center text-sm text-muted-foreground py-8"
-                    >
-                      <div className="flex items-center justify-center gap-2">
-                        <svg
-                          className="animate-spin h-5 w-5 text-muted-foreground"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
-                        <span>Loading users...</span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                  <>
+                    {Array.from({ length: limit }).map((_, index) => (
+                      <TableRow key={`skeleton-${index}`}>
+                        {Array.from({
+                          length: getVisibleColumnsCount(),
+                        }).map((_, colIndex) => (
+                          <TableCell
+                            key={`skeleton-cell-${index}-${colIndex}`}
+                            className="whitespace-nowrap border-r"
+                          >
+                            <div
+                              className={cn(
+                                "h-4 rounded animate-pulse",
+                                isDark ? "bg-[#391A6A]/50" : "bg-gray-200"
+                              )}
+                              style={{
+                                width: `${Math.random() * 40 + 60}%`,
+                              }}
+                            />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </>
                 ) : tabFiltered.length === 0 ? (
                   <TableRow>
                     <TableCell
