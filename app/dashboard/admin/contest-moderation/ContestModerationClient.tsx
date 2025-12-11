@@ -31,6 +31,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatLocalDateTime, cn } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   Shield,
   Clock,
@@ -133,6 +134,9 @@ export default function ContestModerationClient({
   hasInitialData = false,
 }: ContestModerationClientProps) {
   const [contests, setContests] = useState<Contest[]>(initialContests);
+  // Track if we've initialized from server data to prevent flash
+  // If server provided initial data, we're already initialized
+  const [hasInitialized, setHasInitialized] = useState(hasInitialData);
   // Start with loading false if server provided initial data, true otherwise
   const [loading, setLoading] = useState(() => {
     // If server provided initial data, we don't need to load
@@ -161,6 +165,8 @@ export default function ContestModerationClient({
 
   // Track if component has mounted to prevent flash
   const hasMountedRef = useRef(false);
+  // Track if we've handled initial data to prevent race conditions
+  const hasHandledInitialDataRef = useRef(false);
 
   // Get theme from parent layout
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -312,6 +318,7 @@ export default function ContestModerationClient({
     } finally {
       // Always set loading to false, even on error
       setLoading(false);
+      setHasInitialized(true);
     }
   };
 
@@ -319,10 +326,15 @@ export default function ContestModerationClient({
   // This prevents the flash of "no contests found" -> loading -> contests
   useLayoutEffect(() => {
     hasMountedRef.current = true;
-    if (hasInitialData && selectedStatus === initialStatus && loading) {
+    if (
+      hasInitialData &&
+      selectedStatus === initialStatus &&
+      !hasHandledInitialDataRef.current
+    ) {
       // Server provided initial data, ensure loading is false before first paint
-      // Only set if loading is currently true (defensive check)
       setLoading(false);
+      setHasInitialized(true);
+      hasHandledInitialDataRef.current = true;
     }
   }, []); // Only run once on mount
 
@@ -339,18 +351,34 @@ export default function ContestModerationClient({
     // On first render, if we have initial data for the current status, skip fetch
     if (isFirstRender.current) {
       isFirstRender.current = false;
-      if (hasInitialData && selectedStatus === initialStatus) {
-        // Server provided initial data, loading already set to false in useLayoutEffect
+      if (
+        hasInitialData &&
+        selectedStatus === initialStatus &&
+        !hasHandledInitialDataRef.current
+      ) {
+        // Server provided initial data, mark as initialized
+        setHasInitialized(true);
+        setLoading(false);
+        hasHandledInitialDataRef.current = true;
         // Don't fetch, use initial data
         return; // Skip fetch, use initial data
       }
       // If no initial data from server, loading is already true, just fetch
     }
 
+    // Don't fetch if we've already handled initial data for this status
+    if (
+      hasInitialData &&
+      selectedStatus === initialStatus &&
+      hasHandledInitialDataRef.current
+    ) {
+      return; // Skip fetch, use initial data
+    }
+
     // Fetch when status changes (always fetch when switching tabs)
     // This will only execute if:
     // 1. First render with no initial data from server, OR
-    // 2. Tab change (isFirstRender.current is already false)
+    // 2. Tab change (isFirstRender.current is already false) AND not using initial data
     fetchContests(selectedStatus);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStatus]);
@@ -856,10 +884,8 @@ export default function ContestModerationClient({
       </div>
 
       <div className="mt-4">
-        {loading ? (
-          <div className="flex items-center justify-center h-32">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
+        {loading || !hasInitialized ? (
+          <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
         ) : contests.length === 0 ? (
           <Card>
             <CardContent className="p-6 text-center">
