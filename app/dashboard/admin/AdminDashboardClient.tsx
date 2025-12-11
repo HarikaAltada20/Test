@@ -169,20 +169,20 @@ export default function AdminDashboardClient({
       {/* Top Summary */}
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
         {/* Total Contests */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total Contests
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -201,50 +201,42 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-blue-900/30" : "bg-blue-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <Trophy
-                className={`h-5 w-5 ${
-                  isDark ? "text-blue-400" : "text-blue-600"
-                }`}
-              />
+              <Trophy className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              {totalContests}
-            </div>
+            <div className="text-2xl font-bold">{totalContests}</div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               All contests on platform
             </p>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Total Users */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total Users
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -261,50 +253,44 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-purple-900/30" : "bg-purple-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <User
-                className={`h-5 w-5 ${
-                  isDark ? "text-purple-400" : "text-purple-600"
-                }`}
-              />
+              <User className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {totalUsers.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Creators + Brands
             </p>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Total Creators */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total Creators
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -321,50 +307,44 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-green-900/30" : "bg-green-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <User
-                className={`h-5 w-5 ${
-                  isDark ? "text-green-400" : "text-green-600"
-                }`}
-              />
+              <User className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {totalCreators.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Creators
             </p>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Total Brands */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total Brands
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -381,34 +361,28 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-orange-900/30" : "bg-orange-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <Building
-                className={`h-5 w-5 ${
-                  isDark ? "text-orange-400" : "text-orange-600"
-                }`}
-              />
+              <Building className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {totalBrands.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Brands
             </p>
           </CardContent>
-        </Card>
+        </div>
       </div>
 
       {/* Contest Overview */}
@@ -424,22 +398,22 @@ export default function AdminDashboardClient({
       </div>
 
       {/* Contest Metrics */}
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
         {/* Total Drafts */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total Drafts
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -458,50 +432,42 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-gray-800" : "bg-gray-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <FileText
-                className={`h-5 w-5 ${
-                  isDark ? "text-gray-400" : "text-gray-600"
-                }`}
-              />
+              <FileText className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              {totalDraftContests}
-            </div>
+            <div className="text-2xl font-bold">{totalDraftContests}</div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Draft contests
             </p>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Total Pending */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total Pending
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -520,50 +486,42 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-yellow-900/30" : "bg-yellow-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <Eye
-                className={`h-5 w-5 ${
-                  isDark ? "text-yellow-400" : "text-yellow-600"
-                }`}
-              />
+              <Eye className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              {totalPendingContests}
-            </div>
+            <div className="text-2xl font-bold">{totalPendingContests}</div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Pending approval
             </p>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Total Approved */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total Approved
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -582,50 +540,42 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-green-900/30" : "bg-green-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <CheckCircle
-                className={`h-5 w-5 ${
-                  isDark ? "text-green-400" : "text-green-600"
-                }`}
-              />
+              <CheckCircle className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              {totalApprovedContests}
-            </div>
+            <div className="text-2xl font-bold">{totalApprovedContests}</div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Approved contests
             </p>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Total Rejected */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total Rejected
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -644,49 +594,41 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-red-900/30" : "bg-red-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <XCircle
-                className={`h-5 w-5 ${
-                  isDark ? "text-red-400" : "text-red-600"
-                }`}
-              />
+              <XCircle className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              {totalRejectedContests}
-            </div>
+            <div className="text-2xl font-bold">{totalRejectedContests}</div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Rejected contests
             </p>
           </CardContent>
-        </Card>
+        </div>
 
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total Published
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -705,50 +647,42 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-indigo-900/30" : "bg-indigo-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <PlayCircle
-                className={`h-5 w-5 ${
-                  isDark ? "text-indigo-400" : "text-indigo-600"
-                }`}
-              />
+              <PlayCircle className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              {totalPublishedContests}
-            </div>
+            <div className="text-2xl font-bold">{totalPublishedContests}</div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Published contests
             </p>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Upcoming */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Upcoming
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -767,50 +701,42 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-cyan-900/30" : "bg-cyan-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <PlayCircle
-                className={`h-5 w-5 ${
-                  isDark ? "text-cyan-400" : "text-cyan-600"
-                }`}
-              />
+              <PlayCircle className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              {totalUpcomingContests}
-            </div>
+            <div className="text-2xl font-bold">{totalUpcomingContests}</div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Scheduled contests
             </p>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Live (Active) */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Live
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -829,49 +755,41 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-emerald-900/30" : "bg-emerald-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <Eye
-                className={`h-5 w-5 ${
-                  isDark ? "text-emerald-400" : "text-emerald-600"
-                }`}
-              />
+              <Eye className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              {totalActiveContests}
-            </div>
+            <div className="text-2xl font-bold">{totalActiveContests}</div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Currently live
             </p>
           </CardContent>
-        </Card>
+        </div>
 
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Ended
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -890,49 +808,41 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-slate-800" : "bg-slate-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <StopCircle
-                className={`h-5 w-5 ${
-                  isDark ? "text-slate-400" : "text-slate-600"
-                }`}
-              />
+              <StopCircle className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              {totalEndedContests}
-            </div>
+            <div className="text-2xl font-bold">{totalEndedContests}</div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Published but ended
             </p>
           </CardContent>
-        </Card>
+        </div>
 
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Completed
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -952,34 +862,26 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-teal-900/30" : "bg-teal-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <CheckCircle
-                className={`h-5 w-5 ${
-                  isDark ? "text-teal-400" : "text-teal-600"
-                }`}
-              />
+              <CheckCircle className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              {totalCompletedContests}
-            </div>
+            <div className="text-2xl font-bold">{totalCompletedContests}</div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Payouts processed
             </p>
           </CardContent>
-        </Card>
+        </div>
       </div>
 
       {/* Submissions Metrics */}
@@ -992,221 +894,191 @@ export default function AdminDashboardClient({
           Submissions Metrics
         </h2>
       </div>
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-5">
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-            <CardTitle
-              className={`text-sm font-semibold ${
-                isDark ? "text-gray-200" : "text-gray-700"
-              }`}
-            >
-              Verified Submissions
-            </CardTitle>
-            <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-green-900/30" : "bg-green-100"
-              }`}
-            >
-              <CheckCircle
-                className={`h-5 w-5 ${
-                  isDark ? "text-green-400" : "text-green-600"
-                }`}
-              />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-3xl font-bold ${
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
+            <h1
+              className={`text-md font-medium ${
                 isDark ? "text-white" : "text-gray-900"
               }`}
             >
+              Verified Submissions
+            </h1>
+            <div
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
+              }`}
+            >
+              <CheckCircle className="h-5 w-5" />
+            </div>
+          </div>
+          <CardContent>
+            <div className="text-2xl font-bold">
               {verifiedSubmissions.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Verified
             </p>
           </CardContent>
-        </Card>
+        </div>
 
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-            <CardTitle
-              className={`text-sm font-semibold ${
-                isDark ? "text-gray-200" : "text-gray-700"
-              }`}
-            >
-              Pending Submissions
-            </CardTitle>
-            <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-yellow-900/30" : "bg-yellow-100"
-              }`}
-            >
-              <Eye
-                className={`h-5 w-5 ${
-                  isDark ? "text-yellow-400" : "text-yellow-600"
-                }`}
-              />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-3xl font-bold ${
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
+            <h1
+              className={`text-md font-medium ${
                 isDark ? "text-white" : "text-gray-900"
               }`}
             >
+              Pending Submissions
+            </h1>
+            <div
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
+              }`}
+            >
+              <Eye className="h-5 w-5" />
+            </div>
+          </div>
+          <CardContent>
+            <div className="text-2xl font-bold">
               {pendingSubmissions.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Pending
             </p>
           </CardContent>
-        </Card>
+        </div>
 
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-            <CardTitle
-              className={`text-sm font-semibold ${
-                isDark ? "text-gray-200" : "text-gray-700"
-              }`}
-            >
-              Rejected Submissions
-            </CardTitle>
-            <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-red-900/30" : "bg-red-100"
-              }`}
-            >
-              <XCircle
-                className={`h-5 w-5 ${
-                  isDark ? "text-red-400" : "text-red-600"
-                }`}
-              />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-3xl font-bold ${
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
+            <h1
+              className={`text-md font-medium ${
                 isDark ? "text-white" : "text-gray-900"
               }`}
             >
+              Rejected Submissions
+            </h1>
+            <div
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
+              }`}
+            >
+              <XCircle className="h-5 w-5" />
+            </div>
+          </div>
+          <CardContent>
+            <div className="text-2xl font-bold">
               {rejectedSubmissions.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Rejected
             </p>
           </CardContent>
-        </Card>
+        </div>
 
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-            <CardTitle
-              className={`text-sm font-semibold ${
-                isDark ? "text-gray-200" : "text-gray-700"
-              }`}
-            >
-              Paid Submissions
-            </CardTitle>
-            <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-emerald-900/30" : "bg-emerald-100"
-              }`}
-            >
-              <DollarSign
-                className={`h-5 w-5 ${
-                  isDark ? "text-emerald-400" : "text-emerald-600"
-                }`}
-              />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-3xl font-bold ${
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
+            <h1
+              className={`text-md font-medium ${
                 isDark ? "text-white" : "text-gray-900"
               }`}
             >
+              Paid Submissions
+            </h1>
+            <div
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
+              }`}
+            >
+              <DollarSign className="h-5 w-5" />
+            </div>
+          </div>
+          <CardContent>
+            <div className="text-2xl font-bold">
               {paidSubmissions.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Paid
             </p>
           </CardContent>
-        </Card>
+        </div>
 
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-            <CardTitle
-              className={`text-sm font-semibold ${
-                isDark ? "text-gray-200" : "text-gray-700"
-              }`}
-            >
-              Total Submissions
-            </CardTitle>
-            <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-blue-900/30" : "bg-blue-100"
-              }`}
-            >
-              <Video
-                className={`h-5 w-5 ${
-                  isDark ? "text-blue-400" : "text-blue-600"
-                }`}
-              />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-3xl font-bold ${
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
+            <h1
+              className={`text-md font-medium ${
                 isDark ? "text-white" : "text-gray-900"
               }`}
             >
+              Total Submissions
+            </h1>
+            <div
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
+              }`}
+            >
+              <Video className="h-5 w-5" />
+            </div>
+          </div>
+          <CardContent>
+            <div className="text-2xl font-bold">
               {totalSubmissions.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               All submissions
             </p>
           </CardContent>
-        </Card>
+        </div>
       </div>
 
       <div className="mt-8 mb-4">
@@ -1218,22 +1090,22 @@ export default function AdminDashboardClient({
           Views Metrics
         </h2>
       </div>
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
         {/* Expected Views */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Expected Views
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1252,50 +1124,44 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-blue-900/30" : "bg-blue-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <Eye
-                className={`h-5 w-5 ${
-                  isDark ? "text-blue-400" : "text-blue-600"
-                }`}
-              />
+              <Eye className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {totalExpectedViews.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Pending + Verified
             </p>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Verified Views */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Verified Views
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1314,50 +1180,44 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-green-900/30" : "bg-green-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <CheckCircle
-                className={`h-5 w-5 ${
-                  isDark ? "text-green-400" : "text-green-600"
-                }`}
-              />
+              <CheckCircle className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {totalVerifiedViews.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Verified
             </p>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Pending Views */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Pending Views
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1376,50 +1236,44 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-yellow-900/30" : "bg-yellow-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <Eye
-                className={`h-5 w-5 ${
-                  isDark ? "text-yellow-400" : "text-yellow-600"
-                }`}
-              />
+              <Eye className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {totalPendingViews.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Pending
             </p>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Rejected Views */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Rejected Views
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1436,50 +1290,44 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-red-900/30" : "bg-red-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <XCircle
-                className={`h-5 w-5 ${
-                  isDark ? "text-red-400" : "text-red-600"
-                }`}
-              />
+              <XCircle className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {totalRejectedViews.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               From rejected entries
             </p>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Paid Views */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Paid Views
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1496,50 +1344,44 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-emerald-900/30" : "bg-emerald-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <DollarSign
-                className={`h-5 w-5 ${
-                  isDark ? "text-emerald-400" : "text-emerald-600"
-                }`}
-              />
+              <DollarSign className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {totalPaidViews.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               From paid entries
             </p>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Total Views */}
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total Views
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1558,34 +1400,28 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-purple-900/30" : "bg-purple-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <Video
-                className={`h-5 w-5 ${
-                  isDark ? "text-purple-400" : "text-purple-600"
-                }`}
-              />
+              <Video className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {totalViews.toLocaleString()}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               All views
             </p>
           </CardContent>
-        </Card>
+        </div>
       </div>
 
       {/* Admin actions */}
@@ -1615,20 +1451,20 @@ export default function AdminDashboardClient({
         </h2> */}
       </div>
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Money Paid (Published)
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1647,49 +1483,43 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-green-900/30" : "bg-green-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <DollarSign
-                className={`h-5 w-5 ${
-                  isDark ? "text-green-400" : "text-green-600"
-                }`}
-              />
+              <DollarSign className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {formatCurrencyFromCents(totalMoneyPaidByPublished)}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Completed payments for published contests
             </p>
           </CardContent>
-        </Card>
+        </div>
 
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Money Paid (Unpublished)
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1709,49 +1539,43 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-yellow-900/30" : "bg-yellow-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <DollarSign
-                className={`h-5 w-5 ${
-                  isDark ? "text-yellow-400" : "text-yellow-600"
-                }`}
-              />
+              <DollarSign className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {formatCurrencyFromCents(moneyPaidUnpublished)}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Paid but not published
             </p>
           </CardContent>
-        </Card>
+        </div>
 
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Money Paid (Published + Unpublished)
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1771,34 +1595,28 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-blue-900/30" : "bg-blue-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <DollarSign
-                className={`h-5 w-5 ${
-                  isDark ? "text-blue-400" : "text-blue-600"
-                }`}
-              />
+              <DollarSign className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {formatCurrencyFromCents(expectedMoneyPaidAll)}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               All contests with completed payment
             </p>
           </CardContent>
-        </Card>
+        </div>
       </div>
 
       {/* Money Breakdown (Expected payments) */}
@@ -1812,20 +1630,20 @@ export default function AdminDashboardClient({
         </h2> */}
       </div>
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total (Without Commission)
-              </CardTitle>
+              </h1>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1844,49 +1662,43 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-indigo-900/30" : "bg-indigo-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <DollarSign
-                className={`h-5 w-5 ${
-                  isDark ? "text-indigo-400" : "text-indigo-600"
-                }`}
-              />
+              <DollarSign className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {formatCurrencyFromCents(paymentsBreakdown.withoutCommission)}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Total money paid excluding commission
             </p>
           </CardContent>
-        </Card>
+        </div>
 
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total Commission
-              </CardTitle>
+              </h1>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1905,49 +1717,43 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-purple-900/30" : "bg-purple-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <DollarSign
-                className={`h-5 w-5 ${
-                  isDark ? "text-purple-400" : "text-purple-600"
-                }`}
-              />
+              <DollarSign className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {formatCurrencyFromCents(paymentsBreakdown.commission)}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Total commission paid
             </p>
           </CardContent>
-        </Card>
+        </div>
 
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total (With Commission)
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1966,34 +1772,28 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-teal-900/30" : "bg-teal-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <DollarSign
-                className={`h-5 w-5 ${
-                  isDark ? "text-teal-400" : "text-teal-600"
-                }`}
-              />
+              <DollarSign className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {formatCurrencyFromCents(paymentsBreakdown.withCommission)}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Total money paid including commission
             </p>
           </CardContent>
-        </Card>
+        </div>
       </div>
 
       {/* Projected Breakdown */}
@@ -2007,20 +1807,20 @@ export default function AdminDashboardClient({
         </h2> */}
       </div>
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Projected (Without Commission)
-              </CardTitle>
+              </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2040,49 +1840,43 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-indigo-900/30" : "bg-indigo-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <DollarSign
-                className={`h-5 w-5 ${
-                  isDark ? "text-indigo-400" : "text-indigo-600"
-                }`}
-              />
+              <DollarSign className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {formatCurrencyFromCents(projectedMoneySpent)}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Budgets/prize pools set (paid + not-yet-paid)
             </p>
           </CardContent>
-        </Card>
+        </div>
 
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Projected (With Commission)
-              </CardTitle>
+              </h1>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2102,49 +1896,43 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-teal-900/30" : "bg-teal-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <DollarSign
-                className={`h-5 w-5 ${
-                  isDark ? "text-teal-400" : "text-teal-600"
-                }`}
-              />
+              <DollarSign className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {formatCurrencyFromCents(projectedWithCommission)}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Includes payments made + budgets set on not-yet-paid contests
             </p>
           </CardContent>
-        </Card>
+        </div>
 
-        <Card
-          className={`shadow-md hover:shadow-lg transition-shadow duration-200 ${
-            isDark ? "bg-[#170337]" : "bg-white"
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <div className="flex items-center gap-2">
-              <CardTitle
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-200" : "text-gray-700"
+              <h1
+                className={`text-md font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
                 }`}
               >
                 Total Money in Draft (Not Paid)
-              </CardTitle>
+              </h1>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2164,34 +1952,28 @@ export default function AdminDashboardClient({
               </TooltipProvider>
             </div>
             <div
-              className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-gray-800" : "bg-gray-100"
+              className={`w-10 h-10 flex items-center justify-center rounded-full ${
+                isDark
+                  ? "bg-[#FFFFFF36] text-white"
+                  : "bg-[#D8C3FF] text-[#4A00BE]"
               }`}
             >
-              <DollarSign
-                className={`h-5 w-5 ${
-                  isDark ? "text-gray-400" : "text-gray-600"
-                }`}
-              />
+              <DollarSign className="h-5 w-5" />
             </div>
-          </CardHeader>
+          </div>
           <CardContent>
-            <div
-              className={`text-3xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
+            <div className="text-2xl font-bold">
               {formatCurrencyFromCents(totalMoneyInDraftNotPaid)}
             </div>
             <p
-              className={`text-xs mt-1 ${
-                isDark ? "text-gray-400" : "text-gray-500"
+              className={`text-sm mt-2 ${
+                isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
               Draft contests only (unpaid)
             </p>
           </CardContent>
-        </Card>
+        </div>
       </div>
     </div>
   );

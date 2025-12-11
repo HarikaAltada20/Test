@@ -1,5 +1,5 @@
 "use client";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { toast } from "sonner";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ContestOption = {
@@ -45,6 +45,7 @@ type ContestOption = {
 };
 
 export default function AffiliateLandingPage() {
+  const router = useRouter();
   const [contestId, setContestId] = useState("");
   const [contestSearch, setContestSearch] = useState("");
   const [contests, setContests] = useState<ContestOption[]>([]);
@@ -58,6 +59,8 @@ export default function AffiliateLandingPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkRate, setBulkRate] = useState<number>(10);
+  const [earnersLoading, setEarnersLoading] = useState(false);
+  const [contestLoading, setContestLoading] = useState(false);
 
   const filtered = useMemo(() => rows, [rows]);
   const selectedRows = filtered.filter((r) => selected[r.submission_id]);
@@ -232,6 +235,17 @@ export default function AffiliateLandingPage() {
     }
   };
 
+  const handleViewEarners = () => {
+    setEarnersLoading(true);
+    router.push(`/dashboard/admin/affiliate/earners`);
+  };
+
+  const handleOpenContest = () => {
+    if (!contestId) return;
+    setContestLoading(true);
+    router.push(`/dashboard/admin/affiliate/${contestId}`);
+  };
+
   return (
     <div className="space-y-6">
       <Card
@@ -326,15 +340,24 @@ export default function AffiliateLandingPage() {
                 </div>
               )}
             </div>
-            <Button asChild disabled={!contestId}>
-              <Link href={`/dashboard/admin/affiliate/${contestId}`}>
-                Open Contest
-              </Link>
+            <Button
+              onClick={handleOpenContest}
+              disabled={!contestId || contestLoading}
+            >
+              {contestLoading && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Open Contest
             </Button>
-            <Button asChild variant="outline">
-              <Link href={`/dashboard/admin/affiliate/earners`}>
-                View Earners
-              </Link>
+            <Button
+              variant="outline"
+              onClick={handleViewEarners}
+              disabled={earnersLoading}
+            >
+              {earnersLoading && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              View Earners
             </Button>
             <Button onClick={fetchContest} disabled={!contestId || loading}>
               {loading ? "Loading..." : "Load"}

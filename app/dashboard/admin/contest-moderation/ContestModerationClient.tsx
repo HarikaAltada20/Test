@@ -20,6 +20,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { formatLocalDateTime, cn } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
@@ -136,6 +144,8 @@ export default function ContestModerationClient({
   const [showRejectionDialog, setShowRejectionDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [processingAction, setProcessingAction] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(9);
   const { toast } = useToast();
 
   // Separate state for counts to persist across tab switches
@@ -325,6 +335,7 @@ export default function ContestModerationClient({
   }, []);
 
   useEffect(() => {
+    setPage(1); // Reset to first page when tab changes
     // On first render, if we have initial data for the current status, skip fetch
     if (isFirstRender.current) {
       isFirstRender.current = false;
@@ -343,6 +354,14 @@ export default function ContestModerationClient({
     fetchContests(selectedStatus);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStatus]);
+
+  // Keep current page in range when the data size or page size changes
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(contests.length / limit || 1));
+    if (page > maxPage) {
+      setPage(maxPage);
+    }
+  }, [contests.length, limit, page]);
 
   const handleApprove = async (contestId: string) => {
     try {
@@ -727,85 +746,114 @@ export default function ContestModerationClient({
 
   return (
     <div className="space-y-6">
-      <EnhancedTabs
-        tabs={[
-          {
-            id: "pending_approval",
-            label: (
-              <span>
-                Pending{" "}
-                <Badge
-                  variant="secondary"
-                  className="ml-1 px-1.5 py-0.5 text-xs"
-                >
-                  {contestCounts.pending_approval}
-                </Badge>
-              </span>
-            ),
-          },
-          {
-            id: "approved",
-            label: (
-              <span>
-                Approved{" "}
-                <Badge
-                  variant="secondary"
-                  className="ml-1 px-1.5 py-0.5 text-xs"
-                >
-                  {contestCounts.approved}
-                </Badge>
-              </span>
-            ),
-          },
-          {
-            id: "published",
-            label: (
-              <span>
-                Published{" "}
-                <Badge
-                  variant="secondary"
-                  className="ml-1 px-1.5 py-0.5 text-xs"
-                >
-                  {contestCounts.published}
-                </Badge>
-              </span>
-            ),
-          },
-          {
-            id: "rejected",
-            label: (
-              <span>
-                Rejected{" "}
-                <Badge
-                  variant="secondary"
-                  className="ml-1 px-1.5 py-0.5 text-xs"
-                >
-                  {contestCounts.rejected}
-                </Badge>
-              </span>
-            ),
-          },
-          {
-            id: "all",
-            label: (
-              <span>
-                All{" "}
-                <Badge
-                  variant="secondary"
-                  className="ml-1 px-1.5 py-0.5 text-xs"
-                >
-                  {contestCounts.all}
-                </Badge>
-              </span>
-            ),
-          },
-        ]}
-        activeTab={selectedStatus}
-        onTabChange={setSelectedStatus}
-        className="mb-8"
-        isDark={isDark}
-        light={!isDark}
+      {/* Responsive wrapper for EnhancedTabs */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        .contest-moderation-tabs-wrapper > div {
+          min-width: max-content;
+        }
+        
+        @media (max-width: 640px) {
+          .contest-moderation-tabs-wrapper button {
+            flex: 0 0 auto !important;
+            min-width: fit-content !important;
+            padding: 0.375rem 0.5rem !important;
+            font-size: 0.75rem !important;
+            gap: 0.25rem !important;
+          }
+        }
+        
+        @media (min-width: 640px) and (max-width: 768px) {
+          .contest-moderation-tabs-wrapper button {
+            padding: 0.5rem 0.75rem !important;
+            font-size: 0.875rem !important;
+          }
+        }
+      `,
+        }}
       />
+      <div className="contest-moderation-tabs-wrapper overflow-x-auto scrollbar-hide mb-6 sm:mb-8 -mx-4 px-4 sm:mx-0 sm:px-0">
+        <EnhancedTabs
+          tabs={[
+            {
+              id: "pending_approval",
+              label: (
+                <span className="flex items-center gap-0.5 sm:gap-1">
+                  Pending
+                  <Badge
+                    variant="secondary"
+                    className="ml-0.5 sm:ml-1 px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs font-semibold"
+                  >
+                    {contestCounts.pending_approval}
+                  </Badge>
+                </span>
+              ),
+            },
+            {
+              id: "approved",
+              label: (
+                <span className="flex items-center gap-0.5 sm:gap-1">
+                  Approved
+                  <Badge
+                    variant="secondary"
+                    className="ml-0.5 sm:ml-1 px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs font-semibold"
+                  >
+                    {contestCounts.approved}
+                  </Badge>
+                </span>
+              ),
+            },
+            {
+              id: "published",
+              label: (
+                <span className="flex items-center gap-0.5 sm:gap-1">
+                  Published
+                  <Badge
+                    variant="secondary"
+                    className="ml-0.5 sm:ml-1 px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs font-semibold"
+                  >
+                    {contestCounts.published}
+                  </Badge>
+                </span>
+              ),
+            },
+            {
+              id: "rejected",
+              label: (
+                <span className="flex items-center gap-0.5 sm:gap-1">
+                  Rejected
+                  <Badge
+                    variant="secondary"
+                    className="ml-0.5 sm:ml-1 px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs font-semibold"
+                  >
+                    {contestCounts.rejected}
+                  </Badge>
+                </span>
+              ),
+            },
+            {
+              id: "all",
+              label: (
+                <span className="flex items-center gap-0.5 sm:gap-1">
+                  All
+                  <Badge
+                    variant="secondary"
+                    className="ml-0.5 sm:ml-1 px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs font-semibold"
+                  >
+                    {contestCounts.all}
+                  </Badge>
+                </span>
+              ),
+            },
+          ]}
+          activeTab={selectedStatus}
+          onTabChange={setSelectedStatus}
+          className="w-full sm:w-auto"
+          isDark={isDark}
+          light={!isDark}
+        />
+      </div>
 
       <div className="mt-4">
         {loading ? (
@@ -821,13 +869,113 @@ export default function ContestModerationClient({
             </CardContent>
           </Card>
         ) : (
-          <div
-            className="grid gap-6"
-            style={{
-              gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))",
-            }}
-          >
-            {contests.map((contest) => renderContestCard(contest))}
+          <div className="space-y-4">
+            <div
+              className="grid gap-6"
+              style={{
+                gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))",
+              }}
+            >
+              {contests
+                .slice((page - 1) * limit, page * limit)
+                .map((contest) => renderContestCard(contest))}
+            </div>
+
+            <div className="flex flex-col gap-3 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
+              <div className="flex flex-col items-center sm:flex-row sm:items-center sm:gap-3">
+                <div
+                  className="text-sm"
+                  style={{
+                    color: isDark ? "#cbd5e1" : "#4b5563",
+                    transition: "none",
+                  }}
+                >
+                  {(() => {
+                    const total = contests.length;
+                    const startItem = Math.min((page - 1) * limit + 1, total);
+                    const endItem = Math.min(page * limit, total);
+                    return `Showing ${startItem}-${endItem} of ${total} contests`;
+                  })()}
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span
+                    style={{
+                      color: isDark ? "#cbd5e1" : "#4b5563",
+                      transition: "none",
+                    }}
+                  >
+                    Show:
+                  </span>
+                  <Select
+                    value={limit.toString()}
+                    onValueChange={(value) => {
+                      const newLimit = parseInt(value, 10);
+                      setLimit(newLimit);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger
+                      className={cn(
+                        "w-20 h-9",
+                        isDark && "border border-gray-600"
+                      )}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent
+                      isDark={isDark}
+                      className={cn(
+                        isDark && "border-gray-600 bg-[#07031D] text-white"
+                      )}
+                    >
+                      {[9, 15, 21, 30].map((size) => (
+                        <SelectItem
+                          isDark={isDark}
+                          key={size}
+                          value={size.toString()}
+                          className={cn(
+                            isDark &&
+                              "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
+                          )}
+                        >
+                          {size}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span
+                    style={{
+                      color: isDark ? "#cbd5e1" : "#4b5563",
+                      transition: "none",
+                    }}
+                  >
+                    per page
+                  </span>
+                </div>
+              </div>
+              <PaginationControls
+                page={page}
+                limit={limit}
+                total={contests.length}
+                totalPages={Math.max(
+                  1,
+                  Math.ceil(contests.length / limit || 1)
+                )}
+                hasNextPage={
+                  page < Math.max(1, Math.ceil(contests.length / limit || 1))
+                }
+                hasPreviousPage={page > 1}
+                onPageChange={setPage}
+                onLimitChange={setLimit}
+                loading={loading}
+                isDark={isDark}
+                showResultInfo={false}
+                showEdgeButtons={false}
+                showPrevNextButtons={true}
+                showPageSizeSelector={false}
+                pageSizeOptions={[9, 15, 21, 30]}
+              />
+            </div>
           </div>
         )}
       </div>

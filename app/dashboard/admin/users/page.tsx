@@ -333,42 +333,20 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [activeTab, setActiveTab] = useState("all");
-  // Initialize mode state with proper detection to prevent flash
-  const [mode, setMode] = useState<"light" | "dark">(() => {
-    // Check if we're in browser environment
+  const [isDark, setIsDark] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      // Try to get theme from data-theme attribute first
-      const themeElement = document.documentElement;
-      const dataTheme = themeElement.getAttribute("data-theme") as
-        | "light"
-        | "dark";
-      if (dataTheme) return dataTheme;
-
-      // Fallback to data-mode attribute
+      // Check data-mode attribute from parent layout
       const modeElement = document.querySelector("[data-mode]");
       if (modeElement) {
-        const dataMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (dataMode) return dataMode;
+        const dataMode = modeElement.getAttribute("data-mode");
+        return dataMode === "dark";
       }
-
-      // Check localStorage as last resort
-      try {
-        const savedMode = localStorage.getItem("dashboard-mode") as
-          | "light"
-          | "dark";
-        if (savedMode) return savedMode;
-
-        const preset = localStorage.getItem("dashboard-preset");
-        if (preset === "game-of-creators" || preset === "dark-professional") {
-          return "dark";
-        }
-      } catch (e) {
-        // Ignore localStorage errors
-      }
+      // Fallback to data-theme attribute
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme");
+      return dataTheme === "dark";
     }
-    return "light";
+    return false; // Default to light mode
   });
   const [selectedSubscriptionInfo, setSelectedSubscriptionInfo] = useState<
     any | null
@@ -2058,107 +2036,35 @@ export default function AdminUsersPage() {
     load();
   }, []);
 
-  // Read mode/compact flags from data attributes with immediate updates
-  useEffect(() => {
-    const checkFlags = () => {
-      const container = document.querySelector("[data-mode][data-compact]");
-      const modeElement = container || document.querySelector("[data-mode]");
-      if (modeElement) {
-        const currentMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (currentMode && currentMode !== mode) {
-          setMode(currentMode);
-        }
+ // Watch for theme changes from parent layout
+ useEffect(() => {
+  const checkTheme = () => {
+    const modeElement = document.querySelector("[data-mode]");
+    if (modeElement) {
+      const currentMode = modeElement.getAttribute("data-mode");
+      const newIsDark = currentMode === "dark";
+      if (newIsDark !== isDark) {
+        setIsDark(newIsDark);
       }
-    };
-
-    // Check immediately
-    checkFlags();
-
-    // Watch for changes in the data attributes with immediate callback
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (
-          mutation.type === "attributes" &&
-          mutation.attributeName === "data-mode"
-        ) {
-          checkFlags();
-        }
-      });
-    });
-
-    const targetNode =
-      document.querySelector("[data-mode][data-compact]") ||
-      document.querySelector("[data-mode]") ||
-      document.documentElement;
-
-    if (targetNode) {
-      observer.observe(targetNode, {
-        attributes: true,
-        attributeFilter: ["data-mode", "data-theme"],
-      });
     }
+  };
 
-    // Also listen for storage events to catch theme changes from other tabs
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "dashboard-mode" && e.newValue) {
-        const newMode = e.newValue as "light" | "dark";
-        if (newMode !== mode) {
-          setMode(newMode);
-        }
-      }
-    };
+  checkTheme();
 
-    window.addEventListener("storage", handleStorageChange);
+  // Watch for changes in the data attribute
+  const observer = new MutationObserver(checkTheme);
+  const targetNode = document.querySelector("[data-mode]");
+  if (targetNode) {
+    observer.observe(targetNode, {
+      attributes: true,
+      attributeFilter: ["data-mode"],
+    });
+  }
 
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("storage", handleStorageChange);
-    };
-  }, [mode]);
+  return () => observer.disconnect();
+}, [isDark]);
 
-  // Additional effect to catch theme changes more immediately
-  useEffect(() => {
-    // Listen for custom theme change events that might be dispatched by the theme system
-    const handleThemeChange = (event: CustomEvent) => {
-      if (event.detail && event.detail.mode) {
-        const newMode = event.detail.mode as "light" | "dark";
-        if (newMode !== mode) {
-          setMode(newMode);
-        }
-      }
-    };
 
-    // Listen for the custom event
-    window.addEventListener("theme-change", handleThemeChange as EventListener);
-
-    // Also check for changes on a more frequent interval as a fallback
-    const intervalId = setInterval(() => {
-      const container = document.querySelector("[data-mode][data-compact]");
-      const modeElement =
-        container ||
-        document.querySelector("[data-mode]") ||
-        document.documentElement;
-      if (modeElement) {
-        const currentMode = (modeElement.getAttribute("data-mode") ||
-          modeElement.getAttribute("data-theme")) as "light" | "dark" | null;
-        if (currentMode && currentMode !== mode) {
-          setMode(currentMode);
-        }
-      }
-    }, 50); // Check every 50ms for faster response
-
-    return () => {
-      window.removeEventListener(
-        "theme-change",
-        handleThemeChange as EventListener
-      );
-      clearInterval(intervalId);
-    };
-  }, [mode]);
-
-  const isDark = mode === "dark";
 
   return (
     <div className="space-y-6">
