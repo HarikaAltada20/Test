@@ -52,6 +52,7 @@ import {
   Gift,
   Tag,
   Star,
+  Inbox,
 } from "lucide-react";
 
 interface Contest {
@@ -887,13 +888,12 @@ export default function ContestModerationClient({
         {loading || !hasInitialized ? (
           <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
         ) : contests.length === 0 ? (
-          <Card>
-            <CardContent className="p-6 text-center">
-              <p className="text-muted-foreground">
-                No contests found for this status
-              </p>
-            </CardContent>
-          </Card>
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Inbox className="h-12 w-12 mb-4 text-muted-foreground" />
+            <p className="text-muted-foreground">
+              No contests found for this status
+            </p>
+          </div>
         ) : (
           <div className="space-y-4">
             <div
