@@ -253,7 +253,7 @@ export function ManualEntryModal({
       <DialogContent
         className={cn(
           "max-w-2xl max-h-[90vh] overflow-y-auto",
-          isDark ? "bg-[#170337] text-white" : "bg-white text-gray-900"
+          isDark ? "text-white" : "bg-white text-gray-900"
         )}
       >
         <DialogHeader>
@@ -296,7 +296,7 @@ export function ManualEntryModal({
                 className={cn(
                   "pl-10",
                   isDark
-                    ? "bg-[#210B43] border-gray-700 text-white placeholder:text-gray-500"
+                    ? "bg-[#06021d] border-gray-700 text-white placeholder:text-gray-500"
                     : "bg-white border-gray-300"
                 )}
               />
@@ -348,7 +348,7 @@ export function ManualEntryModal({
                 className={cn(
                   "p-3 rounded-lg border",
                   isDark
-                    ? "bg-[#210B43] border-gray-700 text-white"
+                    ? "bg-[#06021d] border-gray-700 text-white"
                     : "bg-gray-50 border-gray-300 text-gray-900"
                 )}
               >
@@ -383,15 +383,15 @@ export function ManualEntryModal({
                 id="transaction-type"
                 className={cn(
                   isDark
-                    ? "bg-[#210B43] border-gray-700 text-white"
+                    ? "bg-[#06021d] border-gray-700 text-white"
                     : "bg-white border-gray-300"
                 )}
               >
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="coins">Coins</SelectItem>
-                <SelectItem value="cash">Cash</SelectItem>
+              <SelectContent isDark={isDark}>
+                <SelectItem value="coins" isDark={isDark}>Coins</SelectItem>
+                <SelectItem value="cash" isDark={isDark}>Cash</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -414,7 +414,7 @@ export function ManualEntryModal({
               onChange={(e) => setAmount(e.target.value)}
               className={cn(
                 isDark
-                  ? "bg-[#210B43] border-gray-700 text-white"
+                  ? "bg-[#06021d] border-gray-700 text-white"
                   : "bg-white border-gray-300"
               )}
               required
@@ -442,17 +442,19 @@ export function ManualEntryModal({
                   id="cash-category"
                   className={cn(
                     isDark
-                      ? "bg-[#210B43] border-gray-700 text-white"
+                      ? "bg-[#06021d] border-gray-700 text-white"
                       : "bg-white border-gray-300"
                   )}
                 >
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="contest_winnings">
+                <SelectContent isDark={isDark}>
+                  <SelectItem value="contest_winnings" isDark={isDark}>
                     Contest Winnings
                   </SelectItem>
-                  <SelectItem value="other_earnings">Other Earnings</SelectItem>
+                  <SelectItem value="other_earnings" isDark={isDark}>
+                    Other Earnings
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -474,7 +476,7 @@ export function ManualEntryModal({
               className={cn(
                 "min-h-[100px]",
                 isDark
-                  ? "bg-[#210B43] border-gray-700 text-white placeholder:text-gray-500"
+                  ? "bg-[#06021d] border-gray-700 text-white placeholder:text-gray-500"
                   : "bg-white border-gray-300"
               )}
               required
