@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -60,6 +60,24 @@ export function PaginationControls({
   const startItem = Math.min((page - 1) * limit + 1, total);
   const endItem = Math.min(page * limit, total);
 
+  // Track window size for responsive pagination
+  const [windowWidth, setWindowWidth] = useState<number>(
+    typeof window !== "undefined" ? window.innerWidth : 1024
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+
+    window.addEventListener("resize", handleResize);
+    handleResize(); // Set initial value
+
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   const handlePageSizeChange = (value: string) => {
     const newLimit = parseInt(value, 10);
     onLimitChange(newLimit);
@@ -67,56 +85,145 @@ export function PaginationControls({
     onPageChange(1);
   };
 
-  // Generate page numbers to display
+  // Generate page numbers to display (responsive based on screen size)
   const getPageNumbers = () => {
     const pages: (number | string)[] = [];
+    // Show same number of pages on all screen sizes for consistency
     const maxVisiblePages = 7;
 
     if (totalPages <= maxVisiblePages) {
-      // Show all pages
+      // Show all pages if total pages fit within max visible
       for (let i = 1; i <= totalPages; i++) {
         pages.push(i);
       }
+      return pages;
+    }
+
+    // Strategy: Build pages array and ensure it doesn't exceed maxVisiblePages
+    // Always show: first page, current page area, last page
+    // Add ellipses only if there are gaps AND we have room
+
+    let adjustedStart: number;
+    let adjustedEnd: number;
+
+    // Start with maximum possible middle pages (assuming no ellipses)
+    let middlePageSlots = maxVisiblePages - 2; // Reserve for first and last
+
+    // Try to determine what we want to show
+    if (page <= middlePageSlots + 1) {
+      // Near beginning: show consecutive from start
+      adjustedStart = 2;
+      adjustedEnd = Math.min(totalPages - 1, middlePageSlots + 1);
+    } else if (page >= totalPages - middlePageSlots + 1) {
+      // Near end: show consecutive to end
+      adjustedEnd = totalPages - 1;
+      adjustedStart = Math.max(2, totalPages - middlePageSlots + 1);
     } else {
-      // Show pages with ellipsis
-      if (page <= 4) {
-        // Near the beginning
-        for (let i = 1; i <= 5; i++) {
-          pages.push(i);
-        }
-        pages.push("...");
-        pages.push(totalPages);
-      } else if (page >= totalPages - 3) {
-        // Near the end
-        pages.push(1);
-        pages.push("...");
-        for (let i = totalPages - 4; i <= totalPages; i++) {
-          pages.push(i);
-        }
+      // In middle: show around current page
+      const sideCount = Math.floor((middlePageSlots - 1) / 2);
+      adjustedStart = Math.max(2, page - sideCount);
+      adjustedEnd = Math.min(totalPages - 1, page + sideCount);
+    }
+
+    // Now check if we need ellipses and if we have room
+    const needsEllipsisBefore = adjustedStart > 2;
+    const needsEllipsisAfter = adjustedEnd < totalPages - 1;
+    const ellipsisCount =
+      (needsEllipsisBefore ? 1 : 0) + (needsEllipsisAfter ? 1 : 0);
+
+    // Recalculate middle slots accounting for ellipses
+    middlePageSlots = Math.max(1, maxVisiblePages - 2 - ellipsisCount);
+
+    // Adjust if we exceeded the limit
+    const currentMiddleCount = adjustedEnd - adjustedStart + 1;
+    if (currentMiddleCount > middlePageSlots) {
+      // Reduce middle pages to fit
+      if (page <= middlePageSlots + 1) {
+        adjustedStart = 2;
+        adjustedEnd = Math.min(totalPages - 1, middlePageSlots + 1);
+      } else if (page >= totalPages - middlePageSlots + 1) {
+        adjustedEnd = totalPages - 1;
+        adjustedStart = Math.max(2, totalPages - middlePageSlots + 1);
       } else {
-        // In the middle
-        pages.push(1);
-        pages.push("...");
-        for (let i = page - 1; i <= page + 1; i++) {
-          pages.push(i);
-        }
-        pages.push("...");
-        pages.push(totalPages);
+        const sideCount = Math.floor((middlePageSlots - 1) / 2);
+        adjustedStart = Math.max(2, page - sideCount);
+        adjustedEnd = Math.min(totalPages - 1, page + sideCount);
       }
     }
+
+    // Ensure valid range
+    adjustedStart = Math.max(2, adjustedStart);
+    adjustedEnd = Math.max(
+      adjustedStart,
+      Math.min(totalPages - 1, adjustedEnd)
+    );
+
+    // Update ellipsis flags based on final values
+    let showEllipsisBefore = adjustedStart > 2;
+    let showEllipsisAfter = adjustedEnd < totalPages - 1;
+
+    // Verify total count doesn't exceed maxVisiblePages
+    // Total = 1 (first) + ellipsisBefore + middlePages + ellipsisAfter + 1 (last)
+    const totalCount =
+      2 +
+      (showEllipsisBefore ? 1 : 0) +
+      (adjustedEnd - adjustedStart + 1) +
+      (showEllipsisAfter ? 1 : 0);
+
+    if (totalCount > maxVisiblePages) {
+      // Remove ellipses if we don't have room, prioritizing showing pages
+      if (showEllipsisBefore && showEllipsisAfter) {
+        // Can't show both ellipses, remove one
+        // Prefer to keep ellipsis that's further from current page
+        if (page - adjustedStart < adjustedEnd - page) {
+          showEllipsisBefore = false;
+        } else {
+          showEllipsisAfter = false;
+        }
+      }
+
+      // Recheck and remove remaining ellipsis if still over limit
+      const newTotalCount =
+        2 +
+        (showEllipsisBefore ? 1 : 0) +
+        (adjustedEnd - adjustedStart + 1) +
+        (showEllipsisAfter ? 1 : 0);
+      if (newTotalCount > maxVisiblePages) {
+        // Remove remaining ellipsis
+        showEllipsisBefore = false;
+        showEllipsisAfter = false;
+      }
+    }
+
+    // Build the pages array
+    pages.push(1);
+
+    if (showEllipsisBefore) {
+      pages.push("...");
+    }
+
+    for (let i = adjustedStart; i <= adjustedEnd; i++) {
+      pages.push(i);
+    }
+
+    if (showEllipsisAfter) {
+      pages.push("...");
+    }
+
+    pages.push(totalPages);
 
     return pages;
   };
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
       {/* Results info and page size selector */}
       {(showResultInfo || showPageSizeSelector) && (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+        <div className="flex flex-row items-center gap-2 sm:gap-4 flex-wrap">
           {showResultInfo && (
             <div
               className={cn(
-                "text-sm text-muted-foreground",
+                "text-xs sm:text-sm text-muted-foreground whitespace-nowrap",
                 isDark && "text-slate-300"
               )}
             >
@@ -126,10 +233,10 @@ export function PaginationControls({
           )}
 
           {showPageSizeSelector && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <span
                 className={cn(
-                  "text-sm text-muted-foreground",
+                  "text-xs sm:text-sm text-muted-foreground whitespace-nowrap",
                   isDark && "text-slate-300"
                 )}
               >
@@ -141,7 +248,10 @@ export function PaginationControls({
                 disabled={loading}
               >
                 <SelectTrigger
-                  className={cn("w-20", isDark && "border border-gray-600")}
+                  className={cn(
+                    "w-16 sm:w-20 h-8 text-xs sm:text-sm",
+                    isDark && "border border-gray-600"
+                  )}
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -171,7 +281,7 @@ export function PaginationControls({
               </Select>
               <span
                 className={cn(
-                  "text-sm text-muted-foreground",
+                  "text-xs sm:text-sm text-muted-foreground whitespace-nowrap hidden sm:inline",
                   isDark && "text-slate-300"
                 )}
               >
@@ -184,8 +294,8 @@ export function PaginationControls({
 
       {/* Page navigation */}
       {totalPages > 1 && (
-        <div className="flex items-center gap-1">
-          {/* First page */}
+        <div className="flex items-center justify-center sm:justify-start gap-0.5 sm:gap-1 flex-wrap">
+          {/* First page - hidden on mobile */}
           {showEdgeButtons && (
             <Button
               variant="outline"
@@ -193,7 +303,7 @@ export function PaginationControls({
               onClick={() => onPageChange(1)}
               disabled={!hasPreviousPage || loading}
               className={cn(
-                "h-8 w-8 p-0",
+                "h-8 w-8 p-0 hidden sm:flex",
                 isDark &&
                   "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
               )}
@@ -210,7 +320,7 @@ export function PaginationControls({
               onClick={() => onPageChange(page - 1)}
               disabled={!hasPreviousPage || loading}
               className={cn(
-                "h-8 w-8 p-0",
+                "h-8 w-8 p-0 sm:w-8",
                 isDark &&
                   "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
               )}
@@ -220,13 +330,13 @@ export function PaginationControls({
           )}
 
           {/* Page numbers */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 sm:gap-1 overflow-x-auto scrollbar-hide">
             {getPageNumbers().map((pageNum, index) => (
               <React.Fragment key={index}>
                 {pageNum === "..." ? (
                   <span
                     className={cn(
-                      "px-2 text-sm text-muted-foreground",
+                      "px-1 sm:px-2 text-xs sm:text-sm text-muted-foreground whitespace-nowrap",
                       isDark && "text-slate-400"
                     )}
                   >
@@ -239,7 +349,7 @@ export function PaginationControls({
                     onClick={() => onPageChange(pageNum as number)}
                     disabled={loading}
                     className={cn(
-                      "h-8 w-8 p-0",
+                      "h-8 min-w-8 px-2 sm:w-8 sm:p-0 text-xs sm:text-sm",
                       isDark &&
                         (pageNum === page
                           ? "border-slate-700 bg-[#7F39EC] text-slate-100 hover:bg-slate-700"
@@ -270,7 +380,7 @@ export function PaginationControls({
             </Button>
           )}
 
-          {/* Last page */}
+          {/* Last page - hidden on mobile */}
           {showEdgeButtons && (
             <Button
               variant="outline"
@@ -278,7 +388,7 @@ export function PaginationControls({
               onClick={() => onPageChange(totalPages)}
               disabled={!hasNextPage || loading}
               className={cn(
-                "h-8 w-8 p-0",
+                "h-8 w-8 p-0 hidden sm:flex",
                 isDark &&
                   "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
               )}
