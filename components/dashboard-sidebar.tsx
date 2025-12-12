@@ -15,6 +15,8 @@ import {
   DollarSign,
   CreditCard,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   BarChart3,
   FileText,
   Briefcase,
@@ -23,6 +25,7 @@ import {
   Phone,
   HelpCircle,
   Award,
+  PlusCircle,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -44,7 +47,22 @@ export function DashboardSidebar({
   const [isMobile, setIsMobile] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [showChat, setShowChat] = useState(false);
+  const [isOthersDropdownOpen, setIsOthersDropdownOpen] = useState(false);
   const isDark = mode === "dark";
+
+  // Auto-open Others dropdown if current path matches any dropdown item
+  useEffect(() => {
+    if (userRole === "admin") {
+      const othersDropdownItems = [
+        "/dashboard/admin/manual-entry",
+        "/dashboard/admin/others",
+      ];
+      const shouldBeOpen = othersDropdownItems.some((href) =>
+        pathname.startsWith(href)
+      );
+      setIsOthersDropdownOpen(shouldBeOpen);
+    }
+  }, [pathname, userRole]);
 
   // Check if screen is mobile size
   useEffect(() => {
@@ -161,6 +179,15 @@ export function DashboardSidebar({
     },
   ];
 
+  const othersDropdownItems = [
+    {
+      name: "Manual Entry",
+      href: "/dashboard/admin/manual-entry",
+      icon: PlusCircle,
+      description: "Credit coins or cash to users",
+    },
+  ];
+
   const creatorLinks = [
     {
       name: "Getting Started",
@@ -271,7 +298,7 @@ export function DashboardSidebar({
         }}
       >
         {/* Removed Getting Started link for admin */}
-        <div className="p-4 pb-2">
+        <div className="p-4 pb-4">
           {!collapsed && (
             <h3
               className="px-3 py-2 text-xs font-semibold uppercase tracking-wider"
@@ -281,8 +308,7 @@ export function DashboardSidebar({
             </h3>
           )}
           <nav className={cn("space-y-2", collapsed && "space-y-3")}>
-            {links.map((link) => {
-              const isActive = pathname === link.href;
+            {(() => {
               const isDark = mode === "dark";
               const activeBg = isDark
                 ? "rgba(127, 57, 236, 0.15)"
@@ -292,102 +318,374 @@ export function DashboardSidebar({
                 : "hsl(var(--primary) / 0.3)";
               const activeText = isDark ? "#ffffff" : "#4A00BE";
               const hoverShadow = "0 1px 2px 0 rgba(0, 0, 0, 0.05)";
+
               return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(
-                    "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
-                    "border border-transparent",
-                    collapsed ? "justify-center px-2 py-3" : "px-3 py-3"
-                  )}
-                  style={{
-                    backgroundColor: isActive ? activeBg : "transparent",
-                    borderColor: isActive ? activeBorder : "transparent",
-                    color: isActive ? activeText : "hsl(var(--foreground))",
-                    // boxShadow: isActive
-                    //   ? "0 4px 6px -1px hsl(var(--primary) / 0.25)"
-                    //   : "none",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.borderColor = activeBorder;
-                      e.currentTarget.style.backgroundColor = activeBg;
-                      e.currentTarget.style.boxShadow = hoverShadow;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.borderColor = "transparent";
-                      e.currentTarget.style.backgroundColor = "transparent";
-                      e.currentTarget.style.boxShadow = "none";
-                    }
-                  }}
-                  title={collapsed ? link.name : undefined}
-                >
-                  <div
-                    className={cn(
-                      "flex items-center justify-center rounded-lg transition-colors",
-                      collapsed ? "w-16 h-12" : "w-10 h-10"
-                    )}
-                    style={{
-                      color: isActive
-                        ? isDark
-                          ? "#C9A7FF"
-                          : "#4A00BE"
-                        : "hsl(var(--primary))",
-                    }}
-                  >
-                    <link.icon
-                      className={cn(collapsed ? "h-6 w-6" : "h-5 w-5")}
-                    />
-                  </div>
-                  {!collapsed && (
-                    <>
-                      <div className="flex-1 min-w-0">
-                        <div
-                          className="font-semibold text-sm"
-                          style={{
-                            color: isActive
-                              ? isDark
-                                ? "#ffffff"
-                                : "#4A00BE"
-                              : "hsl(var(--foreground))",
-                          }}
-                        >
-                          {link.name}
-                        </div>
-                        <div
-                          className="text-xs truncate transition-colors"
-                          style={{
-                            color: isActive
-                              ? isDark
-                                ? "rgba(255,255,255,0.8)"
-                                : "#4A00BE"
-                              : "hsl(var(--muted-foreground))",
-                          }}
-                        >
-                          {link.description}
-                        </div>
-                      </div>
-                      <ChevronRight
+                <>
+                  {links.map((link) => {
+                    const isActive = pathname === link.href;
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href}
                         className={cn(
-                          "h-4 w-4 transition-all duration-200",
-                          isActive && "translate-x-0.5"
+                          "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
+                          "border border-transparent",
+                          collapsed ? "justify-center px-2 py-3" : "px-3 py-3"
                         )}
                         style={{
+                          backgroundColor: isActive ? activeBg : "transparent",
+                          borderColor: isActive ? activeBorder : "transparent",
                           color: isActive
-                            ? isDark
-                              ? "#C9A7FF"
-                              : "#4A00BE"
-                            : "hsl(var(--muted-foreground))",
+                            ? activeText
+                            : "hsl(var(--foreground))",
+                          // boxShadow: isActive
+                          //   ? "0 4px 6px -1px hsl(var(--primary) / 0.25)"
+                          //   : "none",
                         }}
-                      />
-                    </>
+                        onMouseEnter={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.borderColor = activeBorder;
+                            e.currentTarget.style.backgroundColor = activeBg;
+                            e.currentTarget.style.boxShadow = hoverShadow;
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.borderColor = "transparent";
+                            e.currentTarget.style.backgroundColor =
+                              "transparent";
+                            e.currentTarget.style.boxShadow = "none";
+                          }
+                        }}
+                        title={collapsed ? link.name : undefined}
+                      >
+                        <div
+                          className={cn(
+                            "flex items-center justify-center rounded-lg transition-colors",
+                            collapsed ? "w-16 h-12" : "w-10 h-10"
+                          )}
+                          style={{
+                            color: isActive
+                              ? isDark
+                                ? "#C9A7FF"
+                                : "#4A00BE"
+                              : "hsl(var(--primary))",
+                          }}
+                        >
+                          <link.icon
+                            className={cn(collapsed ? "h-6 w-6" : "h-5 w-5")}
+                          />
+                        </div>
+                        {!collapsed && (
+                          <>
+                            <div className="flex-1 min-w-0">
+                              <div
+                                className="font-semibold text-sm"
+                                style={{
+                                  color: isActive
+                                    ? isDark
+                                      ? "#ffffff"
+                                      : "#4A00BE"
+                                    : "hsl(var(--foreground))",
+                                }}
+                              >
+                                {link.name}
+                              </div>
+                              <div
+                                className="text-xs truncate transition-colors"
+                                style={{
+                                  color: isActive
+                                    ? isDark
+                                      ? "rgba(255,255,255,0.8)"
+                                      : "#4A00BE"
+                                    : "hsl(var(--muted-foreground))",
+                                }}
+                              >
+                                {link.description}
+                              </div>
+                            </div>
+                            <ChevronRight
+                              className={cn(
+                                "h-4 w-4 transition-all duration-200",
+                                isActive && "translate-x-0.5"
+                              )}
+                              style={{
+                                color: isActive
+                                  ? isDark
+                                    ? "#C9A7FF"
+                                    : "#4A00BE"
+                                  : "hsl(var(--muted-foreground))",
+                              }}
+                            />
+                          </>
+                        )}
+                      </Link>
+                    );
+                  })}
+
+                  {/* Others with Dropdown for Admin */}
+                  {userRole === "admin" && (
+                    <div className="space-y-1 pb-2">
+                      <div className="relative">
+                        <button
+                          onClick={() =>
+                            setIsOthersDropdownOpen(!isOthersDropdownOpen)
+                          }
+                          className={cn(
+                            "group relative flex items-center gap-3 rounded-xl transition-all duration-200 w-full",
+                            "border border-transparent",
+                            collapsed
+                              ? "justify-center px-2 py-3"
+                              : "justify-start px-3 py-3"
+                          )}
+                          style={{
+                            backgroundColor:
+                              isOthersDropdownOpen ||
+                              pathname === "/dashboard/admin/manual-entry" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/manual-entry"
+                              ) ||
+                              pathname === "/dashboard/admin/others" ||
+                              pathname.startsWith("/dashboard/admin/others")
+                                ? activeBg
+                                : "transparent",
+                            borderColor:
+                              isOthersDropdownOpen ||
+                              pathname === "/dashboard/admin/manual-entry" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/manual-entry"
+                              ) ||
+                              pathname === "/dashboard/admin/others" ||
+                              pathname.startsWith("/dashboard/admin/others")
+                                ? activeBorder
+                                : "transparent",
+                            color:
+                              isOthersDropdownOpen ||
+                              pathname === "/dashboard/admin/manual-entry" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/manual-entry"
+                              ) ||
+                              pathname === "/dashboard/admin/others" ||
+                              pathname.startsWith("/dashboard/admin/others")
+                                ? activeText
+                                : "hsl(var(--foreground))",
+                          }}
+                          onMouseEnter={(e) => {
+                            const isActive =
+                              isOthersDropdownOpen ||
+                              pathname === "/dashboard/admin/manual-entry" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/manual-entry"
+                              ) ||
+                              pathname === "/dashboard/admin/others" ||
+                              pathname.startsWith("/dashboard/admin/others");
+                            if (!isActive) {
+                              e.currentTarget.style.borderColor = activeBorder;
+                              e.currentTarget.style.backgroundColor = activeBg;
+                              e.currentTarget.style.boxShadow = hoverShadow;
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            const isActive =
+                              isOthersDropdownOpen ||
+                              pathname === "/dashboard/admin/manual-entry" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/manual-entry"
+                              ) ||
+                              pathname === "/dashboard/admin/others" ||
+                              pathname.startsWith("/dashboard/admin/others");
+                            if (!isActive) {
+                              e.currentTarget.style.borderColor = "transparent";
+                              e.currentTarget.style.backgroundColor =
+                                "transparent";
+                              e.currentTarget.style.boxShadow = "none";
+                            }
+                          }}
+                          title={collapsed ? "Others" : undefined}
+                        >
+                          <div
+                            className={cn(
+                              "flex items-center justify-center rounded-lg transition-colors",
+                              collapsed ? "w-16 h-12" : "w-10 h-10"
+                            )}
+                            style={{
+                              color:
+                                isOthersDropdownOpen ||
+                                pathname === "/dashboard/admin/manual-entry" ||
+                                pathname.startsWith(
+                                  "/dashboard/admin/manual-entry"
+                                ) ||
+                                pathname === "/dashboard/admin/others" ||
+                                pathname.startsWith("/dashboard/admin/others")
+                                  ? isDark
+                                    ? "#C9A7FF"
+                                    : "#4A00BE"
+                                  : "hsl(var(--primary))",
+                            }}
+                          >
+                            <FileText
+                              className={cn(collapsed ? "h-6 w-6" : "h-5 w-5")}
+                            />
+                          </div>
+                          {!collapsed && (
+                            <>
+                              <div className="flex-1 min-w-0 text-left">
+                                <div
+                                  className="font-semibold text-sm text-left"
+                                  style={{
+                                    color:
+                                      isOthersDropdownOpen ||
+                                      pathname ===
+                                        "/dashboard/admin/manual-entry" ||
+                                      pathname.startsWith(
+                                        "/dashboard/admin/manual-entry"
+                                      ) ||
+                                      pathname === "/dashboard/admin/others" ||
+                                      pathname.startsWith(
+                                        "/dashboard/admin/others"
+                                      )
+                                        ? isDark
+                                          ? "#ffffff"
+                                          : "#4A00BE"
+                                        : "hsl(var(--foreground))",
+                                  }}
+                                >
+                                  Others
+                                </div>
+                                <div
+                                  className="text-xs truncate transition-colors text-left"
+                                  style={{
+                                    color:
+                                      isOthersDropdownOpen ||
+                                      pathname ===
+                                        "/dashboard/admin/manual-entry" ||
+                                      pathname.startsWith(
+                                        "/dashboard/admin/manual-entry"
+                                      ) ||
+                                      pathname === "/dashboard/admin/others" ||
+                                      pathname.startsWith(
+                                        "/dashboard/admin/others"
+                                      )
+                                        ? isDark
+                                          ? "rgba(255,255,255,0.8)"
+                                          : "#4A00BE"
+                                        : "hsl(var(--muted-foreground))",
+                                  }}
+                                >
+                                  Other admin functions
+                                </div>
+                              </div>
+                              {isOthersDropdownOpen ? (
+                                <ChevronUp className="h-4 w-4 transition-all duration-200" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 transition-all duration-200" />
+                              )}
+                            </>
+                          )}
+                        </button>
+
+                        {/* Manual Entry nested inside Others */}
+                        {isOthersDropdownOpen && !collapsed && (
+                          <div className="ml-4 mt-1 space-y-1 pl-4">
+                            {othersDropdownItems.map((item) => {
+                              const isItemActive = pathname === item.href;
+                              return (
+                                <Link
+                                  key={item.href}
+                                  href={item.href}
+                                  className={cn(
+                                    "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
+                                    "border border-transparent",
+                                    "px-3 py-2"
+                                  )}
+                                  style={{
+                                    backgroundColor: isItemActive
+                                      ? activeBg
+                                      : "transparent",
+                                    borderColor: isItemActive
+                                      ? activeBorder
+                                      : "transparent",
+                                    color: isItemActive
+                                      ? activeText
+                                      : "hsl(var(--foreground))",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!isItemActive) {
+                                      e.currentTarget.style.borderColor =
+                                        activeBorder;
+                                      e.currentTarget.style.backgroundColor =
+                                        activeBg;
+                                      e.currentTarget.style.boxShadow =
+                                        hoverShadow;
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!isItemActive) {
+                                      e.currentTarget.style.borderColor =
+                                        "transparent";
+                                      e.currentTarget.style.backgroundColor =
+                                        "transparent";
+                                      e.currentTarget.style.boxShadow = "none";
+                                    }
+                                  }}
+                                >
+                                  <div
+                                    className="flex items-center justify-center rounded-lg transition-colors w-8 h-8"
+                                    style={{
+                                      color: isItemActive
+                                        ? isDark
+                                          ? "#C9A7FF"
+                                          : "#4A00BE"
+                                        : "hsl(var(--primary))",
+                                    }}
+                                  >
+                                    <item.icon className="h-4 w-4" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div
+                                      className="font-semibold text-sm"
+                                      style={{
+                                        color: isItemActive
+                                          ? isDark
+                                            ? "#ffffff"
+                                            : "#4A00BE"
+                                          : "hsl(var(--foreground))",
+                                      }}
+                                    >
+                                      {item.name}
+                                    </div>
+                                    <div
+                                      className="text-xs truncate transition-colors"
+                                      style={{
+                                        color: isItemActive
+                                          ? isDark
+                                            ? "rgba(255,255,255,0.8)"
+                                            : "#4A00BE"
+                                          : "hsl(var(--muted-foreground))",
+                                      }}
+                                    >
+                                      {item.description}
+                                    </div>
+                                  </div>
+                                  {isItemActive && (
+                                    <ChevronRight
+                                      className="h-4 w-4 transition-all duration-200 translate-x-0.5"
+                                      style={{
+                                        color: isDark ? "#C9A7FF" : "#4A00BE",
+                                      }}
+                                    />
+                                  )}
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   )}
-                </Link>
+                </>
               );
-            })}
+            })()}
           </nav>
         </div>
         <div className="px-4 pb-8 mb-4">
@@ -477,7 +775,7 @@ export function DashboardSidebar({
           )}
         </div>
         {/* Spacer to ensure scroll reaches bottom */}
-        <div style={{ height: "48px", minHeight: "48px", flexShrink: 0 }} />
+        <div style={{ height: "80px", minHeight: "80px", flexShrink: 0 }} />
       </div>
     </div>
   );

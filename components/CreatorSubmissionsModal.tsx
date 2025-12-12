@@ -32,6 +32,7 @@ import {
   ExternalLink,
   ArrowUpDown,
   Download,
+  Loader2,
 } from "lucide-react";
 import {
   Select,
@@ -110,6 +111,9 @@ export function CreatorSubmissionsModal({
     "views-desc" | "views-asc" | "date-desc" | "date-asc"
   >("date-desc");
   const [mode, setMode] = useState<"light" | "dark">("light");
+  const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
+    string | null
+  >(null);
 
   // Read mode from data attribute
   useEffect(() => {
@@ -150,6 +154,9 @@ export function CreatorSubmissionsModal({
   };
 
   const handleDownloadReel = async (submissionId: string) => {
+    // Set loading state
+    setDownloadingSubmissionId(submissionId);
+
     // Show downloading toast
     toast({
       title: "Downloading...",
@@ -176,9 +183,11 @@ export function CreatorSubmissionsModal({
         // Show error toast with message from API
         toast({
           title: "Download Failed",
-          description: errorData.error || "Failed to download video. Please try again.",
+          description:
+            errorData.error || "Failed to download video. Please try again.",
           variant: "destructive",
         });
+        setDownloadingSubmissionId(null);
         return;
       }
 
@@ -207,13 +216,16 @@ export function CreatorSubmissionsModal({
         title: "Download Started",
         description: "Your video download has started.",
       });
+      setDownloadingSubmissionId(null);
     } catch (error: any) {
       console.error("Error downloading reel:", error);
       toast({
         title: "Download Failed",
-        description: error.message || "Failed to download video. Please try again.",
+        description:
+          error.message || "Failed to download video. Please try again.",
         variant: "destructive",
       });
+      setDownloadingSubmissionId(null);
     }
   };
 
@@ -1134,11 +1146,30 @@ export function CreatorSubmissionsModal({
                                       onClick={() =>
                                         handleDownloadReel(submission.id)
                                       }
-                                      className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                      disabled={
+                                        downloadingSubmissionId ===
+                                        submission.id
+                                      }
+                                      className={cn(
+                                        "text-xs text-blue-600 hover:underline flex items-center gap-1",
+                                        downloadingSubmissionId ===
+                                          submission.id &&
+                                          "opacity-50 cursor-not-allowed"
+                                      )}
                                       title="Download Reel/Short"
                                     >
-                                      <Download className="h-3 w-3" />
-                                      Download
+                                      {downloadingSubmissionId ===
+                                      submission.id ? (
+                                        <>
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                          Downloading...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Download className="h-3 w-3" />
+                                          Download
+                                        </>
+                                      )}
                                     </button>
                                   )}
                                 </div>
@@ -1325,9 +1356,29 @@ export function CreatorSubmissionsModal({
                                       onClick={() =>
                                         handleDownloadReel(submission.id)
                                       }
+                                      disabled={
+                                        downloadingSubmissionId ===
+                                        submission.id
+                                      }
+                                      className={
+                                        downloadingSubmissionId ===
+                                        submission.id
+                                          ? "opacity-50 cursor-not-allowed"
+                                          : ""
+                                      }
                                     >
-                                      <Download className="h-4 w-4 mr-2" />
-                                      Download Reel/Short
+                                      {downloadingSubmissionId ===
+                                      submission.id ? (
+                                        <>
+                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                          Downloading...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Download className="h-4 w-4 mr-2" />
+                                          Download Reel/Short
+                                        </>
+                                      )}
                                     </DropdownMenuItem>
                                   )}
                                 </>
