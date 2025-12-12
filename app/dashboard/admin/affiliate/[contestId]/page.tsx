@@ -22,6 +22,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 
 type Item = {
   submission_id: string;
@@ -45,6 +47,24 @@ export default function ContestAffiliatePage() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkRate, setBulkRate] = useState<number>(10);
   const [creditType, setCreditType] = useState<"wallet" | "external">("wallet");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  // Get theme from parent layout instead of managing independent state
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      // Check data-mode attribute from parent layout
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const dataMode = modeElement.getAttribute("data-mode");
+        return dataMode === "dark";
+      }
+      // Fallback to data-theme attribute
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme");
+      return dataTheme === "dark";
+    }
+    return false; // Default to light mode
+  });
 
   const totals = useMemo(() => {
     const pending = items.filter((i) => i.status === "pending");
@@ -68,6 +88,55 @@ export default function ContestAffiliatePage() {
     };
   }, [items]);
 
+  const total = items.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+
+  const paginatedItems = useMemo(() => {
+    const start = (page - 1) * limit;
+    return items.slice(start, start + limit);
+  }, [items, page, limit]);
+
+  const paginatedPendingItems = useMemo(
+    () => paginatedItems.filter((i) => i.status === "pending"),
+    [paginatedItems]
+  );
+
+  // Keep current page in range when result size shrinks
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(items.length / limit));
+    if (page > maxPage) {
+      setPage(maxPage);
+    }
+  }, [items.length, limit, page]);
+
+  // Watch for theme changes from parent layout
+  useEffect(() => {
+    const checkTheme = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode");
+        const newIsDark = currentMode === "dark";
+        if (newIsDark !== isDark) {
+          setIsDark(newIsDark);
+        }
+      }
+    };
+
+    checkTheme();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkTheme);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, [isDark]);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -85,14 +154,20 @@ export default function ContestAffiliatePage() {
     if (contestId) fetchData();
   }, [contestId]);
 
-  const toggleAll = (checked: boolean) => {
-    const next: Record<string, boolean> = {};
-    if (checked) {
-      for (const i of items) {
-        if (i.status === "pending") next[i.submission_id] = true;
+  const toggleAllVisible = (checked: boolean) => {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (checked) {
+        for (const i of paginatedPendingItems) {
+          next[i.submission_id] = true;
+        }
+      } else {
+        for (const i of paginatedPendingItems) {
+          delete next[i.submission_id];
+        }
       }
-    }
-    setSelected(next);
+      return next;
+    });
   };
 
   const selectedItems = items.filter((i) => selected[i.submission_id]);
@@ -142,7 +217,12 @@ export default function ContestAffiliatePage() {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card
+        className={cn(
+          "shadow-md hover:shadow-lg transition-shadow duration-200",
+          isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+        )}
+      >
         <CardHeader>
           <CardTitle>Contest Affiliate Earnings</CardTitle>
         </CardHeader>
@@ -236,7 +316,12 @@ export default function ContestAffiliatePage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card
+        className={cn(
+          "shadow-md hover:shadow-lg transition-shadow duration-200",
+          isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+        )}
+      >
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
@@ -245,11 +330,12 @@ export default function ContestAffiliatePage() {
                   <TableHead>
                     <Checkbox
                       checked={
-                        items.length > 0 &&
-                        selectedItems.length ===
-                          items.filter((i) => i.status === "pending").length
+                        paginatedPendingItems.length > 0 &&
+                        paginatedPendingItems.every(
+                          (i) => selected[i.submission_id]
+                        )
                       }
-                      onCheckedChange={(v: any) => toggleAll(Boolean(v))}
+                      onCheckedChange={(v: any) => toggleAllVisible(Boolean(v))}
                     />
                   </TableHead>
                   <TableHead>Winner</TableHead>
@@ -301,7 +387,7 @@ export default function ContestAffiliatePage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  items.map((i) => (
+                  paginatedItems.map((i) => (
                     <TableRow
                       key={i.submission_id}
                       className={i.status === "credited" ? "opacity-60" : ""}
@@ -337,6 +423,20 @@ export default function ContestAffiliatePage() {
                 )}
               </TableBody>
             </Table>
+          </div>
+          <div className="mt-4">
+            <PaginationControls
+              page={page}
+              limit={limit}
+              total={total}
+              totalPages={totalPages}
+              hasNextPage={page < totalPages}
+              hasPreviousPage={page > 1}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
+              loading={loading}
+              isDark={isDark}
+            />
           </div>
         </CardContent>
       </Card>
