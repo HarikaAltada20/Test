@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/download-ytdlp-binary.js",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -12,7 +13,8 @@
     "update:all": "node scripts/update_all.js",
     "convert-images": "node ./scripts/convert-images.mjs",
     "refund-old-withdrawals": "node scripts/refund-old-rejected-withdrawals.js",
-    "test-phantom-wallet": "node scripts/test-phantom-wallet-integration.js"
+    "test-phantom-wallet": "node scripts/test-phantom-wallet-integration.js",
+    "download-ytdlp": "node scripts/download-ytdlp-binary.js"
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",

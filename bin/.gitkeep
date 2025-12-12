@@ -1,0 +1,4 @@
+# This directory contains the yt-dlp binary
+# The binary is downloaded during the build process via the prebuild script
+# On Vercel, this ensures the binary is available for serverless functions
+
