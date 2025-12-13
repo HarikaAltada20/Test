@@ -100,12 +100,40 @@
         console.warn(
           "⚠️ Supabase client not found. Session will be set via cookies."
         );
-        // Fallback: Set cookies directly (Supabase SSR will pick them up)
-        setSupabaseCookies(accessToken, refreshToken);
-        // Reload after a short delay to let cookies be processed
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+        // Wait a bit for the global client to be created
+        let attempts = 0;
+        const maxAttempts = 10;
+        const checkInterval = setInterval(() => {
+          attempts++;
+          if (typeof window.supabase !== "undefined" && window.supabase.auth) {
+            clearInterval(checkInterval);
+            console.log("✅ Found Supabase client, setting session...");
+            window.supabase.auth
+              .setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              })
+              .then(() => {
+                console.log("✅ Supabase session set successfully from mobile");
+                window.dispatchEvent(new CustomEvent("mobileAuthSuccess"));
+                setTimeout(() => {
+                  window.location.reload();
+                }, 500);
+              })
+              .catch((error) => {
+                console.error("❌ Failed to set session via client:", error);
+                // Fallback to cookies
+                setSupabaseCookies(accessToken, refreshToken);
+              });
+          } else if (attempts >= maxAttempts) {
+            clearInterval(checkInterval);
+            console.warn(
+              "⚠️ Supabase client not available after waiting, using cookies"
+            );
+            // Fallback: Set cookies directly (Supabase SSR will pick them up)
+            setSupabaseCookies(accessToken, refreshToken);
+          }
+        }, 100);
       }
     } catch (error) {
       console.error("❌ Error setting Supabase session from mobile:", error);
@@ -115,22 +143,53 @@
   /**
    * Set Supabase authentication cookies directly
    * This is a fallback method when the Supabase client is not available
+   * Uses the correct Supabase SSR cookie format
    */
   function setSupabaseCookies(accessToken, refreshToken) {
     try {
       const domain = window.location.hostname;
       const expires = new Date();
-      expires.setTime(expires.getTime() + 60 * 60 * 1000); // 1 hour
+      expires.setTime(expires.getTime() + 60 * 60 * 24 * 365 * 1000); // 1 year (Supabase default)
 
-      // Set access token cookie
+      // Extract project ref from Supabase URL if available
+      const supabaseUrl = window.location.origin.includes("localhost")
+        ? "http://localhost:3000"
+        : window.location.origin;
+
+      // Try to get project ref from environment or URL
+      let projectRef = "rjprmbjqetxkramwbrqo"; // Default from your Supabase URL
+
+      // Supabase SSR uses this cookie format: sb-<project-ref>-auth-token
+      // The value is a JSON string with access_token and refresh_token
+      const sessionData = {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_at: Math.floor(expires.getTime() / 1000),
+        expires_in: 3600,
+        token_type: "bearer",
+        user: null, // Will be populated by Supabase
+      };
+
+      // Set the main auth token cookie (Supabase SSR format)
+      const cookieName = `sb-${projectRef}-auth-token`;
+      const cookieValue = encodeURIComponent(JSON.stringify(sessionData));
+      document.cookie = `${cookieName}=${cookieValue}; domain=${domain}; path=/; expires=${expires.toUTCString()}; SameSite=Lax; Secure`;
+
+      // Also set individual cookies as fallback
       document.cookie = `sb-access-token=${accessToken}; domain=${domain}; path=/; expires=${expires.toUTCString()}; SameSite=Lax; Secure`;
 
-      // Set refresh token cookie
       if (refreshToken) {
         document.cookie = `sb-refresh-token=${refreshToken}; domain=${domain}; path=/; expires=${expires.toUTCString()}; SameSite=Lax; Secure`;
       }
 
-      console.log("✅ Supabase cookies set directly");
+      console.log("✅ Supabase cookies set directly with SSR format");
+      console.log(`📝 Cookie name: ${cookieName}`);
+
+      // Trigger a navigation to let Next.js middleware pick up the cookies
+      // Use replace to avoid adding to history
+      setTimeout(() => {
+        window.location.replace(window.location.href);
+      }, 100);
     } catch (error) {
       console.error("❌ Error setting cookies:", error);
     }
