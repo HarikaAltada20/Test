@@ -243,6 +243,11 @@ export default async function RootLayout({
             });
           `}
         </Script>
+        {/* Mobile Auth Bridge - Enables native authentication from Flutter app */}
+        <Script
+          src="/mobile-auth-bridge.js"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );
