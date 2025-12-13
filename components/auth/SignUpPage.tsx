@@ -126,10 +126,15 @@ export default function SignUpPage() {
     setIsGoogleLoading(true);
 
     try {
+      // Detect if running in mobile app WebView
+      const isMobile = /GameOfCreators-Mobile/i.test(navigator.userAgent);
+
       const { data, error: signUpError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: isMobile
+            ? `${window.location.origin}/mobile/auth/callback`
+            : `${window.location.origin}/auth/callback`,
           queryParams: {
             access_type: "offline",
             prompt: "consent",
