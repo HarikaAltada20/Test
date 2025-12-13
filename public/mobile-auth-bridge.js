@@ -1,0 +1,138 @@
+/**
+ * Mobile Auth Bridge - Handles session injection from Flutter app
+ * This script should be included in the website to enable native authentication
+ */
+
+(function () {
+  "use strict";
+
+  // Wait for DOM to be ready
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+
+  function init() {
+    // Listen for session injection events from Flutter
+    window.addEventListener("supabaseSessionInjected", handleSessionInjection);
+    window.addEventListener("retrySupabaseInjection", handleRetryInjection);
+
+    // Also check for session in localStorage (fallback)
+    checkForStoredSession();
+  }
+
+  /**
+   * Handle session injection event
+   */
+  function handleSessionInjection(event) {
+    console.log("✅ Supabase session injection event received", event.detail);
+    // The session should already be set by the injected script
+    // Just reload the page to reflect the new authentication state
+    if (event.detail?.authenticated) {
+      window.location.reload();
+    }
+  }
+
+  /**
+   * Retry session injection if Supabase client becomes available
+   */
+  function handleRetryInjection() {
+    // This will be handled by the Flutter injection script
+    console.log("🔄 Retrying Supabase session injection...");
+  }
+
+  /**
+   * Check for stored session in localStorage (fallback method)
+   */
+  function checkForStoredSession() {
+    try {
+      const storedSession = localStorage.getItem("supabase.auth.token");
+      if (storedSession) {
+        console.log("📦 Found stored Supabase session");
+      }
+    } catch (e) {
+      console.warn("⚠️ Could not check localStorage:", e);
+    }
+  }
+
+  /**
+   * Expose a global function to set Supabase session
+   * This can be called from Flutter's JavaScript injection
+   */
+  window.setSupabaseSessionFromMobile = function (accessToken, refreshToken) {
+    try {
+      // Try to find Supabase client in various ways
+      let supabaseClient = null;
+
+      // Method 1: Check if Supabase is available globally
+      if (typeof window.supabase !== "undefined") {
+        supabaseClient = window.supabase;
+      }
+
+      // Method 2: Check if it's in a module (Next.js might have it)
+      if (!supabaseClient && typeof window.__NEXT_DATA__ !== "undefined") {
+        // Try to access from Next.js context
+        console.log("🔍 Checking Next.js context for Supabase client");
+      }
+
+      if (supabaseClient && supabaseClient.auth) {
+        supabaseClient.auth
+          .setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
+          .then(() => {
+            console.log("✅ Supabase session set successfully from mobile");
+            window.dispatchEvent(new CustomEvent("mobileAuthSuccess"));
+            // Reload to reflect authentication state
+            setTimeout(() => {
+              window.location.reload();
+            }, 500);
+          })
+          .catch((error) => {
+            console.error("❌ Failed to set Supabase session:", error);
+            window.dispatchEvent(
+              new CustomEvent("mobileAuthError", { detail: error })
+            );
+          });
+      } else {
+        console.warn(
+          "⚠️ Supabase client not found. Session will be set via cookies."
+        );
+        // Fallback: Set cookies directly (Supabase SSR will pick them up)
+        setSupabaseCookies(accessToken, refreshToken);
+        // Reload after a short delay to let cookies be processed
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
+      }
+    } catch (error) {
+      console.error("❌ Error setting Supabase session from mobile:", error);
+    }
+  };
+
+  /**
+   * Set Supabase authentication cookies directly
+   * This is a fallback method when the Supabase client is not available
+   */
+  function setSupabaseCookies(accessToken, refreshToken) {
+    try {
+      const domain = window.location.hostname;
+      const expires = new Date();
+      expires.setTime(expires.getTime() + 60 * 60 * 1000); // 1 hour
+
+      // Set access token cookie
+      document.cookie = `sb-access-token=${accessToken}; domain=${domain}; path=/; expires=${expires.toUTCString()}; SameSite=Lax; Secure`;
+
+      // Set refresh token cookie
+      if (refreshToken) {
+        document.cookie = `sb-refresh-token=${refreshToken}; domain=${domain}; path=/; expires=${expires.toUTCString()}; SameSite=Lax; Secure`;
+      }
+
+      console.log("✅ Supabase cookies set directly");
+    } catch (error) {
+      console.error("❌ Error setting cookies:", error);
+    }
+  }
+})();
