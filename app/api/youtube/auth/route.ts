@@ -4,25 +4,13 @@ import crypto from 'crypto'; // Import crypto for generating random state
 
 export async function GET(request: NextRequest) {
   try {
-    const oauth2Client = await createOAuthClient();
-    const returnTo = request.nextUrl.searchParams.get('returnTo') || '/dashboard/settings'; // Keep returnTo if needed elsewhere, but don't use as state
-
-    // Detect mobile WebView by custom User-Agent
-    const userAgent = request.headers.get('user-agent') || '';
-    const isMobile = /GameOfCreators-Mobile/i.test(userAgent);
     const origin = new URL(request.url).origin;
-
-    // Use mobile callback when inside the app WebView, otherwise use the web callback
-    if (isMobile) {
-      const mobileRedirect = `${origin}/mobile/youtube/callback`;
-      oauth2Client.redirectUri = mobileRedirect;
-      console.log('YouTube auth: mobile WebView detected, redirectUri:', mobileRedirect);
-    } else {
-      // Keep the default (web) redirect
-      const webRedirect = `${origin}/api/youtube/callback`;
-      oauth2Client.redirectUri = webRedirect;
-      console.log('YouTube auth: web detected, redirectUri:', webRedirect);
-    }
+    // Always use the same redirect URI for both web and mobile (like Instagram)
+    // The mobile callback route will handle redirecting to the API callback
+    const redirectUri = `${origin}/api/youtube/callback`;
+    const oauth2Client = await createOAuthClient(redirectUri);
+    
+    console.log('YouTube auth: redirectUri:', redirectUri);
 
     // Generate a secure random state value
     const state = crypto.randomBytes(16).toString('hex');
@@ -36,14 +24,21 @@ export async function GET(request: NextRequest) {
       // 'https://www.googleapis.com/auth/youtube.channel-memberships.creator', // Access to channel memberships
       // 'https://www.googleapis.com/auth/youtube.upload'         // Upload access (if needed in future)
 
+    // Generate auth URL with explicit parameters to force consent screen
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',           // Get refresh token for long-term access
       scope: scopes,
-      // On mobile, show account picker to ensure the correct Google account is chosen
-      prompt: isMobile ? 'select_account' : 'consent',
-      include_granted_scopes: true,     // Include previously granted scopes
+      // Force consent screen - this ensures users see YouTube permission screen
+      // even if they've granted access before
+      prompt: 'consent',
+      // Don't include previously granted scopes - force fresh consent
+      include_granted_scopes: false,
       state: state                      // Pass the RANDOM state value
     });
+    
+    // Log the generated URL for debugging
+    console.log('YouTube OAuth URL generated:', authUrl.substring(0, 200) + '...');
+    console.log('Contains prompt=consent:', authUrl.includes('prompt=consent'));
 
     // Create a response object to set the cookie
     const response = NextResponse.redirect(authUrl);
