@@ -82,13 +82,48 @@
             access_token: accessToken,
             refresh_token: refreshToken,
           })
-          .then(() => {
+          .then(async () => {
             console.log("✅ Supabase session set successfully from mobile");
             window.dispatchEvent(new CustomEvent("mobileAuthSuccess"));
-            // Reload to reflect authentication state
-            setTimeout(() => {
-              window.location.reload();
-            }, 500);
+
+            // Check user profile to determine redirect path
+            try {
+              const {
+                data: { user },
+              } = await supabaseClient.auth.getUser();
+
+              if (user) {
+                // Check if user has a username
+                const { data: profile } = await supabaseClient
+                  .from("users")
+                  .select("username")
+                  .eq("id", user.id)
+                  .single();
+
+                // Navigate to appropriate page
+                if (!profile || !profile.username) {
+                  console.log(
+                    "📝 User needs to complete profile, redirecting to /choose-username"
+                  );
+                  window.location.href = "/choose-username";
+                } else {
+                  console.log(
+                    "✅ User profile complete, redirecting to /dashboard"
+                  );
+                  window.location.href = "/dashboard";
+                }
+              } else {
+                // Fallback: just reload
+                window.location.reload();
+              }
+            } catch (profileError) {
+              console.warn(
+                "⚠️ Could not check user profile, redirecting to dashboard:",
+                profileError
+              );
+              // Fallback: navigate to dashboard
+              window.location.href = "/dashboard";
+            }
           })
           .catch((error) => {
             console.error("❌ Failed to set Supabase session:", error);
@@ -113,12 +148,48 @@
                 access_token: accessToken,
                 refresh_token: refreshToken,
               })
-              .then(() => {
+              .then(async () => {
                 console.log("✅ Supabase session set successfully from mobile");
                 window.dispatchEvent(new CustomEvent("mobileAuthSuccess"));
-                setTimeout(() => {
-                  window.location.reload();
-                }, 500);
+
+                // Check user profile to determine redirect path
+                try {
+                  const {
+                    data: { user },
+                  } = await window.supabase.auth.getUser();
+
+                  if (user) {
+                    // Check if user has a username
+                    const { data: profile } = await window.supabase
+                      .from("users")
+                      .select("username")
+                      .eq("id", user.id)
+                      .single();
+
+                    // Navigate to appropriate page
+                    if (!profile || !profile.username) {
+                      console.log(
+                        "📝 User needs to complete profile, redirecting to /choose-username"
+                      );
+                      window.location.href = "/choose-username";
+                    } else {
+                      console.log(
+                        "✅ User profile complete, redirecting to /dashboard"
+                      );
+                      window.location.href = "/dashboard";
+                    }
+                  } else {
+                    // Fallback: just reload
+                    window.location.reload();
+                  }
+                } catch (profileError) {
+                  console.warn(
+                    "⚠️ Could not check user profile, redirecting to dashboard:",
+                    profileError
+                  );
+                  // Fallback: navigate to dashboard
+                  window.location.href = "/dashboard";
+                }
               })
               .catch((error) => {
                 console.error("❌ Failed to set session via client:", error);
@@ -185,10 +256,10 @@
       console.log("✅ Supabase cookies set directly with SSR format");
       console.log(`📝 Cookie name: ${cookieName}`);
 
-      // Trigger a navigation to let Next.js middleware pick up the cookies
-      // Use replace to avoid adding to history
+      // Navigate to dashboard to let Next.js middleware pick up the cookies
+      // The middleware will check if user has username and redirect accordingly
       setTimeout(() => {
-        window.location.replace(window.location.href);
+        window.location.href = "/dashboard";
       }, 100);
     } catch (error) {
       console.error("❌ Error setting cookies:", error);
