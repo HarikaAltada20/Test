@@ -11,6 +11,7 @@ import { ConditionalFooter } from "./conditional-footer";
 import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
 import { cookies } from "next/headers";
+import { MobileAuthBridge } from "@/components/MobileAuthBridge";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -243,6 +244,12 @@ export default async function RootLayout({
             });
           `}
         </Script>
+        {/* Mobile Auth Bridge - Enables native authentication from Flutter app */}
+        <MobileAuthBridge />
+        <Script
+          src="/mobile-auth-bridge.js"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );

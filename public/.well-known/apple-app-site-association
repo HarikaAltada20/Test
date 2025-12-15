@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "REPLACE_WITH_YOUR_TEAM_ID.com.gameofcreators.app",
+        "paths": [
+          "/mobile/auth/*",
+          "/mobile/instagram/*",
+          "/mobile/youtube/*"
+        ]
+      }
+    ]
+  }
+}
