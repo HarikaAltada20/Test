@@ -4,7 +4,13 @@ import crypto from 'crypto'; // Import crypto for generating random state
 
 export async function GET(request: NextRequest) {
   try {
-    const oauth2Client = await createOAuthClient();
+    const userAgent = request.headers.get('user-agent') || '';
+    const isMobileApp = userAgent.includes('GameOfCreators-Mobile');
+    const redirectUri = isMobileApp
+      ? `${process.env.NEXT_PUBLIC_APP_URL}/mobile/youtube/callback`
+      : `${process.env.NEXT_PUBLIC_APP_URL}/api/youtube/callback`;
+
+    const oauth2Client = await createOAuthClient(redirectUri);
     const returnTo = request.nextUrl.searchParams.get('returnTo') || '/dashboard/settings'; // Keep returnTo if needed elsewhere, but don't use as state
 
     // Generate a secure random state value

@@ -17,11 +17,13 @@ export function extractYoutubeId(url: string) {
 
 // Since these functions use Node.js-specific modules, we'll only import them
 // and use them in a server context. Client components should use the API endpoints instead.
-export async function createOAuthClient(): Promise<OAuth2Client> {
+export async function createOAuthClient(
+  redirectUri?: string,
+): Promise<OAuth2Client> {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    `${process.env.NEXT_PUBLIC_APP_URL}/api/youtube/callback`
+    redirectUri ?? `${process.env.NEXT_PUBLIC_APP_URL}/api/youtube/callback`,
   );
 
   return oauth2Client;
