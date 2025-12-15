@@ -4,10 +4,25 @@ import crypto from 'crypto'; // Import crypto for generating random state
 
 export async function GET(request: NextRequest) {
   try {
-    // Use a single redirect URI so the entire flow stays in the WebView and
-    // retains Supabase cookies, avoiding session_error on callback.
     const oauth2Client = await createOAuthClient();
     const returnTo = request.nextUrl.searchParams.get('returnTo') || '/dashboard/settings'; // Keep returnTo if needed elsewhere, but don't use as state
+
+    // Detect mobile WebView by custom User-Agent
+    const userAgent = request.headers.get('user-agent') || '';
+    const isMobile = /GameOfCreators-Mobile/i.test(userAgent);
+    const origin = new URL(request.url).origin;
+
+    // Use mobile callback when inside the app WebView, otherwise use the web callback
+    if (isMobile) {
+      const mobileRedirect = `${origin}/mobile/youtube/callback`;
+      oauth2Client.redirectUri = mobileRedirect;
+      console.log('YouTube auth: mobile WebView detected, redirectUri:', mobileRedirect);
+    } else {
+      // Keep the default (web) redirect
+      const webRedirect = `${origin}/api/youtube/callback`;
+      oauth2Client.redirectUri = webRedirect;
+      console.log('YouTube auth: web detected, redirectUri:', webRedirect);
+    }
 
     // Generate a secure random state value
     const state = crypto.randomBytes(16).toString('hex');
@@ -24,7 +39,8 @@ export async function GET(request: NextRequest) {
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',           // Get refresh token for long-term access
       scope: scopes,
-      prompt: 'consent',                // Always show consent screen to get refresh token
+      // On mobile, show account picker to ensure the correct Google account is chosen
+      prompt: isMobile ? 'select_account' : 'consent',
       include_granted_scopes: true,     // Include previously granted scopes
       state: state                      // Pass the RANDOM state value
     });
