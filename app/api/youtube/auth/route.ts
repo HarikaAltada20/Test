@@ -4,13 +4,9 @@ import crypto from 'crypto'; // Import crypto for generating random state
 
 export async function GET(request: NextRequest) {
   try {
-    const userAgent = request.headers.get('user-agent') || '';
-    const isMobileApp = userAgent.includes('GameOfCreators-Mobile');
-    const redirectUri = isMobileApp
-      ? `${process.env.NEXT_PUBLIC_APP_URL}/mobile/youtube/callback`
-      : `${process.env.NEXT_PUBLIC_APP_URL}/api/youtube/callback`;
-
-    const oauth2Client = await createOAuthClient(redirectUri);
+    // Use a single redirect URI so the entire flow stays in the WebView and
+    // retains Supabase cookies, avoiding session_error on callback.
+    const oauth2Client = await createOAuthClient();
     const returnTo = request.nextUrl.searchParams.get('returnTo') || '/dashboard/settings'; // Keep returnTo if needed elsewhere, but don't use as state
 
     // Generate a secure random state value
