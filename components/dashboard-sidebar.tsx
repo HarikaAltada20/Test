@@ -172,6 +172,12 @@ export function DashboardSidebar({
       description: "Commissions & credits",
     },
     {
+      name: "Blogs",
+      href: "/dashboard/admin/blogs",
+      icon: FileText,
+      description: "Create and manage blog posts",
+    },
+    {
       name: "Support",
       href: "/dashboard/admin/support",
       icon: HelpCircle,

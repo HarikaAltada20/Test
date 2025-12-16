@@ -140,6 +140,7 @@ export function Footer() {
             <ul className="space-y-3">
               {[
                 { name: "About Us", href: "/about" },
+                { name: "blogs", href: "/blog" },
                 { name: "Contact", href: "/contact" },
                 { name: "Privacy Policy", href: "/privacy-policy" },
                 { name: "Terms of Service", href: "/terms-of-service" },
@@ -157,28 +158,27 @@ export function Footer() {
           </nav>
 
           {/* Contact Information */}
-         {/* Contact Information */}
-<div className="max-w-xs space-y-4 text-gray-300 text-lg">
-  <h3 className="font-semibold text-xl mb-6 text-white">
-    Contact Information
-  </h3>
-  <ul className="space-y-4">
-    <li className="flex items-center space-x-3">
-      <Mail className="h-5 w-5 text-[#FDC155]" />
-      <a
-        href="mailto:support@gameofcreators.com"
-        className="hover:underline hover:text-white transition-colors duration-200"
-      >
-        support@gameofcreators.com
-      </a>
-    </li>
-    <li className="flex items-center space-x-3">
-      <MapPin className="h-5 w-5 text-[#FDC155]" />
-      <span>San Francisco, CA</span>
-    </li>
-  </ul>
-</div>
-
+          {/* Contact Information */}
+          <div className="max-w-xs space-y-4 text-gray-300 text-lg">
+            <h3 className="font-semibold text-xl mb-6 text-white">
+              Contact Information
+            </h3>
+            <ul className="space-y-4">
+              <li className="flex items-center space-x-3">
+                <Mail className="h-5 w-5 text-[#FDC155]" />
+                <a
+                  href="mailto:support@gameofcreators.com"
+                  className="hover:underline hover:text-white transition-colors duration-200"
+                >
+                  support@gameofcreators.com
+                </a>
+              </li>
+              <li className="flex items-center space-x-3">
+                <MapPin className="h-5 w-5 text-[#FDC155]" />
+                <span>San Francisco, CA</span>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
 
