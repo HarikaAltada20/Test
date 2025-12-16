@@ -2,7 +2,7 @@
   "relation": ["delegate_permission/common.handle_all_urls"],
   "target": {
     "namespace": "android_app",
-    "package_name": "com.gameofcreators.app",
+    "package_name": "com.gameofcreators.mobile",
     "sha256_cert_fingerprints": [
       "E2:F3:E3:A7:74:D5:86:82:B2:01:58:3B:F3:3E:24:C6:28:D4:24:90:EF:8D:9C:D3:DC:6F:88:C8:7C:8C:14:2B"
     ]
