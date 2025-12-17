@@ -140,7 +140,7 @@ export function Footer() {
             <ul className="space-y-3">
               {[
                 { name: "About Us", href: "/about" },
-                { name: "blogs", href: "/blog" },
+                { name: "Blogs", href: "/blog" },
                 { name: "Contact", href: "/contact" },
                 { name: "Privacy Policy", href: "/privacy-policy" },
                 { name: "Terms of Service", href: "/terms-of-service" },
