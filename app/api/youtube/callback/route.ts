@@ -60,7 +60,13 @@ export async function GET(request: NextRequest) {
       return response;
     }
 
-    const oauth2Client = await createOAuthClient();
+    // Use the same redirect URI that was used in the auth request
+    // This must match exactly what Google expects
+    const origin = new URL(request.url).origin;
+    const redirectUri = `${origin}/api/youtube/callback`;
+    const oauth2Client = await createOAuthClient(redirectUri);
+    
+    console.log('Exchanging code for tokens with redirect URI:', redirectUri);
     const { tokens } = await oauth2Client.getToken(code);
 
     console.log('Received YouTube tokens');

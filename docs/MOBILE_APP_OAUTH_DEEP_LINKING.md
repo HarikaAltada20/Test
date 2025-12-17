@@ -483,7 +483,7 @@ if (isMobile) {
     <key>CFBundleTypeRole</key>
     <string>Editor</string>
     <key>CFBundleURLName</key>
-    <string>com.gameofcreators.app</string>
+    <string>com.gameofcreators.mobile</string>
     <key>CFBundleURLSchemes</key>
     <array>
       <string>gameofcreators</string>

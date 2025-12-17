@@ -871,7 +871,7 @@ adb shell am start -W -a android.intent.action.VIEW \
 adb shell dumpsys package d | grep gameofcreators
 
 # Clear app data (useful for testing fresh installs)
-adb shell pm clear com.gameofcreators.app
+adb shell pm clear com.gameofcreators.mobile
 ```
 
 ### iOS Deep Link Testing

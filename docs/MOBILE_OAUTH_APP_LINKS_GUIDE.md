@@ -148,7 +148,7 @@ Now create the file:
   "relation": ["delegate_permission/common.handle_all_urls"],
   "target": {
     "namespace": "android_app",
-    "package_name": "com.gameofcreators.app",
+    "package_name": "com.gameofcreators.mobile",
     "sha256_cert_fingerprints": [
       "AB:CD:EF:12:34:56:78:90:AB:CD:EF:12:34:56:78:90:AB:CD:EF:12:34:56:78:90:AB:CD:EF:12:34:56:78:90"
     ]
@@ -157,7 +157,7 @@ Now create the file:
 ```
 
 **⚠️ Important:** 
-- Replace `com.gameofcreators.app` with your actual package name
+- Replace `com.gameofcreators.mobile` with your actual package name
 - Replace the fingerprint with your actual SHA-256
 - For production, add BOTH debug and release fingerprints
 
@@ -183,7 +183,7 @@ This file does the same thing for iOS.
     "apps": [],
     "details": [
       {
-        "appID": "TEAM_ID.com.gameofcreators.app",
+        "appID": "TEAM_ID.com.gameofcreators.mobile",
         "paths": [
           "/mobile/auth/*",
           "/mobile/instagram/*",
@@ -204,7 +204,7 @@ This file does the same thing for iOS.
 - No `.json` extension for this file!
 - Must be served with `Content-Type: application/json`
 - Replace `TEAM_ID` with your actual Apple Team ID
-- Replace `com.gameofcreators.app` with your bundle identifier
+- Replace `com.gameofcreators.mobile` with your bundle identifier
 
 **Why?** This tells iOS: "URLs matching these paths should open in the app"
 
@@ -879,7 +879,7 @@ https://www.gameofcreators.com/mobile/youtube/callback
 
 ```xml
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.gameofcreators.app">
+    package="com.gameofcreators.mobile">
 
     <application ...>
         <activity
@@ -996,7 +996,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 class DeepLinkService {
-  static const platform = MethodChannel('com.gameofcreators.app/deeplink');
+  static const platform = MethodChannel('com.gameofcreators.mobile/deeplink');
   
   // Callback functions
   Function(Uri)? onAuthCallback;
@@ -1068,7 +1068,7 @@ import Flutter
 
 @UIApplicationMain
 @objc class AppDelegate: FlutterAppDelegate {
-  private let CHANNEL = "com.gameofcreators.app/deeplink"
+  private let CHANNEL = "com.gameofcreators.mobile/deeplink"
   private var deepLinkChannel: FlutterMethodChannel?
   
   override func application(
@@ -1108,7 +1108,7 @@ import Flutter
 **For Android, create: `android/app/src/main/kotlin/com/gameofcreators/app/MainActivity.kt`**
 
 ```kotlin
-package com.gameofcreators.app
+package com.gameofcreators.mobile
 
 import android.content.Intent
 import android.net.Uri
@@ -1118,7 +1118,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
-    private val CHANNEL = "com.gameofcreators.app/deeplink"
+    private val CHANNEL = "com.gameofcreators.mobile/deeplink"
     private var methodChannel: MethodChannel? = null
     
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -1431,7 +1431,7 @@ adb shell am start -W -a android.intent.action.VIEW \
 
 ```bash
 # Check if App Links are verified
-adb shell pm get-app-links com.gameofcreators.app
+adb shell pm get-app-links com.gameofcreators.mobile
 
 # Should show: verified
 ```
@@ -1494,7 +1494,7 @@ xcrun simctl openurl booted "https://www.gameofcreators.com/mobile/auth/callback
 
 ```bash
 # Android: Verify domain association
-adb shell pm get-app-links com.gameofcreators.app
+adb shell pm get-app-links com.gameofcreators.mobile
 
 # If not verified, check:
 1. assetlinks.json is accessible
@@ -1506,7 +1506,7 @@ adb shell pm get-app-links com.gameofcreators.app
 **Fix:**
 ```bash
 # Force re-verification (Android 12+)
-adb shell pm verify-app-links --re-verify com.gameofcreators.app
+adb shell pm verify-app-links --re-verify com.gameofcreators.mobile
 ```
 
 ### Issue: Deep link opens in browser instead of app
@@ -1519,7 +1519,7 @@ adb shell pm verify-app-links --re-verify com.gameofcreators.app
 **Fix:**
 ```bash
 # Android: Reset app preferences
-adb shell pm clear-default-app-links com.gameofcreators.app
+adb shell pm clear-default-app-links com.gameofcreators.mobile
 ```
 
 ### Issue: OAuth completes but doesn't return to app

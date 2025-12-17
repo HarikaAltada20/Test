@@ -237,7 +237,7 @@ userAgent: 'GameOfCreators-Mobile/1.0.0 (Android)'
 
 **Fix**: Clear cookies and app data:
 ```bash
-adb shell pm clear com.gameofcreators.app  # Android
+adb shell pm clear com.gameofcreators.mobile  # Android
 ```
 
 ### Issue: Instagram token expires quickly
