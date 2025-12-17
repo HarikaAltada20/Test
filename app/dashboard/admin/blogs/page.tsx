@@ -2,13 +2,7 @@
 
 import { useEffect, useLayoutEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -17,6 +11,14 @@ import { toast } from "sonner";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type BlogStatus = "draft" | "published" | "archived";
 
@@ -54,6 +56,7 @@ export default function AdminBlogsPage() {
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(9);
@@ -540,7 +543,7 @@ export default function AdminBlogsPage() {
                               }
                               onClick={(e) => {
                                 e.stopPropagation();
-                                deletePost(post.id);
+                                setConfirmDeleteId(post.id);
                               }}
                             >
                               <Trash2 className="h-4 w-4 mb-[2px]" />
@@ -580,7 +583,7 @@ export default function AdminBlogsPage() {
                               }
                               onClick={(e) => {
                                 e.stopPropagation();
-                                deletePost(post.id);
+                                setConfirmDeleteId(post.id);
                               }}
                             >
                               <Trash2 className="h-4 w-4 mb-[2px]" />
@@ -623,6 +626,56 @@ export default function AdminBlogsPage() {
               />
             </div>
           )}
+
+          {/* Delete confirmation dialog */}
+          <Dialog
+            open={!!confirmDeleteId}
+            onOpenChange={(open) => {
+              if (!open) setConfirmDeleteId(null);
+            }}
+            isdark={isDark}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete blog post?</DialogTitle>
+                <DialogDescription  className="text-md">
+                  Are you sure you want to delete this blog? This action cannot
+                  be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  className={cn(
+                    "w-full text-md rounded-full",
+                    isDark
+                      ? "bg-[#7F39EC] py-3"
+                      : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+                  )}
+                  onClick={async () => {
+                    if (!confirmDeleteId) return;
+                    await deletePost(confirmDeleteId);
+                    setConfirmDeleteId(null);
+                  }}
+                  disabled={!!deletingId}
+                >
+                  {deletingId ? "Deleting..." : "Delete"}
+                </Button>
+                <Button
+                  className={cn(
+                    "w-full text-md rounded-full",
+                    isDark
+                      ? "py-3 border border-[#FF5353] text-[#FF5353]"
+                      : "bg-[#FF323224] text-[#E50000] py-4"
+                  )}
+                  variant="outline"
+                  onClick={() => setConfirmDeleteId(null)}
+                  disabled={!!deletingId}
+                >
+                  Cancel
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>
