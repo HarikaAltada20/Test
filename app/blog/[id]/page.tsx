@@ -106,7 +106,7 @@ export default async function BlogDetailPage({ params }: BlogPageProps) {
   }`;
 
   return (
-    <div className="min-h-screen bg-[#000825] text-white">
+    <div className="min-h-screen bg-[#000825] text-white border-b border-[#A87313]">
       {/* Subtle radial background glow to match hero theme */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-40 left-1/2 h-60 w-60 sm:h-80 sm:w-80 -translate-x-1/2 rounded-full bg-purple-600/30 blur-3xl" />

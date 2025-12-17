@@ -17,7 +17,8 @@ type BlogPost = {
 const formatDate = (iso: string | null) => {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
+  // Use a fixed locale so server and client render the same string and avoid hydration mismatches
+  return d.toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",

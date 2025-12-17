@@ -36,7 +36,7 @@ export default async function BlogIndexPage() {
   }[];
 
   return (
-    <div className="min-h-screen bg-[#000825] text-white overflow-hidden">
+    <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
       <div className="relative z-20">
         {/* Floating Gaming Elements */}
         <section className="pt-20 pb-20 md:pt-28 md:pb-24 relative overflow-hidden">
