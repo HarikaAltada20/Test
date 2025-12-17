@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
 
-type BlogStatus = "draft" | "published" | "archived";
+type BlogStatus = "draft" | "published";
 
 interface CreateBlogRequest {
   title: string;
   excerpt?: string;
   contentHtml: string;
   category?: string;
-  tags?: string[] | string;
   thumbnailUrl?: string;
   readTimeMinutes?: number;
   status?: BlogStatus;
@@ -45,7 +44,7 @@ export async function GET(req: NextRequest) {
       const { data, error } = await supabase
         .from("blog_posts")
         .select(
-          "id, title, short_description, content, category, tags, thumbnail, read_time_minutes, status, created_at, updated_at, published_at"
+          "id, title, short_description, content, category, thumbnail, read_time_minutes, status, created_at, updated_at, published_at"
         )
         .eq("id", id)
         .single();
@@ -64,7 +63,7 @@ export async function GET(req: NextRequest) {
     let query = supabase
       .from("blog_posts")
       .select(
-        "id, title, short_description, category, tags, thumbnail, read_time_minutes, status, created_at, updated_at, published_at"
+        "id, title, short_description, category, thumbnail, read_time_minutes, status, created_at, updated_at, published_at"
       )
       .order("created_at", { ascending: false })
       .limit(limit);
@@ -111,7 +110,6 @@ export async function POST(req: NextRequest) {
       excerpt,
       contentHtml,
       category,
-      tags,
       thumbnailUrl,
       readTimeMinutes,
       status = "draft",
@@ -122,23 +120,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
     }
 
-    if (!contentHtml || !contentHtml.trim()) {
-      return NextResponse.json(
-        { error: "Content is required" },
-        { status: 400 }
-      );
-    }
-
-    let tagsString: string | null = null;
-    if (Array.isArray(tags)) {
-      const cleaned = tags.map((t) => t.trim()).filter(Boolean);
-      tagsString = cleaned.length > 0 ? cleaned.join(", ") : null;
-    } else if (typeof tags === "string") {
-      const cleaned = tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
-      tagsString = cleaned.length > 0 ? cleaned.join(", ") : null;
+    // Only require content when publishing
+    if (status === "published") {
+      if (!contentHtml || !contentHtml.trim() || contentHtml === "<p></p>") {
+        return NextResponse.json(
+          { error: "Content is required to publish" },
+          { status: 400 }
+        );
+      }
     }
 
     let finalPublishedAt: string | null = null;
@@ -155,9 +144,8 @@ export async function POST(req: NextRequest) {
       .insert({
         title: title.trim(),
         short_description: excerpt?.trim() || null,
-        content: contentHtml,
+        content: contentHtml?.trim() || null,
         category: category?.trim() || null,
-        tags: tagsString,
         thumbnail: thumbnailUrl?.trim() || null,
         read_time_minutes:
           typeof readTimeMinutes === "number" && !isNaN(readTimeMinutes)
@@ -216,7 +204,6 @@ export async function PATCH(req: NextRequest) {
       excerpt?: string;
       contentHtml?: string;
       category?: string;
-      tags?: string[] | string;
       thumbnailUrl?: string;
       readTimeMinutes?: number;
     };
@@ -228,7 +215,6 @@ export async function PATCH(req: NextRequest) {
       excerpt,
       contentHtml,
       category,
-      tags,
       thumbnailUrl,
       readTimeMinutes,
     } = body;
@@ -245,7 +231,7 @@ export async function PATCH(req: NextRequest) {
     };
 
     if (status) {
-      if (!["draft", "published", "archived"].includes(status)) {
+      if (!["draft", "published"].includes(status)) {
         return NextResponse.json(
           { error: "Invalid status value" },
           { status: 400 }
@@ -271,19 +257,6 @@ export async function PATCH(req: NextRequest) {
 
     if (category !== undefined) {
       updateData.category = category.trim() || null;
-    }
-
-    if (tags !== undefined) {
-      if (Array.isArray(tags)) {
-        const cleaned = tags.map((t) => t.trim()).filter(Boolean);
-        updateData.tags = cleaned.length > 0 ? cleaned.join(", ") : null;
-      } else if (typeof tags === "string") {
-        const cleaned = tags
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean);
-        updateData.tags = cleaned.length > 0 ? cleaned.join(", ") : null;
-      }
     }
 
     if (thumbnailUrl !== undefined) {

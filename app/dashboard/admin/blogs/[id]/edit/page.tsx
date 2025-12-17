@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { createClient } from "@/utils/supabase/client";
 import { Upload, Trash } from "lucide-react";
 import type { NovelEditorRef } from "@/components/novel-editor";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 const NovelEditor = dynamic(() => import("@/components/novel-editor"), {
   ssr: false,
@@ -54,10 +55,12 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
   const [isDark, setIsDark] = useState<boolean>(readIsDarkFromDom);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [submitAction, setSubmitAction] = useState<"draft" | "published">(
+    "draft"
+  );
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
-  const [tags, setTags] = useState("");
   const [excerpt, setExcerpt] = useState("");
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
@@ -100,9 +103,6 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
         const post = json.post;
         setTitle(post.title || "");
         setCategory(post.category || "");
-        setTags(
-          Array.isArray(post.tags) ? post.tags.join(", ") : post.tags || ""
-        );
         setExcerpt(post.short_description || "");
         setReadTime(
           typeof post.read_time_minutes === "number"
@@ -183,9 +183,32 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
       return;
     }
 
-    if (!contentText || contentText === "<p></p>") {
-      toast.error("Content is required");
-      return;
+    // When publishing, require all main fields to be filled
+    if (submitAction === "published") {
+      if (!contentText || contentText === "<p></p>") {
+        toast.error("Content is required to publish");
+        return;
+      }
+      if (!category.trim()) {
+        toast.error("Category is required to publish");
+        return;
+      }
+      if (!excerpt.trim()) {
+        toast.error("Short description is required to publish");
+        return;
+      }
+      if (
+        !readTime ||
+        Number(readTime) <= 0 ||
+        Number.isNaN(Number(readTime))
+      ) {
+        toast.error("Valid read time (in minutes) is required to publish");
+        return;
+      }
+      if (!thumbnailPreview && !thumbnailFile) {
+        toast.error("Thumbnail image is required to publish");
+        return;
+      }
     }
 
     setSaving(true);
@@ -213,16 +236,23 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
         } = supabase.storage.from("contest-assets").getPublicUrl(fileName);
 
         uploadedThumbnailUrl = publicUrl;
+      } else if (thumbnailPreview && thumbnailPreview.startsWith("http")) {
+        // Preserve existing thumbnail URL if no new file was uploaded
+        uploadedThumbnailUrl = thumbnailPreview;
       }
+
+      const status: "draft" | "published" =
+        submitAction === "published" ? "published" : "draft";
 
       const body: any = {
         id,
         title: title.trim(),
         excerpt: excerpt.trim() || undefined,
-        contentHtml: contentText,
+        contentHtml:
+          contentText && contentText !== "<p></p>" ? contentText : undefined,
         category: category.trim() || undefined,
-        tags: tags.trim() || undefined,
         readTimeMinutes: readTime ? Number(readTime) : undefined,
+        status,
       };
 
       if (uploadedThumbnailUrl !== undefined) {
@@ -242,7 +272,11 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
         throw new Error(json.error || "Failed to update blog post");
       }
 
-      toast.success("Blog post updated successfully");
+      toast.success(
+        submitAction === "published"
+          ? "Blog post published successfully"
+          : "Blog post saved as draft"
+      );
       router.push("/dashboard/admin/blogs");
     } catch (error: any) {
       toast.error(
@@ -254,11 +288,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
   };
 
   if (loading) {
-    return (
-      <div className="py-8 text-center text-sm sm:text-base">
-        Loading blog...
-      </div>
-    );
+    return <PageLoadingSpinner mode={isDark ? "dark" : "light"} />;
   }
 
   return (
@@ -333,21 +363,6 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                   placeholder="e.g. UGC, Influencer Marketing, eCommerce"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className={cn(
-                    isDark
-                      ? "bg-[#170337] border-gray-600 text-white placeholder:text-gray-400"
-                      : ""
-                  )}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="tags">Tags (comma separated)</Label>
-                <Input
-                  id="tags"
-                  placeholder="e.g. TikTok hooks, UGC platform, creator marketing"
-                  value={tags}
-                  onChange={(e) => setTags(e.target.value)}
                   className={cn(
                     isDark
                       ? "bg-[#170337] border-gray-600 text-white placeholder:text-gray-400"
@@ -458,7 +473,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="excerpt">Short description / excerpt</Label>
+              <Label htmlFor="excerpt">Short description</Label>
               <Textarea
                 id="excerpt"
                 placeholder="Short summary shown in blog cards and previews"
@@ -490,15 +505,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                   isDark={isDark}
                 />
               </div>
-              <p
-                className={cn(
-                  "text-xs sm:text-sm",
-                  isDark ? "text-gray-300" : "text-muted-foreground"
-                )}
-              >
-                Use headings, lists, and storytelling similar to Insense blog
-                articles to make the content scannable and engaging.
-              </p>
+             
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -510,8 +517,24 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? "Saving..." : "Save Changes"}
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={saving}
+                onClick={() => setSubmitAction("draft")}
+              >
+                {saving && submitAction === "draft"
+                  ? "Saving..."
+                  : "Save Draft"}
+              </Button>
+              <Button
+                type="submit"
+                disabled={saving}
+                onClick={() => setSubmitAction("published")}
+              >
+                {saving && submitAction === "published"
+                  ? "Publishing..."
+                  : "Publish"}
               </Button>
             </div>
           </form>

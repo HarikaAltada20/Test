@@ -7,7 +7,6 @@ create table if not exists public.blog_posts (
   short_description text,
   content text not null,
   category text,
-  tags text,
   thumbnail text,
   read_time_minutes integer,
   status text not null default 'draft', -- 'draft' | 'published' | 'archived'

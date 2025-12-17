@@ -1,9 +1,9 @@
 import { createClient } from "@/utils/supabase/server";
-import Link from "next/link";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 import { Sparkles, Star, Heart, Palette, Trophy, Crown } from "lucide-react";
 import SocialPair from "@/public/images/social_pair.avif";
+import { BlogPostsGrid } from "@/app/blog/BlogPostsGrid";
 
 // Always fetch fresh data so newly published blogs show up immediately
 export const revalidate = 0;
@@ -14,8 +14,10 @@ export default async function BlogIndexPage() {
   const { data: posts, error } = await supabase
     .from("blog_posts")
     .select(
-      "id, title, short_description, thumbnail, read_time_minutes, published_at, status"
+      "id, title, short_description, thumbnail, read_time_minutes, published_at, status, category"
     )
+    .eq("status", "published")
+    .not("published_at", "is", null)
     .order("published_at", { ascending: false });
 
   if (error) {
@@ -30,22 +32,8 @@ export default async function BlogIndexPage() {
     read_time_minutes: number | null;
     published_at: string | null;
     status?: string | null;
+    category: string | null;
   }[];
-
-  const formatDate = (iso: string | null) => {
-    if (!iso) return "";
-    const d = new Date(iso);
-    return d.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
-
-  const stripHtml = (html: string | null | undefined): string => {
-    if (!html) return "";
-    return html.replace(/<[^>]*>/g, "").trim();
-  };
 
   return (
     <div className="min-h-screen bg-[#000825] text-white overflow-hidden">
@@ -129,7 +117,7 @@ export default async function BlogIndexPage() {
                         "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
                     }}
                   >
-                    Blog
+                    Blogs
                   </span>
                   <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl"></div>
                 </span>
@@ -141,25 +129,25 @@ export default async function BlogIndexPage() {
               className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
               style={{ animationDelay: "2s" }}
             >
-              Insights on{" "}
+              Creator marketing
               <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">
-                UGC
+                {" "}
+                insights for
               </span>
               ,{" "}
               <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">
-                creator marketing
-              </span>
-              , and product seeding to help you run campaigns like the best
-              brands.
+                brands and creators
+              </span>{" "}
+              focused on performance-driven content.
             </p>
           </div>
         </section>
 
         {/* Blog Posts Section */}
         <section className="py-16 md:py-24 relative z-10">
-          <div className="max-w-[1250px] mx-auto px-4">
+          <div className="max-w-[1300px] mx-auto px-4">
             {/* Latest Heading */}
-            <div className="text-center mb-12">
+            {/* <div className="text-center mb-12">
               <h2
                 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl flex flex-wrap justify-center gap-x-2 md:gap-x-3 mb-4 leading-tight slide-up"
                 style={{ animationDelay: "0.3s" }}
@@ -189,48 +177,14 @@ export default async function BlogIndexPage() {
                 Discover the latest trends, updates, and platform-specific
                 strategies.
               </p>
-            </div>
+            </div> */}
 
             {safePosts.length === 0 ? (
               <p className="text-center text-lg text-slate-300">
                 No published blog posts yet.
               </p>
             ) : (
-              <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-                {safePosts.map((post) => (
-                  <Link
-                    key={post.id}
-                    href={`/blog/${post.id}`}
-                    className="group rounded-xl border border-slate-700/50 bg-slate-900/50 backdrop-blur-sm shadow-lg overflow-hidden flex flex-col hover:shadow-xl hover:border-amber-500/50 transition-all duration-300"
-                  >
-                    {post.thumbnail && (
-                      <div className="w-full h-72 bg-slate-800/50 overflow-hidden">
-                        <img
-                          src={post.thumbnail}
-                          alt={post.title}
-                          className="w-full h-full object-cover group-hover:scale-[1.05] transition-transform duration-300"
-                        />
-                      </div>
-                    )}
-                    <div className="p-7 flex flex-col gap-4 flex-1">
-                      <h2 className="font-semibold text-lg lg:text-xl line-clamp-2 text-white group-hover:text-amber-400 transition-colors">
-                        {post.title}
-                      </h2>
-                      {stripHtml(post.short_description).length > 0 && (
-                        <p className="text-sm lg:text-base text-slate-300 line-clamp-3">
-                          {stripHtml(post.short_description)}
-                        </p>
-                      )}
-                      <div className="mt-auto flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-700/50">
-                        <span>{formatDate(post.published_at)}</span>
-                        {post.read_time_minutes ? (
-                          <span>{post.read_time_minutes} min read</span>
-                        ) : null}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
+              <BlogPostsGrid posts={safePosts} />
             )}
           </div>
         </section>

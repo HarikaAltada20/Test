@@ -26,6 +26,12 @@ interface NovelEditorProps {
   isDark?: boolean;
   onChange?: (html: string, json: any) => void;
   onImageUpload?: (file: File) => Promise<string>;
+  /**
+   * Controls whether image upload/delete UI is enabled.
+   * - Blogs (create/edit): should be true (default).
+   * - Contests (create/edit): should be false.
+   */
+  enableImages?: boolean;
 }
 
 export interface NovelEditorRef {
@@ -43,6 +49,7 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
       height = "300px",
       onChange,
       onImageUpload,
+      enableImages = true,
     },
     ref
   ) => {
@@ -599,80 +606,84 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
           <div
             className={`w-px mx-1 ${isDark ? "bg-gray-600" : "bg-gray-300"}`}
           ></div>
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className={`px-2 py-1 text-sm border rounded flex items-center ${
-              isDark
-                ? "text-gray-300 border-gray-600 hover:bg-gray-700"
-                : "hover:bg-gray-100"
-            }`}
-            title="Insert Image"
-          >
-            <ImageIcon className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (editorInstance?.isActive("image")) {
-                // Delete the selected image
-                editorInstance.chain().focus().deleteSelection().run();
-                toast.success("Image removed");
-              } else {
-                // Try to find and delete image at cursor position
-                const { state } = editorInstance;
+          {enableImages && (
+            <>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className={`px-2 py-1 text-sm border rounded flex items-center ${
+                  isDark
+                    ? "text-gray-300 border-gray-600 hover:bg-gray-700"
+                    : "hover:bg-gray-100"
+                }`}
+                title="Insert Image"
+              >
+                <ImageIcon className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (editorInstance?.isActive("image")) {
+                    // Delete the selected image
+                    editorInstance.chain().focus().deleteSelection().run();
+                    toast.success("Image removed");
+                  } else {
+                    // Try to find and delete image at cursor position
+                    const { state } = editorInstance;
 
-                // Check if we're in or near an image node
-                let imagePos: number | null = null;
-                state.doc.descendants((node: any, pos: number) => {
-                  if (node.type.name === "image" && imagePos === null) {
-                    imagePos = pos;
+                    // Check if we're in or near an image node
+                    let imagePos: number | null = null;
+                    state.doc.descendants((node: any, pos: number) => {
+                      if (node.type.name === "image" && imagePos === null) {
+                        imagePos = pos;
+                      }
+                    });
+
+                    if (imagePos !== null) {
+                      // Select and delete the image
+                      editorInstance
+                        .chain()
+                        .setTextSelection(imagePos)
+                        .deleteSelection()
+                        .run();
+                      toast.success("Image removed");
+                    } else {
+                      toast.error(
+                        "Please click on an image to select it, then click delete"
+                      );
+                    }
                   }
-                });
-
-                if (imagePos !== null) {
-                  // Select and delete the image
-                  editorInstance
-                    .chain()
-                    .setTextSelection(imagePos)
-                    .deleteSelection()
-                    .run();
-                  toast.success("Image removed");
-                } else {
-                  toast.error(
-                    "Please click on an image to select it, then click delete"
-                  );
+                }}
+                className={`px-2 py-1 text-sm border rounded flex items-center ${
+                  isDark
+                    ? `text-gray-300 border-gray-600 ${
+                        editorInstance?.isActive("image")
+                          ? "hover:bg-red-600/20 hover:border-red-500 hover:text-red-400 bg-red-600/10"
+                          : "hover:bg-gray-700"
+                      }`
+                    : `${
+                        editorInstance?.isActive("image")
+                          ? "hover:bg-red-100 hover:border-red-300 hover:text-red-600 bg-red-50"
+                          : "hover:bg-gray-100"
+                      }`
+                }`}
+                title={
+                  editorInstance?.isActive("image")
+                    ? "Delete Selected Image"
+                    : "Click on an image first, then click here to delete"
                 }
-              }
-            }}
-            className={`px-2 py-1 text-sm border rounded flex items-center ${
-              isDark
-                ? `text-gray-300 border-gray-600 ${
-                    editorInstance?.isActive("image")
-                      ? "hover:bg-red-600/20 hover:border-red-500 hover:text-red-400 bg-red-600/10"
-                      : "hover:bg-gray-700"
-                  }`
-                : `${
-                    editorInstance?.isActive("image")
-                      ? "hover:bg-red-100 hover:border-red-300 hover:text-red-600 bg-red-50"
-                      : "hover:bg-gray-100"
-                  }`
-            }`}
-            title={
-              editorInstance?.isActive("image")
-                ? "Delete Selected Image"
-                : "Click on an image first, then click here to delete"
-            }
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileInputChange}
-            className="hidden"
-          />
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileInputChange}
+                className="hidden"
+              />
+            </>
+          )}
         </div>
 
         {/* Editor Content */}

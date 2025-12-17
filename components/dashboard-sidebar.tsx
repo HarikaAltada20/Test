@@ -26,6 +26,7 @@ import {
   HelpCircle,
   Award,
   PlusCircle,
+  Newspaper,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -174,7 +175,7 @@ export function DashboardSidebar({
     {
       name: "Blogs",
       href: "/dashboard/admin/blogs",
-      icon: FileText,
+      icon: Newspaper,
       description: "Create and manage blog posts",
     },
     {

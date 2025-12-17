@@ -49,7 +49,6 @@ export default function AdminBlogsCreatePage() {
   const [isDark, setIsDark] = useState<boolean>(readIsDarkFromDom);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
-  const [tags, setTags] = useState("");
   const [excerpt, setExcerpt] = useState("");
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
@@ -97,9 +96,32 @@ export default function AdminBlogsCreatePage() {
       return;
     }
 
-    if (!contentText || contentText === "<p></p>") {
-      toast.error("Content is required");
-      return;
+    // When publishing, require all main fields to be filled
+    if (submitAction === "published") {
+      if (!contentText || contentText === "<p></p>") {
+        toast.error("Content is required to publish");
+        return;
+      }
+      if (!category.trim()) {
+        toast.error("Category is required to publish");
+        return;
+      }
+      if (!excerpt.trim()) {
+        toast.error("Short description is required to publish");
+        return;
+      }
+      if (
+        !readTime ||
+        Number(readTime) <= 0 ||
+        Number.isNaN(Number(readTime))
+      ) {
+        toast.error("Valid read time (in minutes) is required to publish");
+        return;
+      }
+      if (!thumbnailFile) {
+        toast.error("Thumbnail image is required to publish");
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -136,9 +158,9 @@ export default function AdminBlogsCreatePage() {
       const body = {
         title: title.trim(),
         excerpt: excerpt.trim() || undefined,
-        contentHtml: contentText,
+        contentHtml:
+          contentText && contentText !== "<p></p>" ? contentText : undefined,
         category: category.trim() || undefined,
-        tags: tags.trim() || undefined,
         thumbnailUrl: uploadedThumbnailUrl,
         readTimeMinutes: readTime ? Number(readTime) : undefined,
         status,
@@ -217,17 +239,18 @@ export default function AdminBlogsCreatePage() {
               isDark ? "text-white" : "text-gray-900"
             )}
           >
-            Create Blog Post
+            Create Blog
           </h2>
-          <p
+          {/* <p
             className={cn(
               "mt-1 text-xs sm:text-sm lg:text-base",
               isDark ? "text-gray-400" : "text-muted-foreground"
             )}
           >
-            Publish educational content, guides, and updates similar to the
-            Insense resources blog.
-          </p>
+            Publish actionable playbooks, campaign breakdowns, and GoViral
+            product updates to help brands run better UGC and creator marketing
+            campaigns.
+          </p> */}
         </div>
       </div>
 
@@ -247,14 +270,14 @@ export default function AdminBlogsCreatePage() {
           <CardTitle className="text-lg sm:text-xl">
             Blog details & content
           </CardTitle>
-          <CardDescription
+          {/* <CardDescription
             className={cn(
               "text-xs sm:text-sm",
               isDark ? "text-gray-300" : "text-muted-foreground"
             )}
           >
             Set up the title, metadata, and rich content for this article.
-          </CardDescription>
+          </CardDescription> */}
         </CardHeader>
         <CardContent className="pt-4 sm:pt-6 space-y-6">
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -278,24 +301,9 @@ export default function AdminBlogsCreatePage() {
                 <Label htmlFor="category">Category</Label>
                 <Input
                   id="category"
-                  placeholder="e.g. UGC, Influencer Marketing, eCommerce"
+                  placeholder="e.g. UGC, Influencer Marketing"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className={cn(
-                    isDark
-                      ? "bg-[#170337] border-gray-600 text-white placeholder:text-gray-400"
-                      : ""
-                  )}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="tags">Tags (comma separated)</Label>
-                <Input
-                  id="tags"
-                  placeholder="e.g. TikTok hooks, UGC platform, creator marketing"
-                  value={tags}
-                  onChange={(e) => setTags(e.target.value)}
                   className={cn(
                     isDark
                       ? "bg-[#170337] border-gray-600 text-white placeholder:text-gray-400"
@@ -406,7 +414,7 @@ export default function AdminBlogsCreatePage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="excerpt">Short description / excerpt</Label>
+              <Label htmlFor="excerpt">Short description</Label>
               <Textarea
                 id="excerpt"
                 placeholder="Short summary shown in blog cards and previews"
@@ -438,15 +446,6 @@ export default function AdminBlogsCreatePage() {
                   isDark={isDark}
                 />
               </div>
-              <p
-                className={cn(
-                  "text-xs sm:text-sm",
-                  isDark ? "text-gray-300" : "text-muted-foreground"
-                )}
-              >
-                Use headings, lists, and storytelling similar to Insense blog
-                articles to make the content scannable and engaging.
-              </p>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
