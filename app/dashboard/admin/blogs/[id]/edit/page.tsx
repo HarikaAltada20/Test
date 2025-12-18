@@ -58,6 +58,9 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
   const [submitAction, setSubmitAction] = useState<"draft" | "published">(
     "draft"
   );
+  const [currentStatus, setCurrentStatus] = useState<
+    "draft" | "published" | null
+  >(null);
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
@@ -112,6 +115,8 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
         if (post.thumbnail) {
           setThumbnailPreview(post.thumbnail);
         }
+        // Track current status to conditionally show/hide Save Draft button
+        setCurrentStatus(post.status || "draft");
         // Set content into NovelEditor once it mounts
         // Use a longer timeout to ensure the editor is fully initialized
         setTimeout(() => {
@@ -277,6 +282,10 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
           ? "Blog post published successfully"
           : "Blog post saved as draft"
       );
+      // Update current status if published
+      if (submitAction === "published") {
+        setCurrentStatus("published");
+      }
       router.push("/dashboard/admin/blogs");
     } catch (error: any) {
       toast.error(
@@ -505,7 +514,6 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                   isDark={isDark}
                 />
               </div>
-             
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -517,16 +525,18 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
               >
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={saving}
-                onClick={() => setSubmitAction("draft")}
-              >
-                {saving && submitAction === "draft"
-                  ? "Saving..."
-                  : "Save Draft"}
-              </Button>
+              {currentStatus !== "published" && (
+                <Button
+                  type="submit"
+                  variant="outline"
+                  disabled={saving}
+                  onClick={() => setSubmitAction("draft")}
+                >
+                  {saving && submitAction === "draft"
+                    ? "Saving..."
+                    : "Save Draft"}
+                </Button>
+              )}
               <Button
                 type="submit"
                 disabled={saving}

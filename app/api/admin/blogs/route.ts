@@ -226,6 +226,21 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    // Fetch current blog post to check existing status and published_at
+    const { data: existingPost, error: fetchError } = await supabase
+      .from("blog_posts")
+      .select("status, published_at")
+      .eq("id", id)
+      .single();
+
+    if (fetchError) {
+      console.error("Error fetching existing blog post:", fetchError);
+      return NextResponse.json(
+        { error: "Failed to fetch existing blog post" },
+        { status: 500 }
+      );
+    }
+
     const updateData: any = {
       updated_at: new Date().toISOString(),
     };
@@ -238,9 +253,13 @@ export async function PATCH(req: NextRequest) {
         );
       }
       updateData.status = status;
-      if (status === "published") {
+      // Only set published_at if changing from draft to published
+      // If already published, preserve the existing published_at timestamp
+      if (status === "published" && existingPost?.status !== "published") {
         updateData.published_at = new Date().toISOString();
       }
+      // If already published and staying published, don't touch published_at
+      // (it will remain unchanged in the database)
     }
 
     if (title !== undefined) {

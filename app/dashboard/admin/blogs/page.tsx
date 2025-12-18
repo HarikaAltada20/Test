@@ -6,7 +6,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Edit, Plus, Trash2, Eye, Loader2, BookOpen, Inbox } from "lucide-react";
+import {
+  Edit,
+  Plus,
+  Trash2,
+  Eye,
+  Loader2,
+  BookOpen,
+  Inbox,
+} from "lucide-react";
 import { toast } from "sonner";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
@@ -467,7 +475,9 @@ export default function AdminBlogsPage() {
                             isDark ? "text-gray-300" : "text-gray-600"
                           )}
                         >
-                          <span>{formatDate(post.updated_at)}</span>
+                          <span>
+                            {formatDate(post.published_at || post.updated_at)}
+                          </span>
                           {post.read_time_minutes ? (
                             <>
                               <span>•</span>
@@ -498,24 +508,7 @@ export default function AdminBlogsPage() {
                           <>
                             <button
                               className={cn(
-                                "flex flex-1 items-center justify-center gap-2 px-3 py-3 rounded-full text-[13px]",
-                                isDark
-                                  ? "bg-[#7F39EC] text-white"
-                                  : "bg-[#D9C0FF61] text-[#7F39EC]"
-                              )}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                router.push(
-                                  `/dashboard/admin/blogs/${post.id}/edit`
-                                );
-                              }}
-                            >
-                              <Edit className="h-4 w-4" />
-                              <span className="hidden sm:inline">Edit</span>
-                            </button>
-                            <button
-                              className={cn(
-                                "flex flex-1 items-center justify-center gap-2 px-3 py-3 rounded-full text-[13px]",
+                                "flex flex-[1.8] items-center justify-center gap-2 px-3 py-3 rounded-full text-[13px]",
                                 isDark
                                   ? "bg-[#7F39EC] text-white"
                                   : "bg-[#D9C0FF61] text-[#7F39EC]"
@@ -532,11 +525,28 @@ export default function AdminBlogsPage() {
                                 ? "Publishing..."
                                 : "Publish"}
                             </button>
+                            <button
+                              className={cn(
+                                "flex flex-[0.6] items-center border justify-center gap-2 px-3 py-3 rounded-full text-[13px]",
+                                isDark
+                                  ? "border-purple-400 text-purple-400"
+                                  : "border-purple-500 text-purple-500"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(
+                                  `/dashboard/admin/blogs/${post.id}/edit`
+                                );
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                              <span className="hidden sm:inline">Edit</span>
+                            </button>
                             <Button
                               variant="outline"
                               size="md"
                               className={cn(
-                                "border text-[14px]",
+                                "border text-[14px] flex-[0.6]",
                                 isDark
                                   ? "text-purple-400 border-gray-600"
                                   : "text-purple-500"
@@ -559,7 +569,7 @@ export default function AdminBlogsPage() {
                           <>
                             <button
                               className={cn(
-                                "flex flex-1 items-center justify-center gap-2 px-3 py-3 rounded-full text-[13px]",
+                                "flex flex-[1.8] items-center justify-center gap-2 px-3 py-3 rounded-full text-[13px]",
                                 isDark
                                   ? "bg-[#7F39EC] text-white"
                                   : "bg-[#D9C0FF61] text-[#7F39EC]"
@@ -570,15 +580,32 @@ export default function AdminBlogsPage() {
                               }}
                             >
                               <Eye className="h-4 w-4" />
-                              <span>View Blog</span>
+                              <span className="hidden sm:inline">View Article</span>
+                            </button>
+                            <button
+                              className={cn(
+                                "flex flex-[0.6] items-center border justify-center gap-2 px-3 py-3 rounded-full text-[13px]",
+                                isDark
+                                  ? "border-purple-400 text-purple-400"
+                                  : "border-purple-500 text-purple-500"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(
+                                  `/dashboard/admin/blogs/${post.id}/edit`
+                                );
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                              <span className="hidden sm:inline">Edit</span>
                             </button>
                             <Button
                               variant="outline"
                               size="md"
                               className={cn(
-                                "border text-[14px]",
+                                "border text-[14px] flex-[0.6]",
                                 isDark
-                                  ? "text-purple-400 border-gray-600"
+                                  ? "text-purple-400 "
                                   : "text-purple-500"
                               )}
                               disabled={
