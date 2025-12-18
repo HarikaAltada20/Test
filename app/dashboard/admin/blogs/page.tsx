@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Edit, Plus, Trash2, Eye, Loader2 } from "lucide-react";
+import { Edit, Plus, Trash2, Eye, Loader2, BookOpen, Inbox } from "lucide-react";
 import { toast } from "sonner";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
@@ -377,12 +377,15 @@ export default function AdminBlogsPage() {
         <>
           <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
             {filteredPosts.length === 0 ? (
-              <div className="col-span-full py-8 text-center text-sm sm:text-base">
-                {activeTab === "draft"
-                  ? "No draft posts yet."
-                  : activeTab === "published"
-                  ? "No published posts yet."
-                  : "No blog posts yet."}
+              <div className="col-span-full min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center text-sm sm:text-base">
+                <Inbox className="h-16 w-16 text-gray-400" />
+                <span>
+                  {activeTab === "draft"
+                    ? "No draft posts yet."
+                    : activeTab === "published"
+                    ? "No published posts yet."
+                    : "No blog posts yet."}
+                </span>
               </div>
             ) : (
               paginatedPosts.map((post) => {
@@ -638,7 +641,7 @@ export default function AdminBlogsPage() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Delete blog post?</DialogTitle>
-                <DialogDescription  className="text-md">
+                <DialogDescription className="text-md">
                   Are you sure you want to delete this blog? This action cannot
                   be undone.
                 </DialogDescription>
