@@ -11,6 +11,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+import { cn } from "@/lib/utils";
+
 type Tx = {
   id: string;
   type: string;
@@ -26,7 +28,53 @@ export default function AffiliateTransactionsPage() {
   const userId = params?.userId as string;
   const [items, setItems] = useState<Tx[]>([]);
   const [loading, setLoading] = useState(false);
+   // Get theme from parent layout instead of managing independent state
+   const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      // Check data-mode attribute from parent layout
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const dataMode = modeElement.getAttribute("data-mode");
+        return dataMode === "dark";
+      }
+      // Fallback to data-theme attribute
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme");
+      return dataTheme === "dark";
+    }
+    return false; // Default to light mode
+  });
 
+  
+    // Watch for theme changes from parent layout
+    useEffect(() => {
+      const checkTheme = () => {
+        const modeElement = document.querySelector("[data-mode]");
+        if (modeElement) {
+          const currentMode = modeElement.getAttribute("data-mode");
+          const newIsDark = currentMode === "dark";
+          if (newIsDark !== isDark) {
+            setIsDark(newIsDark);
+          }
+        }
+      };
+  
+      checkTheme();
+  
+      // Watch for changes in the data attribute
+      const observer = new MutationObserver(checkTheme);
+      const targetNode = document.querySelector("[data-mode]");
+      if (targetNode) {
+        observer.observe(targetNode, {
+          attributes: true,
+          attributeFilter: ["data-mode"],
+        });
+      }
+  
+      return () => observer.disconnect();
+    }, [isDark]);
+
+    
   const load = async () => {
     try {
       setLoading(true);
@@ -44,7 +92,12 @@ export default function AffiliateTransactionsPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card
+        className={cn(
+          "shadow-md hover:shadow-lg transition-shadow duration-200",
+          isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+        )}
+      >
         <CardHeader>
           <CardTitle>Affiliate Transactions</CardTitle>
         </CardHeader>

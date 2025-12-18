@@ -6065,6 +6065,7 @@ export default function EditContestPage({
                   placeholder="Describe your product, what you want creators to do, key messages, target audience, and any specific requirements..."
                   height="250px"
                   isDark={isDark}
+                  enableImages={false}
                   ref={richTextEditorRef}
                   onChange={(html: string, json: any) => {
                     setBriefHtml(html);
@@ -6373,6 +6374,7 @@ export default function EditContestPage({
                     height="250px"
                     ref={rulesRichTextEditorRef}
                     isDark={isDark}
+                    enableImages={false}
                     onChange={(html: string, json: any) => {
                       console.log(
                         "Rules editor onChange - html:",

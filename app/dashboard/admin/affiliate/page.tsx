@@ -1,9 +1,15 @@
 "use client";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import {
+  useState,
+  useMemo,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+} from "react";
 import {
   Table,
   TableBody,
@@ -29,7 +35,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { toast } from "sonner";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ContestOption = {
@@ -39,6 +45,7 @@ type ContestOption = {
 };
 
 export default function AffiliateLandingPage() {
+  const router = useRouter();
   const [contestId, setContestId] = useState("");
   const [contestSearch, setContestSearch] = useState("");
   const [contests, setContests] = useState<ContestOption[]>([]);
@@ -52,6 +59,8 @@ export default function AffiliateLandingPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkRate, setBulkRate] = useState<number>(10);
+  const [earnersLoading, setEarnersLoading] = useState(false);
+  const [contestLoading, setContestLoading] = useState(false);
 
   const filtered = useMemo(() => rows, [rows]);
   const selectedRows = filtered.filter((r) => selected[r.submission_id]);
@@ -59,6 +68,23 @@ export default function AffiliateLandingPage() {
     (acc, r) => acc + r.default_commission_cents * (bulkRate / 10),
     0
   );
+
+  // Get theme from parent layout instead of managing independent state
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      // Check data-mode attribute from parent layout
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const dataMode = modeElement.getAttribute("data-mode");
+        return dataMode === "dark";
+      }
+      // Fallback to data-theme attribute
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme");
+      return dataTheme === "dark";
+    }
+    return false; // Default to light mode
+  });
 
   // Debounced search for contests
   const searchContests = useCallback(async (query: string) => {
@@ -96,6 +122,34 @@ export default function AffiliateLandingPage() {
     setContestSearch(contest.title);
     setOpen(false);
   };
+
+  // Watch for theme changes from parent layout
+  useEffect(() => {
+    const checkTheme = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode");
+        const newIsDark = currentMode === "dark";
+        if (newIsDark !== isDark) {
+          setIsDark(newIsDark);
+        }
+      }
+    };
+
+    checkTheme();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkTheme);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, [isDark]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -181,9 +235,25 @@ export default function AffiliateLandingPage() {
     }
   };
 
+  const handleViewEarners = () => {
+    setEarnersLoading(true);
+    router.push(`/dashboard/admin/affiliate/earners`);
+  };
+
+  const handleOpenContest = () => {
+    if (!contestId) return;
+    setContestLoading(true);
+    router.push(`/dashboard/admin/affiliate/${contestId}`);
+  };
+
   return (
     <div className="space-y-6">
-      <Card>
+      <Card
+        className={cn(
+          "shadow-md hover:shadow-lg transition-shadow duration-200",
+          isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+        )}
+      >
         <CardHeader>
           <CardTitle>Affiliate Commissions</CardTitle>
         </CardHeader>
@@ -206,12 +276,26 @@ export default function AffiliateLandingPage() {
                 onFocus={() => {
                   if (contestSearch) setOpen(true);
                 }}
-                className="w-full"
+                className={cn(
+                  "w-full",
+                  isDark
+                    ? "bg-[#170337] border border-gray-600 text-white"
+                    : "bg-white text-black"
+                )}
               />
               {open && contestSearch && (
-                <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-[300px] overflow-auto">
+                <div
+                  className={cn(
+                    "absolute z-50 w-full mt-1 border rounded-md shadow-md",
+                    isDark
+                      ? "bg-[#170337] border-gray-700"
+                      : "bg-popover border-gray-200"
+                  )}
+                >
                   <Command shouldFilter={false}>
-                    <CommandList>
+                    <CommandList
+                      className={cn(isDark ? "bg-[#020817]" : "bg-white")}
+                    >
                       <CommandEmpty>
                         {searching ? "Searching..." : "No contests found."}
                       </CommandEmpty>
@@ -256,15 +340,24 @@ export default function AffiliateLandingPage() {
                 </div>
               )}
             </div>
-            <Button asChild disabled={!contestId}>
-              <Link href={`/dashboard/admin/affiliate/${contestId}`}>
-                Open Contest
-              </Link>
+            <Button
+              onClick={handleOpenContest}
+              disabled={!contestId || contestLoading}
+            >
+              {contestLoading && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Open Contest
             </Button>
-            <Button asChild variant="outline">
-              <Link href={`/dashboard/admin/affiliate/earners`}>
-                View Earners
-              </Link>
+            <Button
+              variant="outline"
+              onClick={handleViewEarners}
+              disabled={earnersLoading}
+            >
+              {earnersLoading && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              View Earners
             </Button>
             <Button onClick={fetchContest} disabled={!contestId || loading}>
               {loading ? "Loading..." : "Load"}
@@ -278,7 +371,12 @@ export default function AffiliateLandingPage() {
       </Card>
 
       {rows.length > 0 && (
-        <Card>
+        <Card
+          className={cn(
+            "shadow-md hover:shadow-lg transition-shadow duration-200",
+            isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+          )}
+        >
           <CardHeader>
             <CardTitle>Results</CardTitle>
           </CardHeader>

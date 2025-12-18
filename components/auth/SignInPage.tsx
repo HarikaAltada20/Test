@@ -125,13 +125,19 @@ export default function SignInPage() {
     setIsGoogleLoading(true);
 
     try {
+      // Use regular callback URL for both web and mobile
+      // This ensures PKCE code verifier is preserved in webview session storage
+      // Use "select_account" to show account picker with existing accounts
+      const isMobile = /GameOfCreators-Mobile/i.test(navigator.userAgent);
       const { data, error: signInError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
           queryParams: {
             access_type: "offline",
-            prompt: "consent",
+            // Use "select_account" for mobile to show account picker with existing accounts
+            // This helps users see their Google accounts even if webview doesn't have cookies
+            prompt: isMobile ? "select_account" : "consent",
           },
         },
       });
