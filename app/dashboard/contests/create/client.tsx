@@ -5205,6 +5205,7 @@ export default function CreateContestPage({
                         <NovelEditor
                           value={bonusHtml}
                           isDark={isDark}
+                          enableImages={false}
                           placeholder="Example:
 • Top 3 creators get $100 each
 • Affiliate link available: https://yoursite.com/ref - 10% commission on sales  
@@ -7659,6 +7660,7 @@ export default function CreateContestPage({
                       placeholder="Describe your project, what you want creators to do, key messages, target audience, and any specific requirements..."
                       height="250px"
                       isDark={isDark}
+                      enableImages={false}
                       ref={richTextEditorRef}
                       onChange={(html: string, json: any) => {
                         console.log(
@@ -7745,6 +7747,7 @@ export default function CreateContestPage({
                       placeholder="Content rules and guidelines..."
                       height="250px"
                       isDark={isDark}
+                      enableImages={false}
                       ref={rulesRichTextEditorRef}
                       onChange={(html: string, json: any) => {
                         console.log(

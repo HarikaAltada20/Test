@@ -284,6 +284,8 @@ function DashboardContent({
     const saved = localStorage.getItem("dashboard-compact-mode");
     return saved === "true";
   });
+  // Track very small screens (≤ 400px) so we can force 85% zoom and hide the toggle
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
   const { logout } = useClientAuth();
   const {
     isFullscreen,
@@ -304,6 +306,17 @@ function DashboardContent({
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
+
+  // Detect very small screens to enforce compact zoom without showing the toggle
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleResize = () => {
+      setIsSmallScreen(window.innerWidth <= 400);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Handle checkout success - refresh subscription data with protection against infinite loops
   useEffect(() => {
@@ -424,7 +437,7 @@ function DashboardContent({
     localStorage.removeItem("dashboard-mode");
     try {
       document.cookie = `dashboard-preset=${presetKey}; path=/; max-age=31536000`;
-    } catch { }
+    } catch {}
 
     // Dispatch custom event for immediate theme change notification
     const event = new CustomEvent("theme-change", {
@@ -447,7 +460,7 @@ function DashboardContent({
     localStorage.removeItem("dashboard-preset"); // Clear preset when manually changing
     try {
       document.cookie = `dashboard-mode=${modeKey}; path=/; max-age=31536000`;
-    } catch { }
+    } catch {}
 
     // Dispatch custom event for immediate theme change notification
     const event = new CustomEvent("theme-change", {
@@ -560,49 +573,49 @@ function DashboardContent({
       <style jsx global>{`
         :root {
           --background: ${currentMode === "light"
-          ? "210 20% 98%"
-          : "222.2 84% 4.9%"};
+            ? "210 20% 98%"
+            : "222.2 84% 4.9%"};
           --foreground: ${currentMode === "light"
-          ? "220 13% 9%"
-          : "210 40% 98%"};
+            ? "220 13% 9%"
+            : "210 40% 98%"};
           --card: ${currentMode === "light" ? "0 0% 96%" : "217.2 32.6% 17.5%"};
           --card-foreground: ${currentMode === "light"
-          ? "220 13% 9%"
-          : "210 40% 98%"};
+            ? "220 13% 9%"
+            : "210 40% 98%"};
           --popover: ${currentMode === "light"
-          ? "0 0% 96%"
-          : "217.2 32.6% 17.5%"};
+            ? "0 0% 96%"
+            : "217.2 32.6% 17.5%"};
           --popover-foreground: ${currentMode === "light"
-          ? "220 13% 9%"
-          : "210 40% 98%"};
+            ? "220 13% 9%"
+            : "210 40% 98%"};
           --primary: ${getThemeHSL(currentTheme)};
           --primary-foreground: ${currentMode === "light"
-          ? "0 0% 100%"
-          : "222.2 84% 4.9%"};
+            ? "0 0% 100%"
+            : "222.2 84% 4.9%"};
           --secondary: ${currentMode === "light"
-          ? "220 14% 96%"
-          : "217.2 32.6% 17.5%"};
+            ? "220 14% 96%"
+            : "217.2 32.6% 17.5%"};
           --secondary-foreground: ${currentMode === "light"
-          ? "220 9% 46%"
-          : "210 40% 98%"};
+            ? "220 9% 46%"
+            : "210 40% 98%"};
           --muted: ${currentMode === "light"
-          ? "220 13% 91%"
-          : "217.2 32.6% 17.5%"};
+            ? "220 13% 91%"
+            : "217.2 32.6% 17.5%"};
           --muted-foreground: ${currentMode === "light"
-          ? "220 9% 46%"
-          : "215 20.2% 75.1%"};
+            ? "220 9% 46%"
+            : "215 20.2% 75.1%"};
           --accent: ${currentMode === "light"
-          ? "220 13% 91%"
-          : "217.2 32.6% 17.5%"};
+            ? "220 13% 91%"
+            : "217.2 32.6% 17.5%"};
           --accent-foreground: ${currentMode === "light"
-          ? "220 13% 9%"
-          : "210 40% 98%"};
+            ? "220 13% 9%"
+            : "210 40% 98%"};
           --border: ${currentMode === "light"
-          ? "220 13% 82%"
-          : "217.2 32.6% 17.5%"};
+            ? "220 13% 82%"
+            : "217.2 32.6% 17.5%"};
           --input: ${currentMode === "light"
-          ? "220 13% 82%"
-          : "217.2 32.6% 17.5%"};
+            ? "220 13% 82%"
+            : "217.2 32.6% 17.5%"};
           --ring: ${getThemeHSL(currentTheme)};
 
           /* Performance optimized theme variables */
@@ -621,7 +634,9 @@ function DashboardContent({
 
         /* Compact Mode Zoom Control */
         .dashboard-container {
-          zoom: ${isCompactMode ? "0.85" : "1"};
+          /* On very small screens (≤ 400px) we always use 85% zoom, */
+          /* otherwise we respect the compact mode toggle              */
+          zoom: ${isSmallScreen || isCompactMode ? "0.85" : "1"};
           transition: zoom 0.3s ease-in-out;
         }
 
@@ -663,8 +678,8 @@ function DashboardContent({
         * {
           scrollbar-width: thin;
           scrollbar-color: ${currentMode === "light"
-          ? "rgba(156, 163, 175, 0.6) rgba(255, 255, 255, 1)"
-          : `${theme.scrollbar} rgba(${mode.background.secondary}, 0.1)`};
+            ? "rgba(156, 163, 175, 0.6) rgba(255, 255, 255, 1)"
+            : `${theme.scrollbar} rgba(${mode.background.secondary}, 0.1)`};
         }
 
         /* Webkit scrollbar styling */
@@ -675,23 +690,23 @@ function DashboardContent({
 
         *::-webkit-scrollbar-track {
           background: ${currentMode === "light"
-          ? "rgba(255, 255, 255, 1)"
-          : `rgba(${mode.background.secondary}, 0.1)`};
+            ? "rgba(255, 255, 255, 1)"
+            : `rgba(${mode.background.secondary}, 0.1)`};
           border-radius: 10px;
         }
 
         *::-webkit-scrollbar-thumb {
           background: ${currentMode === "light"
-          ? "rgba(156, 163, 175, 0.6)"
-          : theme.scrollbar};
+            ? "rgba(156, 163, 175, 0.6)"
+            : theme.scrollbar};
           border-radius: 10px;
           transition: background-color 0.05s ease;
         }
 
         *::-webkit-scrollbar-thumb:hover {
           background: ${currentMode === "light"
-          ? "rgba(156, 163, 175, 0.8)"
-          : theme.scrollbarHover};
+            ? "rgba(156, 163, 175, 0.8)"
+            : theme.scrollbarHover};
           transition: background-color 0.05s ease;
         }
 
@@ -765,19 +780,19 @@ function DashboardContent({
               ? "bg-[#06021D] text-white border-gray-800"
               : "bg-white text-slate-900 border-gray-300"
           )}
-        // style={{
-        //   background:
-        //     currentMode === "light"
-        //       ? `linear-gradient(to bottom, rgba(${mode.background.secondary}, 1), rgba(${mode.background.tertiary}, 1), rgba(${mode.background.secondary}, 1))`
-        //       : `linear-gradient(to bottom, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.90), rgba(${mode.background.primary}, 0.95))`,
-        //   borderRightColor: `rgba(${theme.primary}, ${
-        //     currentMode === "light" ? "0.3" : "0.2"
-        //   })`,
-        //   boxShadow:
-        //     currentMode === "light"
-        //       ? `2px 0 8px 0 rgba(0, 0, 0, 0.1), inset -1px 0 0 0 rgba(${theme.primary}, 0.1)`
-        //       : "none",
-        // }}
+          // style={{
+          //   background:
+          //     currentMode === "light"
+          //       ? `linear-gradient(to bottom, rgba(${mode.background.secondary}, 1), rgba(${mode.background.tertiary}, 1), rgba(${mode.background.secondary}, 1))`
+          //       : `linear-gradient(to bottom, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.90), rgba(${mode.background.primary}, 0.95))`,
+          //   borderRightColor: `rgba(${theme.primary}, ${
+          //     currentMode === "light" ? "0.3" : "0.2"
+          //   })`,
+          //   boxShadow:
+          //     currentMode === "light"
+          //       ? `2px 0 8px 0 rgba(0, 0, 0, 0.1), inset -1px 0 0 0 rgba(${theme.primary}, 0.1)`
+          //       : "none",
+          // }}
         >
           {/* Sidebar Header - Premium Styling to Match Main Header */}
           <div
@@ -896,8 +911,9 @@ function DashboardContent({
               currentMode === "light"
                 ? `rgba(${mode.background.primary}, 0.9)`
                 : `rgba(${mode.background.secondary}, 0.9)`,
-            borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.2" : "0.15"
-              })`,
+            borderColor: `rgba(${theme.primary}, ${
+              currentMode === "light" ? "0.2" : "0.15"
+            })`,
             boxShadow:
               currentMode === "light"
                 ? "0 1px 2px rgba(0, 0, 0, 0.05)"
@@ -918,8 +934,9 @@ function DashboardContent({
                 : `0 0 8px rgba(${theme.primary}, 0.4), 0 2px 4px rgba(${theme.primary}, 0.2)`;
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = `rgba(${theme.primary}, ${currentMode === "light" ? "0.2" : "0.15"
-              })`;
+            e.currentTarget.style.borderColor = `rgba(${theme.primary}, ${
+              currentMode === "light" ? "0.2" : "0.15"
+            })`;
             e.currentTarget.style.backgroundColor =
               currentMode === "light"
                 ? `rgba(${mode.background.primary}, 0.9)`
@@ -1045,8 +1062,9 @@ function DashboardContent({
                             currentMode === "light"
                               ? `rgba(${mode.background.tertiary}, 1)`
                               : `rgba(${mode.background.secondary}, 0.5)`,
-                          borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.3" : "0.2"
-                            })`,
+                          borderColor: `rgba(${theme.primary}, ${
+                            currentMode === "light" ? "0.3" : "0.2"
+                          })`,
                           color: `rgba(${mode.text.muted}, 1)`,
                           boxShadow:
                             currentMode === "light"
@@ -1177,29 +1195,29 @@ function DashboardContent({
                       size="icon"
                       onClick={() => toggleFullscreen()}
                       className="h-8 w-8 border border-gray-400 backdrop-blur-sm transition-all duration-300"
-                    // style={{
-                    //   backgroundColor:
-                    //     currentMode === "light"
-                    //       ? `rgba(${mode.background.tertiary}, 1)`
-                    //       : `rgba(${mode.background.secondary}, 0.5)`,
-                    //   borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.3" : "0.2"
-                    //     })`,
-                    //   color: `rgba(${mode.text.muted}, 1)`,
-                    //   boxShadow:
-                    //     currentMode === "light"
-                    //       ? "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
-                    //       : "none",
-                    // }}
-                    // onMouseEnter={(e) => {
-                    //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
-                    //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
-                    //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
-                    // }}
-                    // onMouseLeave={(e) => {
-                    //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
-                    //   e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.5)`;
-                    //   e.currentTarget.style.color = `rgba(${mode.text.muted}, 1)`;
-                    // }}
+                      // style={{
+                      //   backgroundColor:
+                      //     currentMode === "light"
+                      //       ? `rgba(${mode.background.tertiary}, 1)`
+                      //       : `rgba(${mode.background.secondary}, 0.5)`,
+                      //   borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.3" : "0.2"
+                      //     })`,
+                      //   color: `rgba(${mode.text.muted}, 1)`,
+                      //   boxShadow:
+                      //     currentMode === "light"
+                      //       ? "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
+                      //       : "none",
+                      // }}
+                      // onMouseEnter={(e) => {
+                      //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
+                      //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
+                      //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
+                      // }}
+                      // onMouseLeave={(e) => {
+                      //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
+                      //   e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.5)`;
+                      //   e.currentTarget.style.color = `rgba(${mode.text.muted}, 1)`;
+                      // }}
                     >
                       {isFullscreen ? (
                         <Minimize className="h-4 w-4" />
@@ -1211,53 +1229,56 @@ function DashboardContent({
                   )}
 
                   {/* Compact Mode Indicator - Shows current zoom level */}
-                  <div
-                    className="flex border border-gray-400 items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 cursor-pointer hover:scale-105"
-                    // style={{
-                    //   backgroundColor:
-                    //     currentMode === "light"
-                    //       ? `rgba(${mode.background.tertiary}, 0.8)`
-                    //       : `rgba(${mode.background.secondary}, 0.3)`,
-                    //   borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.2" : "0.15"
-                    //     })`,
-                    //   color: `rgba(${mode.text.secondary}, 1)`,
-                    // }}
-                    title={`Click to toggle: ${isCompactMode
-                        ? "Switch to Normal (100%)"
-                        : "Switch to Compact (85%)"
+                  {!isSmallScreen && (
+                    <div
+                      className="flex border border-gray-400 items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 cursor-pointer hover:scale-105"
+                      // style={{
+                      //   backgroundColor:
+                      //     currentMode === "light"
+                      //       ? `rgba(${mode.background.tertiary}, 0.8)`
+                      //       : `rgba(${mode.background.secondary}, 0.3)`,
+                      //   borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.2" : "0.15"
+                      //     })`,
+                      //   color: `rgba(${mode.text.secondary}, 1)`,
+                      // }}
+                      title={`Click to toggle: ${
+                        isCompactMode
+                          ? "Switch to Normal (100%)"
+                          : "Switch to Compact (85%)"
                       }`}
-                    onClick={() => toggleCompactMode(!isCompactMode)}
-                  // onMouseEnter={(e) => {
-                  //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
-                  //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
-                  //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
-                  // }}
-                  // onMouseLeave={(e) => {
-                  //   e.currentTarget.style.borderColor = `rgba(${theme.primary
-                  //     }, ${currentMode === "light" ? "0.2" : "0.15"})`;
-                  //   e.currentTarget.style.backgroundColor =
-                  //     currentMode === "light"
-                  //       ? `rgba(${mode.background.tertiary}, 0.8)`
-                  //       : `rgba(${mode.background.secondary}, 0.3)`;
-                  //   e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
-                  // }}
-                  >
-                    <svg
-                      className="h-3 w-3"
-                      // style={{ color: `rgba(${theme.primary}, 1)` }}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
+                      onClick={() => toggleCompactMode(!isCompactMode)}
+                      // onMouseEnter={(e) => {
+                      //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
+                      //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
+                      //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
+                      // }}
+                      // onMouseLeave={(e) => {
+                      //   e.currentTarget.style.borderColor = `rgba(${theme.primary
+                      //     }, ${currentMode === "light" ? "0.2" : "0.15"})`;
+                      //   e.currentTarget.style.backgroundColor =
+                      //     currentMode === "light"
+                      //       ? `rgba(${mode.background.tertiary}, 0.8)`
+                      //       : `rgba(${mode.background.secondary}, 0.3)`;
+                      //   e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
+                      // }}
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-                      />
-                    </svg>
-                    {isCompactMode ? "85%" : "100%"}
-                  </div>
+                      <svg
+                        className="h-3 w-3"
+                        // style={{ color: `rgba(${theme.primary}, 1)` }}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                        />
+                      </svg>
+                      {isCompactMode ? "85%" : "100%"}
+                    </div>
+                  )}
 
                   {/* Theme Toggle - Quick Access */}
                   <Button
@@ -1309,10 +1330,10 @@ function DashboardContent({
                         "w-96 p-0 border-l ",
                         currentMode === "light" ? "bg-white" : "bg-[#06021D]"
                       )}
-                    // style={{
-                    //   background: `linear-gradient(135deg, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1))`,
-                    //   borderColor: `rgba(${theme.primary}, 0.2)`,
-                    // }}
+                      // style={{
+                      //   background: `linear-gradient(135deg, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1))`,
+                      //   borderColor: `rgba(${theme.primary}, 0.2)`,
+                      // }}
                     >
                       {/* Premium Background Effects */}
                       {/* <div
@@ -1350,15 +1371,15 @@ function DashboardContent({
                                   ? "bg-[#D8C3FF] text-purple-600"
                                   : "bg-[#FFFFFF42] text-white"
                               )}
-                            // style={{
-                            //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
-                            // }}
+                              // style={{
+                              //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
+                              // }}
                             >
                               <Settings
                                 className="h-6 w-6"
-                              // style={{
-                              //   color: `rgba(${theme.primary}, 1)`,
-                              // }}
+                                // style={{
+                                //   color: `rgba(${theme.primary}, 1)`,
+                                // }}
                               />
                             </div>
                             <div className="flex-1">
@@ -1535,10 +1556,10 @@ function DashboardContent({
                             {isFullscreenClient && isFullscreenSupported && (
                               <div
                                 className="w-full bg-[#D9C0FF26] flex justify-between items-center border border-[#7F39EC] rounded-lg px-4 py-5  transition"
-                              // style={{
-                              //   backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
-                              //   borderColor: `rgba(${theme.primary}, 0.2)`,
-                              // }}
+                                // style={{
+                                //   backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
+                                //   borderColor: `rgba(${theme.primary}, 0.2)`,
+                                // }}
                               >
                                 <div className="flex items-center gap-3">
                                   <div
@@ -1549,24 +1570,24 @@ function DashboardContent({
                                         : "bg-[#FFFFFF42] text-white"
                                     )}
 
-                                  // style={{
-                                  //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
-                                  // }}
+                                    // style={{
+                                    //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
+                                    // }}
                                   >
                                     {isFullscreen ? (
                                       <Minimize
                                         className="h-5 w-5"
 
-                                      // style={{
-                                      //   color: `rgba(${theme.primaryLight}, 1)`,
-                                      // }}
+                                        // style={{
+                                        //   color: `rgba(${theme.primaryLight}, 1)`,
+                                        // }}
                                       />
                                     ) : (
                                       <Maximize
                                         className="h-5 w-5"
-                                      // style={{
-                                      //   color: `rgba(${theme.primaryLight}, 1)`,
-                                      // }}
+                                        // style={{
+                                        //   color: `rgba(${theme.primaryLight}, 1)`,
+                                        // }}
                                       />
                                     )}
                                   </div>
@@ -1653,10 +1674,10 @@ function DashboardContent({
                             {/* Compact Mode Toggle - NEW FEATURE */}
                             <div
                               className="w-full bg-[#D9C0FF26] flex justify-between items-center border border-[#7F39EC] rounded-lg px-4 py-5  transition"
-                            // style={{
-                            //   backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
-                            //   borderColor: `rgba(${theme.primary}, 0.2)`,
-                            // }}
+                              // style={{
+                              //   backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
+                              //   borderColor: `rgba(${theme.primary}, 0.2)`,
+                              // }}
                             >
                               <div className="flex items-center gap-3">
                                 <div
@@ -1667,9 +1688,9 @@ function DashboardContent({
                                       : "bg-[#FFFFFF42] text-white"
                                   )}
 
-                                // style={{
-                                //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
-                                // }}
+                                  // style={{
+                                  //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
+                                  // }}
                                 >
                                   <svg
                                     className="h-5 w-5"
@@ -1709,12 +1730,14 @@ function DashboardContent({
                                   </div>
                                 </div>
                               </div>
-                              <Switch
-                                variant="theme-aware"
-                                theme={currentMode}
-                                checked={isCompactMode}
-                                onCheckedChange={toggleCompactMode}
-                              />
+                              {!isSmallScreen && (
+                                <Switch
+                                  variant="theme-aware"
+                                  theme={currentMode}
+                                  checked={isCompactMode}
+                                  onCheckedChange={toggleCompactMode}
+                                />
+                              )}
                             </div>
 
                             {/* Reset Button - COMMENTED OUT FOR SIMPLICITY */}
@@ -1785,29 +1808,29 @@ function DashboardContent({
                       <Button
                         variant="ghost"
                         className="h-8 px-3"
-                      // style={{
-                      //   backgroundColor:
-                      //     currentMode === "light"
-                      //       ? `rgba(${mode.background.tertiary}, 1)`
-                      //       : `rgba(${mode.background.secondary}, 0.5)`,
-                      //   borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.3" : "0.2"
-                      //     })`,
-                      //   color: `rgba(${mode.text.muted}, 1)`,
-                      //   boxShadow:
-                      //     currentMode === "light"
-                      //       ? "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
-                      //       : "none",
-                      // }}
-                      // onMouseEnter={(e) => {
-                      //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
-                      //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
-                      //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
-                      // }}
-                      // onMouseLeave={(e) => {
-                      //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
-                      //   e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.5)`;
-                      //   e.currentTarget.style.color = `rgba(${mode.text.muted}, 1)`;
-                      // }}
+                        // style={{
+                        //   backgroundColor:
+                        //     currentMode === "light"
+                        //       ? `rgba(${mode.background.tertiary}, 1)`
+                        //       : `rgba(${mode.background.secondary}, 0.5)`,
+                        //   borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.3" : "0.2"
+                        //     })`,
+                        //   color: `rgba(${mode.text.muted}, 1)`,
+                        //   boxShadow:
+                        //     currentMode === "light"
+                        //       ? "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
+                        //       : "none",
+                        // }}
+                        // onMouseEnter={(e) => {
+                        //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
+                        //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
+                        //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
+                        // }}
+                        // onMouseLeave={(e) => {
+                        //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
+                        //   e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.5)`;
+                        //   e.currentTarget.style.color = `rgba(${mode.text.muted}, 1)`;
+                        // }}
                       >
                         <div className="flex items-center gap-2">
                           {avatarSrc ? (
@@ -1839,14 +1862,14 @@ function DashboardContent({
                         "w-96 bg-white p-0 border-l",
                         currentMode === "light" ? " bg-white" : "bg-[#06021D]"
                       )}
-                    // style={{
-                    //   background:
-                    //     currentMode === "dark"
-                    //       ? `linear-gradient(135deg, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.9), rgba(${mode.background.primary}, 0.95))`
-                    //       : `linear-gradient(135deg, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1))`,
-                    //   borderColor: `rgba(${theme.primary}, ${currentMode === "dark" ? "0.3" : "0.2"
-                    //     })`,
-                    // }}
+                      // style={{
+                      //   background:
+                      //     currentMode === "dark"
+                      //       ? `linear-gradient(135deg, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.9), rgba(${mode.background.primary}, 0.95))`
+                      //       : `linear-gradient(135deg, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1))`,
+                      //   borderColor: `rgba(${theme.primary}, ${currentMode === "dark" ? "0.3" : "0.2"
+                      //     })`,
+                      // }}
                     >
                       {/* Premium Background Effects */}
                       {/* <div
@@ -1873,8 +1896,9 @@ function DashboardContent({
                         <SheetHeader
                           className="p-6 border-b flex-shrink-0"
                           style={{
-                            borderColor: `rgba(${theme.primary}, ${currentMode === "dark" ? "0.2" : "0.15"
-                              })`,
+                            borderColor: `rgba(${theme.primary}, ${
+                              currentMode === "dark" ? "0.2" : "0.15"
+                            })`,
                           }}
                         >
                           <div className="flex items-center gap-4">
@@ -1928,17 +1952,17 @@ function DashboardContent({
                                       ? "text-gray-700"
                                       : "text-white"
                                   )}
-                                // style={{
-                                //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
-                                //   color: `rgba(${theme.primary}, 1)`,
-                                //   borderColor: `rgba(${theme.primary}, 0.2)`,
-                                // }}
+                                  // style={{
+                                  //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
+                                  //   color: `rgba(${theme.primary}, 1)`,
+                                  //   borderColor: `rgba(${theme.primary}, 0.2)`,
+                                  // }}
                                 >
                                   {userRole === "advertiser"
                                     ? "Advertiser"
                                     : userRole === "creator"
-                                      ? "Creator"
-                                      : "Admin"}
+                                    ? "Creator"
+                                    : "Admin"}
                                 </span>
                               </div>
                             </div>
@@ -1987,10 +2011,10 @@ function DashboardContent({
 
                                 <div
                                   className="flex justify-between items-center border border-[#7F39EC] rounded-lg bg-[#D9C0FF26] px-4 py-3"
-                                // style={{
-                                //   background: `linear-gradient(135deg, rgba(${theme.primary}, 0.2), rgba(${theme.primaryDark}, 0.2))`,
-                                //   borderColor: `rgba(${theme.primary}, 0.3)`,
-                                // }}
+                                  // style={{
+                                  //   background: `linear-gradient(135deg, rgba(${theme.primary}, 0.2), rgba(${theme.primaryDark}, 0.2))`,
+                                  //   borderColor: `rgba(${theme.primary}, 0.3)`,
+                                  // }}
                                 >
                                   <div className="flex items-center justify-between">
                                     <div
@@ -2000,9 +2024,9 @@ function DashboardContent({
                                           ? "bg-[#D8C3FF] text-purple-600"
                                           : "bg-[#FFFFFF42] text-white"
                                       )}
-                                    // style={{
-                                    //   backgroundColor: `rgba(${theme.primary}, 0.3)`,
-                                    // }}
+                                      // style={{
+                                      //   backgroundColor: `rgba(${theme.primary}, 0.3)`,
+                                      // }}
                                     >
                                       <Trophy className="h-5 w-5" />
                                     </div>
@@ -2026,8 +2050,8 @@ function DashboardContent({
                                         {currentPlan.price === 0
                                           ? "Basic features included"
                                           : `$${(
-                                            currentPlan.price / 100
-                                          ).toFixed(2)}/month`}
+                                              currentPlan.price / 100
+                                            ).toFixed(2)}/month`}
                                       </div>
                                     </div>
                                   </div>
@@ -2038,15 +2062,15 @@ function DashboardContent({
                                         setProfileSidebarOpen(false)
                                       }
                                       className="bg-[#6C43D0] text-white text-xs px-3 py-2 rounded-xl transition"
-                                    // style={{
-                                    //   color: `rgba(${theme.primary}, 1)`,
-                                    // }}
-                                    // onMouseEnter={(e) => {
-                                    //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
-                                    // }}
-                                    // onMouseLeave={(e) => {
-                                    //   e.currentTarget.style.color = `rgba(${theme.primary}, 1)`;
-                                    // }}
+                                      // style={{
+                                      //   color: `rgba(${theme.primary}, 1)`,
+                                      // }}
+                                      // onMouseEnter={(e) => {
+                                      //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
+                                      // }}
+                                      // onMouseLeave={(e) => {
+                                      //   e.currentTarget.style.color = `rgba(${theme.primary}, 1)`;
+                                      // }}
                                     >
                                       Upgrade Plan
                                       {/* <ChevronRight className="h-3 w-3" /> */}
@@ -2071,21 +2095,21 @@ function DashboardContent({
                                   href="/dashboard/profile"
                                   onClick={() => setProfileSidebarOpen(false)}
                                   className="flex justify-between items-center border border-[#7F39EC] rounded-lg bg-[#D9C0FF26] px-4 py-3"
-                                // style={{
-                                //   backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
-                                //   borderColor: `rgba(${theme.primary}, 0.2)`,
-                                //   color: `rgba(${mode.text.secondary}, 1)`,
-                                // }}
-                                // onMouseEnter={(e) => {
-                                //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
-                                //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
-                                //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
-                                // }}
-                                // onMouseLeave={(e) => {
-                                //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
-                                //   e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.3)`;
-                                //   e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
-                                // }}
+                                  // style={{
+                                  //   backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
+                                  //   borderColor: `rgba(${theme.primary}, 0.2)`,
+                                  //   color: `rgba(${mode.text.secondary}, 1)`,
+                                  // }}
+                                  // onMouseEnter={(e) => {
+                                  //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
+                                  //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
+                                  //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
+                                  // }}
+                                  // onMouseLeave={(e) => {
+                                  //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
+                                  //   e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.3)`;
+                                  //   e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
+                                  // }}
                                 >
                                   <div
                                     // className="w-8 h-8 rounded-lg flex items-center justify-center group-hover:opacity-80 transition-colors"
@@ -2102,9 +2126,9 @@ function DashboardContent({
                                   >
                                     <User
                                       className="h-5 w-5"
-                                    // style={{
-                                    //   color: `rgba(${theme.primary}, 1)`,
-                                    // }}
+                                      // style={{
+                                      //   color: `rgba(${theme.primary}, 1)`,
+                                      // }}
                                     />
                                   </div>
                                   <div className="flex-1">
@@ -2126,9 +2150,9 @@ function DashboardContent({
                                         ? "text-purple-600"
                                         : "text-white"
                                     )}
-                                  // style={{
-                                  //   color: `rgba(${mode.text.muted}, 1)`,
-                                  // }}
+                                    // style={{
+                                    //   color: `rgba(${mode.text.muted}, 1)`,
+                                    // }}
                                   />
                                 </Link>
                                 <button
@@ -2137,21 +2161,21 @@ function DashboardContent({
                                     setSettingsPanelOpen(true);
                                   }}
                                   className="w-full flex justify-between items-center border border-[#7F39EC] rounded-lg bg-[#D9C0FF26] px-4 py-3"
-                                // style={{
-                                //   backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
-                                //   borderColor: `rgba(${theme.primary}, 0.2)`,
-                                //   color: `rgba(${mode.text.secondary}, 1)`,
-                                // }}
-                                // onMouseEnter={(e) => {
-                                //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
-                                //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
-                                //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
-                                // }}
-                                // onMouseLeave={(e) => {
-                                //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
-                                //   e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.3)`;
-                                //   e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
-                                // }}
+                                  // style={{
+                                  //   backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
+                                  //   borderColor: `rgba(${theme.primary}, 0.2)`,
+                                  //   color: `rgba(${mode.text.secondary}, 1)`,
+                                  // }}
+                                  // onMouseEnter={(e) => {
+                                  //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
+                                  //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
+                                  //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
+                                  // }}
+                                  // onMouseLeave={(e) => {
+                                  //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
+                                  //   e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.3)`;
+                                  //   e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
+                                  // }}
                                 >
                                   <div
                                     className={cn(
@@ -2160,15 +2184,15 @@ function DashboardContent({
                                         ? "bg-[#D8C3FF] text-purple-600"
                                         : "bg-[#FFFFFF42] text-white"
                                     )}
-                                  // style={{
-                                  //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
-                                  // }}
+                                    // style={{
+                                    //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
+                                    // }}
                                   >
                                     <Settings
                                       className="h-5 w-5"
-                                    // style={{
-                                    //   color: `rgba(${theme.primary}, 1)`,
-                                    // }}
+                                      // style={{
+                                      //   color: `rgba(${theme.primary}, 1)`,
+                                      // }}
                                     />
                                   </div>
                                   <div className="flex-1 text-left">
@@ -2190,9 +2214,9 @@ function DashboardContent({
                                         ? "text-purple-600"
                                         : "text-white"
                                     )}
-                                  // style={{
-                                  //   color: `rgba(${mode.text.muted}, 1)`,
-                                  // }}
+                                    // style={{
+                                    //   color: `rgba(${mode.text.muted}, 1)`,
+                                    // }}
                                   />
                                 </button>
                               </div>
@@ -2260,41 +2284,42 @@ function DashboardContent({
                         <div
                           className="p-6 border-t flex-shrink-0"
                           style={{
-                            borderColor: `rgba(${theme.primary}, ${currentMode === "dark" ? "0.2" : "0.15"
-                              })`,
+                            borderColor: `rgba(${theme.primary}, ${
+                              currentMode === "dark" ? "0.2" : "0.15"
+                            })`,
                           }}
                         >
                           <Button
                             onClick={handleSignOut}
                             variant="ghost"
                             className="w-full border-[#E50000] bg-[#A8000014] hover:bg-[#A8000014] text-black justify-start gap-3 p-3 h-auto border transition-all duration-300"
-                          // style={{
-                          //   backgroundColor: "rgba(244, 63, 94, 0.2)",
-                          //   borderColor: "rgba(244, 63, 94, 0.2)",
-                          //   color: "rgb(251, 113, 133)",
-                          // }}
-                          // onMouseEnter={(e) => {
-                          //   e.currentTarget.style.borderColor =
-                          //     "rgba(244, 63, 94, 0.4)";
-                          //   e.currentTarget.style.backgroundColor =
-                          //     "rgba(244, 63, 94, 0.1)";
-                          //   e.currentTarget.style.color =
-                          //     "rgb(248, 113, 113)";
-                          // }}
-                          // onMouseLeave={(e) => {
-                          //   e.currentTarget.style.borderColor =
-                          //     "rgba(244, 63, 94, 0.2)";
-                          //   e.currentTarget.style.backgroundColor =
-                          //     "rgba(244, 63, 94, 0.2)";
-                          //   e.currentTarget.style.color =
-                          //     "rgb(251, 113, 133)";
-                          // }}
+                            // style={{
+                            //   backgroundColor: "rgba(244, 63, 94, 0.2)",
+                            //   borderColor: "rgba(244, 63, 94, 0.2)",
+                            //   color: "rgb(251, 113, 133)",
+                            // }}
+                            // onMouseEnter={(e) => {
+                            //   e.currentTarget.style.borderColor =
+                            //     "rgba(244, 63, 94, 0.4)";
+                            //   e.currentTarget.style.backgroundColor =
+                            //     "rgba(244, 63, 94, 0.1)";
+                            //   e.currentTarget.style.color =
+                            //     "rgb(248, 113, 113)";
+                            // }}
+                            // onMouseLeave={(e) => {
+                            //   e.currentTarget.style.borderColor =
+                            //     "rgba(244, 63, 94, 0.2)";
+                            //   e.currentTarget.style.backgroundColor =
+                            //     "rgba(244, 63, 94, 0.2)";
+                            //   e.currentTarget.style.color =
+                            //     "rgb(251, 113, 133)";
+                            // }}
                           >
                             <div
                               className="w-10 h-10 bg-[#FF323224] rounded-lg flex items-center justify-center"
-                            // style={{
-                            //   backgroundColor: "rgba(244, 63, 94, 0.2)",
-                            // }}
+                              // style={{
+                              //   backgroundColor: "rgba(244, 63, 94, 0.2)",
+                              // }}
                             >
                               <LogOut
                                 className="h-5 w-5"
@@ -2322,9 +2347,9 @@ function DashboardContent({
                                     : "text-white"
                                 )}
 
-                              // style={{
-                              //   color: "rgba(244, 63, 94, 0.8)",
-                              // }}
+                                // style={{
+                                //   color: "rgba(244, 63, 94, 0.8)",
+                                // }}
                               >
                                 End your session
                               </div>

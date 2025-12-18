@@ -1,15 +1,17 @@
-import { HeroSection } from "@/components/hero-section"
-import type { Metadata } from "next"
+import { HeroSection } from "@/components/hero-section";
+import type { Metadata } from "next";
 
 // Add export const for static page generation
-export const revalidate = 3600 // Revalidate every hour
+export const revalidate = 3600; // Revalidate every hour
 
 export const metadata: Metadata = {
   title: "Game Of Creators - Performance-Based Creator Marketing Platform",
-  description: "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
+  description:
+    "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
   openGraph: {
     title: "Game Of Creators - Performance-Based Creator Marketing Platform",
-    description: "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
+    description:
+      "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
     url: "https://www.gameofcreators.com/",
     siteName: "Game Of Creators",
     images: [
@@ -30,17 +32,17 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Game Of Creators - Performance-Based Creator Marketing Platform",
-    description: "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers.",
+    description:
+      "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers.",
     images: ["https://www.gameofcreators.com/goc_ogc.png"],
     creator: "@gameofcreators",
   },
-}
+};
 
 export default function Home() {
   return (
     <div>
       <HeroSection />
     </div>
-  )
+  );
 }
-
