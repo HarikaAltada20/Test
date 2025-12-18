@@ -448,12 +448,13 @@ export default function AdminBlogsCreatePage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex flex-wrap justify-end gap-3 pt-2">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => router.back()}
                 disabled={submitting}
+                className="min-w-[80px]"
               >
                 Cancel
               </Button>
@@ -462,6 +463,7 @@ export default function AdminBlogsCreatePage() {
                 variant="outline"
                 disabled={submitting}
                 onClick={() => setSubmitAction("draft")}
+                className="min-w-[100px]"
               >
                 {submitting && submitAction === "draft"
                   ? "Saving..."
@@ -471,6 +473,12 @@ export default function AdminBlogsCreatePage() {
                 type="submit"
                 disabled={submitting}
                 onClick={() => setSubmitAction("published")}
+                className={cn(
+                  "min-w-[100px]",
+                  isDark
+                    ? "bg-[#7F39EC] text-white hover:bg-[#6B2FC7]"
+                    : "bg-[#4A00BE] text-white hover:bg-[#3A0099]"
+                )}
               >
                 {submitting && submitAction === "published"
                   ? "Publishing..."
