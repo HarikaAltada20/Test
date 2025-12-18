@@ -560,9 +560,11 @@ export default function AdminBlogsPage() {
                               }}
                             >
                               <Trash2 className="h-4 w-4 mb-[2px]" />
-                              {deletingId === post.id
-                                ? "Deleting..."
-                                : "Delete"}
+                              <span className="hidden sm:inline">
+                                {deletingId === post.id
+                                  ? "Deleting..."
+                                  : "Delete"}
+                              </span>
                             </Button>
                           </>
                         ) : (
@@ -580,7 +582,7 @@ export default function AdminBlogsPage() {
                               }}
                             >
                               <Eye className="h-4 w-4" />
-                              <span className="hidden sm:inline">View Article</span>
+                              <span className="inline">View Article</span>
                             </button>
                             <button
                               className={cn(
@@ -604,9 +606,7 @@ export default function AdminBlogsPage() {
                               size="md"
                               className={cn(
                                 "border text-[14px] flex-[0.6]",
-                                isDark
-                                  ? "text-purple-400 "
-                                  : "text-purple-500"
+                                isDark ? "text-purple-400 " : "text-purple-500"
                               )}
                               disabled={
                                 deletingId === post.id || updatingId === post.id
@@ -617,9 +617,11 @@ export default function AdminBlogsPage() {
                               }}
                             >
                               <Trash2 className="h-4 w-4 mb-[2px]" />
-                              {deletingId === post.id
-                                ? "Deleting..."
-                                : "Delete"}
+                              <span className="hidden sm:inline">
+                                {deletingId === post.id
+                                  ? "Deleting..."
+                                  : "Delete"}
+                              </span>
                             </Button>
                           </>
                         )}
