@@ -150,6 +150,7 @@ export default function SettingsPage({
     useState(false);
   const [isLoadingTwitterDisconnect, setIsLoadingTwitterDisconnect] =
     useState(false);
+  const [isRefreshingTwitter, setIsRefreshingTwitter] = useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [instagramConnected, setInstagramConnected] = useState(false);
   const [mode, setMode] = useState<"light" | "dark">("light");
@@ -499,28 +500,50 @@ export default function SettingsPage({
     }
   }, [profile, userType]);
 
-  useEffect(() => {
-    const loadTwitterAccount = async () => {
-      try {
-        const response = await fetch("/api/twitter-apis/get-profile", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
+  // Load or refresh connected Twitter (X) account details
+  const loadTwitterAccount = async () => {
+    try {
+      const response = await fetch("/api/twitter-apis/get-profile", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        console.error("Failed to load Twitter account", response.statusText);
+        toast({
+          title: "Error",
+          description: "Failed to refresh Twitter (X) account details.",
+          variant: "destructive",
         });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const result = await response.json();
-        setTwitterAccount(result.twitterAccount || null);
-        setTwitterConnected(!!result.twitterAccount);
-      } catch (error) {
-        console.error("Failed to load Twitter account", error);
+        return;
       }
-    };
 
+      const result = await response.json();
+      setTwitterAccount(result.twitterAccount || null);
+      setTwitterConnected(!!result.twitterAccount);
+
+      // Only show success toast when user explicitly refreshes
+      if (isRefreshingTwitter) {
+        toast({
+          title: "Twitter (X) updated",
+          description: "Latest Twitter (X) profile details have been fetched.",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to load Twitter account", error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh Twitter (X) account details.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshingTwitter(false);
+    }
+  };
+
+  useEffect(() => {
     if (userType === "creator") {
       loadTwitterAccount();
     }
@@ -1719,23 +1742,38 @@ export default function SettingsPage({
               {/* Twitter Connection */}
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center space-x-3">
-                  <FaXTwitter className="text-2xl text-sky-500" />
+                  <FaXTwitter className="text-2xl text-black" />
                   <div>
                     <h3 className="font-medium">Twitter (X)</h3>
-                    {/* <p className="text-sm text-muted-foreground">
-                      Coming soon. You&apos;ll be able to connect your Twitter (X)
-                      account just like YouTube and Instagram.
-                    </p> */}
                     {twitterConnected && twitterAccount ? (
-                      <p className="text-sm text-muted-foreground">
-                        Connected as{" "}
-                        {twitterAccount.name ||
-                          twitterAccount.username ||
-                          "your X account"}
-                        <span className="ml-2 text-green-600 text-xs">
-                          ✓ Active
-                        </span>
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-muted-foreground">
+                          Connected as{" "}
+                          {twitterAccount.name ||
+                            twitterAccount.username ||
+                            "your X account"}
+                          <span className="ml-2 text-green-600 text-xs">
+                            ✓ Active
+                          </span>
+                        </p>
+                        {/* <button
+                          type="button"
+                          onClick={async () => {
+                            setIsRefreshingTwitter(true);
+                            await loadTwitterAccount();
+                          }}
+                          disabled={isRefreshingTwitter}
+                          className="p-1 rounded-full border border-transparent hover:border-gray-300 text-gray-500 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white transition-colors"
+                          aria-label="Refresh Twitter (X) profile details"
+                        >
+                          <RefreshCw
+                            className={cn(
+                              "h-4 w-4",
+                              isRefreshingTwitter && "animate-spin"
+                            )}
+                          />
+                        </button> */}
+                      </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
                         Not connected
@@ -2424,89 +2462,150 @@ export default function SettingsPage({
                   )}
                   {twitterProfile && (
                     <div className="flex flex-col items-end mt-3 space-y-2">
-                      <Button
-                        type="button"
-                        className="bg-[#4A00BE] text-white"
-                        disabled={
-                          !isUsernameInBio(twitterProfile.desc) ||
-                          isSavingTwitter
-                        }
-                        onClick={async () => {
-                          if (!isUsernameInBio(twitterProfile.desc)) return;
-                          try {
-                            setIsSavingTwitter(true);
-                            const response = await fetch(
-                              "/api/twitter-apis/save-profile",
-                              {
-                                method: "POST",
-                                headers: {
-                                  "Content-Type": "application/json",
-                                },
-                                body: JSON.stringify({
-                                  twitterProfile,
-                                }),
+                      <div className="flex flex-row items-center gap-2">
+                        {!isUsernameInBio(twitterProfile.desc) && (
+                          <Button
+                            type="button"
+                            className="bg-[#4A00BE] text-white"
+                            onClick={async () => {
+                              if (!twitterUsername.trim()) return;
+                              try {
+                                setTwitterFetchState("loading");
+                                setTwitterProfile(null);
+
+                                const response = await fetch(
+                                  "/api/twitter-apis/fetch-profile",
+                                  {
+                                    method: "POST",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                    },
+                                    body: JSON.stringify({
+                                      screenname: twitterUsername.trim(),
+                                    }),
+                                  }
+                                );
+
+                                const data = await response.json();
+
+                                if (
+                                  !response.ok ||
+                                  !data ||
+                                  data.status !== "active"
+                                ) {
+                                  throw new Error(
+                                    data?.error ||
+                                      "Unable to fetch active X profile."
+                                  );
+                                }
+
+                                setTwitterProfile(data);
+                                setTwitterFetchState("success");
+                                toast({
+                                  title: "Profile fetched",
+                                  description:
+                                    "We have fetched your public X profile details.",
+                                });
+                              } catch (error: any) {
+                                console.error("Error refreshing X profile", error);
+                                setTwitterFetchState("error");
+                                toast({
+                                  title: "Error",
+                                  description:
+                                    error?.message ||
+                                    "Unable to refresh your X profile. Please try again.",
+                                  variant: "destructive",
+                                });
                               }
-                            );
-
-                            const result = await response.json();
-
-                            if (!response.ok || !result?.success) {
-                              throw new Error(
-                                result?.error ||
-                                  "Failed to save Twitter profile. Please try again."
-                              );
-                            }
-
-                            toast({
-                              title: "Saved & Connected",
-                              description:
-                                "Twitter (X) profile has been linked. You can now use it for campaigns.",
-                            });
-
-                            // Refresh connected state and close dialog so UI updates in real time
+                            }}
+                          >
+                            Refresh profile
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          className="bg-[#4A00BE] text-white"
+                          disabled={
+                            !isUsernameInBio(twitterProfile.desc) ||
+                            isSavingTwitter
+                          }
+                          onClick={async () => {
+                            if (!isUsernameInBio(twitterProfile.desc)) return;
                             try {
-                              const checkResponse = await fetch(
-                                "/api/twitter-apis/get-profile",
+                              setIsSavingTwitter(true);
+                              const response = await fetch(
+                                "/api/twitter-apis/save-profile",
                                 {
-                                  method: "GET",
+                                  method: "POST",
                                   headers: {
                                     "Content-Type": "application/json",
                                   },
+                                  body: JSON.stringify({
+                                    twitterProfile,
+                                  }),
                                 }
                               );
 
-                              if (checkResponse.ok) {
-                                const checkResult = await checkResponse.json();
-                                setTwitterAccount(
-                                  checkResult.twitterAccount || null
-                                );
-                                setTwitterConnected(
-                                  !!checkResult.twitterAccount
+                              const result = await response.json();
+
+                              if (!response.ok || !result?.success) {
+                                throw new Error(
+                                  result?.error ||
+                                    "Failed to save Twitter profile. Please try again."
                                 );
                               }
-                            } catch (e) {
-                              console.error(
-                                "Failed to refresh Twitter account after save",
-                                e
-                              );
-                            }
 
-                            setIsTwitterModalOpen(false);
-                          } catch (error: any) {
-                            toast({
-                              title: "Error",
-                              description:
-                                error?.message ||
-                                "Failed to save Twitter profile. Please try again.",
-                              variant: "destructive",
-                            });
-                          } finally {
-                            setIsSavingTwitter(false);
-                          }
-                        }}
-                      >
-                        {isSavingTwitter ? "Saving..." : "Save & Connect"}
-                      </Button>
+                              toast({
+                                title: "Saved & Connected",
+                                description:
+                                  "Twitter (X) profile has been linked. You can now use it for campaigns.",
+                              });
+
+                              // Refresh connected state and close dialog so UI updates in real time
+                              try {
+                                const checkResponse = await fetch(
+                                  "/api/twitter-apis/get-profile",
+                                  {
+                                    method: "GET",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                    },
+                                  }
+                                );
+
+                                if (checkResponse.ok) {
+                                  const checkResult = await checkResponse.json();
+                                  setTwitterAccount(
+                                    checkResult.twitterAccount || null
+                                  );
+                                  setTwitterConnected(
+                                    !!checkResult.twitterAccount
+                                  );
+                                }
+                              } catch (e) {
+                                console.error(
+                                  "Failed to refresh Twitter account after save",
+                                  e
+                                );
+                              }
+
+                              setIsTwitterModalOpen(false);
+                            } catch (error: any) {
+                              toast({
+                                title: "Error",
+                                description:
+                                  error?.message ||
+                                  "Failed to save Twitter profile. Please try again.",
+                                variant: "destructive",
+                              });
+                            } finally {
+                              setIsSavingTwitter(false);
+                            }
+                          }}
+                        >
+                          {isSavingTwitter ? "Saving..." : "Save & Connect"}
+                        </Button>
+                      </div>
                       {!isUsernameInBio(twitterProfile.desc) && (
                         <p className="text-[11px] text-red-600 text-right dark:text-red-400">
                           You have not added your Game Of Creators username in

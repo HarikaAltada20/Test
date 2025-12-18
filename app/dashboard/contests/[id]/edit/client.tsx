@@ -278,6 +278,18 @@ type ContestData = {
     | Record<string, string[]>
     | null;
   interests?: string[] | null;
+  // Twitter-specific fields
+  twitter_keywords?: string[] | null;
+  twitter_mentions?: string[] | null;
+  twitter_targets?: {
+    link?: string | null;
+    description?: string | null;
+    metrics?: {
+      likes?: number | null;
+      replies?: number | null;
+      retweets?: number | null;
+    } | null;
+  } | null;
 };
 
 export default function EditContestPage({
@@ -341,6 +353,11 @@ export default function EditContestPage({
   const [rulesJson, setRulesJson] = useState<any>(null);
   const [showRulesPreview, setShowRulesPreview] = useState(false);
   const [showBriefPreview, setShowBriefPreview] = useState(false);
+  const [keywords, setKeywords] = useState<string[]>([""]); // For brief/rules context
+  const [mentions, setMentions] = useState<string[]>([""]); // Tracking (@mentions)
+  const [targetLikes, setTargetLikes] = useState<number | "">("");
+  const [targetReplies, setTargetReplies] = useState<number | "">("");
+  const [targetRetweets, setTargetRetweets] = useState<number | "">("");
   const [startDate, setStartDate] = useState<string>("");
   const [startTime, setStartTime] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
@@ -348,6 +365,10 @@ export default function EditContestPage({
   const [inspirationLinks, setInspirationLinks] = useState<
     { url: string; description: string }[]
   >([]);
+  // Twitter target link state (separate from inspirationLinks for clarity)
+  const [twitterTargetUrl, setTwitterTargetUrl] = useState<string>("");
+  const [twitterTargetDescription, setTwitterTargetDescription] =
+    useState<string>("");
   const [trackingLinksOpen, setTrackingLinksOpen] = useState(false);
   const [trackingLinks, setTrackingLinks] = useState<
     { url: string; description: string }[]
@@ -446,7 +467,7 @@ export default function EditContestPage({
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
     useState<number>(1);
   const [contentType, setContentType] = useState<
-    "ugc" | "clipping" | "other" | ""
+    "ugc" | "clipping" | "other" | "" | "raid" | "awareness"
   >("other");
   const [category, setCategory] = useState<string>("technology");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
@@ -791,13 +812,87 @@ export default function EditContestPage({
             // Handle rules rich text content loading
             if (data.rules_html && data.rules_json) {
               setRulesHtml(data.rules_html);
-              setRulesJson(data.rules_json);
-              // Set content in editor if ref is available
-              setTimeout(() => {
-                if (rulesRichTextEditorRef.current) {
-                  rulesRichTextEditorRef.current.setContent(data.rules_json);
+
+              const rawRulesJson: any = data.rules_json;
+
+              // Backwards-compatible handling for rules_json:
+              // - New flat format: full editor doc + keywords/mentions/targets at top level
+              // - Older format 1: { editor, keywords, mentions, targets }
+              // - Older format 2: raw editor JSON only
+              if (
+                rawRulesJson &&
+                typeof rawRulesJson === "object" &&
+                (Array.isArray(rawRulesJson.content) || "type" in rawRulesJson)
+              ) {
+                // New flat format: the object itself is the editor doc, with extras mixed in
+                setRulesJson(rawRulesJson);
+
+                if (Array.isArray(rawRulesJson.keywords)) {
+                  setKeywords(rawRulesJson.keywords);
                 }
-              }, 100);
+                if (Array.isArray(rawRulesJson.mentions)) {
+                  setMentions(rawRulesJson.mentions);
+                }
+                if (
+                  rawRulesJson.targets &&
+                  typeof rawRulesJson.targets === "object"
+                ) {
+                  const { likes, replies, retweets } =
+                    rawRulesJson.targets as any;
+                  if (likes !== undefined) setTargetLikes(likes as any);
+                  if (replies !== undefined) setTargetReplies(replies as any);
+                  if (retweets !== undefined)
+                    setTargetRetweets(retweets as any);
+                }
+
+                // Set content in editor if ref is available
+                setTimeout(() => {
+                  if (rulesRichTextEditorRef.current) {
+                    rulesRichTextEditorRef.current.setContent(rawRulesJson);
+                  }
+                }, 100);
+              } else if (
+                rawRulesJson &&
+                typeof rawRulesJson === "object" &&
+                "editor" in rawRulesJson
+              ) {
+                // Older nested format: { editor, keywords, mentions, targets }
+                const editorJson = (rawRulesJson as any).editor;
+                setRulesJson(editorJson);
+
+                if (Array.isArray(rawRulesJson.keywords)) {
+                  setKeywords(rawRulesJson.keywords);
+                }
+                if (Array.isArray(rawRulesJson.mentions)) {
+                  setMentions(rawRulesJson.mentions);
+                }
+                if (
+                  rawRulesJson.targets &&
+                  typeof rawRulesJson.targets === "object"
+                ) {
+                  const { likes, replies, retweets } =
+                    rawRulesJson.targets as any;
+                  if (likes !== undefined) setTargetLikes(likes as any);
+                  if (replies !== undefined) setTargetReplies(replies as any);
+                  if (retweets !== undefined)
+                    setTargetRetweets(retweets as any);
+                }
+
+                // Set content in editor if ref is available
+                setTimeout(() => {
+                  if (rulesRichTextEditorRef.current) {
+                    rulesRichTextEditorRef.current.setContent(editorJson);
+                  }
+                }, 100);
+              } else {
+                // Oldest flat format: treat rules_json as the editor JSON directly
+                setRulesJson(rawRulesJson);
+                setTimeout(() => {
+                  if (rulesRichTextEditorRef.current) {
+                    rulesRichTextEditorRef.current.setContent(rawRulesJson);
+                  }
+                }, 100);
+              }
             }
 
             if (data.start_date) {
@@ -1016,6 +1111,60 @@ export default function EditContestPage({
                 Array.isArray((data as any).target_countries) &&
                 (data as any).target_countries.length > 0);
             setShowTargetingSections(hasTargetingData);
+
+            // Load twitter-specific fields (twitter_keywords, twitter_mentions, twitter_targets)
+            // Use case-insensitive check because platform in DB may be stored as "Twitter" / "twitter" / etc.
+            if (data.platform && data.platform.toLowerCase() === "twitter") {
+              // Load twitter_keywords from database column
+              if (
+                Array.isArray((data as any).twitter_keywords) &&
+                (data as any).twitter_keywords.length > 0
+              ) {
+                setKeywords((data as any).twitter_keywords);
+              }
+              // Load twitter_mentions from database column
+              if (
+                Array.isArray((data as any).twitter_mentions) &&
+                (data as any).twitter_mentions.length > 0
+              ) {
+                setMentions((data as any).twitter_mentions);
+              }
+              // Load twitter_targets (link, description, and metrics)
+              if (
+                (data as any).twitter_targets &&
+                typeof (data as any).twitter_targets === "object"
+              ) {
+                const tt = (data as any).twitter_targets;
+                // Load target link and description
+                if (tt.link) {
+                  setTwitterTargetUrl(tt.link);
+                }
+                if (tt.description) {
+                  setTwitterTargetDescription(tt.description);
+                }
+                // Load metrics
+                if (tt.metrics && typeof tt.metrics === "object") {
+                  if (
+                    tt.metrics.likes !== undefined &&
+                    tt.metrics.likes !== null
+                  ) {
+                    setTargetLikes(tt.metrics.likes);
+                  }
+                  if (
+                    tt.metrics.replies !== undefined &&
+                    tt.metrics.replies !== null
+                  ) {
+                    setTargetReplies(tt.metrics.replies);
+                  }
+                  if (
+                    tt.metrics.retweets !== undefined &&
+                    tt.metrics.retweets !== null
+                  ) {
+                    setTargetRetweets(tt.metrics.retweets);
+                  }
+                }
+              }
+            }
           }
         } else {
           setError(
@@ -1605,7 +1754,16 @@ export default function EditContestPage({
         brief_html: briefHtml,
         brief_json: briefJson,
         rules_html: rulesHtml,
-        rules_json: rulesJson,
+        rules_json: {
+          ...(rulesJson && typeof rulesJson === "object" ? rulesJson : {}),
+          keywords,
+          mentions,
+          targets: {
+            likes: targetLikes,
+            replies: targetReplies,
+            retweets: targetRetweets,
+          },
+        },
         inspiration_links: inspirationLinks.filter(
           (link) => link.url.trim() !== ""
         ),
@@ -1617,6 +1775,27 @@ export default function EditContestPage({
           contestInterests.length > 0 ? [...new Set(contestInterests)] : null, // Remove duplicate interests
         // Regions and countries as JSONB
         region: buildRegionData(selectedRegions, selectedCountries),
+        // Twitter-specific fields
+        twitter_keywords:
+          platform === "twitter"
+            ? keywords.filter((k) => k.trim() !== "")
+            : null,
+        twitter_mentions:
+          platform === "twitter"
+            ? mentions.filter((m) => m.trim() !== "")
+            : null,
+        twitter_targets:
+          platform === "twitter"
+            ? {
+                link: twitterTargetUrl || null,
+                description: twitterTargetDescription || null,
+                metrics: {
+                  likes: targetLikes || null,
+                  replies: targetReplies || null,
+                  retweets: targetRetweets || null,
+                },
+              }
+            : null,
       };
     }
 
@@ -3163,7 +3342,16 @@ export default function EditContestPage({
           brief_html: briefHtml,
           brief_json: briefJson,
           rules_html: rulesHtml,
-          rules_json: rulesJson,
+          rules_json: {
+            ...(rulesJson && typeof rulesJson === "object" ? rulesJson : {}),
+            keywords,
+            mentions,
+            targets: {
+              likes: targetLikes,
+              replies: targetReplies,
+              retweets: targetRetweets,
+            },
+          },
           start_date: toUTCISOString(startDate, startTime),
           end_date: toUTCISOString(endDate, endTime),
           inspiration_links: inspirationLinks.filter(
@@ -3182,6 +3370,27 @@ export default function EditContestPage({
             contestInterests.length > 0 ? [...new Set(contestInterests)] : null,
           // Regions and countries as JSONB
           region: buildRegionData(selectedRegions, selectedCountries),
+          // Twitter-specific fields
+          twitter_keywords:
+            platform === "twitter"
+              ? keywords.filter((k) => k.trim() !== "")
+              : null,
+          twitter_mentions:
+            platform === "twitter"
+              ? mentions.filter((m) => m.trim() !== "")
+              : null,
+          twitter_targets:
+            platform === "twitter"
+              ? {
+                  link: twitterTargetUrl || null,
+                  description: twitterTargetDescription || null,
+                  metrics: {
+                    likes: targetLikes || null,
+                    replies: targetReplies || null,
+                    retweets: targetRetweets || null,
+                  },
+                }
+              : null,
           moderation_status: "draft", // Save as draft after successful payment
         };
 
@@ -3263,7 +3472,16 @@ export default function EditContestPage({
           brief_html: briefHtml,
           brief_json: briefJson,
           rules_html: rulesHtml,
-          rules_json: rulesJson,
+          rules_json: {
+            ...(rulesJson && typeof rulesJson === "object" ? rulesJson : {}),
+            keywords,
+            mentions,
+            targets: {
+              likes: targetLikes,
+              replies: targetReplies,
+              retweets: targetRetweets,
+            },
+          },
           start_date: toUTCISOString(startDate, startTime),
           end_date: toUTCISOString(endDate, endTime),
           inspiration_links: inspirationLinks.filter(
@@ -3282,6 +3500,27 @@ export default function EditContestPage({
             contestInterests.length > 0 ? [...new Set(contestInterests)] : null,
           // Regions and countries as JSONB
           region: buildRegionData(selectedRegions, selectedCountries),
+          // Twitter-specific fields
+          twitter_keywords:
+            platform === "twitter"
+              ? keywords.filter((k) => k.trim() !== "")
+              : null,
+          twitter_mentions:
+            platform === "twitter"
+              ? mentions.filter((m) => m.trim() !== "")
+              : null,
+          twitter_targets:
+            platform === "twitter"
+              ? {
+                  link: twitterTargetUrl || null,
+                  description: twitterTargetDescription || null,
+                  metrics: {
+                    likes: targetLikes || null,
+                    replies: targetReplies || null,
+                    retweets: targetRetweets || null,
+                  },
+                }
+              : null,
           moderation_status: "draft", // Save as draft after successful payment
         };
 
@@ -3784,7 +4023,16 @@ export default function EditContestPage({
         brief_html: briefHtml,
         brief_json: briefJson,
         rules_html: rulesHtml,
-        rules_json: rulesJson,
+        rules_json: {
+          ...(rulesJson && typeof rulesJson === "object" ? rulesJson : {}),
+          keywords,
+          mentions,
+          targets: {
+            likes: targetLikes,
+            replies: targetReplies,
+            retweets: targetRetweets,
+          },
+        },
         inspiration_links: inspirationLinks.filter(
           (link) => link.url.trim() !== ""
         ),
@@ -3796,6 +4044,27 @@ export default function EditContestPage({
           contestInterests.length > 0 ? [...new Set(contestInterests)] : null, // Remove duplicate interests
         // Regions and countries as JSONB
         region: buildRegionData(selectedRegions, selectedCountries),
+        // Twitter-specific fields
+        twitter_keywords:
+          platform === "twitter"
+            ? keywords.filter((k) => k.trim() !== "")
+            : null,
+        twitter_mentions:
+          platform === "twitter"
+            ? mentions.filter((m) => m.trim() !== "")
+            : null,
+        twitter_targets:
+          platform === "twitter"
+            ? {
+                link: twitterTargetUrl || null,
+                description: twitterTargetDescription || null,
+                metrics: {
+                  likes: targetLikes || null,
+                  replies: targetReplies || null,
+                  retweets: targetRetweets || null,
+                },
+              }
+            : null,
       };
     }
 
@@ -4720,7 +4989,15 @@ export default function EditContestPage({
 
               <div className="space-y-2">
                 <Label htmlFor="platform">Platform</Label>
-                <Select value={platform} onValueChange={setPlatform}>
+                <Select
+                  value={platform}
+                  onValueChange={(value) => {
+                    setPlatform(value);
+                    if (value === "twitter") {
+                      setContentType("raid");
+                    }
+                  }}
+                >
                   <SelectTrigger
                     id="platform"
                     className={cn(
@@ -4737,6 +5014,9 @@ export default function EditContestPage({
                     </SelectItem>
                     <SelectItem isDark={isDark} value="instagram">
                       Instagram
+                    </SelectItem>
+                    <SelectItem isDark={isDark} value="twitter">
+                      Twitter
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -5792,6 +6072,240 @@ export default function EditContestPage({
                   }}
                 />
               )}
+              {platform === "twitter" && (
+                <>
+                  {/* Keywords section */}
+                  <div className="space-y-3 mt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-medium">Keywords</h3>
+                      </div>
+                      <p
+                        className={cn(
+                          "text-xs",
+                          isDark ? "text-gray-300" : "text-gray-500"
+                        )}
+                      >
+                        Add search keywords and hashtags (e.g. product name,
+                        theme, #BrandCampaign). For hashtags, start with #.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      {keywords.map((kw, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <Input
+                            value={kw}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const sanitized = raw.replace(/\s+/g, "");
+                              const next = [...keywords];
+                              next[index] = sanitized;
+                              setKeywords(next);
+                            }}
+                            placeholder="Add keyword"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                          {keywords.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                const next = keywords.filter(
+                                  (_, i) => i !== index
+                                );
+                                setKeywords(next.length ? next : [""]);
+                              }}
+                            >
+                              <Trash className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "mt-1 border-dashed",
+                        isDark
+                          ? "border-gray-500 text-gray-200"
+                          : "border-gray-400 text-gray-700"
+                      )}
+                      onClick={() => setKeywords([...keywords, ""])}
+                    >
+                      + Add keyword
+                    </Button>
+                  </div>
+
+                  {/* Mentions section */}
+                  <div className="space-y-3 mt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-medium">Mentions</h3>
+                      </div>
+                      <p
+                        className={cn(
+                          "text-xs",
+                          isDark ? "text-gray-300" : "text-gray-500"
+                        )}
+                      >
+                        Add up to 3 @mentions to track (e.g. @brandname,
+                        @partner)
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      {mentions.map((mention, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <Input
+                            value={mention}
+                            onChange={(e) => {
+                              const next = [...mentions];
+                              next[index] = e.target.value;
+                              setMentions(next);
+                            }}
+                            placeholder="@username"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                          {mentions.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                const next = mentions.filter(
+                                  (_, i) => i !== index
+                                );
+                                setMentions(next.length ? next : [""]);
+                              }}
+                            >
+                              <Trash className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "mt-1 border-dashed",
+                        mentions.length >= 3 && "opacity-50 cursor-not-allowed",
+                        isDark
+                          ? "border-gray-500 text-gray-200"
+                          : "border-gray-400 text-gray-700"
+                      )}
+                      disabled={mentions.length >= 3}
+                      onClick={() => {
+                        if (mentions.length < 3) {
+                          setMentions([...mentions, ""]);
+                        }
+                      }}
+                    >
+                      + Add mention
+                    </Button>
+                  </div>
+
+                  {/* Engagement target section - only for Twitter awareness campaigns */}
+                  {contentType === "raid" && (
+                    <div className="space-y-2 mt-6">
+                      <Label>Engagement Targets (Optional)</Label>
+                      <p
+                        className={cn(
+                          "text-xs",
+                          isDark ? "text-gray-300" : "text-gray-500"
+                        )}
+                      >
+                        Set soft targets for engagement on the target tweet.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="targetLikes">Target likes</Label>
+                          <Input
+                            id="targetLikes"
+                            type="number"
+                            min={0}
+                            value={targetLikes}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setTargetLikes(
+                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                              );
+                            }}
+                            placeholder="e.g. 500"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="targetReplies">Target replies</Label>
+                          <Input
+                            id="targetReplies"
+                            type="number"
+                            min={0}
+                            value={targetReplies}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setTargetReplies(
+                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                              );
+                            }}
+                            placeholder="e.g. 50"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="targetRetweets">
+                            Target reposts/retweets
+                          </Label>
+                          <Input
+                            id="targetRetweets"
+                            type="number"
+                            min={0}
+                            value={targetRetweets}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setTargetRetweets(
+                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                              );
+                            }}
+                            placeholder="e.g. 100"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 
@@ -6517,126 +7031,178 @@ export default function EditContestPage({
             </div>
           )}
 
-          {/* Inspiration Content Section */}
+          {/* Inspiration Content Section / Target Link for Twitter Raids */}
           {!datesOnly && (
             <div>
               <div>
                 <CardTitle className="mb-2 text-lg md:text-2xl">
-                  Inspiration Content <span className="text-red-500">*</span>
+                  {platform === "twitter" && contentType === "raid" ? (
+                    <>
+                      Target Link <span className="text-red-500">*</span>
+                    </>
+                  ) : (
+                    <>
+                      Inspiration Content{" "}
+                      <span className="text-red-500">*</span>
+                    </>
+                  )}
                 </CardTitle>
                 <CardDescription className="mb-4 text-md">
-                  Help creators understand your vision by adding at least one
-                  inspiration link (Instagram, YouTube, TikTok, etc.) with a
-                  description.
+                  {platform === "twitter" && contentType === "raid"
+                    ? "Add the target tweet link that creators will engage with."
+                    : "Help creators understand your vision by adding at least one inspiration link (Instagram, YouTube, TikTok, etc.) with a description."}
                 </CardDescription>
               </div>
               <div className="space-y-4">
-                {inspirationError && (
-                  <div className="text-red-500 text-sm mb-2">
-                    {inspirationError}
+                {/* Twitter Raid: Show Target Link inputs using separate state */}
+                {platform === "twitter" && contentType === "raid" ? (
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="twitterTargetUrlInput">
+                      Target Link <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="twitterTargetUrlInput"
+                      type="url"
+                      placeholder="https://twitter.com/user/status/123456789"
+                      value={twitterTargetUrl}
+                      onChange={(e) => setTwitterTargetUrl(e.target.value)}
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
+                    />
+                    <Label htmlFor="twitterTargetDescriptionInput">
+                      Description <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="twitterTargetDescriptionInput"
+                      placeholder="e.g. Campaign Tweet"
+                      value={twitterTargetDescription}
+                      onChange={(e) =>
+                        setTwitterTargetDescription(e.target.value)
+                      }
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
+                    />
                   </div>
-                )}
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="inspirationUrlInput">
-                    Inspiration Link <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="inspirationUrlInput"
-                    type="url"
-                    placeholder="https://instagram.com/example"
-                    value={newInspirationUrl}
-                    onChange={(e) => setNewInspirationUrl(e.target.value)}
-                    className={cn(
-                      isDark
-                        ? "bg-[#180438] border border-gray-600 text-white"
-                        : "bg-white text-black"
+                ) : (
+                  <>
+                    {/* Non-Twitter or non-raid: Show Inspiration inputs */}
+                    {inspirationError && (
+                      <div className="text-red-500 text-sm mb-2">
+                        {inspirationError}
+                      </div>
                     )}
-                  />
-                  <Label htmlFor="inspirationDescriptionInput">
-                    Inspiration Description{" "}
-                    <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="inspirationDescriptionInput"
-                    placeholder="Add description here*"
-                    value={newInspirationDescription}
-                    onChange={(e) =>
-                      setNewInspirationDescription(e.target.value)
-                    }
-                    className={cn(
-                      isDark
-                        ? "bg-[#180438] border border-gray-600 text-white"
-                        : "bg-white text-black"
-                    )}
-                  />
-                  <Button
-                    type="button"
-                    onClick={addInspiration}
-                    className="w-full py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
-                    disabled={!newInspirationUrl || !newInspirationDescription}
-                  >
-                    Add Inspiration
-                  </Button>
-                </div>
-                {/* Inspiration List */}
-                {inspirationLinks.length > 0 && (
-                  <ul className="space-y-3 mt-6">
-                    {inspirationLinks.map((item, index) => (
-                      <li
-                        key={index}
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="inspirationUrlInput">
+                        Inspiration Link <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="inspirationUrlInput"
+                        type="url"
+                        placeholder="https://instagram.com/example"
+                        value={newInspirationUrl}
+                        onChange={(e) => setNewInspirationUrl(e.target.value)}
                         className={cn(
-                          "flex flex-col sm:flex-row sm:items-center gap-4 border rounded-xl p-4 shadow-sm",
                           isDark
-                            ? "bg-[#180438] border-gray-600"
-                            : "bg-white dark:bg-gray-800 border border-gray-200"
+                            ? "bg-[#180438] border border-gray-600 text-white"
+                            : "bg-white text-black"
                         )}
+                      />
+                      <Label htmlFor="inspirationDescriptionInput">
+                        Inspiration Description{" "}
+                        <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="inspirationDescriptionInput"
+                        placeholder="Add description here*"
+                        value={newInspirationDescription}
+                        onChange={(e) =>
+                          setNewInspirationDescription(e.target.value)
+                        }
+                        className={cn(
+                          isDark
+                            ? "bg-[#180438] border border-gray-600 text-white"
+                            : "bg-white text-black"
+                        )}
+                      />
+                      <Button
+                        type="button"
+                        onClick={addInspiration}
+                        className="w-full py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
+                        disabled={
+                          !newInspirationUrl || !newInspirationDescription
+                        }
                       >
-                        <div
+                        Add Inspiration
+                      </Button>
+                    </div>
+                  </>
+                )}
+                {/* Inspiration List - only show for non-Twitter raids */}
+                {!(platform === "twitter" && contentType === "raid") &&
+                  inspirationLinks.length > 0 && (
+                    <ul className="space-y-3 mt-6">
+                      {inspirationLinks.map((item, index) => (
+                        <li
+                          key={index}
                           className={cn(
-                            "rounded-full flex items-center justify-center w-12 h-12",
+                            "flex flex-col sm:flex-row sm:items-center gap-4 border rounded-xl p-4 shadow-sm",
                             isDark
-                              ? "bg-[#FFFFFF36] text-white"
-                              : "text-[#4A00BE] bg-[#D8C3FF]"
+                              ? "bg-[#180438] border-gray-600"
+                              : "bg-white dark:bg-gray-800 border border-gray-200"
                           )}
                         >
-                          <ExternalLink className="w-6 h-6" />
-                        </div>
-                        <div className="flex-1">
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={cn(
-                              "font-medium hover:underline break-all",
-                              isDark ? "text-purple-500" : "text-blue-600"
-                            )}
-                          >
-                            {item.url}
-                          </a>
                           <div
                             className={cn(
-                              "text-xs mt-1",
-                              isDark ? "text-white" : "text-gray-600"
+                              "rounded-full flex items-center justify-center w-12 h-12",
+                              isDark
+                                ? "bg-[#FFFFFF36] text-white"
+                                : "text-[#4A00BE] bg-[#D8C3FF]"
                             )}
                           >
-                            {item.description}
+                            <ExternalLink className="w-6 h-6" />
                           </div>
-                        </div>
-                        <button
-                          onClick={() => removeInspirationLink(index)}
-                          className={cn(
-                            "p-3 rounded-full flex-shrink-0 self-end sm:self-auto",
-                            isDark
-                              ? "bg-[#FFFFFF36] text-white"
-                              : "text-[#4A00BE] bg-[#D8C3FF]"
-                          )}
-                        >
-                          <Trash className="h-4 w-4" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                          <div className="flex-1">
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={cn(
+                                "font-medium hover:underline break-all",
+                                isDark ? "text-purple-500" : "text-blue-600"
+                              )}
+                            >
+                              {item.url}
+                            </a>
+                            <div
+                              className={cn(
+                                "text-xs mt-1",
+                                isDark ? "text-white" : "text-gray-600"
+                              )}
+                            >
+                              {item.description}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => removeInspirationLink(index)}
+                            className={cn(
+                              "p-3 rounded-full flex-shrink-0 self-end sm:self-auto",
+                              isDark
+                                ? "bg-[#FFFFFF36] text-white"
+                                : "text-[#4A00BE] bg-[#D8C3FF]"
+                            )}
+                          >
+                            <Trash className="h-4 w-4" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
               </div>
             </div>
           )}
@@ -7407,9 +7973,54 @@ export default function EditContestPage({
                   Configure optional features for enhanced creator engagement.
                 </p>
               </div>
-
               {/* Content Type Selection */}
               <div className="space-y-2">
+                <Label htmlFor="contentType">Content Type</Label>
+                <Select
+                  value={contentType}
+                  onValueChange={(value: any) => setContentType(value)}
+                >
+                  <SelectTrigger
+                    id="contentType"
+                    className={cn(
+                      isDark ? "border-gray-600" : "border-gray-300"
+                    )}
+                  >
+                    <SelectValue placeholder="Select content type (optional)" />
+                  </SelectTrigger>
+                  <SelectContent isDark={isDark}>
+                    {platform === "twitter" ? (
+                      <>
+                        <SelectItem value="raid" isDark={isDark}>
+                          ⚔️ Raid (creators like/comment your tweet)
+                        </SelectItem>
+                        <SelectItem value="awareness" isDark={isDark}>
+                          📣 Awareness (creators post their own tweet)
+                        </SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="ugc" isDark={isDark}>
+                          📹 UGC (User Generated Content)
+                        </SelectItem>
+                        <SelectItem value="clipping" isDark={isDark}>
+                          ✂️ Clipping (Short clips/repurposed content)
+                        </SelectItem>
+                        <SelectItem value="other" isDark={isDark}>
+                          📋 Other (Check Rules for details)
+                        </SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Helps creators filter opportunities by content type. Leave
+                  empty if not applicable.
+                </p>
+              </div>
+
+              {/* Content Type Selection */}
+              {/* <div className="space-y-2">
                 <Label htmlFor="content-type">Content Type (Optional)</Label>
                 <Select
                   value={contentType || undefined}
@@ -7440,7 +8051,7 @@ export default function EditContestPage({
                   Helps creators filter opportunities by content type. Leave
                   empty if not applicable.
                 </p>
-              </div>
+              </div> */}
 
               {/* Multiple Submissions Toggle */}
               <div

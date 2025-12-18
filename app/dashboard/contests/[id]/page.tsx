@@ -216,6 +216,11 @@ export default async function ContestDetailPage({
     interests: contestData.interests,
     // Region data
     region: contestData.region,
+    // Twitter-specific fields
+    contest_format: contestData.contest_format,
+    twitter_targets: contestData.twitter_targets,
+    twitter_keywords: contestData.twitter_keywords,
+    twitter_mentions: contestData.twitter_mentions,
   };
 
   const submissions = submissionsData

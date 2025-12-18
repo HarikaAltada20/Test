@@ -24,6 +24,8 @@ import {
   Eye,
   Search,
   X,
+  Film,
+  FileType,
 } from "lucide-react";
 import { User, UserResponse } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "@/lib/utils";
@@ -132,7 +134,7 @@ export default function OpportunitiesPage({
       ).length,
     },
   ];
-
+  const [mediaType, setMediaType] = useState("media");
   const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: "all" });
   // New state variables for filters and sorting
   const [statusFilter, setStatusFilter] = useState<StatusFilterType>("all");
@@ -686,8 +688,44 @@ export default function OpportunitiesPage({
               );
             }
           );
+          // setAvailableContests(regionFilteredContests);
 
-          setAvailableContests(regionFilteredContests);
+          // Static demo Twitter campaign for UI showcase (does not exist in DB)
+          const demoTwitterContest = {
+            id: "demo-twitter-campaign",
+            title: "Demo Twitter Campaign",
+            platform: "twitter",
+            status: "active",
+            thumbnail_url: null,
+            contest_type: "cpm",
+            contest_based_details: {
+              cpm_contest: {
+                cpm_rate_usd: 5,
+                total_budget: 50000,
+                budget_spent: 0,
+                flat_fee_bonus: 0,
+              },
+              leaderboard_contest: null,
+            },
+            live_submission_count: 0,
+            categories: [],
+            subcategories: {},
+            interests: [],
+            bonus_details: null,
+            region: {},
+            multiple_submissions_enabled: false,
+            max_submissions_per_creator: 1,
+            start_date: "2025-01-01T09:00:00.000Z",
+            end_date: "2025-01-31T23:59:59.000Z",
+            post_contest_status: null,
+            is_demo: true,
+          } as any;
+
+          const contestsWithDemo = [
+            demoTwitterContest,
+            ...regionFilteredContests,
+          ];
+          setAvailableContests(contestsWithDemo);
         }
       } catch (error) {
         console.error("Unexpected error in fetchData:", error);
@@ -870,7 +908,22 @@ export default function OpportunitiesPage({
       });
     }
 
-    // Platform Filter
+    // Media type based on contest content format
+    // mediaType === "media" => show only contests with content_format === "video"
+    // mediaType === "text"  => show only contests with content_format === "text_image"
+    contestsToDisplay = contestsToDisplay.filter((contest) => {
+      const format = contest.contest_format;
+
+      if (mediaType === "media") {
+        if (format !== "video") return false;
+      } else if (mediaType === "text") {
+        if (format !== "text_image") return false;
+      }
+
+      return true;
+    });
+
+    // Platform Filter (applied on top of mediaType grouping)
     if (platformFilter !== "all") {
       contestsToDisplay = contestsToDisplay.filter(
         (contest) => contest.platform?.toLowerCase() === platformFilter
@@ -1042,6 +1095,7 @@ export default function OpportunitiesPage({
     creatorSubcategories,
     creatorInterests,
     userCountry,
+    mediaType,
   ]);
 
   // Reset to first page whenever filters or sort change
@@ -1600,41 +1654,84 @@ export default function OpportunitiesPage({
             />
           </div>
           {/* View Toggle Buttons - Right Side */}
-          <div className="hidden md:flex items-center gap-1 border border-gray-400 rounded-md p-1">
-            <button
-              onClick={() => setViewMode("grid")}
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                viewMode === "grid"
-                  ? isDark
-                    ? "bg-[#7F39EC] text-white"
-                    : "bg-[#7F39EC] text-white"
-                  : isDark
-                  ? "text-gray-300 hover:text-white"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              )}
-              title="Grid View"
-            >
-              <LayoutGrid className="h-4 w-4" />
-              <span>Grid View</span>
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                viewMode === "list"
-                  ? isDark
-                    ? "bg-[#7F39EC] text-white"
-                    : "bg-[#7F39EC] text-white"
-                  : isDark
-                  ? "text-gray-300 hover:text-white"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              )}
-              title="List View"
-            >
-              <List className="h-4 w-4" />
-              <span>List View</span>
-            </button>
+          <div className="flex gap-2 items-center">
+            <div className="flex items-center gap-1 border border-gray-400 rounded-md p-1">
+              <button
+                onClick={() => setMediaType("text")}
+                className={cn(
+                  "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
+                  mediaType === "text"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                    ? "text-gray-300 hover:text-white"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="Text/Image Opportunities"
+              >
+                <FileType className="h-4 w-4 mr-2" />
+                <span>Text/Image</span>
+                <span className="flex sm:hidden lg:flex ml-1">Opportunities</span>
+              </button>
+              <button
+                onClick={() => setMediaType("media")}
+                className={cn(
+                  "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
+                  mediaType === "media"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                    ? "text-gray-300 hover:text-white"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="Video Opportunities"
+              >
+                <Film className="h-4 w-4 mr-2" />
+                <span>Video</span>
+                <span className="flex sm:hidden lg:flex ml-1">Opportunities</span>
+              </button>
+            </div>
+
+            <div className="hidden md:flex items-center gap-1 border border-gray-400 rounded-md p-1">
+              <button
+                onClick={() => setViewMode("grid")}
+                className={cn(
+                  "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
+                  viewMode === "grid"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                    ? "text-gray-300 hover:text-white"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="Grid View"
+              >
+                <LayoutGrid className="h-4 w-4 mr-2" />
+                <span>Grid</span>
+                <span className="flex sm:hidden lg:flex ml-1">View</span>
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={cn(
+                  "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
+                  viewMode === "list"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                    ? "text-gray-300 hover:text-white"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="List View"
+              >
+                <List className="h-4 w-4 mr-2" />
+                <span>List</span>
+                <span className="flex sm:hidden lg:flex ml-1">View</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1706,12 +1803,23 @@ export default function OpportunitiesPage({
             <SelectItem value="all" isDark={isDark}>
               All Platforms
             </SelectItem>
-            <SelectItem value="youtube" isDark={isDark}>
-              YouTube
-            </SelectItem>
-            <SelectItem value="instagram" isDark={isDark}>
-              Instagram
-            </SelectItem>
+
+            {mediaType == "media" && (
+              <SelectItem value="youtube" isDark={isDark}>
+                YouTube
+              </SelectItem>
+            )}
+            {mediaType == "media" && (
+              <SelectItem value="instagram" isDark={isDark}>
+                Instagram
+              </SelectItem>
+            )}
+            {mediaType == "text" && (
+              <SelectItem value="twitter" isDark={isDark}>
+                Twitter
+              </SelectItem>
+            )}
+
             {/* Add more platforms as needed */}
           </SelectContent>
         </Select>
@@ -1738,9 +1846,11 @@ export default function OpportunitiesPage({
             <SelectItem value="leaderboard" isDark={isDark}>
               Leaderboard
             </SelectItem>
-            <SelectItem value="cpm" isDark={isDark}>
-              CPM
-            </SelectItem>
+            {mediaType == "media" && (
+              <SelectItem value="cpm" isDark={isDark}>
+                CPM
+              </SelectItem>
+            )}
           </SelectContent>
         </Select>
 

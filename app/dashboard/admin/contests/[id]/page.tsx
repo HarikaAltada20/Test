@@ -190,6 +190,11 @@ export default async function AdminContestDetailPage({
       subcategories: contestData.subcategories,
       interests: contestData.interests,
       region: contestData.region,
+      // Twitter-specific fields
+      contest_format: contestData.contest_format,
+      twitter_targets: contestData.twitter_targets,
+      twitter_keywords: contestData.twitter_keywords,
+      twitter_mentions: contestData.twitter_mentions,
     };
 
     // Prepare submissions data

@@ -96,6 +96,8 @@ type Contest = {
   max_submissions_per_creator?: number;
   content_type?: string;
   bonus_details?: any;
+  // Text/image vs video contest format (for display filtering)
+  contest_format?: string | null;
 };
 
 interface ContestListClientProps {
@@ -200,6 +202,10 @@ export function ContestListClient({
   const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [contestStatusFilter, setContestStatusFilter] = useState<string>("all"); // New contest status filter
   const [contestTypeFilter, setContestTypeFilter] = useState<string>("all"); // New contest type filter
+  // New: contest format filter (all / text-image / video)
+  const [contestFormatFilter, setContestFormatFilter] = useState<
+    "all" | "text_image" | "video"
+  >("video");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [filteredAndSortedContests, setFilteredAndSortedContests] = useState<
     Contest[]
@@ -429,6 +435,25 @@ export function ContestListClient({
       );
     }
 
+    // Apply contest format filter (text/image vs video)
+    if (contestFormatFilter !== "all") {
+      contestsToDisplay = contestsToDisplay.filter((contest) => {
+        const fmt = contest.contest_format?.toLowerCase() || "";
+        if (contestFormatFilter === "text_image") {
+          // Treat missing/unknown format as text/image by default
+          return (
+            fmt === "text_image" ||
+            fmt === "text-image" ||
+            fmt === "text" ||
+            fmt === "image" ||
+            fmt === ""
+          );
+        }
+        // video filter
+        return fmt === "video";
+      });
+    }
+
     // Sorting - exact copy from opportunities
     contestsToDisplay.sort((a, b) => {
       switch (sortOption) {
@@ -530,6 +555,7 @@ export function ContestListClient({
     contestStatusFilter,
     platformFilter,
     contestTypeFilter,
+    contestFormatFilter,
     sortOption,
     searchQuery,
   ]);
@@ -544,7 +570,7 @@ export function ContestListClient({
     const Icon = config.icon;
     return (
       <Badge
-        className={`${config.color} text-white px=3 py-1 text-sm bg-[#7F39EC] text-white border-0`}
+        className={`${config.color} text-white px=3 py-1 text-sm bg-[#7F39EC] border-0`}
       >
         {/* <Icon className="w-3 h-3 mr-1" /> */}
         {config.label}
@@ -2004,6 +2030,7 @@ export function ContestListClient({
       contestStatusFilter !== "all" ||
       platformFilter !== "all" ||
       contestTypeFilter !== "all" ||
+      contestFormatFilter !== "all" ||
       searchQuery.trim() !== ""
     ) {
       return filteredAndSortedContests; // Use filtered and sorted results
@@ -2127,6 +2154,7 @@ export function ContestListClient({
     contestStatusFilter,
     platformFilter,
     contestTypeFilter,
+    contestFormatFilter,
     sortOption,
     searchQuery,
   ]);
@@ -2173,42 +2201,84 @@ export function ContestListClient({
               )}
             />
           </div>
-          {/* View Toggle Buttons */}
-          <div className="hidden min-[650px]:flex items-center gap-1 border border-gray-400 rounded-md p-1">
-            <button
-              onClick={() => setViewMode("grid")}
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                viewMode === "grid"
-                  ? isDark
-                    ? "bg-[#7F39EC] text-white"
-                    : "bg-[#7F39EC] text-white"
-                  : isDark
-                  ? "text-gray-300 hover:text-white"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              )}
-              title="Grid View"
-            >
-              <LayoutGrid className="h-4 w-4" />
-              <span className="hidden sm:inline">Grid View</span>
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                viewMode === "list"
-                  ? isDark
-                    ? "bg-[#7F39EC] text-white"
-                    : "bg-[#7F39EC] text-white"
-                  : isDark
-                  ? "text-gray-300 hover:text-white"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              )}
-              title="List View"
-            >
-              <List className="h-4 w-4" />
-              <span className="hidden sm:inline">List View</span>
-            </button>
+          <div className="flex gap-2">
+            {/* Format Toggle: Text/Image contests vs Video contests */}
+            <div className="flex items-center gap-1 border border-gray-400 rounded-md p-1">
+              <button
+                type="button"
+                onClick={() => setContestFormatFilter("text_image")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                  contestFormatFilter === "text_image"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                    ? "text-gray-300 hover:text-white"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="Text/Image contests"
+              >
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Text/Image contests</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setContestFormatFilter("video")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                  contestFormatFilter === "video"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                    ? "text-gray-300 hover:text-white"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="Video contests"
+              >
+                <PlayCircle className="h-4 w-4" />
+                <span className="hidden sm:inline">Video contests</span>
+              </button>
+            </div>
+
+            {/* View Toggle Buttons */}
+            <div className="hidden min-[650px]:flex items-center gap-1 border border-gray-400 rounded-md p-1">
+              <button
+                onClick={() => setViewMode("grid")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                  viewMode === "grid"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                    ? "text-gray-300 hover:text-white"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="Grid View"
+              >
+                <LayoutGrid className="h-4 w-4" />
+                <span className="hidden sm:inline">Grid View</span>
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                  viewMode === "list"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                    ? "text-gray-300 hover:text-white"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="List View"
+              >
+                <List className="h-4 w-4" />
+                <span className="hidden sm:inline">List View</span>
+              </button>
+            </div>
           </div>
         </div>
         {/* Filters - Wraps to next row when overflow */}

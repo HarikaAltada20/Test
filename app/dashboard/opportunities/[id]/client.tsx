@@ -204,6 +204,9 @@ export function ContestClientPage({
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [submissionCount, setSubmissionCount] = useState(0);
   const [maxSubmissions, setMaxSubmissions] = useState(1);
+  const [joinCampaignLoading, setJoinCampaignLoading] = useState(false);
+  const [hasJoinedTwitterCampaign, setHasJoinedTwitterCampaign] =
+    useState(false);
   const [showAllSubmissionsModal, setShowAllSubmissionsModal] = useState(false);
   const [modalViewMode, setModalViewMode] = useState<"simple" | "detailed">(
     "simple"
@@ -401,7 +404,10 @@ export function ContestClientPage({
         // Create new group for this creator
         grouped.set(entry.creator_id, {
           creator_id: entry.creator_id,
-          creator_username: entry.user_platform_username,
+          creator_username:
+            (contest?.platform === "twitter"
+              ? (entry as any).app_username
+              : null) || entry.user_platform_username,
           creator_full_name: entry.user_full_name,
           creator_pfp_url: entry.creator_pfp_url,
           user_platform_pfp_url: entry.user_platform_pfp_url,
@@ -543,6 +549,10 @@ export function ContestClientPage({
 
   // Helper function to render verification badges
   const renderVerificationBadges = (status: string) => {
+    // For Twitter (X) contests, leaderboard rows come from twitter_campaign_leaderboard
+    // and do not have a per-submission verification status. Skip badges in that case.
+    if (!status || contest?.platform === "twitter") return null;
+
     return renderStatusBadge(status as any, contestType);
   };
 
@@ -672,6 +682,79 @@ export function ContestClientPage({
     }
   };
 
+  // Fetch Twitter-only leaderboard (aggregated from twitter_campaign_leaderboard)
+  const fetchTwitterLeaderboard = async () => {
+    if (!isMounted || !contestId) return;
+
+    setLoadingLeaderboard(true);
+
+    try {
+      const response = await fetch(
+        `/api/contests/${contestId}/twitter-leaderboard?page=1&limit=${leaderboardItemsPerPage}`
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to fetch Twitter leaderboard");
+      }
+
+      if (isMounted) {
+        // twitter_campaign_leaderboard rows already contain aggregated stats per creator.
+        // We reuse the existing leaderboard state structure where possible.
+        setLeaderboard(data.leaderboard || []);
+        setLastUpdated(new Date().toISOString());
+        setLeaderboardCurrentPage(data.currentPage || 1);
+        setTotalLeaderboardPages(data.totalPages || 1);
+        setTotalLeaderboardEntries(data.totalEntries || 0);
+        setContestType("leaderboard");
+      }
+    } catch (err: any) {
+      console.error("Error fetching Twitter leaderboard:", err);
+      if (isMounted && !error) {
+        setError(err.message || "Failed to fetch Twitter leaderboard");
+      }
+    } finally {
+      if (isMounted) setLoadingLeaderboard(false);
+    }
+  };
+
+  // Fetch current creator's rank/entry from twitter_campaign_leaderboard
+  const fetchMyTwitterRank = async () => {
+    if (!isMounted || !contestId) return;
+
+    setLoadingMySubmission(true);
+
+    try {
+      const response = await fetch(
+        `/api/contests/${contestId}/twitter-my-rank`
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.warn(
+          "Failed to fetch Twitter my-rank data:",
+          data.error || "Unknown error"
+        );
+        if (isMounted) setMyLeaderboardEntry(null);
+        return;
+      }
+
+      if (isMounted) {
+        if (data.entry) {
+          // entry already contains current_rank and aggregated stats
+          setMyLeaderboardEntry({ ...data.entry, rank: data.entry.current_rank });
+        } else {
+          setMyLeaderboardEntry(null);
+        }
+      }
+    } catch (err: any) {
+      console.error("Error fetching Twitter my-rank data:", err);
+      if (isMounted) setMyLeaderboardEntry(null);
+    } finally {
+      if (isMounted) setLoadingMySubmission(false);
+    }
+  };
+
   const fetchPostContestStatus = async () => {
     if (!isMounted || !contestId) return;
 
@@ -694,6 +777,49 @@ export function ContestClientPage({
       console.error("Error fetching post-contest status:", error);
     }
   };
+
+  // Automatically fetch Twitter participants' tweets for this contest on initial render
+  useEffect(() => {
+    if (!contestId || !contest) return;
+
+    const fetchTwitterParticipantsTweets = async () => {
+      try {
+        const payload = {
+          twitter_keywords: contest.twitter_keywords || [],
+          twitter_mentions: contest.twitter_mentions || [],
+        };
+
+        console.log(
+          "[ContestClientPage] Sending campaign keywords/mentions to twitter-refresh-tweets API:",
+          payload
+        );
+
+        const response = await fetch(
+          `/api/contests/${contestId}/twitter-refresh-tweets`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          }
+        );
+
+        const data = await response.json();
+        console.log(
+          "[ContestClientPage] Twitter refresh response (participants & tweets):",
+          data
+        );
+      } catch (err) {
+        console.error(
+          "[ContestClientPage] Error calling twitter-refresh-tweets API:",
+          err
+        );
+      }
+    };
+
+    fetchTwitterParticipantsTweets();
+  }, [contestId, contest]);
 
   // Clean up URL parameters on component mount
   useEffect(() => {
@@ -868,6 +994,24 @@ export function ContestClientPage({
     // Added leaderboardItemsPerPage to dependencies as it affects dummy data pagination
   }, [contestId, user, router, supabase, leaderboardItemsPerPage]);
 
+  // When user switches to the Leaderboard tab, choose the correct data source:
+  // - For Twitter contests, use Twitter-specific leaderboard APIs
+  // - For other contests, use the existing generic leaderboard APIs
+  useEffect(() => {
+    if (!isMounted || !contestId || !contest) return;
+
+    if (activeTab !== "leaderboard") return;
+
+    const isTwitterContest = contest.platform === "twitter";
+
+    if (isTwitterContest) {
+      fetchTwitterLeaderboard();
+      fetchMyTwitterRank();
+    } else {
+      fetchLeaderboard(1);
+      fetchMySubmissionData();
+    }
+  }, [activeTab, contestId, contest]);
   // Fetch user profile data for link processing
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -982,8 +1126,75 @@ export function ContestClientPage({
     }
   }, [showCreatorVideosModal]);
 
+  const isTwitterTextImageContest =
+    contest?.platform === "twitter" &&
+    (contest as any)?.contest_format === "text_image";
+
+  // Check if user has already joined this Twitter campaign
+  useEffect(() => {
+    const checkJoinStatus = async () => {
+      if (!contestId || !isTwitterTextImageContest || !user) return;
+
+      try {
+        const res = await fetch(
+          `/api/twitter-apis/join-status?contestId=${encodeURIComponent(
+            contestId
+          )}`
+        );
+
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (data && typeof data.joined === "boolean") {
+          setHasJoinedTwitterCampaign(data.joined);
+        }
+      } catch (e) {
+        // Silently ignore join-status errors; button will still allow join
+      }
+    };
+
+    checkJoinStatus();
+  }, [contestId, isTwitterTextImageContest, user]);
+
   const handleSubmitContent = () => {
     router.push(`/dashboard/opportunities/${contestId}/submit`);
+  };
+
+  const handleJoinTwitterCampaign = async () => {
+    if (!contest?.id) return;
+
+    setJoinCampaignLoading(true);
+    try {
+      const res = await fetch("/api/twitter-apis/join-campaign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contestId: contest.id }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          data.error || "Failed to join Twitter (X) campaign. Please try again."
+        );
+      }
+
+      toast({
+        title: "Joined Twitter Campaign",
+        description: "You have successfully joined this Twitter (X) campaign.",
+      });
+
+      // Reflect joined state in UI
+      setHasJoinedTwitterCampaign(true);
+    } catch (err: any) {
+      toast({
+        title: "Cannot join campaign",
+        description:
+          err?.message ||
+          "Please check your Twitter connection and X bio, then try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setJoinCampaignLoading(false);
+    }
   };
 
   const handleViewSubmission = (submissionId: string) => {
@@ -1394,8 +1605,16 @@ export function ContestClientPage({
 
                   <Button
                     size="lg"
-                    onClick={handleSubmitContent}
-                    disabled={contest.status?.toLowerCase() !== "active"}
+                    onClick={
+                      isTwitterTextImageContest && !hasJoinedTwitterCampaign
+                        ? handleJoinTwitterCampaign
+                        : handleSubmitContent
+                    }
+                    disabled={
+                      contest.status?.toLowerCase() !== "active" ||
+                      joinCampaignLoading ||
+                      (isTwitterTextImageContest && hasJoinedTwitterCampaign)
+                    }
                     className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${
                       contest.status?.toLowerCase() === "active"
                         ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
@@ -1423,7 +1642,15 @@ export function ContestClientPage({
                         <>
                           <div className="flex items-center gap-2">
                             <PlayCircle className="h-6 w-6" />
-                            <span>Submit Your Entry!</span>
+                            <span>
+                              {isTwitterTextImageContest
+                                ? hasJoinedTwitterCampaign
+                                  ? "Joined"
+                                  : joinCampaignLoading
+                                  ? "Joining..."
+                                  : "Join Twitter Campaign"
+                                : "Submit Your Entry!"}
+                            </span>
                           </div>
                           {contest.status?.toLowerCase() === "active" && (
                             <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse ml-1"></div>
@@ -1432,6 +1659,12 @@ export function ContestClientPage({
                       )}
                     </span>
                   </Button>
+
+                  {/* Preserve existing pulse indicator for non-joined Twitter contests */}
+                  {contest.status?.toLowerCase() === "active" &&
+                    !isTwitterTextImageContest && (
+                      <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse ml-1"></div>
+                    )}
 
                   {contest.status?.toLowerCase() === "active" && (
                     <div
@@ -3429,6 +3662,306 @@ export function ContestClientPage({
                     <FileText className="h-6 w-6 text-purple-600 dark:text-purple-400" />
                     Content Requirements
                   </h3>
+                  {/* Twitter raid details for Twitter contests */}
+                  {contest.platform?.toLowerCase() === "twitter" &&
+                    (contest as any).content_type === "raid" &&
+                    (contest as any).twitter_targets && (
+                      <div
+                        className={cn(
+                          "rounded-xl p-6 border space-y-4",
+                          isDark
+                            ? "bg-slate-900/40 border-slate-700"
+                            : "bg-slate-50 border-slate-200"
+                        )}
+                      >
+                        <h4
+                          className={cn(
+                            "font-semibold text-lg flex items-center gap-2",
+                            isDark ? "text-slate-100" : "text-slate-900"
+                          )}
+                        >
+                          <Share2 className="h-5 w-5 text-sky-500" />
+                          Target Tweet for This Raid
+                        </h4>
+
+                        {(contest as any).twitter_targets.link && (
+                          <div className="space-y-1">
+                            <p
+                              className={cn(
+                                "text-xs uppercase tracking-wide font-medium",
+                                isDark ? "text-slate-300" : "text-slate-600"
+                              )}
+                            >
+                              Tweet Link
+                            </p>
+                            <a
+                              href={(contest as any).twitter_targets.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={cn(
+                                "inline-flex items-center gap-1 text-sm font-medium underline break-all",
+                                isDark
+                                  ? "text-sky-300 hover:text-sky-200"
+                                  : "text-sky-600 hover:text-sky-700"
+                              )}
+                            >
+                              {(contest as any).twitter_targets.link}
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </div>
+                        )}
+
+                        {(contest as any).twitter_targets.description && (
+                          <div className="space-y-1">
+                            <p
+                              className={cn(
+                                "text-xs uppercase tracking-wide font-medium",
+                                isDark ? "text-slate-300" : "text-slate-600"
+                              )}
+                            >
+                              Tweet Description
+                            </p>
+                            <p
+                              className={cn(
+                                "text-sm leading-relaxed",
+                                isDark ? "text-slate-100" : "text-slate-800"
+                              )}
+                            >
+                              {(contest as any).twitter_targets.description}
+                            </p>
+                          </div>
+                        )}
+
+                        {(contest as any).twitter_targets.metrics && (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <p
+                                className={cn(
+                                  "text-xs uppercase tracking-wide font-medium",
+                                  isDark ? "text-slate-300" : "text-slate-600"
+                                )}
+                              >
+                                Target Likes
+                              </p>
+                              <p
+                                className={cn(
+                                  "text-base font-semibold",
+                                  isDark ? "text-slate-100" : "text-slate-800"
+                                )}
+                              >
+                                {(contest as any).twitter_targets.metrics.likes ??
+                                  "Not specified"}
+                              </p>
+                            </div>
+                            <div>
+                              <p
+                                className={cn(
+                                  "text-xs uppercase tracking-wide font-medium",
+                                  isDark ? "text-slate-300" : "text-slate-600"
+                                )}
+                              >
+                                Target Replies
+                              </p>
+                              <p
+                                className={cn(
+                                  "text-base font-semibold",
+                                  isDark ? "text-slate-100" : "text-slate-800"
+                                )}
+                              >
+                                {(contest as any).twitter_targets.metrics
+                                  .replies ?? "Not specified"}
+                              </p>
+                            </div>
+                            <div>
+                              <p
+                                className={cn(
+                                  "text-xs uppercase tracking-wide font-medium",
+                                  isDark ? "text-slate-300" : "text-slate-600"
+                                )}
+                              >
+                                Target Retweets
+                              </p>
+                              <p
+                                className={cn(
+                                  "text-base font-semibold",
+                                  isDark ? "text-slate-100" : "text-slate-800"
+                                )}
+                              >
+                                {(contest as any).twitter_targets.metrics
+                                  .retweets ?? "Not specified"}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {(((contest as any).twitter_keywords &&
+                          (contest as any).twitter_keywords.length > 0) ||
+                          ((contest as any).twitter_mentions &&
+                            (contest as any).twitter_mentions.length > 0)) && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {(contest as any).twitter_keywords &&
+                              (contest as any).twitter_keywords.length > 0 && (
+                                <div>
+                                  <p
+                                    className={cn(
+                                      "text-xs uppercase tracking-wide font-medium mb-1",
+                                      isDark
+                                        ? "text-slate-300"
+                                        : "text-slate-600"
+                                    )}
+                                  >
+                                    Suggested Keywords & Hashtags
+                                  </p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {(contest as any).twitter_keywords.map(
+                                      (keyword: string, idx: number) => (
+                                        <Badge
+                                          key={`${keyword}-${idx}`}
+                                          variant="outline"
+                                          className={cn(
+                                            "rounded-full text-xs px-3 py-1",
+                                            isDark
+                                              ? "border-slate-600 text-slate-100"
+                                              : "border-slate-300 text-slate-800"
+                                          )}
+                                        >
+                                          {keyword}
+                                        </Badge>
+                                      )
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            {(contest as any).twitter_mentions &&
+                              (contest as any).twitter_mentions.length > 0 && (
+                                <div>
+                                  <p
+                                    className={cn(
+                                      "text-xs uppercase tracking-wide font-medium mb-1",
+                                      isDark
+                                        ? "text-slate-300"
+                                        : "text-slate-600"
+                                    )}
+                                  >
+                                    Accounts to Mention
+                                  </p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {(contest as any).twitter_mentions.map(
+                                      (mention: string, idx: number) => (
+                                        <Badge
+                                          key={`${mention}-${idx}`}
+                                          variant="outline"
+                                          className={cn(
+                                            "rounded-full text-xs px-3 py-1",
+                                            isDark
+                                              ? "border-slate-600 text-slate-100"
+                                              : "border-slate-300 text-slate-800"
+                                          )}
+                                        >
+                                          {mention}
+                                        </Badge>
+                                      )
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                  {/* Required Keywords & Mentions for all Twitter contests */}
+                  {contest.platform?.toLowerCase() === "twitter" &&
+                    (((contest as any).twitter_keywords &&
+                      (contest as any).twitter_keywords.length > 0) ||
+                      ((contest as any).twitter_mentions &&
+                        (contest as any).twitter_mentions.length > 0)) && (
+                      <div
+                        className={cn(
+                          "rounded-xl p-4 border space-y-3",
+                          isDark
+                            ? "bg-slate-900/40 border-slate-700"
+                            : "bg-slate-50 border-slate-200"
+                        )}
+                      >
+                        <h4
+                          className={cn(
+                            "font-semibold text-sm flex items-center gap-2",
+                            isDark ? "text-slate-100" : "text-slate-900"
+                          )}
+                        >
+                          Required Keywords & Mentions
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {(contest as any).twitter_keywords &&
+                            (contest as any).twitter_keywords.length > 0 && (
+                              <div>
+                                <p
+                                  className={cn(
+                                    "text-xs uppercase tracking-wide font-medium mb-1",
+                                    isDark
+                                      ? "text-slate-300"
+                                      : "text-slate-600"
+                                  )}
+                                >
+                                  Keywords & Hashtags
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  {(contest as any).twitter_keywords.map(
+                                    (keyword: string, idx: number) => (
+                                      <Badge
+                                        key={`req-keyword-${keyword}-${idx}`}
+                                        variant="outline"
+                                        className={cn(
+                                          "rounded-full text-xs px-3 py-1",
+                                          isDark
+                                            ? "border-slate-600 text-slate-100"
+                                            : "border-slate-300 text-slate-800"
+                                        )}
+                                      >
+                                        {keyword}
+                                      </Badge>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          {(contest as any).twitter_mentions &&
+                            (contest as any).twitter_mentions.length > 0 && (
+                              <div>
+                                <p
+                                  className={cn(
+                                    "text-xs uppercase tracking-wide font-medium mb-1",
+                                    isDark
+                                      ? "text-slate-300"
+                                      : "text-slate-600"
+                                  )}
+                                >
+                                  Accounts to Mention
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  {(contest as any).twitter_mentions.map(
+                                    (mention: string, idx: number) => (
+                                      <Badge
+                                        key={`req-mention-${mention}-${idx}`}
+                                        variant="outline"
+                                        className={cn(
+                                          "rounded-full text-xs px-3 py-1",
+                                          isDark
+                                            ? "border-slate-600 text-slate-100"
+                                            : "border-slate-300 text-slate-800"
+                                        )}
+                                      >
+                                        {mention}
+                                      </Badge>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                        </div>
+                      </div>
+                    )}
 
                   {/* Brief Section */}
                   <div
@@ -4438,32 +4971,51 @@ export function ContestClientPage({
                                     displayEntry.user_platform_pfp_url ??
                                     undefined
                                   }
-                                  alt={displayEntry.user_platform_username}
+                                  alt={
+                                    contest?.platform === "twitter"
+                                      ? (displayEntry as any).app_username ||
+                                        displayEntry.user_platform_username
+                                      : displayEntry.user_platform_username
+                                  }
                                 />
-                                <AvatarFallback 
-                                className={cn(
-                                  "bg-primary/20",
-                                  isDark
-                                    ? "text-white"
-                                    : "text-gray-900"
-                                )}>
-                                  {displayEntry.user_platform_username?.[0]?.toUpperCase() ||
-                                    "U"}
+                                <AvatarFallback
+                                  className={cn(
+                                    "bg-primary/20",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {(
+                                    contest?.platform === "twitter"
+                                      ? ((displayEntry as any).app_username as
+                                          string | undefined)
+                                      : displayEntry.user_platform_username
+                                  )?.[0]
+                                    ?.toUpperCase() || "U"}
                                 </AvatarFallback>
                               </Avatar>
 
                               <div className="flex flex-col min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
-                                  <p                  
+                                  <p
                                     className={cn(
                                       "text-sm sm:text-base font-semibold truncate",
                                       isDark
                                         ? "text-white"
-                                        : "text-gray-900"
+                                        : "text-gray-700"
                                     )}
-                                    title={displayEntry.user_platform_username}
+                                    title={
+                                      contest?.platform === "twitter"
+                                        ? (displayEntry as any).app_username ||
+                                          displayEntry.user_platform_username
+                                        : displayEntry.user_platform_username
+                                    }
                                   >
-                                    {displayEntry.user_platform_username} (You)
+                                    {(contest?.platform === "twitter"
+                                      ? (displayEntry as any).app_username ||
+                                        displayEntry.user_platform_username
+                                      : displayEntry.user_platform_username) +
+                                      " "}
+                                    (You)
                                     {bestSubmission &&
                                       myLeaderboardEntry &&
                                       bestSubmission.id !==
@@ -4494,10 +5046,18 @@ export function ContestClientPage({
                                 "text-base sm:text-lg font-bold",
                                 isDark ? "text-white" : "text-gray-900"
                               )}>
-                                {displayEntry.views
+                                {contest?.platform === "twitter" ? (
+                                  <>{typeof (displayEntry as any).total_points ===
+                                  "number"
+                                  ? (displayEntry as any).total_points.toLocaleString()
+                                  : "0"}{" "}
+                                  points</>
+                                ) : (
+                                  <>{displayEntry.views
                                   ? displayEntry.views.toLocaleString()
                                   : "0"}{" "}
-                                views
+                                  views</>
+                                )}
                               </p>
                               {displayEntry.content_link && (
                                 <Button
@@ -4970,9 +5530,12 @@ export function ContestClientPage({
                                                               : "text-gray-900"
                                                           )}
                                                         >
-                                                          {
-                                                            submission.user_platform_username
-                                                          }{" "}
+                                                          {contest?.platform ===
+                                                          "twitter"
+                                                            ? (submission as any)
+                                                                .app_username ||
+                                                              submission.user_platform_username
+                                                            : submission.user_platform_username}{" "}
                                                           {actualRank ===
                                                             myLeaderboardEntry?.rank &&
                                                             "(You)"}
@@ -5444,7 +6007,10 @@ export function ContestClientPage({
                                                   : "text-gray-700"
                                               )}
                                             >
-                                              {video.user_platform_username}
+                                              {contest?.platform === "twitter"
+                                                ? (video as any).app_username ||
+                                                  video.user_platform_username
+                                                : video.user_platform_username}
                                             </p>
                                             {renderVerificationBadges(
                                               video.status
@@ -5669,95 +6235,97 @@ export function ContestClientPage({
                     })()}
                 </div>
 
-                {/* Submission Stats and Info */}
-                <div
-                  className={cn(
-                    "border rounded-lg p-3 mb-4",
-                    isDark
-                      ? "bg-blue-700/30 border-blue-700/50"
-                      : "bg-blue-50 border-blue-200"
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={cn(
-                        "flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5",
-                        isDark
-                          ? "bg-blue-500/30 text-white"
-                          : "bg-blue-100 text-blue-600"
-                      )}
-                    >
-                      <Info className="w-3 h-3" />
-                    </div>
-                    <div className="flex-1">
-                      <p
-                        className={cn(
-                          "text-md font-medium",
-                          isDark ? "text-white" : "text-blue-900"
-                        )}
-                      >
-                        Leaderboard Display
-                      </p>
+                {/* Submission Stats and Info - only relevant for non-Twitter contests */}
+                {contest?.platform !== "twitter" && (
+                  <div
+                    className={cn(
+                      "border rounded-lg p-3 mb-4",
+                      isDark
+                        ? "bg-blue-700/30 border-blue-700/50"
+                        : "bg-blue-50 border-blue-200"
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
                       <div
                         className={cn(
-                          "text-sm mt-1 space-y-1",
-                          isDark ? "text-gray-300" : "text-blue-700"
+                          "flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5",
+                          isDark
+                            ? "bg-blue-500/30 text-white"
+                            : "bg-blue-100 text-blue-600"
                         )}
                       >
-                        <p>
-                          Only non-rejected submissions are shown in the
-                          leaderboard.
-                          {contest?.multiple_submissions_enabled &&
-                            leaderboardDisplayMode === "creator" &&
-                            " Currently viewing by creator (all submissions grouped)."}
-                        </p>
-                        {contest?.live_submission_count !== null &&
-                          contest?.live_submission_count !== undefined && (
-                            <div className="flex items-center gap-2 mt-2">
-                              <span className="font-medium">Submissions:</span>
-                              <span className="text-green-700 font-semibold">
-                                {totalLeaderboardEntries} active
-                              </span>
-                              {contest.live_submission_count !==
-                                totalLeaderboardEntries && (
-                                <>
-                                  <span
-                                    className={cn(
-                                      "text-blue-600",
-                                      isDark ? "text-gray-400" : "text-blue-700"
-                                    )}
-                                  >
-                                    |
-                                  </span>
-                                  <span className="text-red-700 font-semibold">
-                                    {contest.live_submission_count -
-                                      totalLeaderboardEntries}{" "}
-                                    rejected
-                                  </span>
-                                  <span
-                                    className={cn(
-                                      "text-blue-600",
-                                      isDark ? "text-gray-400" : "text-blue-700"
-                                    )}
-                                  >
-                                    |
-                                  </span>
-                                  <span
-                                    className={cn(
-                                      "text-blue-700",
-                                      isDark ? "text-gray-400" : "text-blue-700"
-                                    )}
-                                  >
-                                    {contest.live_submission_count} total
-                                  </span>
-                                </>
-                              )}
-                            </div>
+                        <Info className="w-3 h-3" />
+                      </div>
+                      <div className="flex-1">
+                        <p
+                          className={cn(
+                            "text-md font-medium",
+                            isDark ? "text-white" : "text-blue-900"
                           )}
+                        >
+                          Leaderboard Display
+                        </p>
+                        <div
+                          className={cn(
+                            "text-sm mt-1 space-y-1",
+                            isDark ? "text-gray-300" : "text-blue-700"
+                          )}
+                        >
+                          <p>
+                            Only non-rejected submissions are shown in the
+                            leaderboard.
+                            {contest?.multiple_submissions_enabled &&
+                              leaderboardDisplayMode === "creator" &&
+                              " Currently viewing by creator (all submissions grouped)."}
+                          </p>
+                          {contest?.live_submission_count !== null &&
+                            contest?.live_submission_count !== undefined && (
+                              <div className="flex items-center gap-2 mt-2">
+                                <span className="font-medium">Submissions:</span>
+                                <span className="text-green-700 font-semibold">
+                                  {totalLeaderboardEntries} active
+                                </span>
+                                {contest.live_submission_count !==
+                                  totalLeaderboardEntries && (
+                                  <>
+                                    <span
+                                      className={cn(
+                                        "text-blue-600",
+                                        isDark ? "text-gray-400" : "text-blue-700"
+                                      )}
+                                    >
+                                      |
+                                    </span>
+                                    <span className="text-red-700 font-semibold">
+                                      {contest.live_submission_count -
+                                        totalLeaderboardEntries}{" "}
+                                      rejected
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "text-blue-600",
+                                        isDark ? "text-gray-400" : "text-blue-700"
+                                      )}
+                                    >
+                                      |
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "text-blue-700",
+                                        isDark ? "text-gray-400" : "text-blue-700"
+                                      )}
+                                    >
+                                      {contest.live_submission_count} total
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                )}
                 {/* Render leaderboard based on display mode */}
                 {leaderboardDisplayMode === "creator" &&
                 groupedLeaderboardByCreator
@@ -5943,8 +6511,20 @@ export function ContestClientPage({
                                     isDark ? "text-white" : "text-gray-700"
                                   )}
                                 >
-                                  {creatorGroup.total_views.toLocaleString()}{" "}
-                                  views
+                                  {contest?.platform === "twitter" ? (
+                                    <>
+                                      {typeof (creatorGroup as any).total_points ===
+                                      "number"
+                                        ? (creatorGroup as any).total_points.toLocaleString()
+                                        : "0"}{" "}
+                                      points
+                                    </>
+                                  ) : (
+                                    <>
+                                      {creatorGroup.total_views.toLocaleString()} {" "}
+                                      views
+                                    </>
+                                  )}
                                 </p>
                                 <Button
                                   variant="ghost"
@@ -6167,11 +6747,21 @@ export function ContestClientPage({
                                     entry.user_platform_pfp_url ??
                                     undefined
                                   }
-                                  alt={entry.user_platform_username}
+                                  alt={
+                                    contest?.platform === "twitter"
+                                      ? (entry as any).app_username ||
+                                        entry.user_platform_username
+                                      : entry.user_platform_username
+                                  }
                                 />
                                 <AvatarFallback>
-                                  {entry.user_platform_username?.[0]?.toUpperCase() ||
-                                    "U"}
+                                  {(
+                                    contest?.platform === "twitter"
+                                      ? ((entry as any).app_username as
+                                          string | undefined)
+                                      : entry.user_platform_username
+                                  )?.[0]
+                                    ?.toUpperCase() || "U"}
                                 </AvatarFallback>
                               </Avatar>
 
@@ -6205,10 +6795,21 @@ export function ContestClientPage({
                                     isDark ? "text-white" : "text-gray-700"
                                   )}
                                 >
-                                  {entry.views
-                                    ? entry.views.toLocaleString()
-                                    : "0"}{" "}
-                                  views
+                                  {contest?.platform === "twitter" ? (
+                                    <>
+                                      {typeof (entry as any).total_points === "number"
+                                        ? (entry as any).total_points.toLocaleString()
+                                        : "0"}{" "}
+                                      points
+                                    </>
+                                  ) : (
+                                    <>
+                                      {entry.views
+                                        ? entry.views.toLocaleString()
+                                        : "0"}{" "}
+                                      views
+                                    </>
+                                  )}
                                 </p>
                                 {entry.content_link &&
                                   (contest?.status?.toLowerCase() === "ended" ||

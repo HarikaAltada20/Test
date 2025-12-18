@@ -156,6 +156,19 @@ interface Contest {
   max_earnings_per_creator?: number;
   content_type?: string;
   bonus_details?: any;
+  // Twitter-specific fields (new columns)
+  contest_format?: string | null;
+  twitter_targets?: {
+    link?: string | null;
+    description?: string | null;
+    metrics?: {
+      likes?: number | null;
+      replies?: number | null;
+      retweets?: number | null;
+    } | null;
+  } | null;
+  twitter_keywords?: string[] | null;
+  twitter_mentions?: string[] | null;
   // Categories, subcategories, and interests
   categories?: string[] | null;
   subcategories?:
@@ -3973,14 +3986,174 @@ export default function ContestDetailClient({
                   </div>
                 )}
 
-                {/* Render inspiration links if present */}
-                {Array.isArray(currentContest.inspiration_links) &&
+                {/* Twitter raid: show target tweet + metrics from new columns */}
+                {currentContest.platform?.toLowerCase() === "twitter" &&
+                  currentContest.content_type === "raid" &&
+                  currentContest.twitter_targets && (
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-3">
+                        <h3
+                          className={cn(
+                            "text-xl font-semibold flex items-center gap-2",
+                            isDark ? "text-white" : "text-gray-900"
+                          )}
+                        >
+                          <Share2 className="h-5 w-5" />
+                          Target Tweet
+                        </h3>
+                      </div>
+
+                      <div className="grid gap-4">
+                        <div
+                          className={cn(
+                            "border rounded-xl p-6 transition-all duration-200",
+                            isDark ? "border-gray-600" : "border-gray-300"
+                          )}
+                        >
+                          <div className="flex items-start gap-4">
+                            <div
+                              className={cn(
+                                "p-3 rounded-full flex-shrink-0",
+                                isDark
+                                  ? "bg-[#FFFFFF42] text-white"
+                                  : "bg-sky-100 text-sky-600"
+                              )}
+                            >
+                              <ExternalLink className="h-5 w-5 " />
+                            </div>
+                            <div className="flex-1 min-w-0 space-y-3">
+                              {currentContest.twitter_targets?.link && (
+                                <a
+                                  href={currentContest.twitter_targets.link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={cn(
+                                    "block text-base font-medium hover:underline mb-1 break-all",
+                                    isDark
+                                      ? "text-sky-300"
+                                      : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                                  )}
+                                >
+                                  {currentContest.twitter_targets.link}
+                                </a>
+                              )}
+
+                              {currentContest.twitter_targets
+                                ?.description && (
+                                <div
+                                  className={cn(
+                                    "text-sm leading-relaxed",
+                                    isDark
+                                      ? "text-white"
+                                      : "text-gray-700 dark:text-gray-300"
+                                  )}
+                                >
+                                  {currentContest.twitter_targets.description}
+                                </div>
+                              )}
+
+                              {currentContest.twitter_targets?.metrics && (
+                                <div className="flex flex-wrap gap-4 mt-2 text-sm">
+                                  {typeof currentContest.twitter_targets
+                                    .metrics?.likes === "number" && (
+                                    <div className="flex items-center gap-1">
+                                      <ThumbsUp className="h-4 w-4" />
+                                      <span>Target Likes:</span>
+                                      <span className="font-medium">
+                                        {currentContest.twitter_targets.metrics.likes?.toLocaleString()}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {typeof currentContest.twitter_targets
+                                    .metrics?.replies === "number" && (
+                                    <div className="flex items-center gap-1">
+                                      <MessageCircle className="h-4 w-4" />
+                                      <span>Target Replies:</span>
+                                      <span className="font-medium">
+                                        {currentContest.twitter_targets.metrics.replies?.toLocaleString()}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {typeof currentContest.twitter_targets
+                                    .metrics?.retweets === "number" && (
+                                    <div className="flex items-center gap-1">
+                                      {/* <Repeat className="h-4 w-4" /> */}
+                                      <span>Target Retweets:</span>
+                                      <span className="font-medium">
+                                        {currentContest.twitter_targets.metrics.retweets?.toLocaleString()}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {(currentContest.twitter_keywords &&
+                                currentContest.twitter_keywords.length > 0) ||
+                              (currentContest.twitter_mentions &&
+                                currentContest.twitter_mentions.length > 0) ? (
+                                <div className="mt-4 space-y-2">
+                                  {currentContest.twitter_keywords &&
+                                    currentContest.twitter_keywords.length > 0 && (
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-xs font-semibold uppercase tracking-wide">
+                                          Keywords
+                                        </span>
+                                        {currentContest.twitter_keywords.map(
+                                          (kw, idx) => (
+                                            <span
+                                              key={idx}
+                                              className={cn(
+                                                "inline-flex items-center px-2 py-1 rounded-full text-xs",
+                                                isDark
+                                                  ? "bg-purple-900/50 text-purple-200 border border-purple-500/60"
+                                                  : "bg-purple-50 text-purple-700 border border-purple-200"
+                                              )}
+                                            >
+                                              <Tag className="h-3 w-3 mr-1" />
+                                              {kw}
+                                            </span>
+                                          )
+                                        )}
+                                      </div>
+                                    )}
+                                  {currentContest.twitter_mentions &&
+                                    currentContest.twitter_mentions.length > 0 && (
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-xs font-semibold uppercase tracking-wide">
+                                          Mentions
+                                        </span>
+                                        {currentContest.twitter_mentions.map(
+                                          (m, idx) => (
+                                            <span
+                                              key={idx}
+                                              className={cn(
+                                                "inline-flex items-center px-2 py-1 rounded-full text-xs",
+                                                isDark
+                                                  ? "bg-slate-800 text-slate-100 border border-slate-600"
+                                                  : "bg-slate-50 text-slate-700 border border-slate-200"
+                                              )}
+                                            >
+                                              @{m.replace(/^@/, "")}
+                                            </span>
+                                          )
+                                        )}
+                                      </div>
+                                    )}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                {/* Render inspiration links for non-Twitter contests */}
+                {currentContest.platform?.toLowerCase() !== "twitter" &&
+                  Array.isArray(currentContest.inspiration_links) &&
                   currentContest.inspiration_links.length > 0 && (
                     <div className="space-y-6">
                       <div className="flex items-center gap-3">
-                        {/* <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                          <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                        </div> */}
                         <h3
                           className={cn(
                             "text-xl font-semibold",

@@ -324,8 +324,13 @@ export default function CreateContestPage({
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
     useState<number>(1);
   const [contentType, setContentType] = useState<
-    "ugc" | "clipping" | "other" | ""
+    "ugc" | "clipping" | "other" | "" | "raid" | "awareness"
   >("");
+  const [keywords, setKeywords] = useState<string[]>([""]); // For brief step
+  const [mentions, setMentions] = useState<string[]>([""]); // Tracking (@mentions)
+  const [targetLikes, setTargetLikes] = useState<number | "">("");
+  const [targetReplies, setTargetReplies] = useState<number | "">("");
+  const [targetRetweets, setTargetRetweets] = useState<number | "">("");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
   const [bonusEnabled, setBonusEnabled] = useState(false);
   const [bonusHtml, setBonusHtml] = useState("");
@@ -369,11 +374,13 @@ export default function CreateContestPage({
         // Ignore localStorage errors
       }
     }
+
     return "light";
   });
+
   const isDark = mode === "dark";
   const [title, setTitle] = useState("");
-  // Categories, subcategories, and interests state
+
   const [contestCategories, setContestCategories] = useState<string[]>([]);
   const [contestSubcategories, setContestSubcategories] = useState<
     Array<{ category: string; subcategory: string }>
@@ -599,8 +606,18 @@ export default function CreateContestPage({
   const [resourceFiles, setResourceFiles] = useState<{ [key: string]: File }>(
     {}
   );
+  const [contestFormat, setContestFormat] = useState<"text_image" | "video">(
+    "video"
+  );
   const [platform, setPlatform] = useState<string>("youtube"); // Default platform
   const [category, setCategory] = useState<string>("technology");
+  const isRaidTwitter = platform === "twitter" && contentType === "raid";
+  const [keywordsRequirementMode, setKeywordsRequirementMode] = useState<
+    "all" | "any"
+  >("all");
+  const [mentionsRequirementMode, setMentionsRequirementMode] = useState<
+    "all" | "any"
+  >("all");
 
   // State for fetched subscription plans
   const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<
@@ -975,6 +992,7 @@ export default function CreateContestPage({
       categories?: string[] | null;
       subcategories?: Array<{ category: string; subcategory: string }> | null;
       interests?: string[] | null;
+      contest_format?: "text_image" | "video";
     }>
   ) => {
     const currentContestId = contestId || draftId;
@@ -2172,13 +2190,34 @@ export default function CreateContestPage({
         title,
         thumbnail_url: thumbnailUrl,
         platform: platform,
+        contest_format: contestFormat,
         category: category || null,
         brief_html: briefHtml,
         brief_json: briefJson,
         rules_html: rulesHtml,
-        rules_json: rulesJson,
+        // Only persist the original rulesJson content
+        rules_json:
+          rulesJson && typeof rulesJson === "object" ? { ...rulesJson } : {},
+        // Twitter raid data: link + description + metrics + requirement modes in a single JSON column
+        twitter_targets: isRaidTwitter
+          ? {
+              link: inspirationLinks[0]?.url || null,
+              description: inspirationLinks[0]?.description || null,
+              metrics: {
+                likes: targetLikes === "" ? null : targetLikes,
+                replies: targetReplies === "" ? null : targetReplies,
+                retweets: targetRetweets === "" ? null : targetRetweets,
+              },
+              keywords_requirement_mode: keywordsRequirementMode,
+              mentions_requirement_mode: mentionsRequirementMode,
+            }
+          : null,
+        twitter_keywords: keywords.filter((k) => k.trim() !== ""),
+        twitter_mentions: mentions.filter((m) => m.trim() !== ""),
         resources,
-        inspiration_links: inspirationLinks,
+        // For Twitter raids, target tweet is stored separately in twitter_targets,
+        // so we avoid duplicating it in inspiration_links.
+        inspiration_links: isRaidTwitter ? null : inspirationLinks,
         tracking_links: trackingLinks,
         // Categories, subcategories, and interests as direct columns
         categories: contestCategories.length > 0 ? contestCategories : null,
@@ -2682,8 +2721,13 @@ export default function CreateContestPage({
     if (!title.trim()) return; // Don't save empty titles
     let currentContestId = contestId;
     try {
-      // Prepare basics data
-      const basicsData = {
+      // Filter out empty values
+      const filteredKeywords = keywords.filter((k) => k.trim() !== "");
+      const filteredMentions = mentions.filter((m) => m.trim() !== "");
+      
+      // Prepare basics data - only include fields that have actual values
+      // to prevent overwriting existing data with empty values
+      const basicsData: Record<string, any> = {
         advertiser_id: user?.id,
         title,
         platform,
@@ -2691,26 +2735,61 @@ export default function CreateContestPage({
         contest_type: contestType,
         thumbnail_url: thumbnailPreview || null,
         moderation_status: "draft",
-        // Categories, subcategories, and interests
-        categories: contestCategories.length > 0 ? contestCategories : null,
-        subcategories: (() => {
-          if (!contestSubcategories || contestSubcategories.length === 0)
-            return null;
-          // Group by category and remove duplicates
-          const grouped: Record<string, string[]> = {};
-          contestSubcategories.forEach((item) => {
-            if (!grouped[item.category]) {
-              grouped[item.category] = [];
-            }
-            if (!grouped[item.category].includes(item.subcategory)) {
-              grouped[item.category].push(item.subcategory);
-            }
-          });
-          return Object.keys(grouped).length > 0 ? grouped : null;
-        })(),
-        interests:
-          contestInterests.length > 0 ? [...new Set(contestInterests)] : null,
+        contest_format: contestFormat,
       };
+      
+      // Only include content_type if it has a value (not empty string)
+      if (contentType) {
+        basicsData.content_type = contentType;
+      }
+      
+      // Only include twitter_keywords if there are actual keywords
+      if (filteredKeywords.length > 0) {
+        basicsData.twitter_keywords = filteredKeywords;
+      }
+      
+      // Only include twitter_mentions if there are actual mentions
+      if (filteredMentions.length > 0) {
+        basicsData.twitter_mentions = filteredMentions;
+      }
+      
+      // Include twitter_targets for both raid and awareness Twitter campaigns
+      if (platform === "twitter" && (contentType === "raid" || contentType === "awareness")) {
+        basicsData.twitter_targets = {
+          link: inspirationLinks[0]?.url || null,
+          description: inspirationLinks[0]?.description || null,
+          metrics: {
+            likes: targetLikes === "" ? null : targetLikes,
+            replies: targetReplies === "" ? null : targetReplies,
+            retweets: targetRetweets === "" ? null : targetRetweets,
+          },
+          keywords_requirement_mode:contentType === "raid"?"":keywordsRequirementMode,
+          mentions_requirement_mode:contentType === "raid"?"": mentionsRequirementMode,
+        };
+      }
+      
+      // Categories, subcategories, and interests
+      if (contestCategories.length > 0) {
+        basicsData.categories = contestCategories;
+      }
+      if (contestSubcategories && contestSubcategories.length > 0) {
+        const grouped: Record<string, string[]> = {};
+        contestSubcategories.forEach((item) => {
+          if (!grouped[item.category]) {
+            grouped[item.category] = [];
+          }
+          if (!grouped[item.category].includes(item.subcategory)) {
+            grouped[item.category].push(item.subcategory);
+          }
+        });
+        if (Object.keys(grouped).length > 0) {
+          basicsData.subcategories = grouped;
+        }
+      }
+      if (contestInterests.length > 0) {
+        basicsData.interests = [...new Set(contestInterests)];
+      }
+
       if (!currentContestId) {
         // Create new draft contest
         const { data, error } = await supabase
@@ -3085,38 +3164,87 @@ export default function CreateContestPage({
   // Helper function to populate form with draft data
   const populateDraftData = (draft: any) => {
     console.log("=== populateDraftData called ===");
+    console.log("Full draft object:", JSON.stringify(draft, null, 2));
     console.log("Draft ID:", draft.id);
     console.log("Draft title:", draft.title);
+    console.log("Draft platform:", draft.platform);
+    console.log("Draft contest_format:", draft.contest_format);
+    console.log("Draft content_type:", draft.content_type);
+    console.log("Draft twitter_keywords:", draft.twitter_keywords);
+    console.log("Draft twitter_mentions:", draft.twitter_mentions);
 
+    // Set draft/contest IDs first
+    setDraftId(draft.id);
+    setContestId(draft.id);
+
+    // Basic contest fields
     setTitle(draft.title || "");
-    setPlatform(draft.platform || "youtube"); // Load platform, default if not present
-    setCategory(draft.category || "technology"); // Load category, default to technology if not present
-    // If thumbnail URL is available, show it in the preview
+    
+    // Set platform
+    const draftPlatform = draft.platform || "youtube";
+    console.log("Setting platform to:", draftPlatform);
+    setPlatform(draftPlatform);
+    
+    setCategory(draft.category || "technology");
+    
+    // Set contest format - important for showing Keywords/Mentions sections
+    const draftFormat = draft.contest_format || "video";
+    console.log("Setting contestFormat to:", draftFormat);
+    setContestFormat(draftFormat);
+
+    // Content type - set with setTimeout to ensure platform is applied first
+    // (Content type options depend on platform)
+    if (draft.content_type) {
+      const validTypes = ["ugc", "clipping", "other", "raid", "awareness"];
+      if (validTypes.includes(draft.content_type)) {
+        console.log("Setting contentType to:", draft.content_type);
+        setTimeout(() => {
+          setContentType(draft.content_type);
+        }, 50);
+      } else {
+        console.log("Invalid content_type:", draft.content_type);
+      }
+    }
+
+    // Thumbnail
     if (draft.thumbnail_url) {
       setThumbnailPreview(draft.thumbnail_url);
     }
-    setDraftId(draft.id);
-    // CRITICAL FIX: Also set contestId when loading a draft
-    setContestId(draft.id);
 
-    console.log("Loading draft data:", draft); // For debugging
+    // Keywords and Mentions - set with setTimeout to ensure contestFormat is applied first
+    // (Keywords/Mentions section only renders when contestFormat === "text_image")
+    setTimeout(() => {
+      // Keywords - directly from twitter_keywords column (array of strings)
+      if (Array.isArray(draft.twitter_keywords) && draft.twitter_keywords.length > 0) {
+        console.log("✅ Setting keywords to:", draft.twitter_keywords);
+        setKeywords(draft.twitter_keywords);
+      }
 
-    // Pre-fill form fields with draft data using rich text format
-    if (draft.brief_html && draft.brief_json) {
+      // Mentions - directly from twitter_mentions column (array of strings)
+      if (Array.isArray(draft.twitter_mentions) && draft.twitter_mentions.length > 0) {
+        console.log("✅ Setting mentions to:", draft.twitter_mentions);
+        setMentions(draft.twitter_mentions);
+      }
+    }, 100);
+
+    // Brief rich text
+    if (draft.brief_html) {
       setBrief(draft.brief_html);
       setBriefHtml(draft.brief_html);
+    }
+    if (draft.brief_json) {
       setBriefJson(draft.brief_json);
-      // Set content in editor if ref is available
       if (richTextEditorRef.current) {
         richTextEditorRef.current.setContent(draft.brief_json);
       }
     }
 
-    // Handle rules rich text content loading
-    if (draft.rules_html && draft.rules_json) {
+    // Rules rich text
+    if (draft.rules_html) {
       setRulesHtml(draft.rules_html);
+    }
+    if (draft.rules_json) {
       setRulesJson(draft.rules_json);
-      // Set content in editor if ref is available
       setTimeout(() => {
         if (rulesRichTextEditorRef.current) {
           rulesRichTextEditorRef.current.setContent(draft.rules_json);
@@ -3124,39 +3252,65 @@ export default function CreateContestPage({
       }, 100);
     }
 
-    // Set resources if available
+    // Target metrics from twitter_targets JSONB
+    if (draft.twitter_targets && typeof draft.twitter_targets === "object") {
+      const t = draft.twitter_targets;
+      if (t.metrics && typeof t.metrics === "object") {
+        if (t.metrics.likes !== undefined && t.metrics.likes !== null) {
+          setTargetLikes(t.metrics.likes);
+        }
+        if (t.metrics.replies !== undefined && t.metrics.replies !== null) {
+          setTargetReplies(t.metrics.replies);
+        }
+        if (t.metrics.retweets !== undefined && t.metrics.retweets !== null) {
+          setTargetRetweets(t.metrics.retweets);
+        }
+      }
+      if (
+        t.keywords_requirement_mode === "all" ||
+        t.keywords_requirement_mode === "any"
+      ) {
+        setKeywordsRequirementMode(t.keywords_requirement_mode);
+      }
+      if (
+        t.mentions_requirement_mode === "all" ||
+        t.mentions_requirement_mode === "any"
+      ) {
+        setMentionsRequirementMode(t.mentions_requirement_mode);
+      }
+    }
+
+    // Resources
     if (draft.resources && typeof draft.resources === "object") {
       setResources(draft.resources);
     }
 
-    // Set inspiration links if available
+    // Inspiration links
     if (Array.isArray(draft.inspiration_links)) {
       setInspirationLinks(draft.inspiration_links);
-    } else {
-      setInspirationLinks([]);
     }
 
-    // Set tracking links if available
+    // Tracking links
     if (Array.isArray(draft.tracking_links)) {
       setTrackingLinks(draft.tracking_links);
-    } else {
-      setTrackingLinks([]);
     }
 
-    // Set winner count and amounts if available
-    if (draft.winner_count) {
-      setWinnerCount(draft.winner_count);
+    // Winners / prizes from contest_based_details
+    if (draft.contest_based_details?.leaderboard_contest) {
+      const lc = draft.contest_based_details.leaderboard_contest;
+      if (lc.winner_count) {
+        setWinnerCount(lc.winner_count);
+      }
+      if (Array.isArray(lc.prizes)) {
+        const amounts = lc.prizes.map(
+          (prize: { amount?: number }) => prize.amount || 0
+        );
+        setWinnerAmounts(amounts);
+        updateTotalPrizePool(amounts);
+      }
     }
 
-    if (draft.prizes && Array.isArray(draft.prizes)) {
-      const amounts = draft.prizes.map(
-        (prize: { amount?: number; position?: number }) => prize.amount || 0
-      );
-      setWinnerAmounts(amounts);
-      updateTotalPrizePool(amounts);
-    }
-
-    // Convert UTC dates to local timezone for display
+    // Dates (convert from UTC to local)
     if (draft.start_date) {
       const { dateString, timeString } = toLocalDateTimeStrings(
         draft.start_date
@@ -3164,28 +3318,20 @@ export default function CreateContestPage({
       setStartDate(dateString);
       setStartTime(timeString);
     }
-
     if (draft.end_date) {
       const { dateString, timeString } = toLocalDateTimeStrings(draft.end_date);
       setEndDate(dateString);
       setEndTime(timeString);
     }
 
-    // Load categories, subcategories, and interests from direct columns
-    if (draft.categories && Array.isArray(draft.categories)) {
+    // Categories, subcategories, interests
+    if (Array.isArray(draft.categories)) {
       setContestCategories(draft.categories);
     }
-
-    // Handle subcategories - can be grouped object format or flat array format
     if (draft.subcategories) {
       if (Array.isArray(draft.subcategories)) {
-        // Old flat array format: [{category: "beauty", subcategory: "Skincare"}, ...]
         setContestSubcategories(draft.subcategories);
-      } else if (
-        typeof draft.subcategories === "object" &&
-        draft.subcategories !== null
-      ) {
-        // New grouped format: {"beauty": ["Skincare", "Makeup"], ...}
+      } else if (typeof draft.subcategories === "object") {
         const grouped = draft.subcategories as Record<string, string[]>;
         const flatArray: Array<{ category: string; subcategory: string }> = [];
         Object.keys(grouped).forEach((category) => {
@@ -3199,11 +3345,11 @@ export default function CreateContestPage({
         setContestSubcategories(flatArray);
       }
     }
-
-    if (draft.interests && Array.isArray(draft.interests)) {
+    if (Array.isArray(draft.interests)) {
       setContestInterests(draft.interests);
     }
-    // Load regions and countries from region JSONB column
+
+    // Regions / countries
     if (draft.region && typeof draft.region === "object") {
       const { regions, countries } = extractRegionsAndCountries(
         draft.region as Record<string, string[]>
@@ -3211,72 +3357,8 @@ export default function CreateContestPage({
       setSelectedRegions(regions);
       setSelectedCountries(countries);
     }
-    // Fallback: Load from old target_regions and target_countries columns for backward compatibility
-    else {
-      if (draft.target_regions && Array.isArray(draft.target_regions)) {
-        setSelectedRegions(draft.target_regions);
-      }
-      if (draft.target_countries && Array.isArray(draft.target_countries)) {
-        setSelectedCountries(draft.target_countries);
-      }
-    }
-    // Fallback: Also check contest_based_details for backward compatibility
-    if (draft.contest_based_details) {
-      const details = draft.contest_based_details;
-      if (
-        !draft.categories &&
-        details.categories &&
-        Array.isArray(details.categories)
-      ) {
-        setContestCategories(details.categories);
-      }
-      if (!draft.subcategories && details.subcategories) {
-        // Handle both formats in fallback
-        if (Array.isArray(details.subcategories)) {
-          setContestSubcategories(details.subcategories);
-        } else if (
-          typeof details.subcategories === "object" &&
-          details.subcategories !== null
-        ) {
-          const grouped = details.subcategories as Record<string, string[]>;
-          const flatArray: Array<{ category: string; subcategory: string }> =
-            [];
-          Object.keys(grouped).forEach((category) => {
-            const subcats = grouped[category];
-            if (Array.isArray(subcats)) {
-              subcats.forEach((subcat) => {
-                flatArray.push({ category, subcategory: subcat });
-              });
-            }
-          });
-          setContestSubcategories(flatArray);
-        }
-      }
-      if (
-        !draft.interests &&
-        details.interests &&
-        Array.isArray(details.interests)
-      ) {
-        setContestInterests(details.interests);
-      }
-      // Load regions and countries from details if not in draft (backward compatibility)
-      if (!draft.region) {
-        if (details.target_regions && Array.isArray(details.target_regions)) {
-          setSelectedRegions(details.target_regions);
-        }
-        if (
-          details.target_countries &&
-          Array.isArray(details.target_countries)
-        ) {
-          setSelectedCountries(details.target_countries);
-        }
-      }
-    }
 
-    console.log(
-      "Draft loaded successfully, thumbnail preview:",
-      draft.thumbnail_url
-    );
+    console.log("Draft loaded successfully");
   };
 
   // Call this once when component mounts
@@ -5423,6 +5505,10 @@ export default function CreateContestPage({
 
   const addInspiration = () => {
     setInspirationError(null);
+    // For Twitter raid campaigns, allow only a single campaign tweet
+    if (isRaidTwitter && inspirationLinks.length >= 1) {
+      return;
+    }
     if (!newInspirationUrl.trim()) {
       setInspirationError("URL cannot be empty.");
       toast({
@@ -6210,11 +6296,60 @@ export default function CreateContestPage({
             >
               {/* Removed general validationError Alert from CardContent */}
 
+              {/* Contest Format Toggle */}
+              <div className="space-y-2 ">
+                <Label className="text-xl font-semibold">Contest Format</Label>
+                <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant={
+                      contestFormat === "text_image" ? "default" : "outline"
+                    }
+                    className={cn(
+                      "flex-1 justify-center",
+                      contestFormat === "text_image" &&
+                        "bg-[#7F39EC] text-white"
+                    )}
+                    onClick={() => {
+                      setContestFormat("text_image");
+                      // Text/Image contests should use Leaderboard type and Twitter platform
+                      if (contestType === "cpm") {
+                        setContestType("leaderboard");
+                      }
+                      if (platform !== "twitter") {
+                        setPlatform("twitter");
+                      }
+                      // Instantly persist contest_format change
+                      updateContestInDB({ contest_format: "text_image" });
+                    }}
+                  >
+                    Text / Image Contest
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={contestFormat === "video" ? "default" : "outline"}
+                    className={cn(
+                      "flex-1 justify-center",
+                      contestFormat === "video" && "bg-[#7F39EC] text-white"
+                    )}
+                    onClick={() => {
+                      setContestFormat("video");
+                      // Default to YouTube when switching back to video if currently on Twitter
+                      if (platform === "twitter") {
+                        setPlatform("youtube");
+                      }
+                      // Instantly persist contest_format change
+                      updateContestInDB({ contest_format: "video" });
+                    }}
+                  >
+                    Video Contest
+                  </Button>
+                </div>
+              </div>
+
               {/* Contest Type Selection */}
               <div className="space-y-2 ">
-                <Label className="text-base text-xl font-semibold">
-                  Contest Type
-                </Label>
+                <Label className="text-xl font-semibold">Contest Type</Label>
                 <RadioGroup
                   value={contestType}
                   onValueChange={(value: "leaderboard" | "cpm") => {
@@ -6223,8 +6358,11 @@ export default function CreateContestPage({
                       planFeatures.contestTypes &&
                       planFeatures.contestTypes.includes("cpm");
 
-                    // Only allow CPM selection if user has access
-                    if (value === "cpm" && !hasCpmAccess) {
+                    // Block CPM selection if not available for current format or plan
+                    if (
+                      value === "cpm" &&
+                      (!hasCpmAccess || contestFormat === "text_image")
+                    ) {
                       return; // Don't change the value
                     }
                     setContestType(value);
@@ -6261,13 +6399,16 @@ export default function CreateContestPage({
                     );
                     const isFreePlan = !currentPlan || currentPlan.price === 0;
 
+                    const isDisabledForFormat = contestFormat === "text_image";
+                    const isDisabled = !hasCpmAccess || isDisabledForFormat;
+
                     return (
                       <div
                         className={`flex items-center space-x-2 p-4 border ${
                           isDark ? "border-gray-600" : "border-gray-300"
                         } rounded-lg flex-1 relative 
                         ${
-                          !hasCpmAccess
+                          isDisabled
                             ? isDark
                               ? "opacity-50 cursor-not-allowed bg-slate-800"
                               : "opacity-50 cursor-not-allowed bg-gray-50"
@@ -6281,14 +6422,12 @@ export default function CreateContestPage({
                         <RadioGroupItem
                           value="cpm"
                           id="cpm"
-                          disabled={!hasCpmAccess}
+                          disabled={isDisabled}
                         />
                         <Label
                           htmlFor="cpm"
                           className={
-                            hasCpmAccess
-                              ? "cursor-pointer"
-                              : "cursor-not-allowed"
+                            isDisabled ? "cursor-not-allowed" : "cursor-pointer"
                           }
                         >
                           <span className="font-semibold text-lg">
@@ -6298,7 +6437,27 @@ export default function CreateContestPage({
                             Creators are paid based on the number of views their
                             content receives, at a pre-defined CPM rate.
                           </p>
-                          {!hasCpmAccess && (
+                          {isDisabledForFormat && (
+                            <div className="mt-2 flex items-center gap-2">
+                              <button
+                                className={cn(
+                                  "text-white text-md px-3 rounded-full py-1 h-8",
+                                  isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
+                                )}
+                              >
+                                Coming Soon
+                              </button>
+                              <p
+                                className={cn(
+                                  "text-sm font-medium",
+                                  isDark ? "text-white" : "text-black"
+                                )}
+                              >
+                                Not available for text/image contests
+                              </p>
+                            </div>
+                          )}
+                          {!hasCpmAccess && !isDisabledForFormat && (
                             <div className="mt-2 flex items-center gap-2">
                               {isFreePlan && (
                                 <button
@@ -6359,7 +6518,16 @@ export default function CreateContestPage({
 
               <div>
                 <Label htmlFor="platform">Platform</Label>
-                <Select value={platform} onValueChange={setPlatform}>
+                <Select
+                  value={platform}
+                  onValueChange={(value) => {
+                    setPlatform(value);
+                    if (value === "twitter") {
+                      // Default Twitter content type to Raid campaign
+                      setContentType("raid");
+                    }
+                  }}
+                >
                   <SelectTrigger
                     id="platform"
                     className={cn(
@@ -6371,12 +6539,20 @@ export default function CreateContestPage({
                     <SelectValue placeholder="Select contest platform" />
                   </SelectTrigger>
                   <SelectContent isDark={isDark}>
-                    <SelectItem isDark={isDark} value="youtube">
-                      YouTube
-                    </SelectItem>
-                    <SelectItem isDark={isDark} value="instagram">
-                      Instagram
-                    </SelectItem>
+                    {contestFormat === "text_image" ? (
+                      <SelectItem isDark={isDark} value="twitter">
+                        Twitter
+                      </SelectItem>
+                    ) : (
+                      <>
+                        <SelectItem isDark={isDark} value="youtube">
+                          YouTube
+                        </SelectItem>
+                        <SelectItem isDark={isDark} value="instagram">
+                          Instagram
+                        </SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -6400,15 +6576,28 @@ export default function CreateContestPage({
                     <SelectValue placeholder="Select content type (optional)" />
                   </SelectTrigger>
                   <SelectContent isDark={isDark}>
-                    <SelectItem value="ugc" isDark={isDark}>
-                      📹 UGC (User Generated Content)
-                    </SelectItem>
-                    <SelectItem value="clipping" isDark={isDark}>
-                      ✂️ Clipping (Short clips/repurposed content)
-                    </SelectItem>
-                    <SelectItem value="other" isDark={isDark}>
-                      📋 Other (Check Rules for details)
-                    </SelectItem>
+                    {platform === "twitter" ? (
+                      <>
+                        <SelectItem value="raid" isDark={isDark}>
+                          ⚔️ Raid (creators like/comment your tweet)
+                        </SelectItem>
+                        <SelectItem value="awareness" isDark={isDark}>
+                          📣 Awareness (creators post their own tweet)
+                        </SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="ugc" isDark={isDark}>
+                          📹 UGC (User Generated Content)
+                        </SelectItem>
+                        <SelectItem value="clipping" isDark={isDark}>
+                          ✂️ Clipping (Short clips/repurposed content)
+                        </SelectItem>
+                        <SelectItem value="other" isDark={isDark}>
+                          📋 Other (Check Rules for details)
+                        </SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -6423,7 +6612,9 @@ export default function CreateContestPage({
                   "space-y-4 p-4 border rounded-lg",
                   isDark
                     ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
-                    : "bg-gray-50"
+                    : "bg-gray-50",
+                  contentType === "raid" &&
+                    "opacity-50 cursor-not-allowed select-none"
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -6448,6 +6639,9 @@ export default function CreateContestPage({
                       id="multipleSubmissions"
                       checked={multipleSubmissionsEnabled}
                       onCheckedChange={(checked: any) => {
+                        if (contentType === "raid") {
+                          return; // Disable multiple submissions for raid campaigns
+                        }
                         setMultipleSubmissionsEnabled(Boolean(checked));
                         if (!checked) {
                           setMaxSubmissionsPerCreator(1);
@@ -6463,7 +6657,7 @@ export default function CreateContestPage({
                   </div>
                 </div>
 
-                {multipleSubmissionsEnabled && (
+                {multipleSubmissionsEnabled && contentType !== "raid" && (
                   <div className="space-y-2 pt-2 border-t">
                     <Label htmlFor="maxSubmissions">
                       Maximum Submissions Per Creator
@@ -7197,17 +7391,6 @@ export default function CreateContestPage({
                         </div>
                       </div>
                       <CollapsibleContent className="px-4 pb-4 space-y-4">
-                        {/* <p
-                          className={cn(
-                            "text-sm mb-3",
-                            isDark ? "text-gray-400" : "text-gray-600"
-                          )}
-                        >
-                          Select regions and countries where creators can see
-                          and participate in this contest. Only creators from
-                          selected regions will see this opportunity in their
-                          dashboard.
-                        </p> */}
                         <div className="space-y-4">
                           {Object.keys(REGIONS_AND_COUNTRIES).map((region) => {
                             const regionKey =
@@ -7349,14 +7532,6 @@ export default function CreateContestPage({
                         </div>
                         {selectedCountries.length > 0 && (
                           <div className="flex items-center justify-end mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                            {/* <p
-                              className={cn(
-                                "text-xs",
-                                isDark ? "text-gray-400" : "text-gray-500"
-                              )}
-                            >
-                              {selectedCountries.length} countries selected
-                            </p> */}
                             <Button
                               type="button"
                               variant="outline"
@@ -7557,11 +7732,6 @@ export default function CreateContestPage({
 
         {step === "brief" && (
           <>
-            {/* <CardHeader>
-              <CardTitle>Project Overview</CardTitle>
-              
-            </CardHeader> */}
-
             <div
               className={cn(
                 "p-6 border-b rounded-t-xl shadow-xl space-y-6",
@@ -7616,9 +7786,9 @@ export default function CreateContestPage({
                     isDark ? "text-white" : "text-gray-600 dark:text-gray-400"
                   )}
                 >
-                  Provide a detailed description of your project, what you want
-                  creators to do, key messages, target audience, and specific
-                  requirements.
+                  {platform === "twitter"
+                    ? "Provide a detailed description of your project, what you want creators to post on X (Twitter), key messages, target audience, and specific requirements. If you want creators to mention specific accounts or hashtags, write them exactly as they should appear in the post (for example: @brandname, @creator, #BrandCampaign)."
+                    : "Provide a detailed description of your project, what you want creators to do, key messages, target audience, and specific requirements."}
                 </p>
 
                 {showBriefPreview ? (
@@ -7675,8 +7845,243 @@ export default function CreateContestPage({
                   </div>
                 )}
               </div>
+              {contestFormat === "text_image" && (
+                <>
+                  {/* Keywords section */}
+                  <div className="space-y-3 mt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-medium">Keywords</h3>
+                        {/* <span className="text-red-500 font-bold text-lg">*</span> */}
+                      </div>
+                      <p
+                        className={cn(
+                          "text-xs",
+                          isDark ? "text-gray-300" : "text-gray-500"
+                        )}
+                      >
+                        Add search keywords and hashtags (e.g. product name,
+                        theme, #BrandCampaign). For hashtags, start with #.
+                      </p>
+                    </div>
 
-              <div className="space-y-4">
+                    <div className="space-y-2">
+                      {keywords.map((kw, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <Input
+                            value={kw}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              // Disallow spaces in keywords; strip all whitespace
+                              const sanitized = raw.replace(/\s+/g, "");
+                              const next = [...keywords];
+                              next[index] = sanitized;
+                              setKeywords(next);
+                            }}
+                            placeholder="Add keyword"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                          {keywords.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                const next = keywords.filter(
+                                  (_, i) => i !== index
+                                );
+                                setKeywords(next.length ? next : [""]);
+                              }}
+                            >
+                              <Trash className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "mt-1 border-dashed",
+                        isDark
+                          ? "border-gray-500 text-gray-200"
+                          : "border-gray-400 text-gray-700"
+                      )}
+                      onClick={() => setKeywords([...keywords, ""])}
+                    >
+                      + Add keyword
+                    </Button>
+
+                    {/* Keyword requirement (for keywords section) */}
+                    <div className="mt-4 space-y-2">
+                      <p
+                        className={cn(
+                          "text-xs font-medium",
+                          isDark ? "text-gray-200" : "text-gray-700"
+                        )}
+                      >
+                        How strict should keywords be?
+                      </p>
+                      <RadioGroup
+                        value={keywordsRequirementMode}
+                        onValueChange={(val: "all" | "any") =>
+                          setKeywordsRequirementMode(val)
+                        }
+                        className="flex flex-col gap-1 sm:flex-row sm:gap-4"
+                      >
+                        <label className="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
+                          <RadioGroupItem value="all" id="req-all-keywords" />
+                          <span
+                            className={cn(
+                              "leading-snug",
+                              isDark ? "text-gray-200" : "text-gray-700"
+                            )}
+                          >
+                            All are mandatory
+                          </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
+                          <RadioGroupItem value="any" id="req-any-keywords" />
+                          <span
+                            className={cn(
+                              "leading-snug",
+                              isDark ? "text-gray-200" : "text-gray-700"
+                            )}
+                          >
+                            Any is acceptable
+                          </span>
+                        </label>
+                      </RadioGroup>
+                    </div>
+                  </div>
+
+                  {/* Mentions section */}
+                  <div className="space-y-3 mt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-medium">Mentions</h3>
+                      </div>
+                      <p
+                        className={cn(
+                          "text-xs",
+                          isDark ? "text-gray-300" : "text-gray-500"
+                        )}
+                      >
+                        Add up to 3 @mentions to track (e.g. @brandname,
+                        @partner)
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      {mentions.map((mention, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <Input
+                            value={mention}
+                            onChange={(e) => {
+                              const next = [...mentions];
+                              next[index] = e.target.value;
+                              setMentions(next);
+                            }}
+                            placeholder="@username"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                          {mentions.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                const next = mentions.filter(
+                                  (_, i) => i !== index
+                                );
+                                setMentions(next.length ? next : [""]);
+                              }}
+                            >
+                              <Trash className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "mt-1 border-dashed",
+                        mentions.length >= 3 && "opacity-50 cursor-not-allowed",
+                        isDark
+                          ? "border-gray-500 text-gray-200"
+                          : "border-gray-400 text-gray-700"
+                      )}
+                      disabled={mentions.length >= 3}
+                      onClick={() => {
+                        if (mentions.length < 3) {
+                          setMentions([...mentions, ""]);
+                        }
+                      }}
+                    >
+                      + Add mention
+                    </Button>
+
+                    {/* Mention requirement (for mentions section) */}
+                    <div className="mt-4 space-y-2">
+                      <p
+                        className={cn(
+                          "text-xs font-medium",
+                          isDark ? "text-gray-200" : "text-gray-700"
+                        )}
+                      >
+                        How strict should mentions be?
+                      </p>
+                      <RadioGroup
+                        value={mentionsRequirementMode}
+                        onValueChange={(val: "all" | "any") =>
+                          setMentionsRequirementMode(val)
+                        }
+                        className="flex flex-col gap-1 sm:flex-row sm:gap-4"
+                      >
+                        <label className="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
+                          <RadioGroupItem value="all" id="req-all-mentions" />
+                          <span
+                            className={cn(
+                              "leading-snug",
+                              isDark ? "text-gray-200" : "text-gray-700"
+                            )}
+                          >
+                            All are mandatory
+                          </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
+                          <RadioGroupItem value="any" id="req-any-mentions" />
+                          <span
+                            className={cn(
+                              "leading-snug",
+                              isDark ? "text-gray-200" : "text-gray-700"
+                            )}
+                          >
+                            Any is acceptable
+                          </span>
+                        </label>
+                      </RadioGroup>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="space-y-4 mt-8">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <h3 className="text-lg font-medium">Set rules</h3>
@@ -8464,27 +8869,32 @@ export default function CreateContestPage({
                   </div>
                 </CardContent>
                 <div>
-                  {/* Inspiration Content Section */}
+                  {/* Inspiration / Target Tweet Section */}
                   <div>
                     <CardTitle className="px-6 pb-2">
-                      Inspiration Content{" "}
+                      {isRaidTwitter ? "Target Tweet" : "Inspiration Content"}{" "}
                       <span className="text-red-500">*</span>
                     </CardTitle>
                     <CardDescription className="text-[14px] px-6 pb-4">
-                      Help creators understand your vision by adding at least
-                      one inspiration link (Instagram, YouTube, TikTok, etc.)
-                      with a description.
+                      {isRaidTwitter
+                        ? "Add the link to the tweet creators should engage with, plus a short description."
+                        : "Help creators understand your vision by adding at least one inspiration link (Instagram, YouTube, TikTok,Twitter etc.) with a description."}
                     </CardDescription>
                   </div>
                   <CardContent className="space-y-4">
                     <div className="flex flex-col gap-2">
                       <Label htmlFor="inspirationUrlInput" className="mb-[2px]">
-                        Inspiration Link <span className="text-red-500">*</span>
+                        {isRaidTwitter ? "Tweet Link" : "Inspiration Link"}{" "}
+                        <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="inspirationUrlInput"
                         type="url"
-                        placeholder="https://instagram.com/example"
+                        placeholder={
+                          isRaidTwitter
+                            ? "https://x.com/yourbrand/status/1234567890"
+                            : "https://instagram.com/example"
+                        }
                         value={newInspirationUrl}
                         className={cn(
                           "mb-3",
@@ -8498,12 +8908,18 @@ export default function CreateContestPage({
                         htmlFor="inspirationDescriptionInput"
                         className="mb-[2px]"
                       >
-                        Inspiration Description{" "}
+                        {isRaidTwitter
+                          ? "Tweet Description"
+                          : "Inspiration Description"}{" "}
                         <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="inspirationDescriptionInput"
-                        placeholder="Add description here*"
+                        placeholder={
+                          isRaidTwitter
+                            ? "Explain what this tweet is about (for creators)"
+                            : "Add description here*"
+                        }
                         value={newInspirationDescription}
                         className={cn(
                           "mb-4",
@@ -8517,13 +8933,20 @@ export default function CreateContestPage({
                       />
                       <Button
                         type="button"
-                        className="w-full py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
+                        className={cn(
+                          "w-full py-6 text-md",
+                          isDark
+                            ? "bg-[#6C43D0] hover:bg-[#6C43D0]"
+                            : "bg-[#4A00BE] hover:bg-[#4A00BE]"
+                        )}
                         onClick={addInspiration}
                         disabled={
-                          !newInspirationUrl || !newInspirationDescription
+                          !newInspirationUrl ||
+                          !newInspirationDescription ||
+                          (isRaidTwitter && inspirationLinks.length >= 1)
                         }
                       >
-                        Add Inspiration
+                        {isRaidTwitter ? "Add Tweet" : "Add Inspiration"}
                       </Button>
                       {inspirationError && (
                         <div className="text-red-500 text-sm mt-1">
@@ -8531,7 +8954,6 @@ export default function CreateContestPage({
                         </div>
                       )}
                     </div>
-                    {/* Inspiration List */}
                     {inspirationLinks.length > 0 && (
                       <ul className="space-y-3 mt-6">
                         {inspirationLinks.map((item, index) => (
@@ -8552,7 +8974,7 @@ export default function CreateContestPage({
                                   : "text-[#4A00BE] bg-[#D8C3FF]"
                               )}
                             >
-                              <ExternalLink className="w-6= h-6" />
+                              <ExternalLink className="w-6 h-6" />
                             </div>
 
                             <div className="flex-1">
@@ -8587,175 +9009,268 @@ export default function CreateContestPage({
                       </ul>
                     )}
                   </CardContent>
-                  {/* Tracking Links (Collapsible) */}
-                  <div className="px-6">
-                    <div className="my-6 border-t border-gray-300"></div>
-                    <Collapsible
-                      open={trackingLinksOpen}
-                      onOpenChange={setTrackingLinksOpen}
-                    >
-                      <CollapsibleTrigger
+                  {/* Raid-only Target Metrics */}
+                  {isRaidTwitter && (
+                    <CardContent className="space-y-3 pt-0">
+                      <h4 className="px-0 text-md font-medium">
+                        Target metrics (optional)
+                      </h4>
+                      <p
                         className={cn(
-                          "w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold transition",
-                          isDark
-                            ? "border-gray-500"
-                            : "border-gray-400 hover:bg-accent/50"
+                          "text-sm",
+                          isDark ? "text-gray-300" : "text-gray-500"
                         )}
                       >
-                        <span>Tracking Links</span>
-                        <span
-                          className={cn(
-                            "text-sm font-normal",
-                            isDark ? "text-gray-300" : "text-gray-600"
-                          )}
-                        >
-                          {trackingLinksOpen ? "Hide" : "Show"}
-                        </span>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="mt-4 space-y-3">
-                        {trackingError && (
-                          <div className="text-red-500 text-sm">
-                            {trackingError}
-                          </div>
-                        )}
-                        <div className="space-y-2">
-                          <Label htmlFor="trackingUrlInput">
-                            External Link
-                          </Label>
+                        Set soft targets for engagement on the target tweet.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="targetLikes">Target likes</Label>
                           <Input
-                            id="trackingUrlInput"
-                            type="url"
-                            placeholder="https://example.com/tracking-link"
-                            value={newTrackingUrl}
-                            onChange={(e) => setNewTrackingUrl(e.target.value)}
+                            id="targetLikes"
+                            type="number"
+                            min={0}
+                            value={targetLikes}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setTargetLikes(
+                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                              );
+                            }}
+                            placeholder="e.g. 500"
                             className={cn(
+                              "text-sm",
                               isDark
-                                ? "bg-[#180438] border border-gray-600 text-white"
-                                : "bg-white text-black"
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
                             )}
                           />
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="trackingDescriptionInput">
-                            Description
-                          </Label>
+                        <div className="space-y-1">
+                          <Label htmlFor="targetReplies">Target replies</Label>
                           <Input
-                            id="trackingDescriptionInput"
-                            placeholder="Describe this link"
-                            value={newTrackingDescription}
-                            onChange={(e) =>
-                              setNewTrackingDescription(e.target.value)
+                            id="targetReplies"
+                            type="number"
+                            min={0}
+                            value={targetReplies}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setTargetReplies(
+                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                              );
+                            }}
+                            placeholder="e.g. 100"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="targetRetweets">Target reposts</Label>
+                          <Input
+                            id="targetRetweets"
+                            type="number"
+                            min={0}
+                            value={targetRetweets}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setTargetRetweets(
+                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                              );
+                            }}
+                            placeholder="e.g. 200"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  )}
+                  {/* Tracking Links (Collapsible) */}
+                  {!isRaidTwitter && (
+                    <div className="px-6">
+                      <div className="my-6 border-t border-gray-300"></div>
+                      <Collapsible
+                        open={trackingLinksOpen}
+                        onOpenChange={setTrackingLinksOpen}
+                      >
+                        <CollapsibleTrigger
+                          className={cn(
+                            "w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold transition",
+                            isDark
+                              ? "border-gray-500"
+                              : "border-gray-400 hover:bg-accent/50"
+                          )}
+                        >
+                          <span>Tracking Links</span>
+                          <span
+                            className={cn(
+                              "text-sm font-normal",
+                              isDark ? "text-gray-300" : "text-gray-600"
+                            )}
+                          >
+                            {trackingLinksOpen ? "Hide" : "Show"}
+                          </span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="mt-4 space-y-3">
+                          {trackingError && (
+                            <div className="text-red-500 text-sm">
+                              {trackingError}
+                            </div>
+                          )}
+                          <div className="space-y-2">
+                            <Label htmlFor="trackingUrlInput">
+                              External Link
+                            </Label>
+                            <Input
+                              id="trackingUrlInput"
+                              type="url"
+                              placeholder="https://example.com/tracking-link"
+                              value={newTrackingUrl}
+                              onChange={(e) =>
+                                setNewTrackingUrl(e.target.value)
+                              }
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white text-black"
+                              )}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="trackingDescriptionInput">
+                              Description
+                            </Label>
+                            <Input
+                              id="trackingDescriptionInput"
+                              placeholder="Describe this link"
+                              value={newTrackingDescription}
+                              onChange={(e) =>
+                                setNewTrackingDescription(e.target.value)
+                              }
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white text-black"
+                              )}
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={addTrackingLink}
+                            disabled={
+                              !newTrackingUrl || !newTrackingDescription
                             }
                             className={cn(
+                              "w-full py-6 text-md",
                               isDark
-                                ? "bg-[#180438] border border-gray-600 text-white"
-                                : "bg-white text-black"
+                                ? "bg-[#6C43D0] hover:bg-[#6C43D0]"
+                                : "bg-[#4A00BE] hover:bg-[#4A00BE]"
                             )}
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          onClick={addTrackingLink}
-                          disabled={!newTrackingUrl || !newTrackingDescription}
-                          className={cn(
-                            "w-full py-6 text-md",
-                            isDark
-                              ? "bg-[#6C43D0] hover:bg-[#6C43D0]"
-                              : "bg-[#4A00BE] hover:bg-[#4A00BE]"
-                          )}
-                        >
-                          Add Tracking Link
-                        </Button>
-                        {trackingLinks.length > 0 && (
-                          <ul className="space-y-3 mt-2">
-                            {trackingLinks.map((item, index) => (
-                              <li
-                                key={index}
-                                className={cn(
-                                  "flex items-center gap-3 rounded-lg p-4 border shadow-sm",
-                                  isDark ? "border-gray-600" : "border-gray-300"
-                                )}
-                              >
-                                <div
+                          >
+                            Add Tracking Link
+                          </Button>
+                          {trackingLinks.length > 0 && (
+                            <ul className="space-y-3 mt-2">
+                              {trackingLinks.map((item, index) => (
+                                <li
+                                  key={index}
                                   className={cn(
-                                    "rounded-full flex items-center justify-center w-12 h-12 mr-2",
+                                    "flex items-center gap-3 rounded-lg p-4 border shadow-sm",
                                     isDark
-                                      ? "bg-[#FFFFFF36] text-white"
-                                      : "text-[#4A00BE] bg-[#D8C3FF]"
+                                      ? "border-gray-600"
+                                      : "border-gray-300"
                                   )}
                                 >
-                                  <ExternalLink className="w-6 h-6" />
-                                </div>
-                                <div className="flex-1">
-                                  <a
-                                    href={
-                                      item.url.includes("[creator]")
-                                        ? item.url.replace(
-                                            /\[creator\]/gi,
-                                            encodeURIComponent(
-                                              currentUserFirstName
-                                            )
-                                          )
-                                        : item.url
-                                    }
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className={cn(
-                                      "font-medium hover:underline break-all",
-                                      isDark
-                                        ? "text-purple-400"
-                                        : "text-blue-600"
-                                    )}
-                                  >
-                                    {item.url.includes("[creator]")
-                                      ? item.url.replace(
-                                          /\[creator\]/gi,
-                                          currentUserFirstName
-                                        )
-                                      : item.url}
-                                  </a>
                                   <div
                                     className={cn(
-                                      "text-xs mt-1",
-                                      isDark ? "text-white" : "text-gray-600"
+                                      "rounded-full flex items-center justify-center w-12 h-12 mr-2",
+                                      isDark
+                                        ? "bg-[#FFFFFF36] text-white"
+                                        : "text-[#4A00BE] bg-[#D8C3FF]"
                                     )}
                                   >
-                                    {item.description}
+                                    <ExternalLink className="w-6 h-6" />
                                   </div>
-                                </div>
-                                <button
-                                  onClick={() => removeTrackingLink(index)}
-                                  className={cn(
-                                    "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
-                                    isDark
-                                      ? "bg-[#FFFFFF36] text-white"
-                                      : "text-[#4A00BE] bg-[#D8C3FF]"
-                                  )}
-                                >
-                                  <Trash className="h-4 w-4" />
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </div>
-
-                  <CardFooter className="py-6 px-6">
-                    <button
-                      className={cn(
-                        "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
-                        isDark
-                          ? "text-white border-gray-400"
-                          : "border-[#4A00BE] text-[#4A00BE]"
-                      )}
-                      type="button"
-                      onClick={prevStep}
-                      disabled={isLoading}
-                    >
-                      Back
-                    </button>
+                                  <div className="flex-1">
+                                    <a
+                                      href={
+                                        item.url.includes("[creator]")
+                                          ? item.url.replace(
+                                              /\[creator\]/gi,
+                                              encodeURIComponent(
+                                                currentUserFirstName
+                                              )
+                                            )
+                                          : item.url
+                                      }
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={cn(
+                                        "font-medium hover:underline break-all",
+                                        isDark
+                                          ? "text-purple-400"
+                                          : "text-blue-600"
+                                      )}
+                                    >
+                                      {item.url.includes("[creator]")
+                                        ? item.url.replace(
+                                            /\[creator\]/gi,
+                                            currentUserFirstName
+                                          )
+                                        : item.url}
+                                    </a>
+                                    <div
+                                      className={cn(
+                                        "text-xs mt-1",
+                                        isDark ? "text-white" : "text-gray-600"
+                                      )}
+                                    >
+                                      {item.description}
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => removeTrackingLink(index)}
+                                    className={cn(
+                                      "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
+                                      isDark
+                                        ? "bg-[#FFFFFF36] text-white"
+                                        : "text-[#4A00BE] bg-[#D8C3FF]"
+                                    )}
+                                  >
+                                    <Trash className="h-4 w-4" />
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </div>
+                  )}
+                </div>
+                <CardFooter className="py-6 px-6">
+                  <button
+                    className={cn(
+                      "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
+                      isDark
+                        ? "text-white border-gray-400"
+                        : "border-[#4A00BE] text-[#4A00BE]"
+                    )}
+                    type="button"
+                    onClick={prevStep}
+                    disabled={isLoading}
+                  >
+                    Back
+                  </button>
+                  <div className="flex gap-2 ml-auto">
                     <div className="flex gap-2 ml-auto">
                       <button
                         className={cn(
@@ -8796,8 +9311,8 @@ export default function CreateContestPage({
                         Next
                       </button>
                     </div>
-                  </CardFooter>
-                </div>
+                  </div>
+                </CardFooter>
               </div>
             </div>
           </>
