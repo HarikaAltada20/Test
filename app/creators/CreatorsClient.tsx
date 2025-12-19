@@ -120,7 +120,12 @@ const images: string[] = [
   "/images/844d84fa7fc8646e15494703ec37e2d880bb59e5.avif",
   "/images/fb3e50b77241ebb8e7cd1813fae1eecbe92b7432.avif",
 ];
-export default function CreatorsClient() {
+
+interface CreatorsClientProps {
+  totalViews: number;
+}
+
+export default function CreatorsClient({ totalViews }: CreatorsClientProps) {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [fade, setFade] = useState<boolean>(true);
   const [windowWidth, setWindowWidth] = useState<number>(0);
@@ -192,8 +197,8 @@ export default function CreatorsClient() {
     // Set initial width
     handleResize();
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
   return (
     <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
@@ -233,7 +238,9 @@ export default function CreatorsClient() {
             <div className="inline-grid grid-cols-[auto_1fr] items-center gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-6 sm:py-3 mb-8 max-w-[92vw] sm:max-w-none mx-auto">
               <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white shrink-0" />
               <span className="text-xs sm:text-lg font-semibold bg-white bg-clip-text text-transparent leading-tight whitespace-normal text-left">
-                #1 Gamified Creator Marketing Platform
+                {`${totalViews.toLocaleString(
+                  "en-US"
+                )} views generated so far!`}
               </span>
             </div>
 
@@ -291,28 +298,25 @@ export default function CreatorsClient() {
               Join{" "}
               <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">
                 Game of Creators
-              </span>
-              {" "}and get paid based on{" "}
+              </span>{" "}
+              and get paid based on{" "}
               <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">
                 views or ranking
-              </span>
-              {" "}— even if you have 0 followers
+              </span>{" "}
+              — even if you have 0 followers
             </p>
 
             {/* Call-to-Action Buttons */}
             <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
               <Link
                 href="/auth/signup"
-
                 onClick={() => {
                   localStorage.setItem("signupRole", "creator");
                 }}
               >
                 <Button className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg">
-
                   <Sparkles className="h-4 w-4" />
                   <span>Get Started →</span>
-
                 </Button>
               </Link>
 
@@ -321,11 +325,14 @@ export default function CreatorsClient() {
                 className="rounded-3xl border-2 border-slate-400/40 text-slate-300 font-semibold px-8 py-6 text-lg hover:border-orange-400/50 hover:text-orange-400 transition-all duration-300 bg-transparent hover:bg-slate-800/20 hover:shadow-lg"
                 asChild
               >
-                <a href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N" target="_blank" rel="noopener noreferrer">
+                <a
+                  href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   Watch Demo
                 </a>
               </Button>
-
             </div>
 
             {/* Creator Discord link (replaces social proof line) */}
@@ -343,15 +350,14 @@ export default function CreatorsClient() {
           </div>
         </section>
 
-
-
         {/* Why Join as Creator - Gaming Style */}
         <section className="text-white py-16" ref={animationRef}>
           <div className="max-w-[1200px] mx-auto px-4 md:px-12 xl:px-4 text-center">
             {/* Heading */}
             <h2
-              className={`text-3xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-up" : "hide-before-animate"
-                }`}
+              className={`text-3xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-up" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "0.2s" }}
             >
               Why Join as a{" "}
@@ -360,8 +366,9 @@ export default function CreatorsClient() {
               </span>
             </h2>
             <p
-              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-left" : "hide-before-animate"
-                }`}
+              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-left" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "1s" }}
             >
               Unlock your creative potential and monetise your passion
@@ -441,8 +448,9 @@ export default function CreatorsClient() {
         >
           <div className="container mx-auto max-w-[1250px]">
             <h2
-              className={`text-center text-2xl md:text-4xl font-bold mb-[50px] ${howItWorksAnimated ? "slide-up" : "hide-before-animate"
-                }`}
+              className={`text-center text-2xl md:text-4xl font-bold mb-[50px] ${
+                howItWorksAnimated ? "slide-up" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "0.1s" }}
             >
               How it works
@@ -471,21 +479,21 @@ export default function CreatorsClient() {
                               ? windowWidth < 1100
                                 ? "230px" // 1000–1099px
                                 : windowWidth < 1250
-                                  ? "200px" // 1100–1249px
-                                  : "180px" // ≥1250px
+                                ? "200px" // 1100–1249px
+                                : "180px" // ≥1250px
                               : index === 1
-                                ? windowWidth < 1100
-                                  ? "200px" // 1000–1099px
-                                  : windowWidth < 1250
-                                    ? "200px" // 1100–1249px
-                                    : "180px" // ≥1250px
-                                : index === 2
-                                  ? windowWidth < 1100
-                                    ? "230px" // 1000–1099px
-                                    : windowWidth < 1250
-                                      ? "200px" // 1100–1249px
-                                      : "180px" // ≥1250px
-                                  : "40px",
+                              ? windowWidth < 1100
+                                ? "200px" // 1000–1099px
+                                : windowWidth < 1250
+                                ? "200px" // 1100–1249px
+                                : "180px" // ≥1250px
+                              : index === 2
+                              ? windowWidth < 1100
+                                ? "230px" // 1000–1099px
+                                : windowWidth < 1250
+                                ? "200px" // 1100–1249px
+                                : "180px" // ≥1250px
+                              : "40px",
                         }}
                       />
                     )}
@@ -514,8 +522,9 @@ export default function CreatorsClient() {
                   src={images[currentIndex]}
                   alt={`Step Image ${currentIndex + 1}`}
                   fill
-                  className={`object-cover rounded-xl transition-opacity duration-500 ${fade ? "opacity-100" : "opacity-0"
-                    }`}
+                  className={`object-cover rounded-xl transition-opacity duration-500 ${
+                    fade ? "opacity-100" : "opacity-0"
+                  }`}
                   priority={true}
                 />
               </div>

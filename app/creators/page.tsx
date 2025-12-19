@@ -1,9 +1,11 @@
 import React from "react";
 import { Metadata } from "next";
 import CreatorsClient from "./CreatorsClient";
+import { createClient } from "@/utils/supabase/server";
 
 export const metadata: Metadata = {
-  title: "Best Platform to Get Paid Based on Views - Turn Your Creativity Into Income | Game Of Creators",
+  title:
+    "Best Platform to Get Paid Based on Views - Turn Your Creativity Into Income | Game Of Creators",
   description:
     "The best platform to get paid based on views and ranking. Join Game of Creators and earn money even with 0 followers! Top choice for creators seeking performance-based payments and fair compensation for quality content.",
   openGraph: {
@@ -24,6 +26,18 @@ export const metadata: Metadata = {
   },
 };
 
-export default function CreatorsPage() {
-  return <CreatorsClient />;
+export default async function CreatorsPage() {
+  const supabase = await createClient();
+
+  const { data: submissions } = await supabase
+    .from("submissions")
+    .select("views");
+
+  const totalViews =
+    submissions?.reduce(
+      (sum, sub: { views: number | null }) => sum + (sub.views || 0),
+      0
+    ) || 0;
+
+  return <CreatorsClient totalViews={totalViews} />;
 }
