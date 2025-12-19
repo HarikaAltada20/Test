@@ -387,7 +387,9 @@ export function ContestListClient({
 
   // useEffect for filtering and sorting - copied from opportunities
   useEffect(() => {
-    let contestsToDisplay = [...initialContests];
+    const baseContests =
+      contestsByStatus[selectedTab as keyof typeof contestsByStatus] || [];
+    let contestsToDisplay = [...baseContests];
 
     // Search Filter - filter by title (case-insensitive)
     if (searchQuery.trim() !== "") {
@@ -551,7 +553,8 @@ export function ContestListClient({
 
     setFilteredAndSortedContests(contestsToDisplay);
   }, [
-    initialContests,
+    contestsByStatus,
+    selectedTab,
     contestStatusFilter,
     platformFilter,
     contestTypeFilter,
