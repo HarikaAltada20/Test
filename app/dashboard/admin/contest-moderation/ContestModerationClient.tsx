@@ -134,15 +134,31 @@ export default function ContestModerationClient({
   initialStatus = "pending_approval",
   hasInitialData = false,
 }: ContestModerationClientProps) {
+  // Memoize whether we have valid initial data
+  const hasValidInitialData = hasInitialData && initialContests.length > 0;
+
+  // Helper function to calculate counts from contests array
+  const calculateCounts = (contestsList: Contest[]) => {
+    return {
+      pending_approval: contestsList.filter(
+        (c) => c.moderation_status === "pending_approval"
+      ).length,
+      approved: contestsList.filter(
+        (c) => c.moderation_status === "approved"
+      ).length,
+      published: contestsList.filter(
+        (c) => c.moderation_status === "published"
+      ).length,
+      rejected: contestsList.filter(
+        (c) => c.moderation_status === "rejected"
+      ).length,
+      all: contestsList.length,
+    };
+  };
+
   const [contests, setContests] = useState<Contest[]>(initialContests);
-  // Track if we've initialized from server data to prevent flash
-  // If server provided initial data, we're already initialized
-  const [hasInitialized, setHasInitialized] = useState(hasInitialData);
-  // Start with loading false if server provided initial data, true otherwise
-  const [loading, setLoading] = useState(() => {
-    // If server provided initial data, we don't need to load
-    return !hasInitialData;
-  });
+  const [hasInitialized, setHasInitialized] = useState(hasValidInitialData);
+  const [loading, setLoading] = useState(!hasValidInitialData);
   const [selectedStatus, setSelectedStatus] = useState(initialStatus);
   const [selectedContest, setSelectedContest] = useState<Contest | null>(null);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
@@ -154,20 +170,13 @@ export default function ContestModerationClient({
   const { toast } = useToast();
 
   // Separate state for counts to persist across tab switches
-  const [contestCounts, setContestCounts] = useState({
-    pending_approval: initialContests.filter(
-      (c) => c.moderation_status === "pending_approval"
-    ).length,
-    approved: 0,
-    published: 0,
-    rejected: 0,
-    all: 0,
-  });
+  const [contestCounts, setContestCounts] = useState(() =>
+    calculateCounts(initialContests)
+  );
 
-  // Track if component has mounted to prevent flash
-  const hasMountedRef = useRef(false);
-  // Track if we've handled initial data to prevent race conditions
-  const hasHandledInitialDataRef = useRef(false);
+  // Use refs to track state without causing re-renders
+  const hasFetchedInitialRef = useRef(!hasValidInitialData);
+  const isInitialStatusRef = useRef(true);
 
   // Get theme from parent layout
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -235,29 +244,15 @@ export default function ContestModerationClient({
     };
   }, []);
 
-  // Fetch counts for all tabs (silently, doesn't affect loading state)
+  // Fetch counts for all tabs (optimized - only updates counts, doesn't fetch contests)
   const fetchAllCounts = async () => {
     try {
       const response = await fetch("/api/admin/contest-moderation");
-      if (response.ok) {
-        const data = await response.json();
-        const allContests = data.contests || [];
-        setContestCounts({
-          pending_approval: allContests.filter(
-            (c: Contest) => c.moderation_status === "pending_approval"
-          ).length,
-          approved: allContests.filter(
-            (c: Contest) => c.moderation_status === "approved"
-          ).length,
-          published: allContests.filter(
-            (c: Contest) => c.moderation_status === "published"
-          ).length,
-          rejected: allContests.filter(
-            (c: Contest) => c.moderation_status === "rejected"
-          ).length,
-          all: allContests.length,
-        });
-      }
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const allContests = data.contests || [];
+      setContestCounts(calculateCounts(allContests));
     } catch (error) {
       console.error("Error fetching counts:", error);
     }
@@ -285,21 +280,7 @@ export default function ContestModerationClient({
       // Update counts based on fetched data
       if (status === "all") {
         // If fetching all, update all counts
-        setContestCounts({
-          pending_approval: fetchedContests.filter(
-            (c: Contest) => c.moderation_status === "pending_approval"
-          ).length,
-          approved: fetchedContests.filter(
-            (c: Contest) => c.moderation_status === "approved"
-          ).length,
-          published: fetchedContests.filter(
-            (c: Contest) => c.moderation_status === "published"
-          ).length,
-          rejected: fetchedContests.filter(
-            (c: Contest) => c.moderation_status === "rejected"
-          ).length,
-          all: fetchedContests.length,
-        });
+        setContestCounts(calculateCounts(fetchedContests));
       } else {
         // Update only the current tab's count
         setContestCounts((prev) => ({
@@ -323,63 +304,41 @@ export default function ContestModerationClient({
     }
   };
 
-  // Set loading to false synchronously if we have initial data (before first paint)
-  // This prevents the flash of "no contests found" -> loading -> contests
+  // Initialize with server data synchronously (before first paint) to prevent flash
   useLayoutEffect(() => {
-    hasMountedRef.current = true;
-    if (
-      hasInitialData &&
-      selectedStatus === initialStatus &&
-      !hasHandledInitialDataRef.current
-    ) {
-      // Server provided initial data, ensure loading is false before first paint
-      setLoading(false);
+    if (hasValidInitialData && selectedStatus === initialStatus) {
+      setContests(initialContests);
       setHasInitialized(true);
-      hasHandledInitialDataRef.current = true;
+      setLoading(false);
+      hasFetchedInitialRef.current = true;
     }
   }, []); // Only run once on mount
 
-  // Track if this is the first render
-  const isFirstRender = useRef(true);
-
-  // Fetch all counts on mount (don't block UI)
+  // Fetch counts on mount (non-blocking, runs after initial render)
   useEffect(() => {
     fetchAllCounts();
   }, []);
 
+  // Handle status changes and initial fetch
   useEffect(() => {
     setPage(1); // Reset to first page when tab changes
-    // On first render, if we have initial data for the current status, skip fetch
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      if (
-        hasInitialData &&
-        selectedStatus === initialStatus &&
-        !hasHandledInitialDataRef.current
-      ) {
-        // Server provided initial data, mark as initialized
-        setHasInitialized(true);
-        setLoading(false);
-        hasHandledInitialDataRef.current = true;
-        // Don't fetch, use initial data
-        return; // Skip fetch, use initial data
-      }
-      // If no initial data from server, loading is already true, just fetch
-    }
 
-    // Don't fetch if we've already handled initial data for this status
+    // Skip fetch if we have initial data for the current status
     if (
-      hasInitialData &&
+      hasValidInitialData &&
       selectedStatus === initialStatus &&
-      hasHandledInitialDataRef.current
+      hasFetchedInitialRef.current
     ) {
-      return; // Skip fetch, use initial data
+      isInitialStatusRef.current = false;
+      return;
     }
 
-    // Fetch when status changes (always fetch when switching tabs)
-    // This will only execute if:
-    // 1. First render with no initial data from server, OR
-    // 2. Tab change (isFirstRender.current is already false) AND not using initial data
+    // Mark that we're no longer on initial status
+    if (selectedStatus !== initialStatus) {
+      isInitialStatusRef.current = false;
+    }
+
+    // Fetch contests for the selected status
     fetchContests(selectedStatus);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStatus]);
@@ -493,7 +452,7 @@ export default function ContestModerationClient({
   const getModerationStatusBadge = (moderationStatus: string) => {
     const config =
       moderationStatusConfig[
-        moderationStatus as keyof typeof moderationStatusConfig
+      moderationStatus as keyof typeof moderationStatusConfig
       ];
     if (!config) return null;
 
@@ -605,21 +564,21 @@ export default function ContestModerationClient({
               {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
                 contest.contest_based_details?.leaderboard_contest
                   ?.flat_fee_bonus) && (
-                <Badge
-                  variant="outline"
-                  className="text-xs bg-green-50 text-green-700 border-green-200"
-                >
-                  <Gift className="h-3 w-3 mr-1" />
-                  {formatMoney(
-                    contest.contest_based_details?.cpm_contest
-                      ?.flat_fee_bonus ||
+                  <Badge
+                    variant="outline"
+                    className="text-xs bg-green-50 text-green-700 border-green-200"
+                  >
+                    <Gift className="h-3 w-3 mr-1" />
+                    {formatMoney(
+                      contest.contest_based_details?.cpm_contest
+                        ?.flat_fee_bonus ||
                       contest.contest_based_details?.leaderboard_contest
                         ?.flat_fee_bonus ||
                       0
-                  )}
-                  /submission
-                </Badge>
-              )}
+                    )}
+                    /submission
+                  </Badge>
+                )}
               {contest.content_type && (
                 <Badge
                   variant="outline"
@@ -684,11 +643,11 @@ export default function ContestModerationClient({
                     {contest.contest_type === "cpm"
                       ? "CPM Based"
                       : contest.contest_type === "leaderboard"
-                      ? "Leaderboard"
-                      : contest.contest_type
-                      ? contest.contest_type.charAt(0).toUpperCase() +
-                        contest.contest_type.slice(1)
-                      : "N/A"}
+                        ? "Leaderboard"
+                        : contest.contest_type
+                          ? contest.contest_type.charAt(0).toUpperCase() +
+                          contest.contest_type.slice(1)
+                          : "N/A"}
                   </span>
                 </span>
               </div>
@@ -704,22 +663,52 @@ export default function ContestModerationClient({
               )}
             </div>
 
-            {contest.moderation_status === "rejected" &&
-              contest.rejection_reason && (
-                <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <div className="text-sm font-medium text-red-800 dark:text-red-200">
-                        Rejection Reason
-                      </div>
-                      <div className="text-sm text-red-700 dark:text-red-300 mt-1">
-                        {contest.rejection_reason}
-                      </div>
+            {/* Show rejection reason based on current status */}
+            {contest.rejection_reason && (
+              <div
+                className={cn(
+                  "mb-3 p-3 rounded-lg border",
+                  contest.moderation_status === "rejected"
+                    ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+                    : "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"
+                )}
+              >
+                <div className="flex items-start gap-2">
+                  <AlertTriangle
+                    className={cn(
+                      "h-4 w-4 mt-0.5 flex-shrink-0",
+                      contest.moderation_status === "rejected"
+                        ? "text-red-500"
+                        : "text-amber-500"
+                    )}
+                  />
+                  <div>
+                    <div
+                      className={cn(
+                        "text-sm font-medium",
+                        contest.moderation_status === "rejected"
+                          ? "text-red-800 dark:text-red-200"
+                          : "text-amber-800 dark:text-amber-200"
+                      )}
+                    >
+                      {contest.moderation_status === "rejected"
+                        ? "Rejection Reason"
+                        : "Previous Rejection Reason"}
+                    </div>
+                    <div
+                      className={cn(
+                        "text-sm mt-1",
+                        contest.moderation_status === "rejected"
+                          ? "text-red-700 dark:text-red-300"
+                          : "text-amber-700 dark:text-amber-300"
+                      )}
+                    >
+                      {contest.rejection_reason}
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
             <div className="flex gap-2 mt-auto pt-3">
               <button
@@ -961,7 +950,7 @@ export default function ContestModerationClient({
                           value={size.toString()}
                           className={cn(
                             isDark &&
-                              "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
+                            "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
                           )}
                         >
                           {size}

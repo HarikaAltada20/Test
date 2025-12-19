@@ -1201,12 +1201,13 @@ export function ContestListClient({
                   </span>
                 </div>
               )}
-              {contest.rejection_reason && (
-                <div className="flex items-start gap-1 text-red-600 dark:text-red-400">
-                  <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                  <span className="text-xs">{contest.rejection_reason}</span>
-                </div>
-              )}
+              {contest.moderation_status === "rejected" &&
+                contest.rejection_reason && (
+                  <div className="flex items-start gap-1 text-red-600 dark:text-red-400">
+                    <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                    <span className="text-xs">{contest.rejection_reason}</span>
+                  </div>
+                )}
             </div>
 
             <div className="flex gap-2 items-center">
