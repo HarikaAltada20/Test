@@ -13,12 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  EnhancedTabs,
-  EnhancedTabsList,
-  EnhancedTabsTrigger,
-  EnhancedTabsContent,
-} from "@/components/ui/enhanced-tabs";
+import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import {
   Dialog,
   DialogContent,
@@ -338,42 +333,20 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [activeTab, setActiveTab] = useState("all");
-  // Initialize mode state with proper detection to prevent flash
-  const [mode, setMode] = useState<"light" | "dark">(() => {
-    // Check if we're in browser environment
+  const [isDark, setIsDark] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      // Try to get theme from data-theme attribute first
-      const themeElement = document.documentElement;
-      const dataTheme = themeElement.getAttribute("data-theme") as
-        | "light"
-        | "dark";
-      if (dataTheme) return dataTheme;
-
-      // Fallback to data-mode attribute
+      // Check data-mode attribute from parent layout
       const modeElement = document.querySelector("[data-mode]");
       if (modeElement) {
-        const dataMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (dataMode) return dataMode;
+        const dataMode = modeElement.getAttribute("data-mode");
+        return dataMode === "dark";
       }
-
-      // Check localStorage as last resort
-      try {
-        const savedMode = localStorage.getItem("dashboard-mode") as
-          | "light"
-          | "dark";
-        if (savedMode) return savedMode;
-
-        const preset = localStorage.getItem("dashboard-preset");
-        if (preset === "game-of-creators" || preset === "dark-professional") {
-          return "dark";
-        }
-      } catch (e) {
-        // Ignore localStorage errors
-      }
+      // Fallback to data-theme attribute
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme");
+      return dataTheme === "dark";
     }
-    return "light";
+    return false; // Default to light mode
   });
   const [selectedSubscriptionInfo, setSelectedSubscriptionInfo] = useState<
     any | null
@@ -640,7 +613,6 @@ export default function AdminUsersPage() {
       case "user_type":
         return row.user_type;
       case "country": {
-     
         if (activeTab === "creators") {
           if (row.creator_profiles) {
             const profiles = Array.isArray(row.creator_profiles)
@@ -2064,114 +2036,42 @@ export default function AdminUsersPage() {
     load();
   }, []);
 
-  // Read mode/compact flags from data attributes with immediate updates
-  useEffect(() => {
-    const checkFlags = () => {
-      const container = document.querySelector("[data-mode][data-compact]");
-      const modeElement = container || document.querySelector("[data-mode]");
-      if (modeElement) {
-        const currentMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (currentMode && currentMode !== mode) {
-          setMode(currentMode);
-        }
+ // Watch for theme changes from parent layout
+ useEffect(() => {
+  const checkTheme = () => {
+    const modeElement = document.querySelector("[data-mode]");
+    if (modeElement) {
+      const currentMode = modeElement.getAttribute("data-mode");
+      const newIsDark = currentMode === "dark";
+      if (newIsDark !== isDark) {
+        setIsDark(newIsDark);
       }
-    };
-
-    // Check immediately
-    checkFlags();
-
-    // Watch for changes in the data attributes with immediate callback
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (
-          mutation.type === "attributes" &&
-          mutation.attributeName === "data-mode"
-        ) {
-          checkFlags();
-        }
-      });
-    });
-
-    const targetNode =
-      document.querySelector("[data-mode][data-compact]") ||
-      document.querySelector("[data-mode]") ||
-      document.documentElement;
-
-    if (targetNode) {
-      observer.observe(targetNode, {
-        attributes: true,
-        attributeFilter: ["data-mode", "data-theme"],
-      });
     }
+  };
 
-    // Also listen for storage events to catch theme changes from other tabs
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "dashboard-mode" && e.newValue) {
-        const newMode = e.newValue as "light" | "dark";
-        if (newMode !== mode) {
-          setMode(newMode);
-        }
-      }
-    };
+  checkTheme();
 
-    window.addEventListener("storage", handleStorageChange);
+  // Watch for changes in the data attribute
+  const observer = new MutationObserver(checkTheme);
+  const targetNode = document.querySelector("[data-mode]");
+  if (targetNode) {
+    observer.observe(targetNode, {
+      attributes: true,
+      attributeFilter: ["data-mode"],
+    });
+  }
 
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("storage", handleStorageChange);
-    };
-  }, [mode]);
+  return () => observer.disconnect();
+}, [isDark]);
 
-  // Additional effect to catch theme changes more immediately
-  useEffect(() => {
-    // Listen for custom theme change events that might be dispatched by the theme system
-    const handleThemeChange = (event: CustomEvent) => {
-      if (event.detail && event.detail.mode) {
-        const newMode = event.detail.mode as "light" | "dark";
-        if (newMode !== mode) {
-          setMode(newMode);
-        }
-      }
-    };
 
-    // Listen for the custom event
-    window.addEventListener("theme-change", handleThemeChange as EventListener);
-
-    // Also check for changes on a more frequent interval as a fallback
-    const intervalId = setInterval(() => {
-      const container = document.querySelector("[data-mode][data-compact]");
-      const modeElement =
-        container ||
-        document.querySelector("[data-mode]") ||
-        document.documentElement;
-      if (modeElement) {
-        const currentMode = (modeElement.getAttribute("data-mode") ||
-          modeElement.getAttribute("data-theme")) as "light" | "dark" | null;
-        if (currentMode && currentMode !== mode) {
-          setMode(currentMode);
-        }
-      }
-    }, 50); // Check every 50ms for faster response
-
-    return () => {
-      window.removeEventListener(
-        "theme-change",
-        handleThemeChange as EventListener
-      );
-      clearInterval(intervalId);
-    };
-  }, [mode]);
-
-  const isDark = mode === "dark";
 
   return (
     <div className="space-y-6">
       <Card
         className={cn(
-          "rounded-xl shadow",
-          isDark ? "bg-[#170337]" : "bg-white"
+          "rounded-xl shadow pb-3",
+          isDark ? "bg-[#020817]" : "bg-white"
         )}
       >
         <CardHeader className="py-3 px-3 sm:px-6">
@@ -2273,28 +2173,17 @@ export default function AdminUsersPage() {
           </div>
         </CardHeader>
         <CardContent className="py-2 px-6">
-          <EnhancedTabs value={activeTab} onValueChange={setActiveTab}>
-            <EnhancedTabsList>
-              <EnhancedTabsTrigger value="all">
-                Users
-                <Badge variant="secondary" className="ml-2">
-                  {allUsersCount}
-                </Badge>
-              </EnhancedTabsTrigger>
-              <EnhancedTabsTrigger value="advertisers">
-                Advertisers
-                <Badge variant="secondary" className="ml-2">
-                  {advertisersCount}
-                </Badge>
-              </EnhancedTabsTrigger>
-              <EnhancedTabsTrigger value="creators">
-                Creators
-                <Badge variant="secondary" className="ml-2">
-                  {creatorsCount}
-                </Badge>
-              </EnhancedTabsTrigger>
-            </EnhancedTabsList>
-          </EnhancedTabs>
+          <EnhancedTabs
+            tabs={[
+              { id: "all", label: `Users (${allUsersCount})` },
+              { id: "advertisers", label: `Advertisers (${advertisersCount})` },
+              { id: "creators", label: `Creators (${creatorsCount})` },
+            ]}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            className="w-full"
+            isDark={isDark}
+          />
         </CardContent>
       </Card>
 
@@ -3429,36 +3318,30 @@ export default function AdminUsersPage() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={getVisibleColumnsCount()}
-                      className="text-center text-sm text-muted-foreground py-8"
-                    >
-                      <div className="flex items-center justify-center gap-2">
-                        <svg
-                          className="animate-spin h-5 w-5 text-muted-foreground"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
-                        <span>Loading users...</span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                  <>
+                    {Array.from({ length: limit }).map((_, index) => (
+                      <TableRow key={`skeleton-${index}`}>
+                        {Array.from({
+                          length: getVisibleColumnsCount(),
+                        }).map((_, colIndex) => (
+                          <TableCell
+                            key={`skeleton-cell-${index}-${colIndex}`}
+                            className="whitespace-nowrap border-r"
+                          >
+                            <div
+                              className={cn(
+                                "h-4 rounded animate-pulse",
+                                isDark ? "bg-[#391A6A]/50" : "bg-gray-200"
+                              )}
+                              style={{
+                                width: `${Math.random() * 40 + 60}%`,
+                              }}
+                            />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </>
                 ) : tabFiltered.length === 0 ? (
                   <TableRow>
                     <TableCell

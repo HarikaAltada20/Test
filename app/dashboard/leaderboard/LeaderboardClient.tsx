@@ -435,30 +435,75 @@ export default function LeaderboardClient({
       {/* Summary Statistics Cards (admin-only when showAdminSummary is true) */}
       {showAdminSummary && staticSummary && (
         <div className="mb-4 sm:mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <div className="bg-white shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 bg-gradient-to-br from-violet-100 via-violet-50 to-purple-50 border-b border-violet-100/50 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-semibold text-violet-800">
+          <div
+            className={cn(
+              "shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl",
+              isDark ? "bg-[#170337]" : "bg-white"
+            )}
+          >
+            <CardHeader
+              className={cn(
+                "flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 border-b px-3 sm:px-6 pt-3 sm:pt-6",
+                isDark
+                  ? "bg-gradient-to-br from-violet-900/30 via-violet-800/20 to-purple-900/20 border-violet-700/30"
+                  : "bg-gradient-to-br from-violet-100 via-violet-50 to-purple-50 border-violet-100/50"
+              )}
+            >
+              <CardTitle
+                className={cn(
+                  "text-xs sm:text-sm font-semibold",
+                  isDark ? "text-violet-300" : "text-violet-800"
+                )}
+              >
                 Total Creators
               </CardTitle>
-              <div className="p-1 sm:p-1.5 rounded-lg bg-violet-200/50 group-hover:bg-violet-200 transition-colors">
-                <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-violet-700" />
+              <div
+                className={cn(
+                  "p-1 sm:p-1.5 rounded-lg transition-colors",
+                  isDark
+                    ? "bg-violet-800/30 group-hover:bg-violet-800/40"
+                    : "bg-violet-200/50 group-hover:bg-violet-200"
+                )}
+              >
+                <Users
+                  className={cn(
+                    "h-3.5 w-3.5 sm:h-4 sm:w-4",
+                    isDark ? "text-violet-300" : "text-violet-700"
+                  )}
+                />
               </div>
             </CardHeader>
             <CardContent className="pt-3 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
-              <div className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-violet-700 to-purple-700 bg-clip-text text-transparent">
+              <div
+                className={cn(
+                  "text-2xl sm:text-3xl font-bold bg-gradient-to-r bg-clip-text text-transparent",
+                  isDark
+                    ? "from-violet-300 to-purple-300"
+                    : "from-violet-700 to-purple-700"
+                )}
+              >
                 {staticSummary.totalCreators.toLocaleString()}
               </div>
 
               {/* Platform Breakdown */}
               {staticSummary.instagramCreators !== undefined &&
                 staticSummary.youtubeCreators !== undefined && (
-                  <p className="text-xs text-violet-600/70 mt-1 sm:mt-2 font-medium flex items-center gap-2 flex-wrap">
+                  <p
+                    className={cn(
+                      "text-xs mt-1 sm:mt-2 font-medium flex items-center gap-2 flex-wrap",
+                      isDark ? "text-violet-300/70" : "text-violet-600/70"
+                    )}
+                  >
                     <span className="flex items-center gap-1.5">
                       <Instagram className="w-3 h-3 text-pink-600" />
                       {staticSummary.instagramCreators.toLocaleString()}{" "}
                       Instagram
                     </span>
-                    <span className="text-violet-400">|</span>
+                    <span
+                      className={isDark ? "text-violet-500" : "text-violet-400"}
+                    >
+                      |
+                    </span>
                     <span className="flex items-center gap-1.5">
                       <Youtube className="w-3 h-3 text-red-600" />
                       {staticSummary.youtubeCreators.toLocaleString()} YouTube
@@ -468,60 +513,183 @@ export default function LeaderboardClient({
             </CardContent>
           </div>
 
-          <div className="bg-white shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 bg-gradient-to-br from-amber-100 via-yellow-50 to-orange-50 border-b border-amber-100/50 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-semibold text-amber-800">
+          <div
+            className={cn(
+              "shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl",
+              isDark ? "bg-[#170337]" : "bg-white"
+            )}
+          >
+            <CardHeader
+              className={cn(
+                "flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 border-b px-3 sm:px-6 pt-3 sm:pt-6",
+                isDark
+                  ? "bg-gradient-to-br from-amber-900/30 via-yellow-900/20 to-orange-900/20 border-amber-700/30"
+                  : "bg-gradient-to-br from-amber-100 via-yellow-50 to-orange-50 border-amber-100/50"
+              )}
+            >
+              <CardTitle
+                className={cn(
+                  "text-xs sm:text-sm font-semibold",
+                  isDark ? "text-amber-300" : "text-amber-800"
+                )}
+              >
                 Total Contests Won
               </CardTitle>
-              <div className="p-1 sm:p-1.5 rounded-lg bg-amber-200/50 group-hover:bg-amber-200 transition-colors">
-                <Award className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-700" />
+              <div
+                className={cn(
+                  "p-1 sm:p-1.5 rounded-lg transition-colors",
+                  isDark
+                    ? "bg-amber-800/30 group-hover:bg-amber-800/40"
+                    : "bg-amber-200/50 group-hover:bg-amber-200"
+                )}
+              >
+                <Award
+                  className={cn(
+                    "h-3.5 w-3.5 sm:h-4 sm:w-4",
+                    isDark ? "text-amber-300" : "text-amber-700"
+                  )}
+                />
               </div>
             </CardHeader>
             <CardContent className="pt-3 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
-              <div className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-amber-700 to-orange-700 bg-clip-text text-transparent">
+              <div
+                className={cn(
+                  "text-2xl sm:text-3xl font-bold bg-gradient-to-r bg-clip-text text-transparent",
+                  isDark
+                    ? "from-amber-300 to-orange-300"
+                    : "from-amber-700 to-orange-700"
+                )}
+              >
                 {staticSummary.totalContestsWon.toLocaleString()}
               </div>
-              <p className="text-xs text-amber-600/80 mt-1 sm:mt-2 font-medium">
+              <p
+                className={cn(
+                  "text-xs mt-1 sm:mt-2 font-medium",
+                  isDark ? "text-amber-300/80" : "text-amber-600/80"
+                )}
+              >
                 {staticSummary.totalContestsParticipated.toLocaleString()}{" "}
                 participated
               </p>
             </CardContent>
           </div>
 
-          <div className="bg-white shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 bg-gradient-to-br from-indigo-100 via-purple-50 to-blue-50 rounded-t-lg border-b border-indigo-100/50 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-semibold text-indigo-800">
+          <div
+            className={cn(
+              "shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl",
+              isDark ? "bg-[#170337]" : "bg-white"
+            )}
+          >
+            <CardHeader
+              className={cn(
+                "flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 rounded-t-lg border-b px-3 sm:px-6 pt-3 sm:pt-6",
+                isDark
+                  ? "bg-gradient-to-br from-indigo-900/30 via-purple-900/20 to-blue-900/20 border-indigo-700/30"
+                  : "bg-gradient-to-br from-indigo-100 via-purple-50 to-blue-50 border-indigo-100/50"
+              )}
+            >
+              <CardTitle
+                className={cn(
+                  "text-xs sm:text-sm font-semibold",
+                  isDark ? "text-indigo-300" : "text-indigo-800"
+                )}
+              >
                 Total Submissions Won
               </CardTitle>
-              <div className="p-1 sm:p-1.5 rounded-lg bg-indigo-200/50 group-hover:bg-indigo-200 transition-colors">
-                <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-indigo-700" />
+              <div
+                className={cn(
+                  "p-1 sm:p-1.5 rounded-lg transition-colors",
+                  isDark
+                    ? "bg-indigo-800/30 group-hover:bg-indigo-800/40"
+                    : "bg-indigo-200/50 group-hover:bg-indigo-200"
+                )}
+              >
+                <Target
+                  className={cn(
+                    "h-3.5 w-3.5 sm:h-4 sm:w-4",
+                    isDark ? "text-indigo-300" : "text-indigo-700"
+                  )}
+                />
               </div>
             </CardHeader>
             <CardContent className="pt-3 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
-              <div className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent">
+              <div
+                className={cn(
+                  "text-2xl sm:text-3xl font-bold bg-gradient-to-r bg-clip-text text-transparent",
+                  isDark
+                    ? "from-indigo-300 to-purple-300"
+                    : "from-indigo-700 to-purple-700"
+                )}
+              >
                 {staticSummary.totalSubmissionsWon.toLocaleString()}
               </div>
-              <p className="text-xs text-indigo-600/80 mt-1 sm:mt-2 font-medium">
+              <p
+                className={cn(
+                  "text-xs mt-1 sm:mt-2 font-medium",
+                  isDark ? "text-indigo-300/80" : "text-indigo-600/80"
+                )}
+              >
                 {staticSummary.totalSubmissionsMade.toLocaleString()} total
                 submissions
               </p>
             </CardContent>
           </div>
 
-          <div className="bg-white shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 bg-gradient-to-br from-pink-100 via-rose-50 to-fuchsia-50 rounded-t-lg border-b border-pink-100/50 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-semibold text-pink-800">
+          <div
+            className={cn(
+              "shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl",
+              isDark ? "bg-[#170337]" : "bg-white"
+            )}
+          >
+            <CardHeader
+              className={cn(
+                "flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 rounded-t-lg border-b px-3 sm:px-6 pt-3 sm:pt-6",
+                isDark
+                  ? "bg-gradient-to-br from-pink-900/30 via-rose-900/20 to-fuchsia-900/20 border-pink-700/30"
+                  : "bg-gradient-to-br from-pink-100 via-rose-50 to-fuchsia-50 border-pink-100/50"
+              )}
+            >
+              <CardTitle
+                className={cn(
+                  "text-xs sm:text-sm font-semibold",
+                  isDark ? "text-pink-300" : "text-pink-800"
+                )}
+              >
                 Total Referrals
               </CardTitle>
-              <div className="p-1 sm:p-1.5 rounded-lg bg-pink-200/50 group-hover:bg-pink-200 transition-colors">
-                <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-pink-700" />
+              <div
+                className={cn(
+                  "p-1 sm:p-1.5 rounded-lg transition-colors",
+                  isDark
+                    ? "bg-pink-800/30 group-hover:bg-pink-800/40"
+                    : "bg-pink-200/50 group-hover:bg-pink-200"
+                )}
+              >
+                <Users
+                  className={cn(
+                    "h-3.5 w-3.5 sm:h-4 sm:w-4",
+                    isDark ? "text-pink-300" : "text-pink-700"
+                  )}
+                />
               </div>
             </CardHeader>
             <CardContent className="pt-3 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
-              <div className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-pink-700 to-rose-700 bg-clip-text text-transparent">
+              <div
+                className={cn(
+                  "text-2xl sm:text-3xl font-bold bg-gradient-to-r bg-clip-text text-transparent",
+                  isDark
+                    ? "from-pink-300 to-rose-300"
+                    : "from-pink-700 to-rose-700"
+                )}
+              >
                 {staticSummary.totalReferrals.toLocaleString()}
               </div>
-              <p className="text-xs text-pink-600/80 mt-1 sm:mt-2 font-medium">
+              <p
+                className={cn(
+                  "text-xs mt-1 sm:mt-2 font-medium",
+                  isDark ? "text-pink-300/80" : "text-pink-600/80"
+                )}
+              >
                 {staticSummary.totalAdvertisersReferred} brands,{" "}
                 {staticSummary.totalCreatorsReferred} creators
               </p>

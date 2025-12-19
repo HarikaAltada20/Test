@@ -227,6 +227,9 @@ export default function ContestDetailClient({
   const [currentSubmissions, setCurrentSubmissions] = useState<Submission[]>(
     initialSubmissions || []
   );
+  const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
+    string | null
+  >(null);
 
   // Utility function to extract firstName from full_name
   const getFirstName = (fullName: string): string => {
@@ -1054,6 +1057,9 @@ export default function ContestDetailClient({
       `[DOWNLOAD] [DEBUG] Starting download for submission: ${submissionId}`
     );
 
+    // Set loading state
+    setDownloadingSubmissionId(submissionId);
+
     try {
       // Find the submission to check if it's Instagram
       const submission = currentSubmissions.find((s) => s.id === submissionId);
@@ -1162,6 +1168,7 @@ export default function ContestDetailClient({
             errorData.error || "Failed to download video. Please try again.",
           variant: "destructive",
         });
+        setDownloadingSubmissionId(null);
         return;
       }
 
@@ -1205,6 +1212,7 @@ export default function ContestDetailClient({
         title: "Download Started",
         description: "Your video download has started.",
       });
+      setDownloadingSubmissionId(null);
     } catch (error: any) {
       const totalTime = Date.now() - requestStartTime;
       console.error(`[DOWNLOAD] [ERROR] Error downloading reel:`, {
@@ -1220,6 +1228,7 @@ export default function ContestDetailClient({
           error.message || "Failed to download video. Please try again.",
         variant: "destructive",
       });
+      setDownloadingSubmissionId(null);
     }
   };
 
@@ -5185,16 +5194,33 @@ export default function ContestDetailClient({
                                                     submission.id
                                                   )
                                                 }
+                                                disabled={
+                                                  downloadingSubmissionId ===
+                                                  submission.id
+                                                }
                                                 className={cn(
                                                   "text-xs hover:underline flex items-center gap-1 transition-colors whitespace-nowrap",
                                                   isDark
                                                     ? "text-purple-400 hover:text-purple-300"
-                                                    : "text-blue-600 hover:text-blue-800"
+                                                    : "text-blue-600 hover:text-blue-800",
+                                                  downloadingSubmissionId ===
+                                                    submission.id &&
+                                                    "opacity-50 cursor-not-allowed"
                                                 )}
                                                 title="Download Reel/Short"
                                               >
-                                                <Download className="h-3 w-3" />
-                                                Download
+                                                {downloadingSubmissionId ===
+                                                submission.id ? (
+                                                  <>
+                                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                                    Downloading...
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    <Download className="h-3 w-3" />
+                                                    Download
+                                                  </>
+                                                )}
                                               </button>
                                             )}
                                           </div>

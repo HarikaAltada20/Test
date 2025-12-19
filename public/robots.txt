@@ -1,0 +1,20 @@
+# robots.txt for Game Of Creators
+# https://www.gameofcreators.com/robots.txt
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+Disallow: /admin/
+
+# Allow blog posts
+Allow: /blog
+Allow: /blog/*
+
+# Sitemap location
+Sitemap: https://www.gameofcreators.com/sitemap.xml
+
+# Crawl-delay (optional, helps prevent server overload)
+Crawl-delay: 1
+
