@@ -3,6 +3,9 @@ import { Metadata } from "next";
 import CreatorsClient from "./CreatorsClient";
 import { createClient } from "@/utils/supabase/server";
 
+// Always fetch fresh data so newly published contests show up immediately
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title:
     "Best Platform to Get Paid Based on Views - Turn Your Creativity Into Income | Game Of Creators",
@@ -39,5 +42,24 @@ export default async function CreatorsPage() {
       0
     ) || 0;
 
-  return <CreatorsClient totalViews={totalViews} />;
+  // Fetch contests on the server for immediate display
+  const { data: contestsData, error: contestsError } = await supabase
+    .from("contests_with_status")
+    .select(
+      `
+      *,
+      contest_based_details
+    `
+    )
+    .eq("moderation_status", "published")
+    .not("status", "eq", "incomplete")
+    .order("created_at", { ascending: false });
+
+  if (contestsError) {
+    console.error("Error fetching contests:", contestsError);
+  }
+
+  const contests = contestsData || [];
+
+  return <CreatorsClient totalViews={totalViews} initialContests={contests} />;
 }

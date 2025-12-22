@@ -86,6 +86,21 @@ const images: string[] = [
   "/images/Property 1=Rectangle 2725.avif",
   "/images/f96e2b44b8e51e5813eb9cc1fa2600d8249d865b.avif",
 ];
+
+const brandImages: string[] = [
+  "/images/universal-music.avif",
+  "/images/atlantic-music.avif",
+  "/images/rolling-loud.avif",
+  "/images/jammable.avif",
+  "/images/warner-music.avif",
+  "/images/sony.avif",
+  "/images/10k-projects.avif",
+  "/images/ada.avif",
+  "/images/artistpg.avif",
+  "/images/capital-music.avif",
+  "/images/create-music-group.avif",
+  "/images/empire-distribution.avif",
+];
 export default function BrandsClient() {
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -434,6 +449,31 @@ export default function BrandsClient() {
             <span className="font-medium">
               Trusted by 500+ creators and brands
             </span>
+          </div>
+        </section>
+
+        {/* Infinite Scroll Images Section */}
+        <section className="py-10 md:py-16 overflow-hidden">
+          <div className="overflow-hidden relative scroll-container-testimonials">
+            <div className="flex justify-center gap-6 animate-scroll-left">
+              {[...brandImages, ...brandImages].map((image, index) => (
+                <div
+                  key={index}
+                  className="flex-shrink-0 w-[120px] h-[72px] md:w-[150px] md:h-[90px] rounded-lg overflow-hidden"
+                >
+                  <Image
+                    src={image}
+                    alt={`Brand image ${index + 1}`}
+                    width={150}
+                    height={90}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-center items-center text-base text-slate-300 mt-8">
+            <span className="font-medium">Trusted by leading brands</span>
           </div>
         </section>
 

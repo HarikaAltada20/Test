@@ -247,10 +247,10 @@ export default function AffiliateLandingPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
       <Card
         className={cn(
-          "shadow-md hover:shadow-lg transition-shadow duration-200",
+          "shadow-md hover:shadow-lg transition-shadow duration-200 w-full",
           isDark ? "bg-[#170337]" : "bg-white border-gray-200"
         )}
       >
@@ -258,8 +258,8 @@ export default function AffiliateLandingPage() {
           <CardTitle>Affiliate Commissions</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-2 items-center">
-            <div className="flex-1 min-w-0 relative">
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <div className="flex-1 min-w-0 relative w-full">
               <Input
                 placeholder="Search contest by ID or title..."
                 value={selectedContest ? selectedContest.title : contestSearch}
@@ -286,7 +286,7 @@ export default function AffiliateLandingPage() {
               {open && contestSearch && (
                 <div
                   className={cn(
-                    "absolute z-50 w-full mt-1 border rounded-md shadow-md",
+                    "absolute z-50 w-full mt-1 border rounded-md shadow-md max-h-[300px] overflow-y-auto",
                     isDark
                       ? "bg-[#170337] border-gray-700"
                       : "bg-popover border-gray-200"
@@ -308,18 +308,18 @@ export default function AffiliateLandingPage() {
                           >
                             <Check
                               className={cn(
-                                "mr-2 h-4 w-4",
+                                "mr-2 h-4 w-4 shrink-0",
                                 selectedContest?.id === contest.id
                                   ? "opacity-100"
                                   : "opacity-0"
                               )}
                             />
-                            <div className="flex flex-col gap-1 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">
+                            <div className="flex flex-col gap-1 flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium truncate">
                                   {contest.title}
                                 </span>
-                                <span className="text-xs text-muted-foreground">
+                                <span className="text-xs text-muted-foreground shrink-0">
                                   ({contest.id})
                                 </span>
                               </div>
@@ -340,28 +340,38 @@ export default function AffiliateLandingPage() {
                 </div>
               )}
             </div>
-            <Button
-              onClick={handleOpenContest}
-              disabled={!contestId || contestLoading}
-            >
-              {contestLoading && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Open Contest
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleViewEarners}
-              disabled={earnersLoading}
-            >
-              {earnersLoading && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              View Earners
-            </Button>
-            <Button onClick={fetchContest} disabled={!contestId || loading}>
-              {loading ? "Loading..." : "Load"}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2 sm:shrink-0 w-full sm:w-auto">
+              <Button
+                onClick={handleOpenContest}
+                disabled={!contestId || contestLoading}
+                className="w-full sm:w-auto"
+              >
+                {contestLoading && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                <span className="hidden sm:inline">Open Contest</span>
+                <span className="sm:hidden">Open</span>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleViewEarners}
+                disabled={earnersLoading}
+                className="w-full sm:w-auto"
+              >
+                {earnersLoading && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                <span className="hidden sm:inline">View Earners</span>
+                <span className="sm:hidden">Earners</span>
+              </Button>
+              <Button
+                onClick={fetchContest}
+                disabled={!contestId || loading}
+                className="w-full sm:w-auto"
+              >
+                {loading ? "Loading..." : "Load"}
+              </Button>
+            </div>
           </div>
           <p className="text-sm text-muted-foreground mt-3">
             Search and select a contest to view pending/credited affiliate rows.
@@ -373,7 +383,7 @@ export default function AffiliateLandingPage() {
       {rows.length > 0 && (
         <Card
           className={cn(
-            "shadow-md hover:shadow-lg transition-shadow duration-200",
+            "shadow-md hover:shadow-lg transition-shadow duration-200 w-full",
             isDark ? "bg-[#170337]" : "bg-white border-gray-200"
           )}
         >
@@ -381,20 +391,25 @@ export default function AffiliateLandingPage() {
             <CardTitle>Results</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
               <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
                 <DialogTrigger asChild>
-                  <Button disabled={selectedRows.length === 0 || loading}>
+                  <Button
+                    disabled={selectedRows.length === 0 || loading}
+                    className="w-full sm:w-auto"
+                  >
                     Credit Selected
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="w-[95vw] max-w-md sm:w-full">
                   <DialogHeader>
                     <DialogTitle>Bulk Credit</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">Commission %</span>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <span className="text-sm whitespace-nowrap">
+                        Commission %
+                      </span>
                       <Input
                         type="number"
                         min={0}
@@ -403,74 +418,98 @@ export default function AffiliateLandingPage() {
                         onChange={(e) =>
                           setBulkRate(Number(e.target.value || 0))
                         }
+                        className="w-full sm:w-auto"
                       />
                     </div>
-                    <div className="text-sm text-muted-foreground">
+                    <div className="text-sm text-muted-foreground break-words">
                       Selected: {selectedRows.length} • Preview total: $
                       {(previewTotal / 100).toFixed(2)}
                     </div>
                   </div>
-                  <DialogFooter>
-                    <Button onClick={creditSelected} disabled={loading}>
+                  <DialogFooter className="flex-col sm:flex-row gap-2">
+                    <Button
+                      onClick={creditSelected}
+                      disabled={loading}
+                      className="w-full sm:w-auto"
+                    >
                       Confirm Credit
                     </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
             </div>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      <Checkbox
-                        checked={
-                          filtered.length > 0 &&
-                          selectedRows.length ===
-                            filtered.filter((r) => r.status === "pending")
-                              .length
-                        }
-                        onCheckedChange={(v: any) => toggleAll(Boolean(v))}
-                      />
-                    </TableHead>
-                    <TableHead>Contest</TableHead>
-                    <TableHead>Winner</TableHead>
-                    <TableHead>Referrer</TableHead>
-                    <TableHead>Winnings</TableHead>
-                    <TableHead>Commission (10%)</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((r) => (
-                    <TableRow key={r.submission_id}>
-                      <TableCell>
-                        {r.status === "pending" ? (
-                          <Checkbox
-                            checked={!!selected[r.submission_id]}
-                            onCheckedChange={(v: any) =>
-                              setSelected((prev) => ({
-                                ...prev,
-                                [r.submission_id]: Boolean(v),
-                              }))
-                            }
-                          />
-                        ) : null}
-                      </TableCell>
-                      <TableCell>{r.contest_id.slice(0, 8)}…</TableCell>
-                      <TableCell>@{r.winner_username || "-"}</TableCell>
-                      <TableCell>@{r.referrer_username || "-"}</TableCell>
-                      <TableCell>
-                        ${(r.winning_amount_cents / 100).toFixed(2)}
-                      </TableCell>
-                      <TableCell>
-                        ${(r.default_commission_cents / 100).toFixed(2)}
-                      </TableCell>
-                      <TableCell>{r.status}</TableCell>
+            <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+              <div className="min-w-full inline-block align-middle">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12 sm:w-auto">
+                        <Checkbox
+                          checked={
+                            filtered.length > 0 &&
+                            selectedRows.length ===
+                              filtered.filter((r) => r.status === "pending")
+                                .length
+                          }
+                          onCheckedChange={(v: any) => toggleAll(Boolean(v))}
+                        />
+                      </TableHead>
+                      <TableHead className="min-w-[80px]">Contest</TableHead>
+                      <TableHead className="min-w-[100px]">Winner</TableHead>
+                      <TableHead className="min-w-[100px]">Referrer</TableHead>
+                      <TableHead className="min-w-[90px]">Winnings</TableHead>
+                      <TableHead className="min-w-[120px]">
+                        Commission (10%)
+                      </TableHead>
+                      <TableHead className="min-w-[80px]">Status</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filtered.map((r) => (
+                      <TableRow key={r.submission_id}>
+                        <TableCell className="w-12 sm:w-auto">
+                          {r.status === "pending" ? (
+                            <Checkbox
+                              checked={!!selected[r.submission_id]}
+                              onCheckedChange={(v: any) =>
+                                setSelected((prev) => ({
+                                  ...prev,
+                                  [r.submission_id]: Boolean(v),
+                                }))
+                              }
+                            />
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs sm:text-sm">
+                          <span className="hidden sm:inline">
+                            {r.contest_id.slice(0, 8)}…
+                          </span>
+                          <span className="sm:hidden">
+                            {r.contest_id.slice(0, 6)}…
+                          </span>
+                        </TableCell>
+                        <TableCell className="truncate max-w-[120px] sm:max-w-none">
+                          @{r.winner_username || "-"}
+                        </TableCell>
+                        <TableCell className="truncate max-w-[120px] sm:max-w-none">
+                          @{r.referrer_username || "-"}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          ${(r.winning_amount_cents / 100).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          ${(r.default_commission_cents / 100).toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-block px-2 py-1 text-xs rounded-full bg-muted">
+                            {r.status}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </CardContent>
         </Card>
