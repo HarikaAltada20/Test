@@ -1,0 +1,21 @@
+create table public.twitter_campaign_tweets (
+  contest_id uuid not null,
+  creator_id uuid not null,
+  tweet_id text not null,
+  tweet_url text not null,
+  twitter_username text not null,
+  tweet_text text not null,
+  tweet_created_at timestamp with time zone not null,
+  tweet_type text not null,
+  is_eligible boolean not null,
+  eligibility_reason text not null,
+  filter_status text not null,
+  likes integer not null default 0,
+  replies integer not null default 0,
+  retweets integer not null default 0,
+  quote_reposts integer not null default 0,
+  impressions bigint not null default 0,
+  points integer not null default 0,
+  points_calculated_at timestamp with time zone not null,
+  constraint twitter_campaign_tweets_pkey primary key (contest_id, tweet_id)
+) TABLESPACE pg_default;

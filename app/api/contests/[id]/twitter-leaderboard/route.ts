@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@/utils/supabase/server";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const contestId = params.id;
+  const { id: contestId } = await params;
 
   const url = new URL(req.url);
   const page = Number(url.searchParams.get("page") ?? 1);
@@ -17,7 +16,7 @@ export async function GET(
   const offset = (safePage - 1) * safeLimit;
 
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = await createClient();
 
     // 1) Fetch raw leaderboard rows
     const { data: leaderboardRows, error, count } = await supabase

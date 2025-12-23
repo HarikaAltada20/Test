@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import axios from "axios";
 
 export const dynamic = "force-dynamic";
 
+// IMPORTANT: This is the ONLY endpoint that makes Twitter API calls
+// This is called ONLY when:
+// 1. "Refresh Feed" button is clicked (via twitter-refresh-feed)
+// 2. "Refresh Metrics" button is clicked (via refresh-metrics)
+// All other operations (tab switch, pagination, filtering) only read from DB
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -16,7 +22,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const contestId = params.id;
+    const { id: contestId } = await params;
 
     // Optional payload from client: twitter_keywords and twitter_mentions
     let bodyKeywords: string[] = [];
@@ -83,18 +89,55 @@ export async function POST(
       participants
     );
 
-    // Use only the keywords/mentions sent from the client (opportunities page)
-    const campaignKeywords: string[] = bodyKeywords.filter(Boolean);
+    // Get Twitter campaign config from JSONB (single source of truth)
+    let campaignKeywords: string[] = bodyKeywords.filter(Boolean);
+    let requiredMentions: string[] = bodyMentions.filter(Boolean);
+    let allowedTweetTypes: string[] = ["tweet", "quote", "retweet", "reply"]; // Default: allow all types
+    let keywordsRequirementMode: "all" | "any" = "any"; // Default: any keyword matches
+    let mentionsRequirementMode: "all" | "any" = "any"; // Default: any mention matches
+    
+    // Always fetch from contest data (JSONB) to get complete config including allowed_tweet_types
+    const { data: contestData, error: contestError } = await supabase
+      .from("contests")
+      .select("contest_based_details")
+      .eq("id", contestId)
+      .maybeSingle();
+    
+    if (!contestError && contestData) {
+      const twitterCampaign = (contestData as any).contest_based_details?.twitter_campaign;
+      
+      // Prefer JSONB data; contest_based_details.twitter_campaign is the single source of truth
+      if (campaignKeywords.length === 0) {
+        campaignKeywords = (twitterCampaign?.keywords || []).filter(Boolean);
+      }
+      if (requiredMentions.length === 0) {
+        requiredMentions = (twitterCampaign?.mentions || []).filter(Boolean);
+      }
+      // Read allowed_tweet_types from JSONB (supports reposts/retweets)
+      if (Array.isArray(twitterCampaign?.allowed_tweet_types) && twitterCampaign.allowed_tweet_types.length > 0) {
+        allowedTweetTypes = twitterCampaign.allowed_tweet_types;
+      }
+      // Read requirement modes from JSONB
+      if (twitterCampaign?.keywords_requirement_mode === "all" || twitterCampaign?.keywords_requirement_mode === "any") {
+        keywordsRequirementMode = twitterCampaign.keywords_requirement_mode;
+      }
+      if (twitterCampaign?.mentions_requirement_mode === "all" || twitterCampaign?.mentions_requirement_mode === "any") {
+        mentionsRequirementMode = twitterCampaign.mentions_requirement_mode;
+      }
+    }
+    
     const campaignHashtags: string[] = []; // no separate hashtags array from client for now
-    const requiredMentions: string[] = bodyMentions.filter(Boolean);
 
-    console.log("[twitter-refresh-tweets] Campaign details from client body", {
+    console.log("[twitter-refresh-tweets] Campaign details (from contest JSONB)", {
       contestId,
       bodyKeywords,
       bodyMentions,
       campaignKeywords,
       campaignHashtags,
       requiredMentions,
+      allowedTweetTypes, // Includes retweet and quote for reposts/retweets support
+      keywordsRequirementMode,
+      mentionsRequirementMode,
     });
 
     const allDetails: any[] = [];
@@ -224,30 +267,97 @@ export async function POST(
         (t: any) => t.tweet_id && t.text
       );
 
-      // Campaign-level filter: match required mentions and keywords/hashtags from contest config
+      console.log(
+        `[twitter-refresh-tweets] Valid tweets before campaign filtering for ${cleanUsername}:`,
+        validTweets.map((t: any) => ({
+          tweet_id: t.tweet_id,
+          text: t.text?.substring(0, 50),
+          type: t.type,
+          user_mentions: t.entities?.user_mentions,
+        }))
+      );
+
+      // Campaign-level filter: match required mentions, keywords/hashtags, and allowed tweet types from contest config
       const campaignFilteredTweets = validTweets.filter((t: any) => {
+        // Filter by allowed tweet types (supports reposts/retweets)
+        const tweetType = t.type || "tweet";
+        if (!allowedTweetTypes.includes(tweetType)) {
+          console.log(
+            `[twitter-refresh-tweets] Tweet ${t.tweet_id} filtered out: type ${tweetType} not in allowed types`,
+            allowedTweetTypes
+          );
+          return false;
+        }
+
         const textLower = (t.text || "").toLowerCase();
 
-        const hasKeyword =
-          campaignKeywords.some((k) =>
-            textLower.includes((k || "").toLowerCase())
-          ) ||
-          campaignHashtags.some((h) =>
-            textLower.includes((h || "").toLowerCase())
-          );
+        // Check keywords based on requirement mode
+        let hasKeyword = true; // Default to true if no keywords required
+        if (campaignKeywords.length > 0 || campaignHashtags.length > 0) {
+          if (keywordsRequirementMode === "all") {
+            // ALL keywords/hashtags must be present
+            const allKeywords = [...campaignKeywords, ...campaignHashtags];
+            hasKeyword = allKeywords.every((k) =>
+              textLower.includes((k || "").toLowerCase())
+            );
+          } else {
+            // ANY keyword/hashtag must be present (default)
+            hasKeyword =
+              campaignKeywords.some((k) =>
+                textLower.includes((k || "").toLowerCase())
+              ) ||
+              campaignHashtags.some((h) =>
+                textLower.includes((h || "").toLowerCase())
+              );
+          }
+        }
 
+        // Check mentions based on requirement mode
         const mentions = t.entities?.user_mentions || [];
         const mentionHandles = mentions.map((m: any) =>
-          ("@" + (m.screen_name || "")).toLowerCase()
+          ("@" + (m.screen_name || m.username || "")).toLowerCase()
         );
 
-        const hasRequiredMention =
-          requiredMentions.length === 0 ||
-          requiredMentions.some((req) =>
-            mentionHandles.includes((req || "").toLowerCase())
-          );
+        let hasRequiredMention = true; // Default to true if no mentions required
+        if (requiredMentions.length > 0) {
+          // Normalize required mentions: add @ if not present
+          const normalizedRequiredMentions = requiredMentions.map((req) => {
+            const reqStr = (req || "").toLowerCase();
+            return reqStr.startsWith("@") ? reqStr : "@" + reqStr;
+          });
 
-        return hasKeyword && hasRequiredMention;
+          if (mentionsRequirementMode === "all") {
+            // ALL mentions must be present
+            hasRequiredMention = normalizedRequiredMentions.every((req) =>
+              mentionHandles.includes(req)
+            );
+          } else {
+            // ANY mention must be present (default)
+            hasRequiredMention = normalizedRequiredMentions.some((req) =>
+              mentionHandles.includes(req)
+            );
+          }
+        }
+
+        const matches = hasKeyword && hasRequiredMention;
+        
+        if (!matches) {
+          console.log(
+            `[twitter-refresh-tweets] Tweet ${t.tweet_id} filtered out:`,
+            {
+              text: t.text?.substring(0, 50),
+              hasKeyword,
+              hasRequiredMention,
+              keywordsRequirementMode,
+              mentionsRequirementMode,
+              campaignKeywords,
+              requiredMentions,
+              mentionHandles,
+            }
+          );
+        }
+
+        return matches;
       });
 
       console.log(
@@ -270,7 +380,7 @@ export async function POST(
           const likes = t.favorites || 0;
           const replies = t.replies || 0;
           const retweets = t.retweets || 0;
-          const quoteReposts = 0; // Not provided by current API mapping
+          const quoteReposts = t.quotes || 0; // Use quotes from API response for quote reposts
           const impressions = Number(t.views) || 0;
 
           // Simple scoring: likes + replies + retweets + quote reposts + views
@@ -292,7 +402,7 @@ export async function POST(
                 tweet_type: t.type || "tweet",
                 is_eligible: true,
                 eligibility_reason:
-                  "Matches twitter_keywords and twitter_mentions for this contest",
+                  "Matches campaign keywords and mentions from contest_based_details.twitter_campaign",
                 filter_status: "eligible",
                 likes,
                 replies,
@@ -453,6 +563,28 @@ export async function POST(
       );
     }
 
+    // Update last_metrics_updated in contests table (same logic as Instagram and YouTube)
+    const currentTime = new Date().toISOString();
+    console.log(`[twitter-refresh-tweets] Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime}`);
+    
+    const supabaseAdmin = createAdminSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
+    const { data: updateData, error: updateError } = await supabaseAdmin
+      .from('contests')
+      .update({ last_metrics_updated: currentTime })
+      .eq('id', contestId)
+      .select();
+
+    if (updateError) {
+      console.error(`[twitter-refresh-tweets] Failed to update last_metrics_updated for contest ${contestId}:`, updateError);
+      // Don't fail the request, just log the error
+    } else {
+      console.log(`[twitter-refresh-tweets] Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`);
+    }
+
     return NextResponse.json({
       success: true,
       contestId,
@@ -461,6 +593,7 @@ export async function POST(
       tweetsFiltered: totalFiltered,
       details: allDetails,
       participantsRaw: participants,
+      lastMetricsUpdated: currentTime,
     });
   } catch (error: any) {
     console.error("[twitter-refresh-tweets] Unexpected error", error);

@@ -77,6 +77,7 @@ export async function POST(
     // Determine which cron job to call based on platform
     let cronEndpoint: string;
     let cronName: string;
+    let isTwitter = false;
 
     switch (contest.platform?.toLowerCase()) {
       case 'instagram':
@@ -87,25 +88,43 @@ export async function POST(
         cronEndpoint = '/api/cron/update-youtube-metrics';
         cronName = 'YouTube Metrics';
         break;
+      case 'twitter':
+      case 'x':
+        // For Twitter, call the refresh-tweets endpoint directly
+        isTwitter = true;
+        cronEndpoint = `/api/contests/${contestId}/twitter-refresh-tweets`;
+        cronName = 'Twitter Metrics';
+        break;
       default:
         return NextResponse.json({ 
           error: `Metrics refresh not supported for platform: ${contest.platform}` 
         }, { status: 400 });
     }
 
-    // Call the appropriate cron job with contest-specific parameter
+    // Call the appropriate cron job or endpoint with contest-specific parameter
     const baseUrl = request.headers.get('host');
     const protocol = request.headers.get('x-forwarded-proto') || 'http';
-    const cronUrl = `${protocol}://${baseUrl}${cronEndpoint}?contestId=${contestId}`;
+    
+    let cronUrl: string;
+    if (isTwitter) {
+      // Twitter uses POST endpoint directly
+      cronUrl = `${protocol}://${baseUrl}${cronEndpoint}`;
+    } else {
+      // Instagram/YouTube use GET cron endpoints
+      cronUrl = `${protocol}://${baseUrl}${cronEndpoint}?contestId=${contestId}`;
+    }
 
     console.log(`Manual refresh triggered for contest ${contestId} (${contest.title}) - calling ${cronName} - Source: ${isOpportunitiesRefresh ? 'Opportunities' : 'Owner'}`);
 
+    // Forward cookies from original request to maintain authentication for Twitter
+    const cookieHeader = request.headers.get('cookie');
     const cronResponse = await fetch(cronUrl, {
-      method: 'GET',
+      method: isTwitter ? 'POST' : 'GET',
       headers: {
-        'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+        ...(isTwitter ? {} : { 'Authorization': `Bearer ${process.env.CRON_SECRET}` }),
         'Content-Type': 'application/json',
-        'X-Contest-Id': contestId
+        ...(isTwitter ? {} : { 'X-Contest-Id': contestId }),
+        ...(isTwitter && cookieHeader ? { 'Cookie': cookieHeader } : {})
       }
     });
 

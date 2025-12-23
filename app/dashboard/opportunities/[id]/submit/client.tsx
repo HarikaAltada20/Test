@@ -2294,6 +2294,41 @@ export default function SubmitContentPage({
     );
   }
 
+  // Handle Twitter contests - they use join-campaign flow, not submission
+  if (contestPlatform === "twitter" || (contest?.contest_format === "text_image" && contest?.platform === "twitter")) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center mb-6 gap-2">
+          <Button variant="ghost" size="icon" onClick={() => router.push(`/dashboard/opportunities/${contestId}`)}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <h1 className="text-2xl font-bold ml-2">Twitter Campaign</h1>
+        </div>
+        <Alert className="mb-4">
+          <AlertDescription>
+            Twitter (X) campaigns work differently from video contests. Instead of submitting content manually, you need to join the campaign and your tweets will be automatically tracked.
+          </AlertDescription>
+        </Alert>
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle>How Twitter Campaigns Work</CardTitle>
+            <CardDescription>
+              <ol className="list-decimal list-inside space-y-2 mt-2">
+                <li>Connect your Twitter (X) account in Settings</li>
+                <li>Join the campaign from the opportunity page</li>
+                <li>Post tweets that match the campaign keywords and mentions or campaign requirements</li>
+                <li>Your tweets will be automatically tracked and scored</li>
+              </ol>
+            </CardDescription>
+          </CardHeader>
+        </Card>
+        <Button onClick={() => router.push(`/dashboard/opportunities/${contestId}`)} className="w-full sm:w-auto">
+          Go to Campaign Page
+        </Button>
+      </div>
+    );
+  }
+
   if (!contestPlatform) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -2329,7 +2364,13 @@ export default function SubmitContentPage({
         </Button>
         <h1 className="text-xl sm:text-2xl font-bold leading-none">
           Submit Content from{" "}
-          {contestPlatform === "youtube" ? "YouTube" : "Instagram"}
+          {contestPlatform === "youtube"
+            ? "YouTube"
+            : contestPlatform === "instagram"
+              ? "Instagram"
+              : contestPlatform === "twitter"
+                ? "Twitter"
+                : contestPlatform}
         </h1>
       </div>
 
@@ -2359,7 +2400,9 @@ export default function SubmitContentPage({
                 Submit your{" "}
                 {contestPlatform === "youtube"
                   ? "YouTube video/short"
-                  : "Instagram Reel/video"}{" "}
+                  : contestPlatform === "instagram"
+                    ? "Instagram Reel/video"
+                    : "content"}{" "}
                 for this contest.
               </CardDescription>
             </div>
@@ -3014,8 +3057,8 @@ export default function SubmitContentPage({
                         return (
                           <Card
                             className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${isSelected
-                                ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                                : "border-2 border-[#7F39EC] rounded-lg "
+                              ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                              : "border-2 border-[#7F39EC] rounded-lg "
                               }`}
                             onClick={() => handleSelectionChange(!isSelected)}
                           >
@@ -3672,8 +3715,8 @@ export default function SubmitContentPage({
                         return (
                           <div
                             className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${isSelected
-                                ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                                : "border-2 border-[#7F39EC] rounded-lg "
+                              ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                              : "border-2 border-[#7F39EC] rounded-lg "
                               }`}
                             onClick={() => handleSelectionChange(!isSelected)}
                           >
@@ -3916,8 +3959,8 @@ export default function SubmitContentPage({
                                   : "bg-white text-black"
                               )}
                               placeholder={`Enter ${contestPlatform?.toLowerCase() === "youtube"
-                                  ? "YouTube"
-                                  : "Instagram"
+                                ? "YouTube"
+                                : "Instagram"
                                 } video URL ${index + 1}`}
                               value={link}
                               onChange={(e) => {
@@ -4037,16 +4080,16 @@ export default function SubmitContentPage({
                                       video.id.videoId,
                                       `https://www.youtube.com/watch?v=${video.id.videoId}`
                                     )
+                                      ? isDark
+                                        ? "border-2 border-red-500 bg-red-900/40 opacity-90"
+                                        : "border-2 border-red-300 bg-red-50 opacity-75"
+                                      : selectedVideoIndices.includes(index)
                                         ? isDark
-                                          ? "border-2 border-red-500 bg-red-900/40 opacity-90"
-                                          : "border-2 border-red-300 bg-red-50 opacity-75"
-                                        : selectedVideoIndices.includes(index)
-                                          ? isDark
-                                            ? "border-2 border-purple-400 bg-[#2B184A]"
-                                            : "border-2 border-purple-500 bg-purple-50"
-                                          : isDark
-                                            ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
-                                            : "border border-gray-200 hover:border-purple-300 bg-white"
+                                          ? "border-2 border-purple-400 bg-[#2B184A]"
+                                          : "border-2 border-purple-500 bg-purple-50"
+                                        : isDark
+                                          ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
+                                          : "border border-gray-200 hover:border-purple-300 bg-white"
                                       }`}
                                     onClick={() =>
                                       handleVideoSelection(

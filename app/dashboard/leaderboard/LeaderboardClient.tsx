@@ -38,7 +38,7 @@ type SortBy =
   | "referrals"
   | "total_coins";
 
-type PlatformFilter = "all" | "youtube" | "instagram";
+type PlatformFilter = "all" | "youtube" | "instagram" | "twitter";
 
 const formatNumber = (num: number): string => {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";

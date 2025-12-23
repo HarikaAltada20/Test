@@ -61,7 +61,7 @@ INSERT INTO public.contests (
   'leaderboard',
   jsonb_build_object(
     'twitter_campaign', jsonb_build_object(
-      'campaign_type', 'keyword_hashtag',
+      'campaign_type', 'raid',
       'keyword_config', jsonb_build_object(
         'keywords', jsonb_build_array('DegenDAO', 'token launch'),
         'hashtags', jsonb_build_array('#DegenDAO', '#TokenLaunch'),

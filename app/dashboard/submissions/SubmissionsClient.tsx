@@ -68,7 +68,7 @@ type StatusFilter =
   | "rejected"
   | "ended"
   | "paid";
-type PlatformFilter = "all" | "youtube" | "instagram" | "other";
+type PlatformFilter = "all" | "youtube" | "instagram" | "twitter" | "other";
 
 export default function SubmissionsClient({
   initialSubmissions,

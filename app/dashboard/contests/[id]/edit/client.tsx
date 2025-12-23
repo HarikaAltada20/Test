@@ -92,6 +92,12 @@ import {
   INTEREST_CATEGORIES,
   INTERESTS,
 } from "@/constants/contentCategories";
+import {
+  getTextImagePlatforms,
+  getVideoPlatforms,
+  platformSupportsFormat,
+  getPlatformConfig,
+} from "@/constants/platforms";
 
 // Dynamically import the Novel editor
 const NovelEditor = dynamic(() => import("@/components/novel-editor"), {
@@ -269,27 +275,16 @@ type ContestData = {
   multiple_submissions_enabled?: boolean;
   max_submissions_per_creator?: number;
   content_type?: "ugc" | "clipping" | "other" | null;
+  contest_format?: string | null; // Text/image vs video contest format
   bonus_details?: { description_html?: string; description_json?: any } | null;
   max_earnings_per_creator?: number | null; // Per-contest cap (in cents)
   // Categories, subcategories, and interests
   categories?: string[] | null;
   subcategories?:
-    | Array<{ category: string; subcategory: string }>
-    | Record<string, string[]>
-    | null;
+  | Array<{ category: string; subcategory: string }>
+  | Record<string, string[]>
+  | null;
   interests?: string[] | null;
-  // Twitter-specific fields
-  twitter_keywords?: string[] | null;
-  twitter_mentions?: string[] | null;
-  twitter_targets?: {
-    link?: string | null;
-    description?: string | null;
-    metrics?: {
-      likes?: number | null;
-      replies?: number | null;
-      retweets?: number | null;
-    } | null;
-  } | null;
 };
 
 export default function EditContestPage({
@@ -328,6 +323,12 @@ export default function EditContestPage({
   const [currentPlanCommissionRate, setCurrentPlanCommissionRate] = useState<
     number | null
   >(null);
+  const [keywordsRequirementMode, setKeywordsRequirementMode] = useState<
+    "all" | "any"
+  >("all");
+  const [mentionsRequirementMode, setMentionsRequirementMode] = useState<
+    "all" | "any"
+  >("all");
 
   // Common contest fields
   const [title, setTitle] = useState("");
@@ -358,6 +359,7 @@ export default function EditContestPage({
   const [targetLikes, setTargetLikes] = useState<number | "">("");
   const [targetReplies, setTargetReplies] = useState<number | "">("");
   const [targetRetweets, setTargetRetweets] = useState<number | "">("");
+  const [targetQuoteReposts, setTargetQuoteReposts] = useState<number | "">("");
   const [startDate, setStartDate] = useState<string>("");
   const [startTime, setStartTime] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
@@ -1112,55 +1114,51 @@ export default function EditContestPage({
                 (data as any).target_countries.length > 0);
             setShowTargetingSections(hasTargetingData);
 
-            // Load twitter-specific fields (twitter_keywords, twitter_mentions, twitter_targets)
+            // Load twitter-specific fields from contest_based_details.twitter_campaign
             // Use case-insensitive check because platform in DB may be stored as "Twitter" / "twitter" / etc.
             if (data.platform && data.platform.toLowerCase() === "twitter") {
-              // Load twitter_keywords from database column
-              if (
-                Array.isArray((data as any).twitter_keywords) &&
-                (data as any).twitter_keywords.length > 0
-              ) {
-                setKeywords((data as any).twitter_keywords);
+              const twitterCampaign = (data as any).contest_based_details?.twitter_campaign;
+
+              // Load keywords from JSONB
+              if (twitterCampaign?.keywords && Array.isArray(twitterCampaign.keywords) && twitterCampaign.keywords.length > 0) {
+                setKeywords(twitterCampaign.keywords);
               }
-              // Load twitter_mentions from database column
-              if (
-                Array.isArray((data as any).twitter_mentions) &&
-                (data as any).twitter_mentions.length > 0
-              ) {
-                setMentions((data as any).twitter_mentions);
+
+              // Load mentions from JSONB
+              if (twitterCampaign?.mentions && Array.isArray(twitterCampaign.mentions) && twitterCampaign.mentions.length > 0) {
+                setMentions(twitterCampaign.mentions);
               }
-              // Load twitter_targets (link, description, and metrics)
-              if (
-                (data as any).twitter_targets &&
-                typeof (data as any).twitter_targets === "object"
-              ) {
-                const tt = (data as any).twitter_targets;
-                // Load target link and description
-                if (tt.link) {
-                  setTwitterTargetUrl(tt.link);
+
+              // Load requirement modes
+              if (twitterCampaign?.keywords_requirement_mode) {
+                setKeywordsRequirementMode(twitterCampaign.keywords_requirement_mode);
+              }
+              if (twitterCampaign?.mentions_requirement_mode) {
+                setMentionsRequirementMode(twitterCampaign.mentions_requirement_mode);
+              }
+
+              // Load raid_target from JSONB
+              const raidTarget = twitterCampaign?.raid_target;
+              if (raidTarget && typeof raidTarget === "object") {
+                if (raidTarget.link) {
+                  setTwitterTargetUrl(raidTarget.link);
                 }
-                if (tt.description) {
-                  setTwitterTargetDescription(tt.description);
+                if (raidTarget.description) {
+                  setTwitterTargetDescription(raidTarget.description);
                 }
                 // Load metrics
-                if (tt.metrics && typeof tt.metrics === "object") {
-                  if (
-                    tt.metrics.likes !== undefined &&
-                    tt.metrics.likes !== null
-                  ) {
-                    setTargetLikes(tt.metrics.likes);
+                if (raidTarget.metrics && typeof raidTarget.metrics === "object") {
+                  if (raidTarget.metrics.likes !== undefined && raidTarget.metrics.likes !== null) {
+                    setTargetLikes(raidTarget.metrics.likes);
                   }
-                  if (
-                    tt.metrics.replies !== undefined &&
-                    tt.metrics.replies !== null
-                  ) {
-                    setTargetReplies(tt.metrics.replies);
+                  if (raidTarget.metrics.comments !== undefined && raidTarget.metrics.comments !== null) {
+                    setTargetReplies(raidTarget.metrics.comments);
                   }
-                  if (
-                    tt.metrics.retweets !== undefined &&
-                    tt.metrics.retweets !== null
-                  ) {
-                    setTargetRetweets(tt.metrics.retweets);
+                  if (raidTarget.metrics.retweets !== undefined && raidTarget.metrics.retweets !== null) {
+                    setTargetRetweets(raidTarget.metrics.retweets);
+                  }
+                  if (raidTarget.metrics.quote_reposts !== undefined && raidTarget.metrics.quote_reposts !== null) {
+                    setTargetQuoteReposts(raidTarget.metrics.quote_reposts);
                   }
                 }
               }
@@ -1441,28 +1439,23 @@ export default function EditContestPage({
 
     let startMessage = "";
     if (daysUntilStart > 0) {
-      startMessage = `Your contest will be live in ${daysUntilStart} day${
-        daysUntilStart !== 1 ? "s" : ""
-      }`;
-      if (hoursUntilStart > 0)
-        startMessage += ` and ${hoursUntilStart} hour${
-          hoursUntilStart !== 1 ? "s" : ""
+      startMessage = `Your contest will be live in ${daysUntilStart} day${daysUntilStart !== 1 ? "s" : ""
         }`;
+      if (hoursUntilStart > 0)
+        startMessage += ` and ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
+          }`;
     } else if (hoursUntilStart > 0) {
-      startMessage = `Your contest will be live in ${hoursUntilStart} hour${
-        hoursUntilStart !== 1 ? "s" : ""
-      }`;
+      startMessage = `Your contest will be live in ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
+        }`;
     } else {
       startMessage = "Your contest will be live soon";
     }
 
-    const durationMessage = `and will run for ${durationDays} day${
-      durationDays !== 1 ? "s" : ""
-    }${
-      durationHours > 0
+    const durationMessage = `and will run for ${durationDays} day${durationDays !== 1 ? "s" : ""
+      }${durationHours > 0
         ? ` and ${durationHours} hour${durationHours !== 1 ? "s" : ""}`
         : ""
-    }`;
+      }`;
 
     return `${startMessage} ${durationMessage}`;
   };
@@ -1514,16 +1507,15 @@ export default function EditContestPage({
       disallowed.length === 1
         ? disallowed[0]
         : disallowed.slice(0, -1).join(", ") +
-          " and " +
-          disallowed[disallowed.length - 1];
+        " and " +
+        disallowed[disallowed.length - 1];
 
     return `For example, if today is ${formatDateWithOrdinal(
       startOfToday
     )}, you can create contests starting from ${formatDateWithOrdinal(
       minStartDate
-    )} (00:00 onwards). ${disallowedText} ${
-      disallowed.length > 1 ? "are" : "is"
-    } not allowed.`;
+    )} (00:00 onwards). ${disallowedText} ${disallowed.length > 1 ? "are" : "is"
+      } not allowed.`;
   };
   // Get minimum allowed end date (at least 3 days after the start date)
   const getMinEndDate = () => {
@@ -1726,7 +1718,8 @@ export default function EditContestPage({
     }
 
     const planFeatures = getPlanFeatures(userPlan);
-    let contestBasedDetails: any = {};
+    // Preserve existing contest_based_details to avoid overwriting Twitter campaign or other data
+    let contestBasedDetails: any = contest?.contest_based_details ? { ...contest.contest_based_details } : {};
     let updatePayload: any = {};
 
     // Only include content fields if not in datesOnly mode
@@ -1754,16 +1747,7 @@ export default function EditContestPage({
         brief_html: briefHtml,
         brief_json: briefJson,
         rules_html: rulesHtml,
-        rules_json: {
-          ...(rulesJson && typeof rulesJson === "object" ? rulesJson : {}),
-          keywords,
-          mentions,
-          targets: {
-            likes: targetLikes,
-            replies: targetReplies,
-            retweets: targetRetweets,
-          },
-        },
+        rules_json: rulesJson && typeof rulesJson === "object" ? rulesJson : {},
         inspiration_links: inspirationLinks.filter(
           (link) => link.url.trim() !== ""
         ),
@@ -1775,27 +1759,7 @@ export default function EditContestPage({
           contestInterests.length > 0 ? [...new Set(contestInterests)] : null, // Remove duplicate interests
         // Regions and countries as JSONB
         region: buildRegionData(selectedRegions, selectedCountries),
-        // Twitter-specific fields
-        twitter_keywords:
-          platform === "twitter"
-            ? keywords.filter((k) => k.trim() !== "")
-            : null,
-        twitter_mentions:
-          platform === "twitter"
-            ? mentions.filter((m) => m.trim() !== "")
-            : null,
-        twitter_targets:
-          platform === "twitter"
-            ? {
-                link: twitterTargetUrl || null,
-                description: twitterTargetDescription || null,
-                metrics: {
-                  likes: targetLikes || null,
-                  replies: targetReplies || null,
-                  retweets: targetRetweets || null,
-                },
-              }
-            : null,
+        // Twitter data is now stored in contest_based_details.twitter_campaign
       };
     }
 
@@ -1832,7 +1796,7 @@ export default function EditContestPage({
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-            (1000 * 60 * 60 * 24)
+          (1000 * 60 * 60 * 24)
         );
 
         const originalStartDate = contest?.start_date
@@ -1852,9 +1816,8 @@ export default function EditContestPage({
             ) {
               toast({
                 title: "Invalid Start Date",
-                description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
-                  MIN_DAYS_UNTIL_START - 1
-                } day gap required).`,
+                description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
+                  } day gap required).`,
                 variant: "destructive",
               });
               setIsSubmitting(false);
@@ -1966,11 +1929,10 @@ export default function EditContestPage({
         if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
           toast({
             title: "Prize Amount Too Low",
-            description: `Prize for Winner ${
-              i + 1
-            } must be at least ${formatCurrencyFromCents(
-              MIN_PRIZE_PER_WINNER
-            )}`,
+            description: `Prize for Winner ${i + 1
+              } must be at least ${formatCurrencyFromCents(
+                MIN_PRIZE_PER_WINNER
+              )}`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -1980,9 +1942,8 @@ export default function EditContestPage({
         if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
           toast({
             title: "Prize Amount Too High",
-            description: `Prize for Winner ${
-              i + 1
-            } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+            description: `Prize for Winner ${i + 1
+              } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -2158,6 +2119,53 @@ export default function EditContestPage({
       return;
     }
 
+    // Add Twitter campaign config to contest_based_details
+    // raid: target a specific tweet and do like, comment, retweet, and quote repost around that tweet
+    // awareness: tweet openly with specified keywords/hashtags and mentions
+    if (!datesOnly && platform === "twitter" && contest?.contest_format === "text_image") {
+      const twitterCampaign: any = {
+        campaign_type: contentType === "raid" ? "raid" : "awareness", // Only 2 types: raid or awareness
+        // Include all tweet types by default (tweet, quote, retweet, reply) to support reposts and retweets
+        allowed_tweet_types: ["tweet", "quote", "retweet", "reply"],
+      };
+
+      const filteredKeywords = keywords.filter((k) => k.trim() !== "");
+      const filteredMentions = mentions.filter((m) => m.trim() !== "");
+
+      if (filteredKeywords.length > 0) {
+        twitterCampaign.keywords = filteredKeywords;
+      }
+      if (filteredMentions.length > 0) {
+        twitterCampaign.mentions = filteredMentions;
+      }
+
+      if (contentType !== "raid") {
+        if (keywordsRequirementMode) {
+          twitterCampaign.keywords_requirement_mode = keywordsRequirementMode;
+        }
+        if (mentionsRequirementMode) {
+          twitterCampaign.mentions_requirement_mode = mentionsRequirementMode;
+        }
+      }
+
+      if ((contentType === "raid" || contentType === "awareness") && twitterTargetUrl) {
+        twitterCampaign.raid_target = {
+          link: twitterTargetUrl || null,
+          description: twitterTargetDescription || null,
+          metrics: {
+            likes: targetLikes || null,
+            comments: targetReplies || null,
+            retweets: targetRetweets || null,
+            quote_reposts: targetQuoteReposts || null,
+          },
+          keywords_requirement_mode: contentType === "raid" ? "" : keywordsRequirementMode || "",
+          mentions_requirement_mode: contentType === "raid" ? "" : mentionsRequirementMode || "",
+        };
+      }
+
+      contestBasedDetails.twitter_campaign = twitterCampaign;
+    }
+
     // Only update contest type and details if not in datesOnly mode
     if (!datesOnly) {
       updatePayload.contest_type = contestType;
@@ -2178,9 +2186,9 @@ export default function EditContestPage({
         setBonusJson(json);
         updatePayload.bonus_details = html
           ? {
-              description_html: html,
-              description_json: json,
-            }
+            description_html: html,
+            description_json: json,
+          }
           : null;
       } else {
         updatePayload.bonus_details = null;
@@ -2189,7 +2197,7 @@ export default function EditContestPage({
       // Add max earnings per creator (stored in cents)
       updatePayload.max_earnings_per_creator =
         maxEarningsPerCreator &&
-        parseFloat(maxEarningsPerCreator.toString()) > 0
+          parseFloat(maxEarningsPerCreator.toString()) > 0
           ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
           : null;
     }
@@ -2267,11 +2275,11 @@ export default function EditContestPage({
           const updated = updateData[0];
           if (
             JSON.stringify(updated.categories) !==
-              JSON.stringify(updatePayload.categories) ||
+            JSON.stringify(updatePayload.categories) ||
             JSON.stringify(updated.subcategories) !==
-              JSON.stringify(updatePayload.subcategories) ||
+            JSON.stringify(updatePayload.subcategories) ||
             JSON.stringify(updated.interests) !==
-              JSON.stringify(updatePayload.interests)
+            JSON.stringify(updatePayload.interests)
           ) {
             console.warn("⚠️ Update may not have saved correctly:", {
               expected: {
@@ -2956,19 +2964,17 @@ export default function EditContestPage({
       // Show detailed refund breakdown if available
       const refundMessage = refundResult.breakdown
         ? `Prize pool reduced by $${refundResult.breakdown.prizePoolReduction.toFixed(
-            2
-          )}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(
-            2
-          )} + $${refundResult.breakdown.commissionRefund.toFixed(
-            2
-          )} commission (${
-            refundDetails.commissionPercentage
-          }%) = $${refundResult.breakdown.totalRefunded.toFixed(2)} total.`
+          2
+        )}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(
+          2
+        )} + $${refundResult.breakdown.commissionRefund.toFixed(
+          2
+        )} commission (${refundDetails.commissionPercentage
+        }%) = $${refundResult.breakdown.totalRefunded.toFixed(2)} total.`
         : `$${(refundDetails.totalRefund / 100).toFixed(
-            2
-          )} has been refunded to your wallet (using original ${
-            refundDetails.commissionPercentage
-          }% commission rate)`;
+          2
+        )} has been refunded to your wallet (using original ${refundDetails.commissionPercentage
+        }% commission rate)`;
 
       toast({
         title: "Refund Processed",
@@ -3006,29 +3012,29 @@ export default function EditContestPage({
       const contestBasedDetails =
         contestType === "leaderboard"
           ? {
-              leaderboard_contest: {
-                prizes: winnerAmounts.map((amount, index) => ({
-                  position: index + 1,
-                  amount: amount,
-                })),
-                total_prize: winnerAmounts.reduce(
-                  (sum, amount) => sum + amount,
-                  0
-                ),
-                winner_count: winnerCount,
-              },
-            }
+            leaderboard_contest: {
+              prizes: winnerAmounts.map((amount, index) => ({
+                position: index + 1,
+                amount: amount,
+              })),
+              total_prize: winnerAmounts.reduce(
+                (sum, amount) => sum + amount,
+                0
+              ),
+              winner_count: winnerCount,
+            },
+          }
           : {
-              cpm_contest: {
-                cpm_rate_usd: parseFloat(cpmRate.toString()),
-                min_views: minViews ? parseInt(minViews.toString()) : null,
-                max_views: maxViews ? parseInt(maxViews.toString()) : null,
-                total_budget: Math.round(
-                  parseFloat(totalBudget.toString()) * 100
-                ),
-                terms_conditions: termsConditions,
-              },
-            };
+            cpm_contest: {
+              cpm_rate_usd: parseFloat(cpmRate.toString()),
+              min_views: minViews ? parseInt(minViews.toString()) : null,
+              max_views: maxViews ? parseInt(maxViews.toString()) : null,
+              total_budget: Math.round(
+                parseFloat(totalBudget.toString()) * 100
+              ),
+              terms_conditions: termsConditions,
+            },
+          };
 
       const { error: updateError } = await supabase
         .from("contests")
@@ -3179,9 +3185,8 @@ export default function EditContestPage({
       if (isNewContest) {
         // CRITICAL: Use exact same logic as getMinDateTime for consistency
         if (daysUntilStart < MIN_DAYS_UNTIL_START) {
-          return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
-            MIN_DAYS_UNTIL_START - 1
-          } day gap required).`;
+          return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
+            } day gap required).`;
         }
       } else if (startDateTime < now) {
         return "Contest start time must be in the future.";
@@ -3226,14 +3231,12 @@ export default function EditContestPage({
 
       for (let i = 0; i < winnerCount; i++) {
         if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
-          return `Prize for Winner ${
-            i + 1
-          } must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`;
+          return `Prize for Winner ${i + 1
+            } must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`;
         }
         if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
-          return `Prize for Winner ${
-            i + 1
-          } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`;
+          return `Prize for Winner ${i + 1
+            } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`;
         }
       }
     }
@@ -3295,29 +3298,29 @@ export default function EditContestPage({
         const contestBasedDetails =
           contestType === "leaderboard"
             ? {
-                leaderboard_contest: {
-                  prizes: winnerAmounts.map((amount, index) => ({
-                    position: index + 1,
-                    amount: amount,
-                  })),
-                  total_prize: winnerAmounts.reduce(
-                    (sum, amount) => sum + amount,
-                    0
-                  ),
-                  winner_count: winnerCount,
-                },
-              }
+              leaderboard_contest: {
+                prizes: winnerAmounts.map((amount, index) => ({
+                  position: index + 1,
+                  amount: amount,
+                })),
+                total_prize: winnerAmounts.reduce(
+                  (sum, amount) => sum + amount,
+                  0
+                ),
+                winner_count: winnerCount,
+              },
+            }
             : {
-                cpm_contest: {
-                  cpm_rate_usd: parseFloat(cpmRate.toString()),
-                  min_views: minViews ? parseInt(minViews.toString()) : null,
-                  max_views: maxViews ? parseInt(maxViews.toString()) : null,
-                  total_budget: Math.round(
-                    parseFloat(totalBudget.toString()) * 100
-                  ),
-                  terms_conditions: termsConditions,
-                },
-              };
+              cpm_contest: {
+                cpm_rate_usd: parseFloat(cpmRate.toString()),
+                min_views: minViews ? parseInt(minViews.toString()) : null,
+                max_views: maxViews ? parseInt(maxViews.toString()) : null,
+                total_budget: Math.round(
+                  parseFloat(totalBudget.toString()) * 100
+                ),
+                terms_conditions: termsConditions,
+              },
+            };
 
         // Helper function to process and group subcategories by category
         const processSubcategories = (
@@ -3370,27 +3373,7 @@ export default function EditContestPage({
             contestInterests.length > 0 ? [...new Set(contestInterests)] : null,
           // Regions and countries as JSONB
           region: buildRegionData(selectedRegions, selectedCountries),
-          // Twitter-specific fields
-          twitter_keywords:
-            platform === "twitter"
-              ? keywords.filter((k) => k.trim() !== "")
-              : null,
-          twitter_mentions:
-            platform === "twitter"
-              ? mentions.filter((m) => m.trim() !== "")
-              : null,
-          twitter_targets:
-            platform === "twitter"
-              ? {
-                  link: twitterTargetUrl || null,
-                  description: twitterTargetDescription || null,
-                  metrics: {
-                    likes: targetLikes || null,
-                    replies: targetReplies || null,
-                    retweets: targetRetweets || null,
-                  },
-                }
-              : null,
+          // Twitter data is now stored in contest_based_details.twitter_campaign
           moderation_status: "draft", // Save as draft after successful payment
         };
 
@@ -3426,29 +3409,29 @@ export default function EditContestPage({
         const contestBasedDetails =
           contestType === "leaderboard"
             ? {
-                leaderboard_contest: {
-                  prizes: winnerAmounts.map((amount, index) => ({
-                    position: index + 1,
-                    amount: amount,
-                  })),
-                  total_prize: winnerAmounts.reduce(
-                    (sum, amount) => sum + amount,
-                    0
-                  ),
-                  winner_count: winnerCount,
-                },
-              }
+              leaderboard_contest: {
+                prizes: winnerAmounts.map((amount, index) => ({
+                  position: index + 1,
+                  amount: amount,
+                })),
+                total_prize: winnerAmounts.reduce(
+                  (sum, amount) => sum + amount,
+                  0
+                ),
+                winner_count: winnerCount,
+              },
+            }
             : {
-                cpm_contest: {
-                  cpm_rate_usd: parseFloat(cpmRate.toString()),
-                  min_views: minViews ? parseInt(minViews.toString()) : null,
-                  max_views: maxViews ? parseInt(maxViews.toString()) : null,
-                  total_budget: Math.round(
-                    parseFloat(totalBudget.toString()) * 100
-                  ),
-                  terms_conditions: termsConditions,
-                },
-              };
+              cpm_contest: {
+                cpm_rate_usd: parseFloat(cpmRate.toString()),
+                min_views: minViews ? parseInt(minViews.toString()) : null,
+                max_views: maxViews ? parseInt(maxViews.toString()) : null,
+                total_budget: Math.round(
+                  parseFloat(totalBudget.toString()) * 100
+                ),
+                terms_conditions: termsConditions,
+              },
+            };
 
         // Helper function to process and group subcategories by category
         const processSubcategories = (
@@ -3500,27 +3483,7 @@ export default function EditContestPage({
             contestInterests.length > 0 ? [...new Set(contestInterests)] : null,
           // Regions and countries as JSONB
           region: buildRegionData(selectedRegions, selectedCountries),
-          // Twitter-specific fields
-          twitter_keywords:
-            platform === "twitter"
-              ? keywords.filter((k) => k.trim() !== "")
-              : null,
-          twitter_mentions:
-            platform === "twitter"
-              ? mentions.filter((m) => m.trim() !== "")
-              : null,
-          twitter_targets:
-            platform === "twitter"
-              ? {
-                  link: twitterTargetUrl || null,
-                  description: twitterTargetDescription || null,
-                  metrics: {
-                    likes: targetLikes || null,
-                    replies: targetReplies || null,
-                    retweets: targetRetweets || null,
-                  },
-                }
-              : null,
+          // Twitter data is now stored in contest_based_details.twitter_campaign
           moderation_status: "draft", // Save as draft after successful payment
         };
 
@@ -3995,7 +3958,8 @@ export default function EditContestPage({
     }
 
     const planFeatures = getPlanFeatures(userPlan);
-    let contestBasedDetails: any = {};
+    // Preserve existing contest_based_details to avoid overwriting Twitter campaign or other data
+    let contestBasedDetails: any = contest?.contest_based_details ? { ...contest.contest_based_details } : {};
     let updatePayload: any = {};
 
     // Only include content fields if not in datesOnly mode
@@ -4023,16 +3987,7 @@ export default function EditContestPage({
         brief_html: briefHtml,
         brief_json: briefJson,
         rules_html: rulesHtml,
-        rules_json: {
-          ...(rulesJson && typeof rulesJson === "object" ? rulesJson : {}),
-          keywords,
-          mentions,
-          targets: {
-            likes: targetLikes,
-            replies: targetReplies,
-            retweets: targetRetweets,
-          },
-        },
+        rules_json: rulesJson && typeof rulesJson === "object" ? rulesJson : {},
         inspiration_links: inspirationLinks.filter(
           (link) => link.url.trim() !== ""
         ),
@@ -4044,27 +3999,7 @@ export default function EditContestPage({
           contestInterests.length > 0 ? [...new Set(contestInterests)] : null, // Remove duplicate interests
         // Regions and countries as JSONB
         region: buildRegionData(selectedRegions, selectedCountries),
-        // Twitter-specific fields
-        twitter_keywords:
-          platform === "twitter"
-            ? keywords.filter((k) => k.trim() !== "")
-            : null,
-        twitter_mentions:
-          platform === "twitter"
-            ? mentions.filter((m) => m.trim() !== "")
-            : null,
-        twitter_targets:
-          platform === "twitter"
-            ? {
-                link: twitterTargetUrl || null,
-                description: twitterTargetDescription || null,
-                metrics: {
-                  likes: targetLikes || null,
-                  replies: targetReplies || null,
-                  retweets: targetRetweets || null,
-                },
-              }
-            : null,
+        // Twitter data is now stored in contest_based_details.twitter_campaign
       };
     }
 
@@ -4114,7 +4049,7 @@ export default function EditContestPage({
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-            (1000 * 60 * 60 * 24)
+          (1000 * 60 * 60 * 24)
         );
 
         const originalStartDate = contest?.start_date
@@ -4134,9 +4069,8 @@ export default function EditContestPage({
             ) {
               toast({
                 title: "Invalid Start Date",
-                description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
-                  MIN_DAYS_UNTIL_START - 1
-                } day gap required).`,
+                description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
+                  } day gap required).`,
                 variant: "destructive",
               });
               setIsSubmitting(false);
@@ -4251,11 +4185,10 @@ export default function EditContestPage({
           if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
             toast({
               title: "Prize Amount Too Low",
-              description: `Prize for Winner ${
-                i + 1
-              } must be at least ${formatCurrencyFromCents(
-                MIN_PRIZE_PER_WINNER
-              )}`,
+              description: `Prize for Winner ${i + 1
+                } must be at least ${formatCurrencyFromCents(
+                  MIN_PRIZE_PER_WINNER
+                )}`,
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -4265,9 +4198,8 @@ export default function EditContestPage({
           if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
             toast({
               title: "Prize Amount Too High",
-              description: `Prize for Winner ${
-                i + 1
-              } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+              description: `Prize for Winner ${i + 1
+                } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -4428,6 +4360,56 @@ export default function EditContestPage({
       updatePayload.contest_based_details = contestBasedDetails;
     }
 
+    // Add Twitter campaign config to contest_based_details
+    // raid: target a specific tweet and do like, comment, retweet, and quote repost around that tweet
+    // awareness: tweet openly with specified keywords/hashtags and mentions
+    if (!datesOnly && platform === "twitter" && contest?.contest_format === "text_image") {
+      const twitterCampaign: any = {
+        campaign_type: contentType === "raid" ? "raid" : "awareness", // Only 2 types: raid or awareness
+        // Include all tweet types by default (tweet, quote, retweet, reply) to support reposts and retweets
+        allowed_tweet_types: ["tweet", "quote", "retweet", "reply"],
+      };
+
+      const filteredKeywords = keywords.filter((k) => k.trim() !== "");
+      const filteredMentions = mentions.filter((m) => m.trim() !== "");
+
+      if (filteredKeywords.length > 0) {
+        twitterCampaign.keywords = filteredKeywords;
+      }
+      if (filteredMentions.length > 0) {
+        twitterCampaign.mentions = filteredMentions;
+      }
+
+      if (contentType !== "raid") {
+        if (keywordsRequirementMode) {
+          twitterCampaign.keywords_requirement_mode = keywordsRequirementMode;
+        }
+        if (mentionsRequirementMode) {
+          twitterCampaign.mentions_requirement_mode = mentionsRequirementMode;
+        }
+      }
+
+      // In "awareness" campaigns, twitterTargetUrl may not be set (it's optional),
+      // so only add raid_target if there is a URL.
+      if (contentType === "raid" && twitterTargetUrl) {
+        twitterCampaign.raid_target = {
+          link: twitterTargetUrl || null,
+          description: twitterTargetDescription || null,
+          metrics: {
+            likes: targetLikes || null,
+            comments: targetReplies || null,
+            retweets: targetRetweets || null,
+            quote_reposts: targetQuoteReposts || null,
+          },
+          keywords_requirement_mode: contentType === "raid" ? "" : keywordsRequirementMode || "",
+          mentions_requirement_mode: contentType === "raid" ? "" : mentionsRequirementMode || "",
+        };
+      }
+
+      contestBasedDetails.twitter_campaign = twitterCampaign;
+      updatePayload.contest_based_details = contestBasedDetails;
+    }
+
     // Only update contest type and details if not in datesOnly mode
     if (!datesOnly) {
       // Add new features (2025-10-01)
@@ -4445,9 +4427,9 @@ export default function EditContestPage({
         setBonusJson(json);
         updatePayload.bonus_details = html
           ? {
-              description_html: html,
-              description_json: json,
-            }
+            description_html: html,
+            description_json: json,
+          }
           : null;
       } else {
         updatePayload.bonus_details = null;
@@ -4456,7 +4438,7 @@ export default function EditContestPage({
       // Add max earnings per creator (stored in cents)
       updatePayload.max_earnings_per_creator =
         maxEarningsPerCreator &&
-        parseFloat(maxEarningsPerCreator.toString()) > 0
+          parseFloat(maxEarningsPerCreator.toString()) > 0
           ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
           : null;
     }
@@ -4522,11 +4504,11 @@ export default function EditContestPage({
           const updated = updateData[0];
           if (
             JSON.stringify(updated.categories) !==
-              JSON.stringify(updatePayload.categories) ||
+            JSON.stringify(updatePayload.categories) ||
             JSON.stringify(updated.subcategories) !==
-              JSON.stringify(updatePayload.subcategories) ||
+            JSON.stringify(updatePayload.subcategories) ||
             JSON.stringify(updated.interests) !==
-              JSON.stringify(updatePayload.interests)
+            JSON.stringify(updatePayload.interests)
           ) {
             console.warn("⚠️ Draft update may not have saved correctly:", {
               expected: {
@@ -4969,6 +4951,80 @@ export default function EditContestPage({
         <div className="px-4 md:px-6 md:p-6 space-y-6">
           {!datesOnly && (
             <>
+              {/* Contest Format Selection */}
+              <div className="space-y-2">
+                <Label className="text-xl font-semibold">Contest Format</Label>
+                <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant={
+                      contest?.contest_format === "text_image" ? "default" : "outline"
+                    }
+                    className={cn(
+                      "flex-1 justify-center",
+                      contest?.contest_format === "text_image" &&
+                      "bg-[#7F39EC] text-white"
+                    )}
+                    onClick={async () => {
+                      // Auto-switch platform if needed (like create client)
+                      const updates: any = { contest_format: "text_image" };
+                      const textImagePlatforms = getTextImagePlatforms();
+                      const currentPlatformConfig = getPlatformConfig(platform);
+
+                      // If current platform doesn't support text_image, switch to first available
+                      if (!platformSupportsFormat(platform, "text_image")) {
+                        const defaultPlatform = textImagePlatforms[0]?.id || "twitter";
+                        updates.platform = defaultPlatform;
+                        setPlatform(defaultPlatform);
+                      }
+                      // Update contest format (and platform if changed) in database
+                      await supabase
+                        .from("contests")
+                        .update(updates)
+                        .eq("id", contestId)
+                        .eq("advertiser_id", user?.id);
+                      // Force refresh to update UI
+                      refreshContestData();
+                    }}
+                  >
+                    Text/Image Contest
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={
+                      contest?.contest_format === "video" ? "default" : "outline"
+                    }
+                    className={cn(
+                      "flex-1 justify-center",
+                      contest?.contest_format === "video" &&
+                      "bg-[#7F39EC] text-white"
+                    )}
+                    onClick={async () => {
+                      // Auto-switch platform if needed (like create client)
+                      const updates: any = { contest_format: "video" };
+                      const videoPlatforms = getVideoPlatforms();
+
+                      // If current platform doesn't support video, switch to first available
+                      if (!platformSupportsFormat(platform, "video")) {
+                        const defaultPlatform = videoPlatforms[0]?.id || "youtube";
+                        updates.platform = defaultPlatform;
+                        setPlatform(defaultPlatform);
+                      }
+                      // Update contest format (and platform if changed) in database
+                      await supabase
+                        .from("contests")
+                        .update(updates)
+                        .eq("id", contestId)
+                        .eq("advertiser_id", user?.id);
+                      // Force refresh to update UI
+                      refreshContestData();
+                    }}
+                  >
+                    Video Contest
+                  </Button>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="title">Contest title</Label>
                 <Input
@@ -5009,19 +5065,75 @@ export default function EditContestPage({
                     <SelectValue placeholder="Select contest platform" />
                   </SelectTrigger>
                   <SelectContent isDark={isDark}>
-                    <SelectItem isDark={isDark} value="youtube">
-                      YouTube
-                    </SelectItem>
-                    <SelectItem isDark={isDark} value="instagram">
-                      Instagram
-                    </SelectItem>
-                    <SelectItem isDark={isDark} value="twitter">
-                      Twitter
-                    </SelectItem>
+                    {contest?.contest_format === "text_image"
+                      ? getTextImagePlatforms().map((platformConfig) => (
+                        <SelectItem
+                          key={platformConfig.id}
+                          isDark={isDark}
+                          value={platformConfig.id}
+                        >
+                          {platformConfig.displayName}
+                        </SelectItem>
+                      ))
+                      : getVideoPlatforms().map((platformConfig) => (
+                        <SelectItem
+                          key={platformConfig.id}
+                          isDark={isDark}
+                          value={platformConfig.id}
+                        >
+                          {platformConfig.displayName}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground mt-1">
                   Choose the platform where creators will submit content.
+                </p>
+              </div>
+
+              {/* Content Type Selection - Moved here from Additional Features */}
+              <div className="space-y-2">
+                <Label htmlFor="contentType">Content Type</Label>
+                <Select
+                  value={contentType}
+                  onValueChange={(value: any) => setContentType(value)}
+                >
+                  <SelectTrigger
+                    id="contentType"
+                    className={cn(
+                      isDark ? "border-gray-600" : "border-gray-300"
+                    )}
+                  >
+                    <SelectValue placeholder="Select content type (optional)" />
+                  </SelectTrigger>
+                  <SelectContent isDark={isDark}>
+                    {platform === "twitter" ? (
+                      <>
+                        <SelectItem value="raid" isDark={isDark}>
+                          ⚔️ Raid (creators like/comment your tweet)
+                        </SelectItem>
+                        <SelectItem value="awareness" isDark={isDark}>
+                          📣 Awareness (creators post their own tweet)
+                        </SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="ugc" isDark={isDark}>
+                          📹 UGC (User Generated Content)
+                        </SelectItem>
+                        <SelectItem value="clipping" isDark={isDark}>
+                          ✂️ Clipping (Short clips/repurposed content)
+                        </SelectItem>
+                        <SelectItem value="other" isDark={isDark}>
+                          📋 Other (Check Rules for details)
+                        </SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Specify the type of content you need from creators. This helps
+                  creators filter opportunities.
                 </p>
               </div>
 
@@ -5434,9 +5546,9 @@ export default function EditContestPage({
                                                       (item) =>
                                                         !(
                                                           item.category ===
-                                                            category.id &&
+                                                          category.id &&
                                                           item.subcategory ===
-                                                            subcategory
+                                                          subcategory
                                                         )
                                                     )
                                                   );
@@ -5733,7 +5845,7 @@ export default function EditContestPage({
                             const isPartiallySelected =
                               selectedCountriesInRegion.length > 0 &&
                               selectedCountriesInRegion.length <
-                                countriesArray.length;
+                              countriesArray.length;
                             const hasAnySelected =
                               selectedCountriesInRegion.length > 0;
 
@@ -5893,13 +6005,12 @@ export default function EditContestPage({
                   Thumbnail
                 </Label>
                 <div
-                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
-                    isDragActive
-                      ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
-                      : isDark
+                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive
+                    ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
+                    : isDark
                       ? "border-slate-600 bg-[#170337]"
                       : "border-gray-300 bg-white"
-                  }`}
+                    }`}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -5917,26 +6028,24 @@ export default function EditContestPage({
                       />
                       <div className="mt-2 flex justify-between items-center">
                         <p
-                          className={`text-sm ${
-                            isDark ? "text-slate-400" : "text-gray-500"
-                          }`}
+                          className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"
+                            }`}
                         >
                           {thumbnail?.name || "Saved thumbnail"}
                           {thumbnail?.size
                             ? ` · ${(thumbnail.size / (1024 * 1024)).toFixed(
-                                2
-                              )}MB`
+                              2
+                            )}MB`
                             : ""}
                         </p>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={removeThumbnail}
-                          className={`${
-                            isDark
-                              ? "text-purple-400 hover:text-purple-300 hover:bg-slate-700"
-                              : "text-purple-500 hover:text-purple-600"
-                          }`}
+                          className={`${isDark
+                            ? "text-purple-400 hover:text-purple-300 hover:bg-slate-700"
+                            : "text-purple-500 hover:text-purple-600"
+                            }`}
                         >
                           <Trash className="h-4 w-4 mr-1" /> Remove
                         </Button>
@@ -5945,14 +6054,12 @@ export default function EditContestPage({
                   ) : (
                     <div className="flex flex-col items-center justify-center h-40">
                       <Image
-                        className={`h-16 w-16 mb-2 ${
-                          isDark ? "text-slate-500" : "text-gray-400"
-                        }`}
+                        className={`h-16 w-16 mb-2 ${isDark ? "text-slate-500" : "text-gray-400"
+                          }`}
                       />
                       <p
-                        className={`text-sm font-medium mb-1 ${
-                          isDark ? "text-slate-200" : "text-gray-900"
-                        }`}
+                        className={`text-sm font-medium mb-1 ${isDark ? "text-slate-200" : "text-gray-900"
+                          }`}
                       >
                         Drag, drop or browse{" "}
                         <span className="text-rose-500 dark:text-rose-400">
@@ -5960,18 +6067,16 @@ export default function EditContestPage({
                         </span>
                       </p>
                       <p
-                        className={`text-xs mb-4 ${
-                          isDark ? "text-slate-400" : "text-gray-500"
-                        }`}
+                        className={`text-xs mb-4 ${isDark ? "text-slate-400" : "text-gray-500"
+                          }`}
                       >
                         Max file size: 5MB
                       </p>
                       <Button
-                        className={`px-4 py-2 rounded-lg text-md transition-colors ${
-                          isDark
-                            ? "bg-[#7F39EC] text-white"
-                            : "bg-[#4A00BE] text-white"
-                        }`}
+                        className={`px-4 py-2 rounded-lg text-md transition-colors ${isDark
+                          ? "bg-[#7F39EC] text-white"
+                          : "bg-[#4A00BE] text-white"
+                          }`}
                         variant="outline"
                         size="sm"
                         onClick={(e) => {
@@ -6029,25 +6134,22 @@ export default function EditContestPage({
 
               {showBriefPreview ? (
                 <div
-                  className={`border rounded-lg p-4 min-h-[300px] transition-colors duration-200 ${
-                    isDark
-                      ? "text-white bg-[#170337] border-gray-600"
-                      : "bg-white"
-                  }`}
+                  className={`border rounded-lg p-4 min-h-[300px] transition-colors duration-200 ${isDark
+                    ? "text-white bg-[#170337] border-gray-600"
+                    : "bg-white"
+                    }`}
                 >
                   <h4
-                    className={`text-sm font-medium mb-2${
-                      isDark ? "text-white" : "text-gray-600"
-                    }`}
+                    className={`text-sm font-medium mb-2${isDark ? "text-white" : "text-gray-600"
+                      }`}
                   >
                     Preview:
                   </h4>
                   <div
-                    className={`max-w-none ${
-                      isDark
-                        ? "text-white"
-                        : "prose prose-lg dark:prose-invert prose-headings:font-title font-default "
-                    }`}
+                    className={`max-w-none ${isDark
+                      ? "text-white"
+                      : "prose prose-lg dark:prose-invert prose-headings:font-title font-default "
+                      }`}
                     style={{
                       padding: "12px 15px",
                       minHeight: "250px",
@@ -6073,240 +6175,158 @@ export default function EditContestPage({
                   }}
                 />
               )}
-              {platform === "twitter" && (
-                <>
-                  {/* Keywords section */}
-                  <div className="space-y-3 mt-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-medium">Keywords</h3>
-                      </div>
-                      <p
-                        className={cn(
-                          "text-xs",
-                          isDark ? "text-gray-300" : "text-gray-500"
-                        )}
-                      >
-                        Add search keywords and hashtags (e.g. product name,
-                        theme, #BrandCampaign). For hashtags, start with #.
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      {keywords.map((kw, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <Input
-                            value={kw}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const sanitized = raw.replace(/\s+/g, "");
-                              const next = [...keywords];
-                              next[index] = sanitized;
-                              setKeywords(next);
-                            }}
-                            placeholder="Add keyword"
-                            className={cn(
-                              isDark
-                                ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
-                            )}
-                          />
-                          {keywords.length > 1 && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                const next = keywords.filter(
-                                  (_, i) => i !== index
-                                );
-                                setKeywords(next.length ? next : [""]);
-                              }}
-                            >
-                              <Trash className="w-4 h-4" />
-                            </Button>
+              {/* Keywords & Mentions - Only show for awareness campaigns with text_image format */}
+              {platform === "twitter" &&
+                contentType === "awareness" &&
+                contest?.contest_format === "text_image" && (
+                  <>
+                    {/* Keywords section */}
+                    <div className="space-y-3 mt-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-medium">Keywords</h3>
+                        </div>
+                        <p
+                          className={cn(
+                            "text-xs",
+                            isDark ? "text-gray-300" : "text-gray-500"
                           )}
-                        </div>
-                      ))}
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className={cn(
-                        "mt-1 border-dashed",
-                        isDark
-                          ? "border-gray-500 text-gray-200"
-                          : "border-gray-400 text-gray-700"
-                      )}
-                      onClick={() => setKeywords([...keywords, ""])}
-                    >
-                      + Add keyword
-                    </Button>
-                  </div>
-
-                  {/* Mentions section */}
-                  <div className="space-y-3 mt-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-medium">Mentions</h3>
+                        >
+                          Add search keywords and hashtags (e.g. product name,
+                          theme, #BrandCampaign). For hashtags, start with #.
+                        </p>
                       </div>
-                      <p
-                        className={cn(
-                          "text-xs",
-                          isDark ? "text-gray-300" : "text-gray-500"
-                        )}
-                      >
-                        Add up to 3 @mentions to track (e.g. @brandname,
-                        @partner)
-                      </p>
-                    </div>
 
-                    <div className="space-y-2">
-                      {mentions.map((mention, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <Input
-                            value={mention}
-                            onChange={(e) => {
-                              const next = [...mentions];
-                              next[index] = e.target.value;
-                              setMentions(next);
-                            }}
-                            placeholder="@username"
-                            className={cn(
-                              isDark
-                                ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
-                            )}
-                          />
-                          {mentions.length > 1 && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                const next = mentions.filter(
-                                  (_, i) => i !== index
-                                );
-                                setMentions(next.length ? next : [""]);
+                      <div className="space-y-2">
+                        {keywords.map((kw, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <Input
+                              value={kw}
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                const sanitized = raw.replace(/\s+/g, "");
+                                const next = [...keywords];
+                                next[index] = sanitized;
+                                setKeywords(next);
                               }}
-                            >
-                              <Trash className="w-4 h-4" />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className={cn(
-                        "mt-1 border-dashed",
-                        mentions.length >= 3 && "opacity-50 cursor-not-allowed",
-                        isDark
-                          ? "border-gray-500 text-gray-200"
-                          : "border-gray-400 text-gray-700"
-                      )}
-                      disabled={mentions.length >= 3}
-                      onClick={() => {
-                        if (mentions.length < 3) {
-                          setMentions([...mentions, ""]);
-                        }
-                      }}
-                    >
-                      + Add mention
-                    </Button>
-                  </div>
-
-                  {/* Engagement target section - only for Twitter awareness campaigns */}
-                  {contentType === "raid" && (
-                    <div className="space-y-2 mt-6">
-                      <Label>Engagement Targets (Optional)</Label>
-                      <p
-                        className={cn(
-                          "text-xs",
-                          isDark ? "text-gray-300" : "text-gray-500"
-                        )}
-                      >
-                        Set soft targets for engagement on the target tweet.
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="space-y-1">
-                          <Label htmlFor="targetLikes">Target likes</Label>
-                          <Input
-                            id="targetLikes"
-                            type="number"
-                            min={0}
-                            value={targetLikes}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setTargetLikes(
-                                v === "" ? "" : Math.max(0, Number(v) || 0)
-                              );
-                            }}
-                            placeholder="e.g. 500"
-                            className={cn(
-                              "text-sm",
-                              isDark
-                                ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
+                              placeholder="Add keyword"
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600"
+                                  : "bg-white"
+                              )}
+                            />
+                            {keywords.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  const next = keywords.filter(
+                                    (_, i) => i !== index
+                                  );
+                                  setKeywords(next.length ? next : [""]);
+                                }}
+                              >
+                                <Trash className="w-4 h-4" />
+                              </Button>
                             )}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="targetReplies">Target replies</Label>
-                          <Input
-                            id="targetReplies"
-                            type="number"
-                            min={0}
-                            value={targetReplies}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setTargetReplies(
-                                v === "" ? "" : Math.max(0, Number(v) || 0)
-                              );
-                            }}
-                            placeholder="e.g. 50"
-                            className={cn(
-                              "text-sm",
-                              isDark
-                                ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
-                            )}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="targetRetweets">
-                            Target reposts/retweets
-                          </Label>
-                          <Input
-                            id="targetRetweets"
-                            type="number"
-                            min={0}
-                            value={targetRetweets}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setTargetRetweets(
-                                v === "" ? "" : Math.max(0, Number(v) || 0)
-                              );
-                            }}
-                            placeholder="e.g. 100"
-                            className={cn(
-                              "text-sm",
-                              isDark
-                                ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
-                            )}
-                          />
-                        </div>
+                          </div>
+                        ))}
                       </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "mt-1 border-dashed",
+                          isDark
+                            ? "border-gray-500 text-gray-200"
+                            : "border-gray-400 text-gray-700"
+                        )}
+                        onClick={() => setKeywords([...keywords, ""])}
+                      >
+                        + Add keyword
+                      </Button>
                     </div>
-                  )}
-                </>
-              )}
+
+                    {/* Mentions section */}
+                    <div className="space-y-3 mt-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-medium">Mentions</h3>
+                        </div>
+                        <p
+                          className={cn(
+                            "text-xs",
+                            isDark ? "text-gray-300" : "text-gray-500"
+                          )}
+                        >
+                          Add up to 3 @mentions to track (e.g. @brandname,
+                          @partner)
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        {mentions.map((mention, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <Input
+                              value={mention}
+                              onChange={(e) => {
+                                const next = [...mentions];
+                                next[index] = e.target.value;
+                                setMentions(next);
+                              }}
+                              placeholder="@username"
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600"
+                                  : "bg-white"
+                              )}
+                            />
+                            {mentions.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  const next = mentions.filter(
+                                    (_, i) => i !== index
+                                  );
+                                  setMentions(next.length ? next : [""]);
+                                }}
+                              >
+                                <Trash className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "mt-1 border-dashed",
+                          mentions.length >= 3 && "opacity-50 cursor-not-allowed",
+                          isDark
+                            ? "border-gray-500 text-gray-200"
+                            : "border-gray-400 text-gray-700"
+                        )}
+                        disabled={mentions.length >= 3}
+                        onClick={() => {
+                          if (mentions.length < 3) {
+                            setMentions([...mentions, ""]);
+                          }
+                        }}
+                      >
+                        + Add mention
+                      </Button>
+                    </div>
+                  </>
+                )}
             </div>
           )}
 
@@ -6336,25 +6356,22 @@ export default function EditContestPage({
 
               {showRulesPreview ? (
                 <div
-                  className={`border rounded-lg p-4 min-h-[300px] transition-colors duration-200 ${
-                    isDark
-                      ? "text-white bg-[#170337] border-gray-600"
-                      : "bg-white"
-                  }`}
+                  className={`border rounded-lg p-4 min-h-[300px] transition-colors duration-200 ${isDark
+                    ? "text-white bg-[#170337] border-gray-600"
+                    : "bg-white"
+                    }`}
                 >
                   <h4
-                    className={`text-sm font-medium mb-2${
-                      isDark ? "text-white" : "text-gray-600"
-                    }`}
+                    className={`text-sm font-medium mb-2${isDark ? "text-white" : "text-gray-600"
+                      }`}
                   >
                     Preview:
                   </h4>
                   <div
-                    className={`max-w-none ${
-                      isDark
-                        ? "text-white"
-                        : "prose prose-lg dark:prose-invert prose-headings:font-title font-default "
-                    }`}
+                    className={`max-w-none ${isDark
+                      ? "text-white"
+                      : "prose prose-lg dark:prose-invert prose-headings:font-title font-default "
+                      }`}
                     style={{
                       padding: "12px 15px",
                       minHeight: "250px",
@@ -6413,13 +6430,12 @@ export default function EditContestPage({
                 {/* Asset Upload */}
                 <div className="flex flex-col gap-6">
                   <div
-                    className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
-                      isDragActive
-                        ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
-                        : isDark
+                    className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive
+                      ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
+                      : isDark
                         ? "border-slate-600 bg-[#170337]"
                         : "border-gray-300 bg-white"
-                    }`}
+                      }`}
                     onClick={() => resourceFileRef.current?.click()}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
@@ -6486,11 +6502,10 @@ export default function EditContestPage({
                           Max file size: 20MB
                         </p>
                         <Button
-                          className={`px-4 py-2 rounded-lg text-md transition-colors ${
-                            isDark
-                              ? "bg-[#7F39EC] text-white"
-                              : "bg-[#4A00BE] text-white"
-                          }`}
+                          className={`px-4 py-2 rounded-lg text-md transition-colors ${isDark
+                            ? "bg-[#7F39EC] text-white"
+                            : "bg-[#4A00BE] text-white"
+                            }`}
                           variant="outline"
                           size="sm"
                           onClick={(e) => {
@@ -7033,14 +7048,124 @@ export default function EditContestPage({
             </div>
           )}
 
+          {/* Target Metrics for Raid Campaigns - Show ABOVE Target Tweet */}
+          {!datesOnly &&
+            platform === "twitter" &&
+            contentType === "raid" &&
+            contest?.contest_format === "text_image" && (
+              <div className="space-y-3">
+                <h4 className="text-md font-medium">
+                  Engagement Targets (Optional)
+                </h4>
+                <p
+                  className={cn(
+                    "text-sm",
+                    isDark ? "text-gray-300" : "text-gray-500"
+                  )}
+                >
+                  Set soft targets for engagement on the target tweet.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="targetLikes">Target likes</Label>
+                    <Input
+                      id="targetLikes"
+                      type="number"
+                      min={0}
+                      value={targetLikes}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setTargetLikes(
+                          v === "" ? "" : Math.max(0, Number(v) || 0)
+                        );
+                      }}
+                      placeholder="e.g. 500"
+                      className={cn(
+                        "text-sm",
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="targetReplies">Target comments</Label>
+                    <Input
+                      id="targetReplies"
+                      type="number"
+                      min={0}
+                      value={targetReplies}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setTargetReplies(
+                          v === "" ? "" : Math.max(0, Number(v) || 0)
+                        );
+                      }}
+                      placeholder="e.g. 50"
+                      className={cn(
+                        "text-sm",
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="targetRetweets">Target reposts/retweets</Label>
+                    <Input
+                      id="targetRetweets"
+                      type="number"
+                      min={0}
+                      value={targetRetweets}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setTargetRetweets(
+                          v === "" ? "" : Math.max(0, Number(v) || 0)
+                        );
+                      }}
+                      placeholder="e.g. 100"
+                      className={cn(
+                        "text-sm",
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="targetQuoteReposts">Target quote reposts</Label>
+                    <Input
+                      id="targetQuoteReposts"
+                      type="number"
+                      min={0}
+                      value={targetQuoteReposts}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setTargetQuoteReposts(
+                          v === "" ? "" : Math.max(0, Number(v) || 0)
+                        );
+                      }}
+                      placeholder="e.g. 50"
+                      className={cn(
+                        "text-sm",
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
           {/* Inspiration Content Section / Target Link for Twitter Raids */}
           {!datesOnly && (
             <div>
               <div>
                 <CardTitle className="mb-2 text-lg md:text-2xl">
-                  {platform === "twitter" && contentType === "raid" ? (
+                  {platform === "twitter" && contentType === "raid" && contest?.contest_format === "text_image" ? (
                     <>
-                      Target Link <span className="text-red-500">*</span>
+                      Target Tweet <span className="text-red-500">*</span>
                     </>
                   ) : (
                     <>
@@ -7050,14 +7175,14 @@ export default function EditContestPage({
                   )}
                 </CardTitle>
                 <CardDescription className="mb-4 text-md">
-                  {platform === "twitter" && contentType === "raid"
+                  {platform === "twitter" && contentType === "raid" && contest?.contest_format === "text_image"
                     ? "Add the target tweet link that creators will engage with."
                     : "Help creators understand your vision by adding at least one inspiration link (Instagram, YouTube, TikTok, etc.) with a description."}
                 </CardDescription>
               </div>
               <div className="space-y-4">
                 {/* Twitter Raid: Show Target Link inputs using separate state */}
-                {platform === "twitter" && contentType === "raid" ? (
+                {platform === "twitter" && contentType === "raid" && contest?.contest_format === "text_image" ? (
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="twitterTargetUrlInput">
                       Target Link <span className="text-red-500">*</span>
@@ -7146,7 +7271,7 @@ export default function EditContestPage({
                   </>
                 )}
                 {/* Inspiration List - only show for non-Twitter raids */}
-                {!(platform === "twitter" && contentType === "raid") &&
+                {!(platform === "twitter" && contentType === "raid" && contest?.contest_format === "text_image") &&
                   inspirationLinks.length > 0 && (
                     <ul className="space-y-3 mt-6">
                       {inspirationLinks.map((item, index) => (
@@ -7305,9 +7430,9 @@ export default function EditContestPage({
                               href={
                                 item.url.includes("[creator]")
                                   ? item.url.replace(
-                                      /\[creator\]/gi,
-                                      encodeURIComponent(currentUserFirstName)
-                                    )
+                                    /\[creator\]/gi,
+                                    encodeURIComponent(currentUserFirstName)
+                                  )
                                   : item.url
                               }
                               target="_blank"
@@ -7319,9 +7444,9 @@ export default function EditContestPage({
                             >
                               {item.url.includes("[creator]")
                                 ? item.url.replace(
-                                    /\[creator\]/gi,
-                                    currentUserFirstName
-                                  )
+                                  /\[creator\]/gi,
+                                  currentUserFirstName
+                                )
                                 : item.url}
                             </a>
                             <div
@@ -7598,7 +7723,7 @@ export default function EditContestPage({
                           const position = newCount;
                           newAmounts.push(
                             DEFAULT_PRIZE_ALLOCATIONS[
-                              position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
+                            position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
                             ] || MIN_PRIZE_PER_WINNER
                           );
                           setWinnerAmounts(newAmounts);
@@ -7975,53 +8100,6 @@ export default function EditContestPage({
                   Configure optional features for enhanced creator engagement.
                 </p>
               </div>
-              {/* Content Type Selection */}
-              <div className="space-y-2">
-                <Label htmlFor="contentType">Content Type</Label>
-                <Select
-                  value={contentType}
-                  onValueChange={(value: any) => setContentType(value)}
-                >
-                  <SelectTrigger
-                    id="contentType"
-                    className={cn(
-                      isDark ? "border-gray-600" : "border-gray-300"
-                    )}
-                  >
-                    <SelectValue placeholder="Select content type (optional)" />
-                  </SelectTrigger>
-                  <SelectContent isDark={isDark}>
-                    {platform === "twitter" ? (
-                      <>
-                        <SelectItem value="raid" isDark={isDark}>
-                          ⚔️ Raid (creators like/comment your tweet)
-                        </SelectItem>
-                        <SelectItem value="awareness" isDark={isDark}>
-                          📣 Awareness (creators post their own tweet)
-                        </SelectItem>
-                      </>
-                    ) : (
-                      <>
-                        <SelectItem value="ugc" isDark={isDark}>
-                          📹 UGC (User Generated Content)
-                        </SelectItem>
-                        <SelectItem value="clipping" isDark={isDark}>
-                          ✂️ Clipping (Short clips/repurposed content)
-                        </SelectItem>
-                        <SelectItem value="other" isDark={isDark}>
-                          📋 Other (Check Rules for details)
-                        </SelectItem>
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Helps creators filter opportunities by content type. Leave
-                  empty if not applicable.
-                </p>
-              </div>
-
-              {/* Content Type Selection */}
               {/* <div className="space-y-2">
                 <Label htmlFor="content-type">Content Type (Optional)</Label>
                 <Select
@@ -8399,15 +8477,15 @@ export default function EditContestPage({
                   <div className="text-sm mt-1 break-words">
                     {budgetDifference > 0
                       ? `Prize pool increased by ${formatCurrencyFromCents(
-                          budgetDifference
-                        )}. Original: ${formatCurrencyFromCents(
-                          originalBudget
-                        )} → New Total: ${formatCurrencyFromCents(
-                          originalBudget + budgetDifference
-                        )}. Additional payment (including commission) will be required.`
+                        budgetDifference
+                      )}. Original: ${formatCurrencyFromCents(
+                        originalBudget
+                      )} → New Total: ${formatCurrencyFromCents(
+                        originalBudget + budgetDifference
+                      )}. Additional payment (including commission) will be required.`
                       : `Prize pool decreased by ${formatCurrencyFromCents(
-                          Math.abs(budgetDifference)
-                        )}. You will be refunded this amount plus commission.`}
+                        Math.abs(budgetDifference)
+                      )}. You will be refunded this amount plus commission.`}
                   </div>
                 </div>
               </Alert>
@@ -8800,11 +8878,11 @@ export default function EditContestPage({
                   budgetChanged && budgetDifference > 0
                     ? budgetDifference / 100 // Prize pool increase amount in dollars
                     : contestType === "leaderboard"
-                    ? winnerAmounts.reduce(
+                      ? winnerAmounts.reduce(
                         (sum, amount) => sum + (amount || 0),
                         0
                       ) / 100 // Convert cents to dollars
-                    : parseFloat(totalBudget.toString()) || 0
+                      : parseFloat(totalBudget.toString()) || 0
                 } // Budget is already in dollars
                 contestTitle={title || "Untitled Contest"}
                 contestId={contestId}

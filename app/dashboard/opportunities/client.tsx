@@ -67,7 +67,7 @@ import {
 
 // Define types for filters and sorting
 type StatusFilterType = "all" | "live" | "upcoming" | "completed";
-type PlatformFilterType = "all" | "youtube" | "instagram"; // Add more as needed
+type PlatformFilterType = "all" | "youtube" | "instagram" | "twitter"; // Scalable: add more platforms as needed
 type ContestTypeFilterType = "all" | "leaderboard" | "cpm";
 type SortOptionType =
   | "relevance_desc"
