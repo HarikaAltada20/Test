@@ -649,7 +649,7 @@ export default function ContestModerationClient({
 
             {/* Contest Details Section */}
             <div
-              className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm mb-3 sm:mb-4 flex-grow"
+              className="space-y-1.5 sm:space-y-2 text-md mb-3 sm:mb-4 flex-grow"
               style={{
                 color: isDark ? "white" : "#475569",
                 transition: "none",
@@ -805,14 +805,30 @@ export default function ContestModerationClient({
             margin-left: 0.125rem !important;
           }
         }
-        
-        @media (min-width: 360px) and (max-width: 640px) {
+
+        /* Small phones in landscape / very small devices */
+        @media (min-width: 360px) and (max-width: 460px) {
           .contest-moderation-tabs-wrapper button {
             flex: 0 0 auto !important;
             min-width: fit-content !important;
             padding: 0.375rem 0.5rem !important;
             font-size: 0.75rem !important;
             gap: 0.25rem !important;
+          }
+        }
+
+        /* Requested: 460px - 640px breakpoint for better tab responsiveness */
+        @media (min-width: 460px) and (max-width: 640px) {
+          .contest-moderation-tabs-wrapper button {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+            padding: 0.5rem 0.75rem !important;
+            font-size: 0.8rem !important;
+            gap: 0.3rem !important;
+          }
+          .contest-moderation-tabs-wrapper .badge {
+            font-size: 0.7rem !important;
+            padding: 0.15rem 0.35rem !important;
           }
         }
         

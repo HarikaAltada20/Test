@@ -1,7 +1,6 @@
 "use client";
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import {
@@ -21,10 +20,6 @@ import FAQ from "@/components/FAQ";
 // Placeholder for social icons image - reuse from creators page
 import SocialPair from "@/public/images/social_pair.avif";
 import BrandGetStartedButton from "@/components/BrandGetStartedButton";
-import { useClientAuth } from "@/hooks/use-client-auth";
-import { useToast } from "@/hooks/use-toast";
-import { createClient } from "@/utils/supabase/client";
-import { hasCampaignFormSubmitted } from "@/lib/campaign-form-submissions";
 
 // const faqItemsBrands = [
 //   {
@@ -102,7 +97,6 @@ const brandImages: string[] = [
   "/images/empire-distribution.avif",
 ];
 export default function BrandsClient() {
-  const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [fade, setFade] = useState<boolean>(true);
   const [windowWidth, setWindowWidth] = useState<number>(0);
@@ -116,14 +110,6 @@ export default function BrandsClient() {
   const [isAnimated, setIsAnimated] = useState(false);
   const howItWorksRef = useRef<HTMLDivElement>(null);
   const [howItWorksAnimated, setHowItWorksAnimated] = useState(false);
-
-  const { user, isAuthenticated } = useClientAuth();
-  const { toast } = useToast();
-  const supabase = createClient();
-  const [userEmail, setUserEmail] = useState<string>("");
-  const [hasCampaignSubmitted, setHasCampaignSubmitted] =
-    useState<boolean>(false);
-  const [userType, setUserType] = useState<string | null>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -182,115 +168,6 @@ export default function BrandsClient() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
-
-  // Fetch user email
-  useEffect(() => {
-    const fetchUserEmail = async () => {
-      try {
-        if (isAuthenticated && user?.id) {
-          const { data: profile, error: profileError } = await supabase
-            .from("users")
-            .select("email, user_type")
-            .eq("id", user.id)
-            .maybeSingle();
-
-          if (profileError) {
-            console.error("Error fetching user email:", profileError);
-          }
-
-          const email = profile?.email || user?.email || "";
-          setUserEmail(email);
-          setUserType(profile?.user_type || null);
-        } else {
-          // For anonymous users, try to get email from auth if available
-          const email = user?.email || "";
-          setUserEmail(email);
-        }
-      } catch (error) {
-        console.error("Error fetching user email:", error);
-      }
-    };
-
-    fetchUserEmail();
-  }, [isAuthenticated, user, supabase]);
-
-  // Check if campaign form has been submitted
-  useEffect(() => {
-    const checkCampaignSubmission = async () => {
-      const emailToCheck = user?.email || userEmail || "";
-      if (emailToCheck && emailToCheck.trim() !== "") {
-        try {
-          const submitted = await hasCampaignFormSubmitted(emailToCheck);
-          setHasCampaignSubmitted(submitted);
-        } catch (error) {
-          console.error("Error checking campaign form submission:", error);
-        }
-      }
-    };
-
-    checkCampaignSubmission();
-  }, [user?.email, userEmail]);
-
-  // Handle Google Form button click
-  const handleLaunchCampaignClick = async (
-    e: React.MouseEvent<HTMLAnchorElement>
-  ) => {
-    e.preventDefault();
-
-    // If user is not authenticated, redirect to sign-in page instead of opening the form
-    if (!isAuthenticated) {
-      router.push("/auth/signin");
-      return;
-    }
-
-    // Only advertisers can launch campaigns
-    if (userType !== "advertiser") {
-      toast({
-        title: "Only advertisers can launch campaigns",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Build URL with pre-filled email data
-    const GOOGLE_FORM_URL =
-      "https://docs.google.com/forms/d/e/1FAIpQLSd_5loTYAlHNrcbONTSXvj3RsSUGDQMwdoV-YxCYYEG9DpXqQ/viewform";
-    let url = GOOGLE_FORM_URL;
-    const params = new URLSearchParams();
-
-    // Get email from logged-in user (prefer auth email)
-    const email = user?.email || userEmail || "";
-
-    // Define form fields mapping - Update entry ID to match your Google Form
-    // To find the entry ID:
-    // 1. Open your Google Form in edit mode: https://docs.google.com/forms/d/e/1FAIpQLSd_5loTYAlHNrcbONTSXvj3RsSUGDQMwdoV-YxCYYEG9DpXqQ/edit
-    // 2. Click the three dots menu (⋮) → Select "Get pre-filled link"
-    // 3. Fill in the email field with any test email
-    // 4. Click "Get link" and check the URL - it will contain entry.XXXXX where XXXXX is the entry ID
-    // 5. Replace "entry.XXXXX" below with the actual entry ID (e.g., "entry.1234567890")
-    const formFields = [{ value: email, entryId: "entry.360122154" }];
-
-    // Add non-empty fields to parameters
-    const validFields = formFields.filter(
-      (field) => field.value && field.value.trim() !== ""
-    );
-
-    validFields.forEach((field) => {
-      params.append(field.entryId, field.value);
-    });
-
-    if (params.toString()) {
-      url += `?${params.toString()}`;
-    }
-
-    // Add timestamp to prevent caching and ensure fresh form load
-    const timestamp = Date.now();
-    const separator = url.includes("?") ? "&" : "?";
-    url += `${separator}_t=${timestamp}`;
-
-    // Open Google Form in new tab with pre-filled email
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
 
   return (
     <div className="min-h-screen bg-[#000825] text-white overflow-hidden">
@@ -425,25 +302,22 @@ export default function BrandsClient() {
             </Button>
           </div>
 
-          {/* Launch Campaign Button with Discount - Only show if not submitted */}
-          {!hasCampaignSubmitted && (
-            <div className="flex justify-center items-center mb-8">
-              <Button
-                variant="outline"
-                className="rounded-full border border-amber-500/50 text-amber-400 font-medium px-4 py-2 text-sm hover:border-amber-400 hover:text-amber-300 transition-all duration-300 bg-transparent hover:bg-amber-500/10"
-                asChild
+          {/* Launch Campaign - always visible, direct link to form */}
+          <div className="flex justify-center items-center mb-8">
+            <Button
+              variant="outline"
+              className="rounded-full border border-amber-500/50 text-amber-400 font-medium px-4 py-2 text-sm hover:border-amber-400 hover:text-amber-300 transition-all duration-300 bg-transparent hover:bg-amber-500/10"
+              asChild
+            >
+              <a
+                href="https://docs.google.com/forms/d/e/1FAIpQLSf7C6hOBIr90e8pBDt9mMo4AzJaFM0Dlbud-EleVIPtuCC68A/viewform"
+                target="_blank"
+                rel="noopener noreferrer"
               >
-                <a
-                  href="https://docs.google.com/forms/d/e/1FAIpQLSd_5loTYAlHNrcbONTSXvj3RsSUGDQMwdoV-YxCYYEG9DpXqQ/viewform"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={handleLaunchCampaignClick}
-                >
-                  Launch Campaign - Get 50% Off
-                </a>
-              </Button>
-            </div>
-          )}
+                Launch Campaign - Get 50% Off
+              </a>
+            </Button>
+          </div>
           {/* Social Proof */}
           <div className="flex justify-center items-center text-base text-slate-300 mb-8">
             <span className="font-medium">

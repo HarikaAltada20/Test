@@ -709,7 +709,7 @@ export default function CreatorsClient({
             )}
 
             {/* Instagram Contests */}
-            {instagramContests.length > 0 && (
+            {/* {instagramContests.length > 0 && (
               <div className="overflow-visible">
                 <div className="flex items-center justify-start mb-6 px-2 sm:px-16">
                   <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
@@ -720,10 +720,10 @@ export default function CreatorsClient({
                   {instagramContests.map(renderContestCard)}
                 </div>
               </div>
-            )}
+            )} */}
 
             {/* YouTube Contests */}
-            {youtubeContests.length > 0 && (
+            {/* {youtubeContests.length > 0 && (
               <div className="overflow-visible">
                 <div className="flex items-center justify-between mb-6 px-2 sm:px-16">
                   <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
@@ -734,7 +734,7 @@ export default function CreatorsClient({
                   {youtubeContests.map(renderContestCard)}
                 </div>
               </div>
-            )}
+            )} */}
           </div>
         </section>
 
@@ -955,7 +955,7 @@ export default function CreatorsClient({
                   {/* light gradient only at bottom for text readability */}
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
                   <Image
-                    src="/images/link_account.avif"
+                    src="/images/link---account.avif"
                     alt="Link account"
                     fill
                     className="object-contain group-hover:scale-[1.06] transition-transform duration-700 ease-out"
