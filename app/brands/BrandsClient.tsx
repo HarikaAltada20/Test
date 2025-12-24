@@ -314,7 +314,7 @@ export default function BrandsClient() {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Launch Campaign - Get 50% Off
+                Launch Your First Campaign — Get 50% Off
               </a>
             </Button>
           </div>
@@ -357,9 +357,8 @@ export default function BrandsClient() {
             {/* Heading */}
 
             <h1
-              className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-up" : "hide-before-animate"
-              }`}
+              className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-up" : "hide-before-animate"
+                }`}
             >
               <span className="text-white">Why Brands Choose </span>
               <span className="bg-gradient-to-r from-purple-500 to-purple-400 bg-clip-text text-transparent">
@@ -372,9 +371,8 @@ export default function BrandsClient() {
             </h1>
 
             <p
-              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-left" : "hide-before-animate"
-              }`}
+              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-left" : "hide-before-animate"
+                }`}
               style={{ animationDelay: "1s" }}
             >
               Simple Steps to Launch your Influencer Marketing Campaign
@@ -454,9 +452,8 @@ export default function BrandsClient() {
         >
           <div className="container mx-auto max-w-[1250px]">
             <h2
-              className={`text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-10 ${
-                howItWorksAnimated ? "slide-up" : "hide-before-animate"
-              }`}
+              className={`text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-10 ${howItWorksAnimated ? "slide-up" : "hide-before-animate"
+                }`}
               style={{ animationDelay: "0.1s" }}
             >
               How it works
@@ -488,21 +485,21 @@ export default function BrandsClient() {
                               ? windowWidth < 1100
                                 ? "320px" // 1000–1099px
                                 : windowWidth < 1250
-                                ? "300px" // 1100–1249px
-                                : "266px" // ≥1250px
+                                  ? "300px" // 1100–1249px
+                                  : "266px" // ≥1250px
                               : index === 1
-                              ? windowWidth < 1100
-                                ? "270px" // 1000–1099px
-                                : windowWidth < 1250
-                                ? "280px" // 1100–1249px
-                                : "250px" // ≥1250px
-                              : index === 2
-                              ? windowWidth < 1100
-                                ? "300px" // 1000–1099px
-                                : windowWidth < 1250
-                                ? "270px" // 1100–1249px
-                                : "180px" // ≥1250px
-                              : "40px",
+                                ? windowWidth < 1100
+                                  ? "270px" // 1000–1099px
+                                  : windowWidth < 1250
+                                    ? "280px" // 1100–1249px
+                                    : "250px" // ≥1250px
+                                : index === 2
+                                  ? windowWidth < 1100
+                                    ? "300px" // 1000–1099px
+                                    : windowWidth < 1250
+                                      ? "270px" // 1100–1249px
+                                      : "180px" // ≥1250px
+                                  : "40px",
                         }}
                       />
                     )}
@@ -531,9 +528,8 @@ export default function BrandsClient() {
                   src={images[currentIndex]}
                   alt={`Step Image ${currentIndex + 1}`}
                   fill
-                  className={`object-cover rounded-xl transition-opacity duration-500 ${
-                    fade ? "opacity-100" : "opacity-0"
-                  }`}
+                  className={`object-cover rounded-xl transition-opacity duration-500 ${fade ? "opacity-100" : "opacity-0"
+                    }`}
                   priority
                 />
               </div>
