@@ -111,25 +111,25 @@ export default function ContactPage() {
   };
 
   return (
-    <section className="bg-[#050A30] text-white py-16 px-6 border-b border-[#A87313]">
-      <div className="max-w-[1200px] mx-auto grid md:grid-cols-2 gap-20 items-start">
+    <section className="bg-[#050A30] text-white py-8 px-4 sm:py-12 sm:px-6 md:py-16 border-b border-[#A87313]">
+      <div className="max-w-[1200px] mx-auto grid md:grid-cols-2 gap-8 sm:gap-12 md:gap-20 items-start">
         {/* Left Section */}
         <div>
           <div
-            className="p-6 rounded-xl space-y-6"
+            className="p-4 sm:p-6 rounded-xl space-y-4 sm:space-y-6"
             style={{
               background:
                 "linear-gradient(180deg, rgba(127, 57, 236, 0.46) 0%, rgba(0, 8, 37, 0.46) 100%)",
             }}
           >
-            <h2 className="text-2xl font-bold">Lets get in touch</h2>
-            <p className="text-lg text-gray-200">
+            <h2 className="text-xl sm:text-2xl font-bold">Lets get in touch</h2>
+            <p className="text-base sm:text-lg text-gray-200">
               We&apos;re open for any suggestion or just to have a chat
             </p>
 
-            <div className="flex items-start gap-4">
-              <MapPin className="text-white mt-1" />
-              <p className="text-lg">
+            <div className="flex items-start gap-3 sm:gap-4">
+              <MapPin className="text-white mt-1 flex-shrink-0 w-5 h-5" />
+              <p className="text-sm sm:text-lg break-words">
                 6425 Weidlake Dr, <br />
                 Los Angeles, California 90068, US
               </p>
@@ -140,9 +140,11 @@ export default function ContactPage() {
               <p className="text-lg">+91-9876543210</p>
             </div> */}
 
-            <div className="flex items-center gap-4">
-              <Mail className="text-white" />
-              <p className="text-lg">support@gameofcreators.com</p>
+            <div className="flex items-center gap-3 sm:gap-4">
+              <Mail className="text-white flex-shrink-0 w-5 h-5" />
+              <p className="text-sm sm:text-lg break-all">
+                support@gameofcreators.com
+              </p>
             </div>
           </div>
 
@@ -153,21 +155,24 @@ export default function ContactPage() {
               alt="Contact"
               width={500}
               height={300}
-              className={`w-full h-full object-cover transition-opacity duration-500 ${fade ? "opacity-100" : "opacity-0"
-                }`}
+              className={`w-full h-full object-cover transition-opacity duration-500 ${
+                fade ? "opacity-100" : "opacity-0"
+              }`}
             />
           </div>
         </div>
 
         {/* Right Section */}
         <div>
-          <h2 className="text-4xl font-bold mb-3">Get in Touch</h2>
-          <p className="text-lg text-gray-300 mb-6">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 sm:mb-3">
+            Get in Touch
+          </h2>
+          <p className="text-sm sm:text-base md:text-lg text-gray-300 mb-4 sm:mb-6">
             We&apos;d love to hear from you! Reach out and our team will get
             back to you soon.
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
             <div>
               <input
                 type="text"
@@ -175,7 +180,7 @@ export default function ContactPage() {
                 placeholder="Enter the Name"
                 value={formData.name}
                 onChange={handleChange}
-                className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
+                className="w-full p-3 sm:p-4 rounded-md bg-transparent border border-gray-400 text-white text-sm sm:text-base focus:outline-none"
               />
               {errors.name && (
                 <p className="text-red-400 mt-2 text-sm">{errors.name}</p>
@@ -189,7 +194,7 @@ export default function ContactPage() {
                 placeholder="Enter the Email"
                 value={formData.email}
                 onChange={handleChange}
-                className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
+                className="w-full p-3 sm:p-4 rounded-md bg-transparent border border-gray-400 text-white text-sm sm:text-base focus:outline-none"
               />
               {errors.email && (
                 <p className="text-red-400 mt-2 text-sm">{errors.email}</p>
@@ -203,7 +208,7 @@ export default function ContactPage() {
                 placeholder="Enter the Mobile Number"
                 value={formData.phone}
                 onChange={handleChange}
-                className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
+                className="w-full p-3 sm:p-4 rounded-md bg-transparent border border-gray-400 text-white text-sm sm:text-base focus:outline-none"
               />
               {errors.phone && (
                 <p className="text-red-400 mt-2 text-sm">{errors.phone}</p>
@@ -217,7 +222,7 @@ export default function ContactPage() {
                 rows={6}
                 value={formData.message}
                 onChange={handleChange}
-                className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
+                className="w-full p-3 sm:p-4 rounded-md bg-transparent border border-gray-400 text-white text-sm sm:text-base focus:outline-none resize-y"
               ></textarea>
               {errors.message && (
                 <p className="text-red-400 mt-2 text-sm">{errors.message}</p>
@@ -227,7 +232,7 @@ export default function ContactPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-full bg-gradient-to-r from-[#7F39EC] to-[#B16FF4] font-semibold text-white"
+              className="w-full py-2.5 sm:py-3 rounded-full bg-gradient-to-r from-[#7F39EC] to-[#B16FF4] font-semibold text-white text-sm sm:text-base"
             >
               {loading ? "Sending..." : "Submit"}
             </button>

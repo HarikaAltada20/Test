@@ -154,7 +154,7 @@ export default function CtcBanner() {
             {isHome
               ? "Join Game Of Creators"
               : isCreators
-                ? "Participate in a Contest"
+                ? "Start Earning"
                 : "Launch a Contest"}
             <ArrowRight className="h-5 w-5" />
           </Link>
