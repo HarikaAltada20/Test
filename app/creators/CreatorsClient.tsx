@@ -1103,7 +1103,7 @@ export default function CreatorsClient({
                   {/* light gradient only at bottom for text readability */}
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
                   <Image
-                    src="/images/paid.avif"
+                    src="/images/my-balance.avif"
                     alt="Get paid"
                     fill
                     className="object-contain group-hover:scale-[1.06] transition-transform duration-700 ease-out"
