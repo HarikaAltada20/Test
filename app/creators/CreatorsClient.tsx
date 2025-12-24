@@ -332,28 +332,30 @@ export default function CreatorsClient({
     return [...liveFiltered, ...endedFiltered].slice(0, limit);
   };
 
-  // Filter contests by platform with fallback to ended contests
-  const instagramContests = getContestsWithFallback(
-    contests.filter((c) => c.platform?.toLowerCase() === "instagram"),
-    5
-  );
-  const youtubeContests = getContestsWithFallback(
-    contests.filter((c) => c.platform?.toLowerCase() === "youtube"),
-    5
-  );
+  // Helper function to get both live and ended contests if live contests exist
+  const getContestsWithLiveAndEnded = (
+    sourceContests: any[],
+    limit: number
+  ) => {
+    const liveFiltered = sourceContests.filter(
+      (c) => c.status === "active" || c.status === "upcoming"
+    );
+    const endedFiltered = sourceContests.filter((c) => c.status === "ended");
 
-  // Get IDs of contests already shown in Instagram and YouTube sections
-  const shownContestIds = new Set([
-    ...instagramContests.map((c) => c.id),
-    ...youtubeContests.map((c) => c.id),
-  ]);
+    // If there are live contests, include both live and ended
+    if (liveFiltered.length > 0) {
+      return [...liveFiltered, ...endedFiltered].slice(0, limit);
+    }
 
-  // Most Popular contests - sorted by budget/prize amount (highest first)
-  // Exclude contests already shown in Instagram/YouTube sections
-  // Prioritize live/upcoming, fill with ended if needed
+    // If no live contests, return only ended (up to limit)
+    return endedFiltered.slice(0, limit);
+  };
+
+  // STEP 1: Most Popular contests - MUST get 4 live (active only) contests (compulsory)
+  // Ensure diversity: different platforms and contest types, prioritizing highest budgets
   const availableForMostPopular = contests.filter((c) => {
-    // Exclude contests already shown in Instagram/YouTube sections
-    if (shownContestIds.has(c.id)) {
+    // Only include active (live) contests - exclude upcoming and ended
+    if (c.status !== "active") {
       return false;
     }
     // Only include contests with a valid budget/prize
@@ -365,7 +367,8 @@ export default function CreatorsClient({
   });
 
   const sortedForMostPopular = [...availableForMostPopular].sort((a, b) => {
-    const getValue = (contest: any) => {
+    // First: Get budget/prize value
+    const getBudget = (contest: any) => {
       if (contest.contest_type === "cpm") {
         return contest.contest_based_details?.cpm_contest?.total_budget || 0;
       } else if (contest.contest_type === "leaderboard") {
@@ -375,10 +378,99 @@ export default function CreatorsClient({
       }
       return 0;
     };
-    return getValue(b) - getValue(a);
+
+    // Second: Get CPM rate (only for CPM contests)
+    const getCpmRate = (contest: any) => {
+      if (contest.contest_type === "cpm") {
+        return contest.contest_based_details?.cpm_contest?.cpm_rate_usd || 0;
+      }
+      return 0;
+    };
+
+    const budgetA = getBudget(a);
+    const budgetB = getBudget(b);
+
+    // Primary sort: by budget (descending)
+    if (budgetB !== budgetA) {
+      return budgetB - budgetA;
+    }
+
+    // Secondary sort: by CPM rate for CPM contests (descending)
+    // Higher CPM rate means more money per view
+    const cpmRateA = getCpmRate(a);
+    const cpmRateB = getCpmRate(b);
+    return cpmRateB - cpmRateA;
   });
 
-  const mostPopularContests = getContestsWithFallback(sortedForMostPopular, 4);
+  // Get exactly 4 active (live) contests for Most Popular with diversity
+  // Prioritize different platforms and contest types
+  const mostPopularContests: any[] = [];
+  const usedPlatforms = new Set<string>();
+  const usedContestTypes = new Set<string>();
+
+  // First pass: Try to get diverse contests (different platforms/types)
+  for (const contest of sortedForMostPopular) {
+    if (mostPopularContests.length >= 4) break;
+
+    const platform = contest.platform?.toLowerCase() || "unknown";
+    const contestType = contest.contest_type || "unknown";
+
+    // Prefer contests with different platforms and types
+    const isNewPlatform = !usedPlatforms.has(platform);
+    const isNewContestType = !usedContestTypes.has(contestType);
+
+    // If we have less than 4, prioritize diversity
+    if (mostPopularContests.length < 4) {
+      // If it's a new platform or new contest type, add it
+      if (isNewPlatform || isNewContestType) {
+        mostPopularContests.push(contest);
+        usedPlatforms.add(platform);
+        usedContestTypes.add(contestType);
+      }
+    }
+  }
+
+  // Second pass: Fill remaining slots with highest budget contests if we don't have 4 yet
+  if (mostPopularContests.length < 4) {
+    for (const contest of sortedForMostPopular) {
+      if (mostPopularContests.length >= 4) break;
+      // Skip if already added
+      if (!mostPopularContests.find((c) => c.id === contest.id)) {
+        mostPopularContests.push(contest);
+        const platform = contest.platform?.toLowerCase() || "unknown";
+        const contestType = contest.contest_type || "unknown";
+        usedPlatforms.add(platform);
+        usedContestTypes.add(contestType);
+      }
+    }
+  }
+
+  // Ensure we have exactly 4 (or as many as available)
+  const finalMostPopularContests = mostPopularContests.slice(0, 4);
+
+  // Get IDs of contests used in Most Popular section
+  const mostPopularContestIds = new Set(
+    finalMostPopularContests.map((c) => c.id)
+  );
+
+  // STEP 2: Instagram and YouTube contests - use remaining contests (active, upcoming, and ended)
+  // Exclude contests already shown in Most Popular section
+  const instagramContests = getContestsWithLiveAndEnded(
+    contests.filter(
+      (c) =>
+        c.platform?.toLowerCase() === "instagram" &&
+        !mostPopularContestIds.has(c.id)
+    ),
+    5
+  );
+  const youtubeContests = getContestsWithLiveAndEnded(
+    contests.filter(
+      (c) =>
+        c.platform?.toLowerCase() === "youtube" &&
+        !mostPopularContestIds.has(c.id)
+    ),
+    5
+  );
 
   // Calculate total budget for all campaigns (live, upcoming, and ended)
   const totalBudget = contests.reduce((sum, contest) => {
@@ -444,13 +536,15 @@ export default function CreatorsClient({
       >
         {/* Image */}
         {contest.thumbnail_url ? (
-          <Image
-            src={contest.thumbnail_url}
-            alt={contest.title}
-            width={240}
-            height={190}
-            className="pointer-events-none w-full h-[140px] sm:h-[150px] md:h-[170px] lg:h-[190px] rounded-xl object-cover"
-          />
+          <div className="w-full h-[140px] sm:h-[150px] md:h-[170px] lg:h-[190px] rounded-xl flex items-center justify-center overflow-hidden">
+            <Image
+              src={contest.thumbnail_url}
+              alt={contest.title}
+              width={240}
+              height={190}
+              className="pointer-events-none w-full h-full rounded-xl object-contain"
+            />
+          </div>
         ) : (
           <div className="w-full h-[140px] sm:h-[150px] md:h-[170px] lg:h-[190px] rounded-xl bg-slate-800 flex items-center justify-center">
             <Trophy className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 text-slate-400" />
@@ -490,16 +584,16 @@ export default function CreatorsClient({
             )}
           </div>
 
-          {/* Budget used text */}
-          {totalBudget > 0 && (
+          {/* Budget used text - only show for CPM contests */}
+          {contest.contest_type === "cpm" && totalBudget > 0 && (
             <span className="mt-1 text-[9px] sm:text-[10px] text-slate-400">
               {budgetUsedPercent}% budget used
             </span>
           )}
         </div>
 
-        {/* Progress bar */}
-        {totalBudget > 0 && (
+        {/* Progress bar - only show for CPM contests */}
+        {contest.contest_type === "cpm" && totalBudget > 0 && (
           <div className="absolute bottom-0 left-[5px] right-0 h-1">
             <div
               className="h-full rounded-tr-full bg-green-500 transition-all"
@@ -665,7 +759,7 @@ export default function CreatorsClient({
         <section className="text-white py-16 px-4 overflow-visible">
           <div className="max-w-[1400px] mx-auto space-y-12 overflow-visible">
             {/* Most Popular Contests */}
-            {mostPopularContests.length > 0 && (
+            {finalMostPopularContests.length > 0 && (
               <div className="overflow-visible">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 px-2 sm:px-16 gap-3 sm:gap-0">
                   <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
@@ -674,7 +768,7 @@ export default function CreatorsClient({
                 </div>
 
                 <div className="flex gap-3 sm:gap-4 overflow-x-auto min-[1000px]:flex-wrap min-[1000px]:overflow-x-visible py-4 px-2 sm:px-4 justify-start md:justify-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                  {mostPopularContests.map(renderContestCard)}
+                  {finalMostPopularContests.map(renderContestCard)}
 
                   {/* Total Budget Card */}
                   <Link
@@ -713,7 +807,7 @@ export default function CreatorsClient({
               <div className="overflow-visible">
                 <div className="flex items-center justify-start mb-6 px-2 sm:px-16">
                   <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
-                    Best Instagram Campaigns
+                    Instagram Campaigns
                   </h2>
                 </div>
                 <div className="flex gap-3 sm:gap-4 overflow-x-auto min-[1000px]:flex-wrap min-[1000px]:overflow-x-visible py-4 px-2 sm:px-4 justify-start md:justify-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
@@ -727,7 +821,7 @@ export default function CreatorsClient({
               <div className="overflow-visible">
                 <div className="flex items-center justify-between mb-6 px-2 sm:px-16">
                   <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
-                    Best YouTube Campaigns
+                    YouTube Campaigns
                   </h2>
                 </div>
                 <div className="flex gap-3 sm:gap-4 overflow-x-auto min-[1000px]:flex-wrap min-[1000px]:overflow-x-visible py-4 px-2 sm:px-4 justify-start md:justify-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
@@ -1009,7 +1103,7 @@ export default function CreatorsClient({
                   {/* light gradient only at bottom for text readability */}
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
                   <Image
-                    src="/images/getpaid.avif"
+                    src="/images/getspaid.avif"
                     alt="Get paid"
                     fill
                     className="object-contain group-hover:scale-[1.06] transition-transform duration-700 ease-out"
