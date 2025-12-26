@@ -3,8 +3,8 @@ import { Metadata } from "next";
 import CreatorsClient from "./CreatorsClient";
 import { createClient } from "@/utils/supabase/server";
 
-// Always fetch fresh data so newly published contests show up immediately
-export const revalidate = 0;
+// Cache for 1 day (86400 seconds) 
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title:

@@ -83,10 +83,10 @@ const images: string[] = [
 ];
 
 const brandImages: string[] = [
-  "/images/universal-music.avif",
-  "/images/atlantic-music.avif",
-  "/images/rolling-loud.avif",
-  "/images/jammable.avif",
+  "/images/song-gpt.logo.avif",
+  "/images/vows-streams-logo.avif",
+  "/images/catch-phrase.avif",
+  "/images/deepvid.avif",
   "/images/warner-music.avif",
   "/images/sony.avif",
   "/images/10k-projects.avif",
@@ -173,7 +173,7 @@ export default function BrandsClient() {
     <div className="min-h-screen bg-[#000825] text-white overflow-hidden">
       <div className="relative z-20">
         {/* Floating Gaming Elements */}
-        <section className="pt-20 pb-20 md:pt-28 md:pb-24 relative overflow-hidden">
+        <section className="pt-20 pb-20 relative overflow-hidden">
           {/* Strategic Background Elements */}
 
           {/* Floating Creative Elements */}
@@ -327,26 +327,47 @@ export default function BrandsClient() {
         </section>
 
         {/* Infinite Scroll Images Section */}
-        <section className="py-10 md:py-16 overflow-hidden">
+        <section className="pb-12 overflow-hidden">
           <div className="overflow-hidden relative scroll-container-testimonials">
-            <div className="flex justify-center gap-6 animate-scroll-left">
-              {[...brandImages, ...brandImages].map((image, index) => (
-                <div
-                  key={index}
-                  className="flex-shrink-0 w-[120px] h-[72px] md:w-[150px] md:h-[90px] rounded-lg overflow-hidden"
-                >
-                  <Image
-                    src={image}
-                    alt={`Brand image ${index + 1}`}
-                    width={150}
-                    height={90}
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-              ))}
+            <div className="flex justify-center items-center gap-6 animate-scroll-left">
+              {[...brandImages, ...brandImages].map((image, index) => {
+                const isLarge =
+                  image === "/images/vows-streams-logo.avif" ||
+                  image === "/images/song-gpt.logo.avif"
+                const isCatchPhrase = image === "/images/catch-phrase.avif";
+                const allImages = [...brandImages, ...brandImages];
+                const nextImage =
+                  index < allImages.length - 1 ? allImages[index + 1] : null;
+                const isNextToLarge =
+                  (isLarge || isCatchPhrase) &&
+                  nextImage &&
+                  (nextImage === "/images/vows-streams-logo.avif" ||
+                    nextImage === "/images/song-gpt.logo.avif" ||
+                    nextImage === "/images/catch-phrase.avif");
+                return (
+                  <div
+                    key={index}
+                    className={`flex-shrink-0 rounded-lg overflow-hidden flex items-center justify-center ${
+                      isCatchPhrase
+                        ? "w-[160px] h-[96px] md:w-[200px] md:h-[120px]"
+                        : isLarge
+                        ? "w-[180px] h-[108px] md:w-[240px] md:h-[190px]"
+                        : "w-[120px] h-[72px] md:w-[150px] md:h-[90px]"
+                    } ${isNextToLarge ? "-mr-4 md:-mr-8" : ""}`}
+                  >
+                    <Image
+                      src={image}
+                      alt={`Brand image ${index + 1}`}
+                      width={isCatchPhrase ? 200 : isLarge ? 235 : 150}
+                      height={isCatchPhrase ? 120 : isLarge ? 190 : 90}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                );
+              })}
             </div>
           </div>
-          <div className="flex justify-center items-center text-base text-slate-300 mt-8">
+          <div className="flex justify-center items-center text-base text-slate-300 ">
             <span className="font-medium">Trusted by leading brands</span>
           </div>
         </section>
@@ -357,8 +378,9 @@ export default function BrandsClient() {
             {/* Heading */}
 
             <h1
-              className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-up" : "hide-before-animate"
-                }`}
+              className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-up" : "hide-before-animate"
+              }`}
             >
               <span className="text-white">Why Brands Choose </span>
               <span className="bg-gradient-to-r from-purple-500 to-purple-400 bg-clip-text text-transparent">
@@ -371,8 +393,9 @@ export default function BrandsClient() {
             </h1>
 
             <p
-              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-left" : "hide-before-animate"
-                }`}
+              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-left" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "1s" }}
             >
               Simple Steps to Launch your Influencer Marketing Campaign
@@ -452,8 +475,9 @@ export default function BrandsClient() {
         >
           <div className="container mx-auto max-w-[1250px]">
             <h2
-              className={`text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-10 ${howItWorksAnimated ? "slide-up" : "hide-before-animate"
-                }`}
+              className={`text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-10 ${
+                howItWorksAnimated ? "slide-up" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "0.1s" }}
             >
               How it works
@@ -485,21 +509,21 @@ export default function BrandsClient() {
                               ? windowWidth < 1100
                                 ? "320px" // 1000–1099px
                                 : windowWidth < 1250
-                                  ? "300px" // 1100–1249px
-                                  : "266px" // ≥1250px
+                                ? "300px" // 1100–1249px
+                                : "266px" // ≥1250px
                               : index === 1
-                                ? windowWidth < 1100
-                                  ? "270px" // 1000–1099px
-                                  : windowWidth < 1250
-                                    ? "280px" // 1100–1249px
-                                    : "250px" // ≥1250px
-                                : index === 2
-                                  ? windowWidth < 1100
-                                    ? "300px" // 1000–1099px
-                                    : windowWidth < 1250
-                                      ? "270px" // 1100–1249px
-                                      : "180px" // ≥1250px
-                                  : "40px",
+                              ? windowWidth < 1100
+                                ? "270px" // 1000–1099px
+                                : windowWidth < 1250
+                                ? "280px" // 1100–1249px
+                                : "250px" // ≥1250px
+                              : index === 2
+                              ? windowWidth < 1100
+                                ? "300px" // 1000–1099px
+                                : windowWidth < 1250
+                                ? "270px" // 1100–1249px
+                                : "180px" // ≥1250px
+                              : "40px",
                         }}
                       />
                     )}
@@ -528,8 +552,9 @@ export default function BrandsClient() {
                   src={images[currentIndex]}
                   alt={`Step Image ${currentIndex + 1}`}
                   fill
-                  className={`object-cover rounded-xl transition-opacity duration-500 ${fade ? "opacity-100" : "opacity-0"
-                    }`}
+                  className={`object-cover rounded-xl transition-opacity duration-500 ${
+                    fade ? "opacity-100" : "opacity-0"
+                  }`}
                   priority
                 />
               </div>
