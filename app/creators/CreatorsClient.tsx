@@ -1,7 +1,8 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 
 import NumbersSection from "@/components/NumberSection";
 import {
@@ -16,13 +17,27 @@ import {
   Heart,
   Gift,
   Sparkles,
+  Clock,
+  Calendar,
+  DollarSign,
+  Eye,
+  ShoppingBag,
+  Wallet,
+  Coins,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import CtcBanner from "@/components/CtcBanner";
 import Testimonials from "../../components/Testimonials";
 import FAQ from "@/components/FAQ";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
 import { FaDiscord } from "react-icons/fa";
+import { createClient } from "@/utils/supabase/client";
+import { formatLocalDateTime } from "@/lib/utils";
+import { getPlatformIconWithFallback } from "@/lib/platform-icons";
+import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
+import { cn } from "@/lib/utils";
 // Placeholder for social icons image - replace with actual path if different
 import socialPair from "@/public/images/social_pair.avif";
 
@@ -120,7 +135,16 @@ const images: string[] = [
   "/images/844d84fa7fc8646e15494703ec37e2d880bb59e5.avif",
   "/images/fb3e50b77241ebb8e7cd1813fae1eecbe92b7432.avif",
 ];
-export default function CreatorsClient() {
+
+interface CreatorsClientProps {
+  totalViews: number;
+  initialContests?: any[];
+}
+
+export default function CreatorsClient({
+  totalViews,
+  initialContests = [],
+}: CreatorsClientProps) {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [fade, setFade] = useState<boolean>(true);
   const [windowWidth, setWindowWidth] = useState<number>(0);
@@ -134,6 +158,22 @@ export default function CreatorsClient() {
   const [isAnimated, setIsAnimated] = useState(false);
   const howItWorksRef = useRef<HTMLDivElement>(null);
   const [howItWorksAnimated, setHowItWorksAnimated] = useState(false);
+
+  const [contests, setContests] = useState<any[]>(initialContests);
+  const [userType, setUserType] = useState<"creator" | "advertiser" | null>(
+    null
+  );
+  const router = useRouter();
+
+  // Cache management for client-side fetching
+  const fetchCacheRef = useRef<{
+    lastFetch: number;
+    isFetching: boolean;
+  }>({
+    lastFetch: 0,
+    isFetching: false,
+  });
+  const CACHE_DURATION = 86400000; // 1 day cache on client side
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -192,9 +232,410 @@ export default function CreatorsClient() {
     // Set initial width
     handleResize();
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  // Fetch contests function (reusable for both initial and polling)
+  // Includes caching to prevent duplicate requests
+  const fetchContests = useCallback(async () => {
+    const now = Date.now();
+
+    // Check if we're already fetching or if cache is still valid
+    if (
+      fetchCacheRef.current.isFetching ||
+      now - fetchCacheRef.current.lastFetch < CACHE_DURATION
+    ) {
+      return;
+    }
+
+    // Mark as fetching
+    fetchCacheRef.current.isFetching = true;
+    fetchCacheRef.current.lastFetch = now;
+
+    try {
+      const supabase = createClient();
+
+      const { data: contestsData, error } = await supabase
+        .from("contests_with_status")
+        .select(
+          `
+          *,
+          contest_based_details
+        `
+        )
+        .eq("moderation_status", "published")
+        .not("status", "eq", "incomplete")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching contests:", error);
+        return;
+      }
+
+      if (contestsData) {
+        setContests(contestsData);
+      }
+    } catch (error) {
+      console.error("Error fetching contests:", error);
+    } finally {
+      // Mark as not fetching
+      fetchCacheRef.current.isFetching = false;
+    }
+  }, []);
+
+  // Initial fetch and automatic polling for contests
+  useEffect(() => {
+    // Initialize with server-fetched data if available
+    if (initialContests.length > 0) {
+      setContests(initialContests);
+      // Set cache timestamp to prevent immediate refetch
+      fetchCacheRef.current.lastFetch = Date.now();
+    } else {
+      // Fallback: fetch immediately if no initial data
+      fetchContests();
+    }
+
+    // Set up automatic polling every 30 seconds to check for new contests
+    // Cache prevents duplicate requests if called multiple times
+    const pollInterval = setInterval(() => {
+      fetchContests();
+    }, 30000); // 30 seconds
+
+    // Cleanup interval on unmount
+    return () => clearInterval(pollInterval);
+  }, [initialContests.length, fetchContests]);
+
+  // Fetch user type to determine the "View More" link destination
+  useEffect(() => {
+    async function fetchUserType() {
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (user) {
+          const { data: userData } = await supabase
+            .from("users")
+            .select("user_type")
+            .eq("id", user.id)
+            .single();
+
+          if (userData?.user_type) {
+            setUserType(userData.user_type as "creator" | "advertiser");
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user type:", error);
+      }
+    }
+
+    fetchUserType();
+  }, []);
+
+  const handleViewContest = (id: string) => {
+    router.push(`/dashboard/opportunities/${id}`);
+  };
+
+  // Get the "View More" link based on user type
+  const getViewMoreLink = () => {
+    if (userType === "advertiser") {
+      return "/dashboard/contests";
+    }
+    // Default to opportunities for creators or logged out users
+    return "/dashboard/opportunities";
+  };
+
+  // Helper function to get contests with live/upcoming priority, filling with ended if needed
+  const getContestsWithFallback = (sourceContests: any[], limit: number) => {
+    const liveFiltered = sourceContests.filter(
+      (c) => c.status === "active" || c.status === "upcoming"
+    );
+    const endedFiltered = sourceContests.filter((c) => c.status === "ended");
+
+    // If we have enough live/upcoming contests, use only those
+    if (liveFiltered.length >= limit) {
+      return liveFiltered.slice(0, limit);
+    }
+
+    // Otherwise, fill with live/upcoming first, then ended contests
+    return [...liveFiltered, ...endedFiltered].slice(0, limit);
+  };
+
+  // Helper function to get both live and ended contests if live contests exist
+  const getContestsWithLiveAndEnded = (
+    sourceContests: any[],
+    limit: number
+  ) => {
+    const liveFiltered = sourceContests.filter(
+      (c) => c.status === "active" || c.status === "upcoming"
+    );
+    const endedFiltered = sourceContests.filter((c) => c.status === "ended");
+
+    // If there are live contests, include both live and ended
+    if (liveFiltered.length > 0) {
+      return [...liveFiltered, ...endedFiltered].slice(0, limit);
+    }
+
+    // If no live contests, return only ended (up to limit)
+    return endedFiltered.slice(0, limit);
+  };
+
+  // STEP 1: Most Popular contests - MUST get 4 live (active only) contests (compulsory)
+  // Ensure diversity: different platforms and contest types, prioritizing highest budgets
+  const availableForMostPopular = contests.filter((c) => {
+    // Only include active (live) contests - exclude upcoming and ended
+    if (c.status !== "active") {
+      return false;
+    }
+    // Only include contests with a valid budget/prize
+    const value =
+      c.contest_type === "cpm"
+        ? c.contest_based_details?.cpm_contest?.total_budget
+        : c.contest_based_details?.leaderboard_contest?.total_prize;
+    return value && value > 0;
+  });
+
+  const sortedForMostPopular = [...availableForMostPopular].sort((a, b) => {
+    // First: Get budget/prize value
+    const getBudget = (contest: any) => {
+      if (contest.contest_type === "cpm") {
+        return contest.contest_based_details?.cpm_contest?.total_budget || 0;
+      } else if (contest.contest_type === "leaderboard") {
+        return (
+          contest.contest_based_details?.leaderboard_contest?.total_prize || 0
+        );
+      }
+      return 0;
+    };
+
+    // Second: Get CPM rate (only for CPM contests)
+    const getCpmRate = (contest: any) => {
+      if (contest.contest_type === "cpm") {
+        return contest.contest_based_details?.cpm_contest?.cpm_rate_usd || 0;
+      }
+      return 0;
+    };
+
+    const budgetA = getBudget(a);
+    const budgetB = getBudget(b);
+
+    // Primary sort: by budget (descending)
+    if (budgetB !== budgetA) {
+      return budgetB - budgetA;
+    }
+
+    // Secondary sort: by CPM rate for CPM contests (descending)
+    // Higher CPM rate means more money per view
+    const cpmRateA = getCpmRate(a);
+    const cpmRateB = getCpmRate(b);
+    return cpmRateB - cpmRateA;
+  });
+
+  // Get exactly 4 active (live) contests for Most Popular with diversity
+  // Prioritize different platforms and contest types
+  const mostPopularContests: any[] = [];
+  const usedPlatforms = new Set<string>();
+  const usedContestTypes = new Set<string>();
+
+  // First pass: Try to get diverse contests (different platforms/types)
+  for (const contest of sortedForMostPopular) {
+    if (mostPopularContests.length >= 4) break;
+
+    const platform = contest.platform?.toLowerCase() || "unknown";
+    const contestType = contest.contest_type || "unknown";
+
+    // Prefer contests with different platforms and types
+    const isNewPlatform = !usedPlatforms.has(platform);
+    const isNewContestType = !usedContestTypes.has(contestType);
+
+    // If we have less than 4, prioritize diversity
+    if (mostPopularContests.length < 4) {
+      // If it's a new platform or new contest type, add it
+      if (isNewPlatform || isNewContestType) {
+        mostPopularContests.push(contest);
+        usedPlatforms.add(platform);
+        usedContestTypes.add(contestType);
+      }
+    }
+  }
+
+  // Second pass: Fill remaining slots with highest budget contests if we don't have 4 yet
+  if (mostPopularContests.length < 4) {
+    for (const contest of sortedForMostPopular) {
+      if (mostPopularContests.length >= 4) break;
+      // Skip if already added
+      if (!mostPopularContests.find((c) => c.id === contest.id)) {
+        mostPopularContests.push(contest);
+        const platform = contest.platform?.toLowerCase() || "unknown";
+        const contestType = contest.contest_type || "unknown";
+        usedPlatforms.add(platform);
+        usedContestTypes.add(contestType);
+      }
+    }
+  }
+
+  // Ensure we have exactly 4 (or as many as available)
+  const finalMostPopularContests = mostPopularContests.slice(0, 4);
+
+  // Get IDs of contests used in Most Popular section
+  const mostPopularContestIds = new Set(
+    finalMostPopularContests.map((c) => c.id)
+  );
+
+  // STEP 2: Instagram and YouTube contests - use remaining contests (active, upcoming, and ended)
+  // Exclude contests already shown in Most Popular section
+  const instagramContests = getContestsWithLiveAndEnded(
+    contests.filter(
+      (c) =>
+        c.platform?.toLowerCase() === "instagram" &&
+        !mostPopularContestIds.has(c.id)
+    ),
+    5
+  );
+  const youtubeContests = getContestsWithLiveAndEnded(
+    contests.filter(
+      (c) =>
+        c.platform?.toLowerCase() === "youtube" &&
+        !mostPopularContestIds.has(c.id)
+    ),
+    5
+  );
+
+  // Calculate total budget for all campaigns (live, upcoming, and ended)
+  const totalBudget = contests.reduce((sum, contest) => {
+    if (contest.contest_type === "cpm") {
+      return (
+        sum + (contest.contest_based_details?.cpm_contest?.total_budget || 0)
+      );
+    } else if (contest.contest_type === "leaderboard") {
+      return (
+        sum +
+        (contest.contest_based_details?.leaderboard_contest?.total_prize || 0)
+      );
+    }
+    return sum;
+  }, 0);
+
+  // Calculate total contests published
+  const totalContests = contests.length;
+
+  const renderContestCard = (contest: any) => {
+    // Calculate budget used percentage
+    let budgetUsedPercent = 0;
+    let totalBudget = 0;
+    let budgetSpent = 0;
+    let cpmRate = null;
+
+    if (contest.contest_type === "cpm") {
+      totalBudget =
+        contest.contest_based_details?.cpm_contest?.total_budget || 0;
+      budgetSpent =
+        contest.contest_based_details?.cpm_contest?.budget_spent || 0;
+      cpmRate = contest.contest_based_details?.cpm_contest?.cpm_rate_usd;
+      if (totalBudget > 0) {
+        budgetUsedPercent = Math.min(
+          Math.round((budgetSpent / totalBudget) * 100),
+          100
+        );
+      }
+    } else if (contest.contest_type === "leaderboard") {
+      totalBudget =
+        contest.contest_based_details?.leaderboard_contest?.total_budget || 0;
+      budgetSpent =
+        contest.contest_based_details?.leaderboard_contest?.budget_spent || 0;
+      if (totalBudget > 0) {
+        budgetUsedPercent = Math.min(
+          Math.round((budgetSpent / totalBudget) * 100),
+          100
+        );
+      }
+    }
+
+    // Get budget/prize amount for display
+    const budgetAmount =
+      contest.contest_type === "cpm"
+        ? contest.contest_based_details?.cpm_contest?.total_budget
+        : contest.contest_based_details?.leaderboard_contest?.total_prize;
+
+    return (
+      <div
+        key={contest.id}
+        onClick={() => handleViewContest(contest.id)}
+        className="relative w-[180px] sm:w-[200px] md:w-[220px] lg:w-[240px] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-700 bg-[#06021D] p-1 pb-2 font-medium transition-transform duration-150 ease-in-out hover:scale-105 hover:border-orange-400 cursor-pointer my-2"
+      >
+        {/* Image */}
+        {contest.thumbnail_url ? (
+          <div className="w-full h-[140px] sm:h-[150px] md:h-[170px] lg:h-[190px] rounded-xl flex items-center justify-center overflow-hidden">
+            <Image
+              src={contest.thumbnail_url}
+              alt={contest.title}
+              width={240}
+              height={190}
+              className="pointer-events-none w-full h-full rounded-xl object-contain"
+            />
+          </div>
+        ) : (
+          <div className="w-full h-[140px] sm:h-[150px] md:h-[170px] lg:h-[190px] rounded-xl bg-slate-800 flex items-center justify-center">
+            <Trophy className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 text-slate-400" />
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="mt-2 flex flex-col items-start px-2">
+          <h3 className="text-xs sm:text-sm md:text-base leading-[1.4] break-words text-white">
+            {contest.title}
+          </h3>
+
+          {/* Budget + CPM Rate */}
+          <div className="mt-3 sm:mt-4 grid min-w-full grid-cols-2 gap-2 text-xs">
+            {/* Budget */}
+            {budgetAmount && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1 text-green-500">
+                  <Wallet className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  <span className="text-xs sm:text-sm font-semibold">
+                    {formatMoney(budgetAmount)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* CPM Rate */}
+            {cpmRate != null && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center truncate text-white">
+                  <Eye className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1" />
+                  <span className="text-xs sm:text-sm">
+                    {formatMoney(cpmRate * 100)}/1k Views
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Budget used text - only show for CPM contests */}
+          {contest.contest_type === "cpm" && totalBudget > 0 && (
+            <span className="mt-1 text-[9px] sm:text-[10px] text-slate-400">
+              {budgetUsedPercent}% budget used
+            </span>
+          )}
+        </div>
+
+        {/* Progress bar - only show for CPM contests */}
+        {contest.contest_type === "cpm" && totalBudget > 0 && (
+          <div className="absolute bottom-0 left-[5px] right-0 h-1">
+            <div
+              className="h-full rounded-tr-full bg-green-500 transition-all"
+              style={{ width: `${budgetUsedPercent}%` }}
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
       <div className="relative z-20">
@@ -233,7 +674,9 @@ export default function CreatorsClient() {
             <div className="inline-grid grid-cols-[auto_1fr] items-center gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-6 sm:py-3 mb-8 max-w-[92vw] sm:max-w-none mx-auto">
               <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white shrink-0" />
               <span className="text-xs sm:text-lg font-semibold bg-white bg-clip-text text-transparent leading-tight whitespace-normal text-left">
-                #1 Gamified Creator Marketing Platform
+                {`${totalViews.toLocaleString(
+                  "en-US"
+                )} views generated so far!`}
               </span>
             </div>
 
@@ -245,8 +688,8 @@ export default function CreatorsClient() {
                   <Image
                     src={socialPair}
                     alt="Social Media Icons"
-                    width={150}
-                    height={40}
+                    width={200}
+                    height={55}
                     className="relative z-10"
                   />
                 </div>
@@ -291,28 +734,25 @@ export default function CreatorsClient() {
               Join{" "}
               <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">
                 Game of Creators
-              </span>
-              {" "}and get paid based on{" "}
+              </span>{" "}
+              and get paid based on{" "}
               <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">
                 views or ranking
-              </span>
-              {" "}— even if you have 0 followers
+              </span>{" "}
+              — even if you have 0 followers
             </p>
 
             {/* Call-to-Action Buttons */}
             <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
               <Link
                 href="/auth/signup"
-
                 onClick={() => {
                   localStorage.setItem("signupRole", "creator");
                 }}
               >
                 <Button className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg">
-
                   <Sparkles className="h-4 w-4" />
-                  <span>Get Started →</span>
-
+                  <span>Start Earning →</span>
                 </Button>
               </Link>
 
@@ -321,11 +761,14 @@ export default function CreatorsClient() {
                 className="rounded-3xl border-2 border-slate-400/40 text-slate-300 font-semibold px-8 py-6 text-lg hover:border-orange-400/50 hover:text-orange-400 transition-all duration-300 bg-transparent hover:bg-slate-800/20 hover:shadow-lg"
                 asChild
               >
-                <a href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N" target="_blank" rel="noopener noreferrer">
+                <a
+                  href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   Watch Demo
                 </a>
               </Button>
-
             </div>
 
             {/* Creator Discord link (replaces social proof line) */}
@@ -343,15 +786,91 @@ export default function CreatorsClient() {
           </div>
         </section>
 
+        {/* Contests Section */}
+        <section className="text-white py-16 px-4 overflow-visible">
+          <div className="max-w-[1400px] mx-auto space-y-12 overflow-visible">
+            {/* Most Popular Contests */}
+            {finalMostPopularContests.length > 0 && (
+              <div className="overflow-visible">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 px-2 sm:px-16 gap-3 sm:gap-0">
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
+                    Most Popular Campaigns
+                  </h2>
+                </div>
 
+                <div className="flex gap-3 sm:gap-4 overflow-x-auto min-[1000px]:flex-wrap min-[1000px]:overflow-x-visible py-4 px-2 sm:px-4 justify-start md:justify-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  {finalMostPopularContests.map(renderContestCard)}
+
+                  {/* Total Budget Card */}
+                  <Link
+                    href={getViewMoreLink()}
+                    className="relative w-[180px] sm:w-[200px] md:w-[220px] lg:w-[240px] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-700 bg-[#06021D] p-2 font-medium transition-transform duration-150 ease-in-out hover:scale-105 hover:border-orange-400 cursor-pointer my-2 flex items-center justify-center"
+                  >
+                    {/* Icon Area (similar to image area) */}
+                    <div className="w-full h-[140px] sm:h-[150px] md:h-[170px] lg:h-[190px] rounded-xl flex flex-col items-center justify-center gap-2">
+                      <div className="relative flex items-center justify-center">
+                        <Wallet className="h-10 w-10 sm:h-12 sm:w-12 md:h-14 md:w-14 text-green-500" />
+                      </div>
+                      <div className="text-lg sm:text-xl md:text-2xl font-bold text-white text-center w-full">
+                        {formatMoney(totalBudget)}
+                      </div>
+                      <h3 className="text-xs sm:text-sm md:text-base leading-[1.4] break-words text-white text-center w-full">
+                        Total Budget
+                      </h3>
+                      <div className="flex items-center justify-center gap-1 text-slate-300 w-full">
+                        <span className="text-xs sm:text-sm text-center">
+                          from {totalContests} campaigns
+                        </span>
+                      </div>
+                      <div className="flex justify-center w-full">
+                        <div className="w-8 h-8 rounded-full border border-slate-600 flex items-center justify-center hover:border-orange-400 transition-colors">
+                          <ArrowRight className="h-4 w-4 text-slate-400" />
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* Instagram Contests */}
+            {/* {instagramContests.length > 0 && (
+              <div className="overflow-visible">
+                <div className="flex items-center justify-start mb-6 px-2 sm:px-16">
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
+                    Instagram Campaigns
+                  </h2>
+                </div>
+                <div className="flex gap-3 sm:gap-4 overflow-x-auto min-[1000px]:flex-wrap min-[1000px]:overflow-x-visible py-4 px-2 sm:px-4 justify-start md:justify-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  {instagramContests.map(renderContestCard)}
+                </div>
+              </div>
+            )} */}
+
+            {/* YouTube Contests */}
+            {/* {youtubeContests.length > 0 && (
+              <div className="overflow-visible">
+                <div className="flex items-center justify-between mb-6 px-2 sm:px-16">
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
+                    YouTube Campaigns
+                  </h2>
+                </div>
+                <div className="flex gap-3 sm:gap-4 overflow-x-auto min-[1000px]:flex-wrap min-[1000px]:overflow-x-visible py-4 px-2 sm:px-4 justify-start md:justify-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  {youtubeContests.map(renderContestCard)}
+                </div>
+              </div>
+            )} */}
+          </div>
+        </section>
 
         {/* Why Join as Creator - Gaming Style */}
         <section className="text-white py-16" ref={animationRef}>
           <div className="max-w-[1200px] mx-auto px-4 md:px-12 xl:px-4 text-center">
             {/* Heading */}
             <h2
-              className={`text-3xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-up" : "hide-before-animate"
-                }`}
+              className={`text-3xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-up" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "0.2s" }}
             >
               Why Join as a{" "}
@@ -360,8 +879,9 @@ export default function CreatorsClient() {
               </span>
             </h2>
             <p
-              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-left" : "hide-before-animate"
-                }`}
+              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-left" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "1s" }}
             >
               Unlock your creative potential and monetise your passion
@@ -395,7 +915,7 @@ export default function CreatorsClient() {
               ].map((item) => (
                 <div
                   key={item.number}
-                  className="cursor-pointer relative border border-gray-500 rounded-xl p-[40px] flex flex-col items-center text-center hover:shadow-lg transition overflow-hidden group"
+                  className="cursor-pointer relative border border-gray-500 rounded-xl p-[50px] flex flex-col items-center text-center hover:shadow-lg transition overflow-hidden group"
                 >
                   <div
                     className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
@@ -435,32 +955,33 @@ export default function CreatorsClient() {
         </section>
 
         {/* Gaming How It Works */}
-        <section
+        {/* <section
           className="py-16 px-4 md:px-16 xl:px-4 text-white"
           ref={howItWorksRef}
         >
           <div className="container mx-auto max-w-[1250px]">
             <h2
-              className={`text-center text-2xl md:text-4xl font-bold mb-[50px] ${howItWorksAnimated ? "slide-up" : "hide-before-animate"
-                }`}
+              className={`text-center text-2xl md:text-4xl font-bold mb-[50px] ${
+                howItWorksAnimated ? "slide-up" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "0.1s" }}
             >
               How it works
             </h2>
 
             <div className="grid lg:grid-cols-2 gap-10 items-start">
-              {/* Steps */}
+             
               <div className="space-y-[90px] relative z-10">
                 {creatorsteps.map((step, index) => (
                   <div key={index} className="flex items-start gap-6 relative">
-                    {/* Circle */}
+                    
                     <div
                       className={`w-16 h-16 md:w-[90px] md:h-[90px] rounded-full flex items-center justify-center text-white font-bold text-lg md:text-2xl ${step.color} flex-shrink-0 relative z-10`}
                     >
                       {step.number}
                     </div>
 
-                    {/* Dotted line - hidden on small screens */}
+                    
                     {index < creatorsteps.length - 1 && (
                       <div
                         className="hidden lg:block absolute left-6 md:left-[45px] w-px border-l-2 border-dotted border-gray-500 z-0"
@@ -469,29 +990,29 @@ export default function CreatorsClient() {
                           height:
                             index === 0
                               ? windowWidth < 1100
-                                ? "230px" // 1000–1099px
+                                ? "230px" 
                                 : windowWidth < 1250
-                                  ? "200px" // 1100–1249px
-                                  : "180px" // ≥1250px
+                                ? "200px" 
+                                : "180px" 
                               : index === 1
-                                ? windowWidth < 1100
-                                  ? "200px" // 1000–1099px
-                                  : windowWidth < 1250
-                                    ? "200px" // 1100–1249px
-                                    : "180px" // ≥1250px
-                                : index === 2
-                                  ? windowWidth < 1100
-                                    ? "230px" // 1000–1099px
-                                    : windowWidth < 1250
-                                      ? "200px" // 1100–1249px
-                                      : "180px" // ≥1250px
-                                  : "40px",
+                              ? windowWidth < 1100
+                                ? "200px" 
+                                : windowWidth < 1250
+                                ? "200px" 
+                                : "180px" 
+                              : index === 2
+                              ? windowWidth < 1100
+                                ? "230px"
+                                : windowWidth < 1250
+                                ? "200px" 
+                                : "180px" 
+                              : "40px",
                         }}
                       />
                     )}
 
                     <div>
-                      {/* Icon box above title */}
+                      
                       <div className="mb-4 w-10 h-10 md:w-12 md:h-12 flex items-center justify-center border border-white rounded-md">
                         <span className="text-white">{step.icon}</span>
                       </div>
@@ -507,18 +1028,146 @@ export default function CreatorsClient() {
                 ))}
               </div>
 
-              {/* Image */}
+             
               <div className="relative w-full h-64 md:h-[900px] rounded-xl overflow-hidden">
                 <Image
                   key={currentIndex}
                   src={images[currentIndex]}
                   alt={`Step Image ${currentIndex + 1}`}
                   fill
-                  className={`object-cover rounded-xl transition-opacity duration-500 ${fade ? "opacity-100" : "opacity-0"
-                    }`}
+                  className={`object-cover rounded-xl transition-opacity duration-500 ${
+                    fade ? "opacity-100" : "opacity-0"
+                  }`}
                   priority={true}
                 />
               </div>
+            </div>
+          </div>
+        </section> */}
+
+        {/* How it Works - New Design */}
+        <section
+          className="py-16 px-4 md:px-16 xl:px-4 text-white"
+          ref={howItWorksRef}
+        >
+          <div className="container mx-auto max-w-[1250px]">
+            <div className="text-center mb-12">
+              <h2
+                className={`text-3xl md:text-5xl text-slate-300 font-bold max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
+                  howItWorksAnimated ? "slide-up" : "hide-before-animate"
+                }`}
+                style={{ animationDelay: "0.1s" }}
+              >
+                How it{" "}
+                <span className="bg-gradient-to-r from-orange-500 to-yellow-500 bg-clip-text text-transparent">
+                  works
+                </span>
+              </h2>
+              <p
+                className={`text-lg md:text-xl text-gray-300 ${
+                  howItWorksAnimated ? "slide-left" : "hide-before-animate"
+                }`}
+                style={{ animationDelay: "0.5s" }}
+              >
+                The easiest way to get paid for your content.
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-8 mb-12">
+              {/* Link Account Card */}
+              <div className="group relative rounded-2xl border border-[#FFB366]/70 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_26px_70px_rgba(255,179,102,0.6)] hover:border-[#FF8C42] hover:ring-2 hover:ring-[#FFB366]/60">
+                <div className="relative w-full h-80 md:h-96 bg-slate-900/10 overflow-hidden">
+                  {/* light gradient only at bottom for text readability */}
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
+                  <Image
+                    src="/images/link---account.avif"
+                    alt="Link account"
+                    fill
+                    className="object-contain group-hover:scale-[1.06] transition-transform duration-700 ease-out"
+                  />
+                </div>
+
+                <div className="relative p-7 flex flex-col gap-4 flex-1">
+                  {/* accent bar */}
+                  <div className="h-0.5 w-10 rounded-full bg-gradient-to-r from-[#FFD700] via-[#FFB366] to-[#FF8C42] mb-1 group-hover:w-16 transition-all duration-500" />
+
+                  <h3 className="font-semibold text-lg lg:text-xl text-slate-50 group-hover:text-[#FFB366] transition-colors duration-300">
+                    Link account
+                  </h3>
+                  <p className="text-sm lg:text-[15px] text-slate-300/90 leading-relaxed group-hover:text-slate-100 transition-colors">
+                    Connect your social profiles to Game of Creators to verify
+                    ownership.
+                  </p>
+                </div>
+              </div>
+
+              {/* Submit Content Card */}
+              <div className="group relative rounded-2xl border border-[#FFB366]/70 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_26px_70px_rgba(255,179,102,0.6)] hover:border-[#FF8C42] hover:ring-2 hover:ring-[#FFB366]/60">
+                <div className="relative w-full h-80 md:h-96 bg-slate-900/10 overflow-hidden">
+                  {/* light gradient only at bottom for text readability */}
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
+                  <Image
+                    src="/images/content.avif"
+                    alt="Submit content"
+                    fill
+                    className="object-contain group-hover:scale-[1.06] transition-transform duration-700 ease-out"
+                  />
+                </div>
+
+                <div className="relative p-7 flex flex-col gap-4 flex-1">
+                  {/* accent bar */}
+                  <div className="h-0.5 w-10 rounded-full bg-gradient-to-r from-[#FFD700] via-[#FFB366] to-[#FF8C42] mb-1 group-hover:w-16 transition-all duration-500" />
+
+                  <h3 className="font-semibold text-lg lg:text-xl text-slate-50 group-hover:text-[#FFB366] transition-colors duration-300">
+                    Submit content
+                  </h3>
+                  <p className="text-sm lg:text-[15px] text-slate-300/90 leading-relaxed group-hover:text-slate-100 transition-colors">
+                    Create and post content, then submit your link to start
+                    tracking views.
+                  </p>
+                </div>
+              </div>
+
+              {/* Get Paid Card */}
+              <div className="group relative rounded-2xl border border-[#FFB366]/70 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_26px_70px_rgba(255,179,102,0.6)] hover:border-[#FF8C42] hover:ring-2 hover:ring-[#FFB366]/60">
+                <div className="relative w-full h-80 md:h-96 bg-slate-900/10 overflow-hidden">
+                  {/* light gradient only at bottom for text readability */}
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
+                  <Image
+                    src="/images/balance.avif"
+                    alt="Get paid"
+                    fill
+                    className="object-contain group-hover:scale-[1.06] transition-transform duration-700 ease-out"
+                  />
+                </div>
+
+                <div className="relative p-7 flex flex-col gap-4 flex-1">
+                  {/* accent bar */}
+                  <div className="h-0.5 w-10 rounded-full bg-gradient-to-r from-[#FFD700] via-[#FFB366] to-[#FF8C42] mb-1 group-hover:w-16 transition-all duration-500" />
+
+                  <h3 className="font-semibold text-lg lg:text-xl text-slate-50 group-hover:text-[#FFB366] transition-colors duration-300">
+                    Get paid
+                  </h3>
+                  <p className="text-sm lg:text-[15px] text-slate-300/90 leading-relaxed group-hover:text-slate-100 transition-colors">
+                    Earn automatically for every verified view your content
+                    generates.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Start Earning Button */}
+            <div className="text-center">
+              <Link
+                href="/auth/signup"
+                onClick={() => {
+                  localStorage.setItem("signupRole", "creator");
+                }}
+              >
+                <Button className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg">
+                  Start earning
+                </Button>
+              </Link>
             </div>
           </div>
         </section>

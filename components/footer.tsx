@@ -154,6 +154,16 @@ export function Footer() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <a
+                  href="https://www.linkedin.com/in/visheshgupta2/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline hover:text-white transition-colors duration-200"
+                >
+                  Jobs
+                </a>
+              </li>
             </ul>
           </nav>
 

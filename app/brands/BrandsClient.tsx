@@ -81,6 +81,21 @@ const images: string[] = [
   "/images/Property 1=Rectangle 2725.avif",
   "/images/f96e2b44b8e51e5813eb9cc1fa2600d8249d865b.avif",
 ];
+
+const brandImages: string[] = [
+  "/images/song-gpt.logo.avif",
+  "/images/vows-streams-logo.avif",
+  "/images/catch-phrase.avif",
+  "/images/deepvid.avif",
+  "/images/warner-music.avif",
+  "/images/sony.avif",
+  "/images/10k-projects.avif",
+  "/images/ada.avif",
+  "/images/artistpg.avif",
+  "/images/capital-music.avif",
+  "/images/create-music-group.avif",
+  "/images/empire-distribution.avif",
+];
 export default function BrandsClient() {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [fade, setFade] = useState<boolean>(true);
@@ -150,15 +165,15 @@ export default function BrandsClient() {
     // Set initial width
     handleResize();
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   return (
     <div className="min-h-screen bg-[#000825] text-white overflow-hidden">
       <div className="relative z-20">
         {/* Floating Gaming Elements */}
-        <section className="pt-20 pb-20 md:pt-28 md:pb-24 relative overflow-hidden">
+        <section className="pt-20 pb-20 relative overflow-hidden">
           {/* Strategic Background Elements */}
 
           {/* Floating Creative Elements */}
@@ -259,12 +274,12 @@ export default function BrandsClient() {
               Launch strategic{" "}
               <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">
                 creator contests
-              </span>
-              {" "}and drive organic viral marketing with{" "}
+              </span>{" "}
+              and drive organic viral marketing with{" "}
               <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">
                 1000s of creators
-              </span>
-              {" "}producing content that scales your brand's reach.
+              </span>{" "}
+              producing content that scales your brand's reach.
             </p>
           </div>
 
@@ -277,14 +292,83 @@ export default function BrandsClient() {
               className="rounded-3xl border-2 border-slate-400/40 text-slate-300 font-semibold px-8 py-6 text-lg hover:border-purple-400/50 hover:text-purple-400 transition-all duration-300 bg-transparent hover:bg-slate-800/20 hover:shadow-lg"
               asChild
             >
-              <a href="https://youtu.be/hlQ1kXSmNvQ?si=wNjmnRgr43CNlPnx" target="_blank" rel="noopener noreferrer">
+              <a
+                href="https://youtu.be/hlQ1kXSmNvQ?si=wNjmnRgr43CNlPnx"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 Watch Demo
+              </a>
+            </Button>
+          </div>
+
+          {/* Launch Campaign - always visible, direct link to form */}
+          <div className="flex justify-center items-center mb-8">
+            <Button
+              variant="outline"
+              className="rounded-full border border-amber-500/50 text-amber-400 font-medium px-4 py-2 text-sm hover:border-amber-400 hover:text-amber-300 transition-all duration-300 bg-transparent hover:bg-amber-500/10"
+              asChild
+            >
+              <a
+                href="https://docs.google.com/forms/d/e/1FAIpQLSf7C6hOBIr90e8pBDt9mMo4AzJaFM0Dlbud-EleVIPtuCC68A/viewform"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Launch Your First Campaign — Get 50% Off
               </a>
             </Button>
           </div>
           {/* Social Proof */}
           <div className="flex justify-center items-center text-base text-slate-300 mb-8">
-            <span className="font-medium">Trusted by 500+ creators and brands</span>
+            <span className="font-medium">
+              Trusted by 500+ creators and brands
+            </span>
+          </div>
+        </section>
+
+        {/* Infinite Scroll Images Section */}
+        <section className="pb-12 overflow-hidden">
+          <div className="overflow-hidden relative scroll-container-testimonials">
+            <div className="flex justify-center items-center gap-6 animate-scroll-left">
+              {[...brandImages, ...brandImages].map((image, index) => {
+                const isLarge =
+                  image === "/images/vows-streams-logo.avif" ||
+                  image === "/images/song-gpt.logo.avif"
+                const isCatchPhrase = image === "/images/catch-phrase.avif";
+                const allImages = [...brandImages, ...brandImages];
+                const nextImage =
+                  index < allImages.length - 1 ? allImages[index + 1] : null;
+                const isNextToLarge =
+                  (isLarge || isCatchPhrase) &&
+                  nextImage &&
+                  (nextImage === "/images/vows-streams-logo.avif" ||
+                    nextImage === "/images/song-gpt.logo.avif" ||
+                    nextImage === "/images/catch-phrase.avif");
+                return (
+                  <div
+                    key={index}
+                    className={`flex-shrink-0 rounded-lg overflow-hidden flex items-center justify-center ${
+                      isCatchPhrase
+                        ? "w-[160px] h-[96px] md:w-[200px] md:h-[120px]"
+                        : isLarge
+                        ? "w-[180px] h-[108px] md:w-[240px] md:h-[190px]"
+                        : "w-[120px] h-[72px] md:w-[150px] md:h-[90px]"
+                    } ${isNextToLarge ? "-mr-4 md:-mr-8" : ""}`}
+                  >
+                    <Image
+                      src={image}
+                      alt={`Brand image ${index + 1}`}
+                      width={isCatchPhrase ? 200 : isLarge ? 235 : 150}
+                      height={isCatchPhrase ? 120 : isLarge ? 190 : 90}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex justify-center items-center text-base text-slate-300 ">
+            <span className="font-medium">Trusted by leading brands</span>
           </div>
         </section>
 
@@ -294,8 +378,9 @@ export default function BrandsClient() {
             {/* Heading */}
 
             <h1
-              className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-up" : "hide-before-animate"
-                }`}
+              className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-up" : "hide-before-animate"
+              }`}
             >
               <span className="text-white">Why Brands Choose </span>
               <span className="bg-gradient-to-r from-purple-500 to-purple-400 bg-clip-text text-transparent">
@@ -308,8 +393,9 @@ export default function BrandsClient() {
             </h1>
 
             <p
-              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-left" : "hide-before-animate"
-                }`}
+              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-left" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "1s" }}
             >
               Simple Steps to Launch your Influencer Marketing Campaign
@@ -383,11 +469,15 @@ export default function BrandsClient() {
         </section>
         {/* Gaming How It Works */}
 
-        <section className="py-16 px-4 md:px-16 xl:px-4 text-white" ref={howItWorksRef}>
+        <section
+          className="py-16 px-4 md:px-16 xl:px-4 text-white"
+          ref={howItWorksRef}
+        >
           <div className="container mx-auto max-w-[1250px]">
             <h2
-              className={`text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-10 ${howItWorksAnimated ? "slide-up" : "hide-before-animate"
-                }`}
+              className={`text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-10 ${
+                howItWorksAnimated ? "slide-up" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "0.1s" }}
             >
               How it works
@@ -419,21 +509,21 @@ export default function BrandsClient() {
                               ? windowWidth < 1100
                                 ? "320px" // 1000–1099px
                                 : windowWidth < 1250
-                                  ? "300px" // 1100–1249px
-                                  : "266px" // ≥1250px
+                                ? "300px" // 1100–1249px
+                                : "266px" // ≥1250px
                               : index === 1
-                                ? windowWidth < 1100
-                                  ? "270px" // 1000–1099px
-                                  : windowWidth < 1250
-                                    ? "280px" // 1100–1249px
-                                    : "250px" // ≥1250px
-                                : index === 2
-                                  ? windowWidth < 1100
-                                    ? "300px" // 1000–1099px
-                                    : windowWidth < 1250
-                                      ? "270px" // 1100–1249px
-                                      : "180px" // ≥1250px
-                                  : "40px",
+                              ? windowWidth < 1100
+                                ? "270px" // 1000–1099px
+                                : windowWidth < 1250
+                                ? "280px" // 1100–1249px
+                                : "250px" // ≥1250px
+                              : index === 2
+                              ? windowWidth < 1100
+                                ? "300px" // 1000–1099px
+                                : windowWidth < 1250
+                                ? "270px" // 1100–1249px
+                                : "180px" // ≥1250px
+                              : "40px",
                         }}
                       />
                     )}
@@ -462,8 +552,9 @@ export default function BrandsClient() {
                   src={images[currentIndex]}
                   alt={`Step Image ${currentIndex + 1}`}
                   fill
-                  className={`object-cover rounded-xl transition-opacity duration-500 ${fade ? "opacity-100" : "opacity-0"
-                    }`}
+                  className={`object-cover rounded-xl transition-opacity duration-500 ${
+                    fade ? "opacity-100" : "opacity-0"
+                  }`}
                   priority
                 />
               </div>

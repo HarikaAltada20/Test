@@ -166,7 +166,7 @@ export default function AdminDashboardClient({
       </div>
 
       {/* Top Summary */}
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {/* Total Contests */}
         <div
           className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
@@ -397,7 +397,7 @@ export default function AdminDashboardClient({
       </div>
 
       {/* Contest Metrics */}
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {/* Total Drafts */}
         <div
           className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
@@ -893,7 +893,7 @@ export default function AdminDashboardClient({
           Submissions Metrics
         </h2>
       </div>
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <div
           className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
             isDark ? "bg-[#170337] text-white" : "bg-white text-black"
@@ -1089,7 +1089,7 @@ export default function AdminDashboardClient({
           Views Metrics
         </h2>
       </div>
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {/* Expected Views */}
         <div
           className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
