@@ -165,6 +165,16 @@ export default function CreatorsClient({
   );
   const router = useRouter();
 
+  // Cache management for client-side fetching
+  const fetchCacheRef = useRef<{
+    lastFetch: number;
+    isFetching: boolean;
+  }>({
+    lastFetch: 0,
+    isFetching: false,
+  });
+  const CACHE_DURATION = 86400000; // 1 day cache on client side
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries, observerInstance) => {
@@ -227,7 +237,22 @@ export default function CreatorsClient({
   }, []);
 
   // Fetch contests function (reusable for both initial and polling)
+  // Includes caching to prevent duplicate requests
   const fetchContests = useCallback(async () => {
+    const now = Date.now();
+
+    // Check if we're already fetching or if cache is still valid
+    if (
+      fetchCacheRef.current.isFetching ||
+      now - fetchCacheRef.current.lastFetch < CACHE_DURATION
+    ) {
+      return;
+    }
+
+    // Mark as fetching
+    fetchCacheRef.current.isFetching = true;
+    fetchCacheRef.current.lastFetch = now;
+
     try {
       const supabase = createClient();
 
@@ -253,6 +278,9 @@ export default function CreatorsClient({
       }
     } catch (error) {
       console.error("Error fetching contests:", error);
+    } finally {
+      // Mark as not fetching
+      fetchCacheRef.current.isFetching = false;
     }
   }, []);
 
@@ -261,12 +289,15 @@ export default function CreatorsClient({
     // Initialize with server-fetched data if available
     if (initialContests.length > 0) {
       setContests(initialContests);
+      // Set cache timestamp to prevent immediate refetch
+      fetchCacheRef.current.lastFetch = Date.now();
     } else {
       // Fallback: fetch immediately if no initial data
       fetchContests();
     }
 
     // Set up automatic polling every 30 seconds to check for new contests
+    // Cache prevents duplicate requests if called multiple times
     const pollInterval = setInterval(() => {
       fetchContests();
     }, 30000); // 30 seconds
