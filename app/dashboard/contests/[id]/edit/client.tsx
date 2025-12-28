@@ -2297,6 +2297,23 @@ export default function EditContestPage({
         }
       }
 
+      // Sync Twitter campaign metrics if this is a Twitter contest and contest_based_details was updated
+      if (
+        !datesOnly &&
+        platform === "twitter" &&
+        updatePayload.contest_based_details?.twitter_campaign
+      ) {
+        try {
+          await fetch(`/api/contests/${contestId}/sync-metrics`, {
+            method: "POST",
+          });
+          console.log("Twitter metrics synced for contest:", contestId);
+        } catch (syncError) {
+          console.error("Error syncing Twitter metrics:", syncError);
+          // Don't fail the request if sync fails
+        }
+      }
+
       // Show success toast
       toast({
         title: datesOnly ? "Contest Dates Updated" : "Contest Updated",

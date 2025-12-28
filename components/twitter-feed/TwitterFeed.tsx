@@ -433,18 +433,28 @@ export function TwitterFeed({
                                         </div>
 
                                         <div className={cn("mt-4 pt-4 border-t", isDark ? "border-gray-700" : "border-gray-200")}>
-                                            <a
-                                                href={tweet.tweet_url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className={cn(
-                                                    "text-sm flex items-center gap-2 hover:underline",
-                                                    isDark ? "text-purple-400" : "text-purple-600"
-                                                )}
-                                            >
-                                                Click to view tweet
-                                                <ExternalLink className="h-3 w-3" />
-                                            </a>
+                                            {tweet.tweet_url ? (
+                                                <a
+                                                    href={tweet.tweet_url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className={cn(
+                                                        "text-sm flex items-center gap-2 hover:underline",
+                                                        isDark ? "text-purple-400" : "text-purple-600"
+                                                    )}
+                                                >
+                                                    Click to view tweet
+                                                    <ExternalLink className="h-3 w-3" />
+                                                </a>
+                                            ) : (
+                                                <span className={cn(
+                                                    "text-sm flex items-center gap-2 opacity-50",
+                                                    isDark ? "text-gray-400" : "text-gray-500"
+                                                )}>
+                                                    Click to view tweet
+                                                    <ExternalLink className="h-3 w-3" />
+                                                </span>
+                                            )}
                                         </div>
                                     </CardContent>
                                 </Card>

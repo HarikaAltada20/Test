@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { syncContestToMetrics } from "@/lib/twitter-metrics-sync";
 
 export async function POST(
   request: Request,
@@ -81,6 +82,34 @@ export async function POST(
 
     if (!data) {
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+    }
+
+    // Sync Twitter campaign metrics if contest_based_details was updated
+    if (updateData.contest_based_details) {
+      try {
+        const { data: updatedContest } = await admin
+          .from("contests")
+          .select("platform, contest_based_details")
+          .eq("id", contestId)
+          .maybeSingle();
+
+        if (
+          updatedContest?.platform === "twitter" &&
+          updatedContest?.contest_based_details?.twitter_campaign
+        ) {
+          await syncContestToMetrics(
+            contestId,
+            updatedContest.contest_based_details.twitter_campaign,
+            admin
+          );
+        }
+      } catch (syncError) {
+        console.error(
+          "[admin/contests/update] Error syncing metrics:",
+          syncError
+        );
+        // Don't fail the request if sync fails
+      }
     }
 
     return NextResponse.json({ success: true });

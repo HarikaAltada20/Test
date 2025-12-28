@@ -4,7 +4,7 @@
  */
 
 export interface TwitterCampaignConfig {
-  campaign_type?: "raid" | "keyword_hashtag" | "awareness";
+  campaign_type?: "raid" | "awareness";
   keywords?: string[];
   mentions?: string[];
   keywords_requirement_mode?: "all" | "any" | "";
@@ -76,9 +76,7 @@ export function buildTwitterCampaignConfig(params: {
     campaign_type:
       contentType === "raid"
         ? "raid"
-        : contentType === "awareness"
-        ? "awareness"
-        : "keyword_hashtag",
+        : "awareness", // Default to awareness for all non-raid campaigns
   };
 
   if (filteredKeywords.length > 0) {
@@ -139,5 +137,17 @@ export function getTwitterMentions(contest: any): string[] {
 export function getTwitterRaidTarget(contest: any) {
   const campaign = getTwitterCampaign(contest);
   return campaign?.raid_target || null;
+}
+
+/**
+ * Extract Twitter/X tweet ID from URL
+ * Handles: https://x.com/username/status/1234567890
+ * Handles: https://twitter.com/username/status/1234567890
+ */
+export function extractTweetId(url: string): string | null {
+  if (!url) return null;
+  const regex = /(?:https?:\/\/)?(?:www\.)?(?:x\.com|twitter\.com)\/\w+\/status\/(\d+)/i;
+  const match = url.match(regex);
+  return match ? match[1] : null;
 }
 

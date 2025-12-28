@@ -2370,6 +2370,19 @@ export default function CreateContestPage({
           console.log("Setting draftId to:", newContestId);
           setDraftId(newContestId);
         }
+
+        // Sync Twitter campaign metrics if this is a Twitter contest
+        if (platform === "twitter" && contestBasedDetails?.twitter_campaign) {
+          try {
+            await fetch(`/api/contests/${newContestId}/sync-metrics`, {
+              method: "POST",
+            });
+            console.log("Twitter metrics synced for contest:", newContestId);
+          } catch (syncError) {
+            console.error("Error syncing Twitter metrics:", syncError);
+            // Don't fail the request if sync fails
+          }
+        }
       }
 
       if (!isDraft) {

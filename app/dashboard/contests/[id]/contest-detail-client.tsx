@@ -67,7 +67,9 @@ import {
   formatCurrencyFromCents as formatMoney,
 } from "@/lib/currency-utils";
 import RejectionReasonModal from "@/components/RejectionReasonModal";
+import TwitterRejectionModal from "@/components/TwitterRejectionModal";
 import PaymentModal from "@/components/PaymentModal";
+import ManualPointsModal from "@/components/ManualPointsModal";
 import { CreatorSubmissionsModal } from "@/components/CreatorSubmissionsModal";
 import { BudgetProgress } from "@/components/BudgetProgress";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -183,16 +185,35 @@ interface Submission {
   id: string;
   created_at: string;
   content_link: string;
-  status: "pending" | "verified" | "rejected" | "paid";
+  status: "pending" | "verified" | "rejected" | "paid" | "mark_bonus_paid" | "mark_both_paid";
   views: number | null;
   other_stats: Record<string, any> | null;
   platform: string | null;
   video_thumbnail_url: string | null;
+  video_title?: string | null; // For YouTube/Instagram video submissions
   creator_display_name: string | null;
   creator_username: string | null;
   creator_avatar_url: string | null;
   creator_id: string | null;
   earnings?: number | null; // Added for earnings display
+  // Twitter-specific fields
+  is_twitter_tweet?: boolean; // Flag to identify Twitter tweets
+  moderation_status?: "pending" | "approved" | "rejected"; // Twitter moderation status
+  manual_points_adjustment?: number; // Manual points adjustment for Twitter tweets
+  manual_points_reason?: string | null; // Reason for manual points adjustment
+  tweet_id?: string; // Twitter tweet ID
+  // Nested creator object for compatibility
+  creator?: {
+    id: string | null;
+    username: string | null;
+    profile_picture_url?: string | null;
+    full_name?: string | null;
+  };
+  // Additional fields that may be present
+  paid?: boolean;
+  paid_at?: string | null;
+  bonus_paid?: boolean;
+  bonus_paid_at?: string | null;
 }
 // --- End Local Type Definitions ---
 
@@ -203,6 +224,20 @@ interface ContestDetailClientProps {
   contestId: string;
   isAdminView?: boolean;
   user?: any; // Add user prop for dynamic [creator] replacement
+  creatorModerationData?: Record<string, {
+    moderation_status?: string;
+    rejection_reason?: string | null;
+    manual_points_adjustment?: number;
+    manual_points_reason?: string | null;
+    total_points?: number;
+    total_eligible_tweets?: number;
+    total_likes?: number;
+    total_replies?: number;
+    total_retweets?: number;
+    total_quote_reposts?: number;
+    total_impressions?: number;
+    current_rank?: number;
+  }>;
 }
 
 
@@ -213,6 +248,7 @@ export default function ContestDetailClient({
   contestId,
   isAdminView = false,
   user,
+  creatorModerationData = {},
 }: ContestDetailClientProps) {
   const supabase = createClient();
   const { toast, toasts } = useToast();
@@ -304,6 +340,21 @@ export default function ContestDetailClient({
   const [pendingRejectionSubmission, setPendingRejectionSubmission] = useState<
     string | null
   >(null);
+
+  // Twitter rejection modal state
+  const [twitterRejectionModalOpen, setTwitterRejectionModalOpen] = useState(false);
+  const [pendingTwitterRejection, setPendingTwitterRejection] = useState<{
+    id: string;
+    type: 'tweet' | 'creator';
+    creatorId?: string;
+    creatorUsername?: string;
+  } | null>(null);
+
+  // Manual points adjustment modal state
+  const [manualPointsModalOpen, setManualPointsModalOpen] = useState(false);
+  const [pendingManualPointsSubmission, setPendingManualPointsSubmission] = useState<
+    { id: string; type: "tweet" | "leaderboard"; creatorId?: string } | null
+  >(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [pendingPaymentSubmission, setPendingPaymentSubmission] = useState<
     string | null
@@ -358,12 +409,28 @@ export default function ContestDetailClient({
   );
 
   // Filter submissions based on active tab
+  // Filter submissions based on active status tab
+  // For Twitter tweets, use moderation_status; for regular submissions, use status
   const filteredSubmissions = currentSubmissions.filter((submission) => {
+    const isTwitterTweet = (submission as any).is_twitter_tweet === true;
+    const statusToCheck = isTwitterTweet
+      ? ((submission as any).moderation_status || "pending")
+      : submission.status;
+
+    // Map Twitter moderation_status to submission status for filtering
+    let mappedStatus = statusToCheck;
+    if (isTwitterTweet) {
+      // Map Twitter moderation_status to submission status equivalents
+      if (statusToCheck === "approved") mappedStatus = "verified";
+      else if (statusToCheck === "rejected") mappedStatus = "rejected";
+      else mappedStatus = "pending"; // pending or null
+    }
+
     if (activeStatusTab === "all") return true;
     if (activeStatusTab === "verified_or_paid") {
-      return submission.status === "verified" || submission.status === "paid";
+      return mappedStatus === "verified" || mappedStatus === "paid";
     }
-    return submission.status === activeStatusTab;
+    return mappedStatus === activeStatusTab;
   });
 
   // Sort filtered submissions
@@ -411,10 +478,121 @@ export default function ContestDetailClient({
   const groupSubmissionsByCreator = useMemo(() => {
     if (!filteredSubmissions || viewMode !== "creator-wise") return null;
 
+    // Check if this is a Twitter leaderboard campaign
+    const isTwitterLeaderboard =
+      ((currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+        currentContest?.contest_format === "text_image" &&
+        currentContest?.contest_type === "leaderboard");
+
+    // For Twitter leaderboard campaigns, use data directly from twitter_campaign_leaderboard
+    if (isTwitterLeaderboard) {
+      const grouped: Record<string, any> = {};
+
+      // Get unique creator IDs from submissions to build the structure
+      const creatorIds = new Set<string>();
+      filteredSubmissions.forEach((submission: any) => {
+        if (submission.creator_id) {
+          creatorIds.add(submission.creator_id);
+        }
+      });
+
+      // Also include creators from leaderboard data who might not have submissions yet
+      Object.keys(creatorModerationData).forEach((creatorId) => {
+        creatorIds.add(creatorId);
+      });
+
+      creatorIds.forEach((creatorId) => {
+        const leaderboardData = creatorModerationData[creatorId] || {};
+        const creatorSubmissions = filteredSubmissions.filter((s: any) => s.creator_id === creatorId);
+        const firstSubmission = creatorSubmissions[0];
+
+        grouped[creatorId] = {
+          creator: {
+            id: creatorId,
+            username: firstSubmission?.creator?.username || "Unknown",
+            profile_picture_url: firstSubmission?.creator?.profile_picture_url || null,
+            full_name: firstSubmission?.creator?.full_name || null,
+          },
+          submissions: creatorSubmissions,
+          totalCount: leaderboardData.total_eligible_tweets || creatorSubmissions.length,
+          statusCounts: {
+            all: creatorSubmissions.length,
+            verified: creatorSubmissions.filter((s: any) =>
+              (s.is_twitter_tweet && (s as any).moderation_status === "approved") ||
+              (!s.is_twitter_tweet && s.status === "verified")
+            ).length,
+            paid: creatorSubmissions.filter((s: any) => s.paid).length,
+            pending: creatorSubmissions.filter((s: any) =>
+              (s.is_twitter_tweet && (!(s as any).moderation_status || (s as any).moderation_status === "pending")) ||
+              (!s.is_twitter_tweet && s.status === "pending")
+            ).length,
+            rejected: creatorSubmissions.filter((s: any) =>
+              (s.is_twitter_tweet && (s as any).moderation_status === "rejected") ||
+              (!s.is_twitter_tweet && s.status === "rejected")
+            ).length,
+            verified_paid: creatorSubmissions.filter((s: any) =>
+              ((s.is_twitter_tweet && (s as any).moderation_status === "approved") ||
+                (!s.is_twitter_tweet && s.status === "verified")) && s.paid
+            ).length,
+          },
+          metrics: {
+            views: 0, // Not applicable for Twitter
+            likes: leaderboardData.total_likes || 0,
+            comments: leaderboardData.total_replies || 0,
+            shares: 0,
+            saves: 0,
+            reach: 0,
+            interactions: 0,
+            retweets: leaderboardData.total_retweets || 0,
+            quote_reposts: leaderboardData.total_quote_reposts || 0,
+            impressions: leaderboardData.total_impressions || 0,
+            points: leaderboardData.total_points || 0,
+            base_points: (leaderboardData.total_points || 0) - (leaderboardData.manual_points_adjustment || 0),
+            manual_points_adjustment: leaderboardData.manual_points_adjustment || 0,
+            manual_points_reason: leaderboardData.manual_points_reason || null,
+          },
+          earnings: { expected: 0, granted: 0 },
+          earningsBeforeCap: 0,
+          bonus: { expected: 0, granted: 0 },
+          firstSubmittedAt: creatorSubmissions.length > 0
+            ? creatorSubmissions[0].created_at
+            : new Date().toISOString(),
+          isCapped: false,
+          creator_moderation_status: leaderboardData.moderation_status || "pending",
+          creator_rejection_reason: leaderboardData.rejection_reason || null,
+          current_rank: leaderboardData.current_rank || null,
+        };
+      });
+
+      // Calculate earnings based on rank for Twitter leaderboard campaigns
+      const contestDetails = currentContest?.contest_based_details?.leaderboard_contest;
+      const prizes = contestDetails?.prizes || [];
+
+      Object.values(grouped).forEach((group: any) => {
+        if (group.current_rank) {
+          const prizeForRank = prizes.find((p: any) => p.position === group.current_rank);
+          if (prizeForRank) {
+            group.earnings.expected = prizeForRank.amount;
+            // Check if creator has paid submissions to set granted earnings
+            const hasPaidSubmissions = group.submissions.some((s: any) => s.paid);
+            if (hasPaidSubmissions) {
+              group.earnings.granted = prizeForRank.amount;
+            }
+          }
+        }
+      });
+
+      return Object.values(grouped);
+    }
+
+    // For non-Twitter leaderboard campaigns, use the original aggregation logic
     const grouped = filteredSubmissions.reduce((acc: any, submission: any) => {
       const creatorId = submission.creator_id;
 
       if (!acc[creatorId]) {
+        // Get creator-level moderation data if available
+        const creatorModeration = creatorModerationData[creatorId] || {};
         acc[creatorId] = {
           creator: {
             id: creatorId,
@@ -441,12 +619,23 @@ export default function ContestDetailClient({
             saves: 0,
             reach: 0,
             interactions: 0,
+            // Twitter-specific metrics
+            retweets: 0,
+            quote_reposts: 0,
+            impressions: 0,
+            points: 0,
+            base_points: 0,
+            manual_points_adjustment: 0,
+            manual_points_reason: null as string | null,
           },
           earnings: { expected: 0, granted: 0 },
           earningsBeforeCap: 0,
           bonus: { expected: 0, granted: 0 },
           firstSubmittedAt: submission.created_at,
           isCapped: false,
+          // Creator-level moderation data
+          creator_moderation_status: creatorModeration.moderation_status || "pending",
+          creator_rejection_reason: creatorModeration.rejection_reason || null,
         };
       }
 
@@ -455,31 +644,62 @@ export default function ContestDetailClient({
       group.totalCount++;
 
       // Update status counts
-      const status = submission.status?.toLowerCase() || "pending";
+      // For Twitter tweets, use moderation_status; for others, use status
+      const isTwitterTweet = submission.is_twitter_tweet || submission.platform?.toLowerCase() === "twitter";
+      const status = isTwitterTweet
+        ? ((submission as any).moderation_status || "pending")?.toLowerCase()
+        : (submission.status?.toLowerCase() || "pending");
+
+      // Map Twitter moderation_status to standard status for counting
+      const normalizedStatus = isTwitterTweet
+        ? (status === "approved" ? "verified" : status === "rejected" ? "rejected" : "pending")
+        : status;
+
       group.statusCounts.all++;
-      if (status === "verified") {
+      if (normalizedStatus === "verified" || normalizedStatus === "approved") {
         group.statusCounts.verified++;
         if (submission.paid) group.statusCounts.verified_paid++;
       }
       if (submission.paid) group.statusCounts.paid++;
-      if (status === "pending") group.statusCounts.pending++;
-      if (status === "rejected") group.statusCounts.rejected++;
+      if (normalizedStatus === "pending") group.statusCounts.pending++;
+      if (normalizedStatus === "rejected") group.statusCounts.rejected++;
 
       // Aggregate metrics
       group.metrics.views += submission.views || 0;
-      group.metrics.likes +=
-        submission.other_stats?.youtube?.likes ||
-        submission.other_stats?.instagram?.likes ||
-        0;
-      group.metrics.comments +=
-        submission.other_stats?.youtube?.comments ||
-        submission.other_stats?.instagram?.comments ||
-        0;
-      group.metrics.shares += submission.other_stats?.instagram?.shares || 0;
-      group.metrics.saves += submission.other_stats?.instagram?.saves || 0;
-      group.metrics.reach += submission.other_stats?.instagram?.reach || 0;
-      group.metrics.interactions +=
-        submission.other_stats?.instagram?.interactions || 0;
+
+      // Reuse isTwitterTweet from above (already declared)
+      if (isTwitterTweet) {
+        // Aggregate Twitter-specific metrics
+        group.metrics.likes += submission.other_stats?.likes || 0;
+        group.metrics.comments += submission.other_stats?.replies || 0;
+        group.metrics.retweets = (group.metrics.retweets || 0) + (submission.other_stats?.retweets || 0);
+        group.metrics.quote_reposts = (group.metrics.quote_reposts || 0) + (submission.other_stats?.quote_reposts || 0);
+        group.metrics.impressions = (group.metrics.impressions || 0) + (submission.other_stats?.impressions || 0);
+        // Don't accumulate points field - it's the total (base + manual), which causes double-counting
+        // Only accumulate base_points and manual_points_adjustment separately
+        // Use base_points directly, don't fallback to points (which is total)
+        group.metrics.base_points = (group.metrics.base_points || 0) + (submission.other_stats?.base_points || 0);
+        group.metrics.manual_points_adjustment = (group.metrics.manual_points_adjustment || 0) + ((submission as any).manual_points_adjustment || 0);
+        // Store manual points reason (use the latest one if multiple)
+        if ((submission as any).manual_points_reason) {
+          group.metrics.manual_points_reason = (submission as any).manual_points_reason;
+        }
+      } else {
+        // Aggregate YouTube/Instagram metrics
+        group.metrics.likes +=
+          submission.other_stats?.youtube?.likes ||
+          submission.other_stats?.instagram?.likes ||
+          0;
+        group.metrics.comments +=
+          submission.other_stats?.youtube?.comments ||
+          submission.other_stats?.instagram?.comments ||
+          0;
+        group.metrics.shares += submission.other_stats?.instagram?.shares || 0;
+        group.metrics.saves += submission.other_stats?.instagram?.saves || 0;
+        group.metrics.reach += submission.other_stats?.instagram?.reach || 0;
+        group.metrics.interactions +=
+          submission.other_stats?.instagram?.interactions || 0;
+      }
 
       // Calculate earnings and bonus
       let expectedEarnings = submission.earnings || 0;
@@ -518,7 +738,19 @@ export default function ContestDetailClient({
 
       // For granted earnings, use ACTUAL earnings from database (which respects cap)
       if (submission.paid) {
-        group.earnings.granted += submission.earnings || 0;
+        // For Twitter leaderboard, prize is per creator, so we'll calculate granted earnings after grouping
+        // For other contests, accumulate earnings per submission
+        if (!isTwitterTweet) {
+          group.earnings.granted += submission.earnings || 0;
+        } else {
+          // For Twitter leaderboard, mark that this creator has paid submissions
+          // We'll set the granted earnings to the prize amount after determining creator rank
+          if (!(group as any).hasPaidSubmissions) {
+            (group as any).hasPaidSubmissions = true;
+            // Store the earnings from the paid submission (should be the prize amount)
+            (group as any).paidEarnings = submission.earnings || 0;
+          }
+        }
       }
 
       // Track uncapped earnings for display purposes
@@ -549,6 +781,48 @@ export default function ContestDetailClient({
       return acc;
     }, {});
 
+    // For Twitter leaderboard contests, calculate expected earnings based on creator rank
+    // Note: isTwitterLeaderboard was already checked above, but we need to check again for non-leaderboard path
+    const isTwitterLeaderboardForEarnings =
+      ((currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+        currentContest?.contest_format === "text_image" &&
+        currentContest?.contest_type === "leaderboard");
+
+    if (isTwitterLeaderboardForEarnings) {
+      // Calculate total points per creator and sort to determine ranks
+      const creatorPointsArray = Object.values(grouped).map((group: any) => ({
+        creatorId: group.creator.id,
+        totalPoints: (group.metrics.base_points || 0) + (group.metrics.manual_points_adjustment || 0),
+        group: group,
+      }));
+
+      // Sort by total points (descending)
+      creatorPointsArray.sort((a, b) => b.totalPoints - a.totalPoints);
+
+      // Get prize structure
+      const contestDetails = currentContest?.contest_based_details?.leaderboard_contest;
+      const prizes = contestDetails?.prizes || [];
+
+      // Assign expected earnings and granted earnings based on creator rank
+      creatorPointsArray.forEach((item, index) => {
+        const rank = index + 1;
+        const prizeForRank = prizes.find((p: any) => p.position === rank);
+        if (prizeForRank) {
+          // Set expected earnings to the prize amount (already in cents)
+          item.group.earnings.expected = prizeForRank.amount;
+
+          // If this creator has any paid submissions, set granted earnings to the prize amount
+          // Use the prize amount (not the stored paidEarnings) since prize is per creator
+          if ((item.group as any).hasPaidSubmissions) {
+            item.group.earnings.granted = prizeForRank.amount;
+          }
+        } else {
+          item.group.earnings.expected = 0;
+        }
+      });
+    }
+
     // Apply earnings cap per creator for expected earnings display
     const maxEarnings = currentContest?.max_earnings_per_creator;
     if (maxEarnings && maxEarnings > 0) {
@@ -565,14 +839,92 @@ export default function ContestDetailClient({
     return Object.values(grouped);
   }, [filteredSubmissions, viewMode, currentContest, activeStatusTab]);
 
+  // Creator ranking for Twitter leaderboard contests (based on total points per creator)
+  const creatorRankingMap = useMemo(() => {
+    // Only calculate for Twitter leaderboard contests
+    const isTwitterLeaderboard =
+      ((currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+        currentContest?.contest_format === "text_image" &&
+        currentContest?.contest_type === "leaderboard");
+
+    if (!isTwitterLeaderboard || !filteredSubmissions || filteredSubmissions.length === 0) {
+      return new Map<string, number>();
+    }
+
+    // Group submissions by creator and calculate total points per creator
+    const creatorPointsMap = new Map<string, number>();
+
+    filteredSubmissions.forEach((submission: any) => {
+      const creatorId = submission.creator_id;
+      if (!creatorId) return;
+
+      const isTwitterTweet = submission.is_twitter_tweet === true;
+      if (!isTwitterTweet) return;
+
+      // Calculate total points for this submission (base + manual)
+      const basePoints = submission.other_stats?.base_points || 0;
+      const manualPoints = (submission as any).manual_points_adjustment || 0;
+      const totalPoints = basePoints + manualPoints;
+
+      // Add to creator's total
+      const currentTotal = creatorPointsMap.get(creatorId) || 0;
+      creatorPointsMap.set(creatorId, currentTotal + totalPoints);
+    });
+
+    // Sort creators by total points (descending) and assign ranks
+    const sortedCreators = Array.from(creatorPointsMap.entries()).sort(
+      (a, b) => b[1] - a[1] // Sort by points descending
+    );
+
+    // Create map: creatorId -> rank (1-based)
+    const rankingMap = new Map<string, number>();
+    sortedCreators.forEach(([creatorId], index) => {
+      rankingMap.set(creatorId, index + 1);
+    });
+
+    return rankingMap;
+  }, [filteredSubmissions, currentContest]);
+
+  // Sort creator groups by total points for Twitter leaderboard contests
+  const sortedCreatorGroups = useMemo(() => {
+    if (!groupSubmissionsByCreator) return [];
+
+    const isTwitterLeaderboard =
+      ((currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+        currentContest?.contest_format === "text_image" &&
+        currentContest?.contest_type === "leaderboard");
+
+    if (isTwitterLeaderboard) {
+      // Sort by total points (descending)
+      return [...groupSubmissionsByCreator].sort((a: any, b: any) => {
+        const totalPointsA = (a.metrics.base_points || 0) + (a.metrics.manual_points_adjustment || 0);
+        const totalPointsB = (b.metrics.base_points || 0) + (b.metrics.manual_points_adjustment || 0);
+        return totalPointsB - totalPointsA; // Descending order
+      });
+    }
+
+    // For other contests, return as-is (may be sorted differently)
+    return groupSubmissionsByCreator;
+  }, [groupSubmissionsByCreator, currentContest]);
+
+  // Check if we should show rejection reason column
+  const showRejectionReasonColumn = useMemo(() => {
+    if (!groupSubmissionsByCreator) return false;
+    return groupSubmissionsByCreator.some((g: any) =>
+      g.creator_rejection_reason || g.statusCounts.rejected > 0
+    );
+  }, [groupSubmissionsByCreator]);
+
   // Pagination calculations for creator-wise view
-  const creatorWiseTotalPages = groupSubmissionsByCreator
-    ? Math.ceil(groupSubmissionsByCreator.length / creatorWiseItemsPerPage)
+  const creatorWiseTotalPages = sortedCreatorGroups
+    ? Math.ceil(sortedCreatorGroups.length / creatorWiseItemsPerPage)
     : 0;
   const creatorWiseHasNextPage = creatorWisePage < creatorWiseTotalPages;
   const creatorWiseHasPreviousPage = creatorWisePage > 1;
-  const paginatedCreatorGroups = groupSubmissionsByCreator
-    ? groupSubmissionsByCreator.slice(
+  const paginatedCreatorGroups = sortedCreatorGroups
+    ? sortedCreatorGroups.slice(
       (creatorWisePage - 1) * creatorWiseItemsPerPage,
       creatorWisePage * creatorWiseItemsPerPage
     )
@@ -689,8 +1041,11 @@ export default function ContestDetailClient({
   };
   const contestStatusBadgeInfo = getStatusBadgeProps(currentContest);
 
-  const getSubmissionStatusBadge = (status: Submission["status"]) => {
-    switch (status) {
+  const getSubmissionStatusBadge = (status: Submission["status"] | string) => {
+    // Map Twitter moderation status to standard status
+    const normalizedStatus = status === "approved" ? "verified" : status;
+
+    switch (normalizedStatus) {
       case "pending":
         return {
           text: "Pending",
@@ -750,6 +1105,28 @@ export default function ContestDetailClient({
       newStatus,
       reason,
     });
+
+    // Check if this is a Twitter tweet - if so, use Twitter moderation endpoint
+    const submission = currentSubmissions.find(s => s.id === submissionId);
+    if ((submission as any)?.is_twitter_tweet) {
+      // Map status to Twitter moderation action
+      // For Twitter tweets, "verified" maps to "approved" in moderation_status
+      if (newStatus === "verified" || (submission as any)?.moderation_status === "approved") {
+        await handleModerateTwitterTweet(submissionId, "approve");
+      } else if (newStatus === "rejected") {
+        await handleModerateTwitterTweet(submissionId, "reject");
+      } else if (newStatus === "pending") {
+        await handleModerateTwitterTweet(submissionId, "pending");
+      } else {
+        toast({
+          title: "Error",
+          description: `Action "${newStatus}" is not supported for Twitter tweets`,
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+
     setIsLoadingSubmission((prev) => ({ ...prev, [submissionId]: true }));
     try {
       const response = await fetch("/api/admin/verify-submission", {
@@ -934,17 +1311,28 @@ export default function ContestDetailClient({
     setRejectionModalOpen(true);
   };
 
-  const handleRejectionConfirm = (reason: string, additionalNotes?: string) => {
+  const handleRejectionConfirm = async (reason: string, additionalNotes?: string) => {
     if (pendingRejectionSubmission) {
       // Combine reason with additional notes if provided
       const fullReason = additionalNotes
         ? `${reason}\n\nAdditional Notes: ${additionalNotes}`
         : reason;
-      handleUpdateSubmissionStatus(
-        pendingRejectionSubmission,
-        "rejected",
-        fullReason
-      );
+
+      // Check if this is a Twitter tweet
+      const submission = currentSubmissions.find(s => s.id === pendingRejectionSubmission);
+      if ((submission as any)?.is_twitter_tweet) {
+        // Use Twitter moderation endpoint
+        await handleModerateTwitterTweet(pendingRejectionSubmission, "reject", fullReason);
+        // Update the reason separately if needed
+        // The moderation endpoint will handle the status update
+      } else {
+        // Use regular submission status update
+        handleUpdateSubmissionStatus(
+          pendingRejectionSubmission,
+          "rejected",
+          fullReason
+        );
+      }
       setRejectionModalOpen(false);
       setPendingRejectionSubmission(null);
     }
@@ -962,6 +1350,18 @@ export default function ContestDetailClient({
     isCustom?: boolean;
   }) => {
     if (pendingPaymentSubmission) {
+      // Check if this is a Twitter tweet - Twitter tweets don't support payment actions
+      const submission = currentSubmissions.find(s => s.id === pendingPaymentSubmission);
+      if ((submission as any)?.is_twitter_tweet) {
+        toast({
+          title: "Error",
+          description: "Payment actions are not supported for Twitter tweets",
+          variant: "destructive",
+        });
+        setPaymentModalOpen(false);
+        setPendingPaymentSubmission(null);
+        return;
+      }
       handleUpdateSubmissionStatus(
         pendingPaymentSubmission,
         "paid",
@@ -1619,6 +2019,203 @@ export default function ContestDetailClient({
         description: "There was an error trying to share this opportunity.",
         variant: "destructive",
       });
+    }
+  };
+
+  // Twitter moderation handlers
+  const handleModerateTwitterTweet = async (tweetId: string, action: "approve" | "reject" | "pending", reason?: string) => {
+    setIsLoadingSubmission((prev) => ({ ...prev, [tweetId]: true }));
+    try {
+      const response = await fetch(
+        `/api/contests/${contestId}/moderate-submission`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            tweetId,
+            action: action === "approve" ? "approve" : action === "reject" ? "reject" : "pending",
+            reason: reason || (action === "reject" ? "Rejected by admin" : null),
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to moderate tweet");
+      }
+
+      // Update local state
+      setCurrentSubmissions((prev) =>
+        prev.map((sub) =>
+          sub.id === tweetId
+            ? {
+              ...sub,
+              moderation_status: action === "approve" ? "approved" : action === "reject" ? "rejected" : "pending",
+            }
+            : sub
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: `Tweet ${action === "approve" ? "approved" : action === "reject" ? "rejected" : "set to pending"} successfully`,
+      });
+
+      // Refresh page after a delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (error: any) {
+      console.error("Error moderating tweet:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to moderate tweet",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingSubmission((prev) => ({ ...prev, [tweetId]: false }));
+    }
+  };
+
+  // Handle Twitter rejection confirmation
+  const handleTwitterRejectionConfirm = async (reason: string, additionalNotes?: string) => {
+    if (!pendingTwitterRejection) return;
+
+    const fullReason = additionalNotes
+      ? `${reason}\n\nAdditional Notes: ${additionalNotes}`
+      : reason;
+
+    if (pendingTwitterRejection.type === 'creator') {
+      // Use creator-level moderation API
+      setIsLoadingSubmission((prev) => ({
+        ...prev,
+        [pendingTwitterRejection.creatorId || '']: true,
+      }));
+
+      try {
+        const response = await fetch(
+          `/api/contests/${contestId}/moderate-creator`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              creatorId: pendingTwitterRejection.creatorId,
+              action: "reject",
+              reason: fullReason,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to reject creator");
+        }
+
+        toast({
+          title: "Success",
+          description: `Creator @${pendingTwitterRejection.creatorUsername || 'creator'} has been rejected`,
+        });
+
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } catch (error: any) {
+        console.error("Error rejecting creator:", error);
+        toast({
+          title: "Error",
+          description: error.message || "Failed to reject creator",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingSubmission((prev) => {
+          const newState = { ...prev };
+          delete newState[pendingTwitterRejection.creatorId || ''];
+          return newState;
+        });
+      }
+    } else {
+      // Reject single tweet
+      await handleModerateTwitterTweet(pendingTwitterRejection.id, "reject", fullReason);
+    }
+
+    setTwitterRejectionModalOpen(false);
+    setPendingTwitterRejection(null);
+  };
+
+  const handleRejectTwitterTweet = (tweetId: string) => {
+    setPendingRejectionSubmission(tweetId);
+    setRejectionModalOpen(true);
+  };
+
+  // Manual points adjustment handler
+  const handleManualPointsConfirm = async (points: number, reason: string) => {
+    if (!pendingManualPointsSubmission) return;
+
+    setIsLoadingSubmission((prev) => ({
+      ...prev,
+      [pendingManualPointsSubmission.id]: true,
+    }));
+
+    try {
+      const response = await fetch(
+        `/api/contests/${contestId}/adjust-manual-points`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            adjustmentType:
+              pendingManualPointsSubmission.type === "tweet"
+                ? "twitter_tweet"
+                : "twitter_leaderboard",
+            tweetId:
+              pendingManualPointsSubmission.type === "tweet"
+                ? pendingManualPointsSubmission.id
+                : undefined,
+            creatorId:
+              pendingManualPointsSubmission.type === "leaderboard"
+                ? pendingManualPointsSubmission.creatorId
+                : undefined,
+            points,
+            reason,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to adjust points");
+      }
+
+      toast({
+        title: "Success",
+        description: `Points adjusted successfully`,
+      });
+
+      setManualPointsModalOpen(false);
+      setPendingManualPointsSubmission(null);
+
+      // Refresh page after a delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (error: any) {
+      console.error("Error adjusting points:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to adjust points",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingSubmission((prev) => ({
+        ...prev,
+        [pendingManualPointsSubmission.id]: false,
+      }));
     }
   };
 
@@ -4954,15 +5551,60 @@ export default function ContestDetailClient({
                             >
                               <TableHead className="w-12">#</TableHead>
                               <TableHead>Creator</TableHead>
-                              <TableHead className="text-center">
-                                Views
-                              </TableHead>
-                              <TableHead className="text-center">
-                                Likes
-                              </TableHead>
-                              <TableHead className="text-center">
-                                Comments
-                              </TableHead>
+                              {/* For Twitter campaigns, show tweet content column */}
+                              {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                currentContest.platform?.toLowerCase() === "x") &&
+                                currentContest.contest_format === "text_image") && (
+                                  <TableHead className="min-w-[200px]">
+                                    Tweet
+                                  </TableHead>
+                                )}
+                              {/* For Twitter campaigns, show different headers */}
+                              {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                currentContest.platform?.toLowerCase() === "x") &&
+                                currentContest.contest_format === "text_image") ? (
+                                <>
+                                  <TableHead className="text-center">
+                                    Total Points
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Base Points
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Manual Points
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Likes
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Replies
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Retweets
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Quote Reposts
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Impressions
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Manual Points Reason
+                                  </TableHead>
+                                </>
+                              ) : (
+                                <>
+                                  <TableHead className="text-center">
+                                    Views
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Likes
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Comments
+                                  </TableHead>
+                                </>
+                              )}
                               {/* Dynamic headers based on contest platform */}
                               {currentContest.platform
                                 ?.toLowerCase()
@@ -4983,12 +5625,23 @@ export default function ContestDetailClient({
                                     {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
                                   </>
                                 )}
-                              <TableHead className="text-center">
-                                Expected Reward
-                              </TableHead>
-                              <TableHead className="text-center">
-                                Reward Granted
-                              </TableHead>
+                              {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
+                              {(!((currentContest.platform?.toLowerCase() === "twitter" ||
+                                currentContest.platform?.toLowerCase() === "x") &&
+                                currentContest.contest_format === "text_image")) ||
+                                (currentContest.contest_type === "leaderboard" &&
+                                  ((currentContest.platform?.toLowerCase() === "twitter" ||
+                                    currentContest.platform?.toLowerCase() === "x") &&
+                                    currentContest.contest_format === "text_image")) ? (
+                                <>
+                                  <TableHead className="text-center">
+                                    Expected Reward
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Reward Granted
+                                  </TableHead>
+                                </>
+                              ) : null}
                               <TableHead className="text-center">
                                 Status
                               </TableHead>
@@ -5006,8 +5659,14 @@ export default function ContestDetailClient({
                                 (currentPage - 1) * itemsPerPage + index;
                               const metrics =
                                 extractPlatformMetrics(submission);
+                              const isTwitterTweet = (submission as any).is_twitter_tweet === true;
+                              const statusToUse = isTwitterTweet
+                                ? ((submission as any).moderation_status || submission.status)
+                                : submission.status;
+                              // Normalize Twitter moderation status to standard status for badge
+                              const normalizedStatusForBadge = statusToUse === "approved" ? "verified" : statusToUse;
                               const submissionStatus = getSubmissionStatusBadge(
-                                submission.status
+                                normalizedStatusForBadge
                               );
                               const isLoading =
                                 isLoadingSubmission[submission.id] || false;
@@ -5025,22 +5684,39 @@ export default function ContestDetailClient({
                                     contestDetails?.prizes &&
                                     Array.isArray(contestDetails.prizes)
                                   ) {
-                                    const currentRank = index + 1; // 1-based ranking
-                                    const prizeForRank =
-                                      contestDetails.prizes.find(
-                                        (prize: any) =>
-                                          prize.position === currentRank
-                                      );
-                                    if (prizeForRank) {
-                                      const prizeAmount = centsToDollars(
-                                        prizeForRank.amount
-                                      );
-                                      return {
-                                        amount: prizeAmount,
-                                        label: "Expected",
-                                        className:
-                                          "text-slate-700 font-semibold",
-                                      };
+                                    // For Twitter leaderboard contests, use creator rank instead of submission rank
+                                    let currentRank: number;
+                                    const isTwitterLeaderboard =
+                                      isTwitterTweet &&
+                                      ((currentContest.platform?.toLowerCase() === "twitter" ||
+                                        currentContest.platform?.toLowerCase() === "x") &&
+                                        currentContest.contest_format === "text_image");
+
+                                    if (isTwitterLeaderboard) {
+                                      // Use creator's rank based on total points
+                                      currentRank = creatorRankingMap.get(submission.creator_id || "") || 0;
+                                    } else {
+                                      // For other platforms, use submission rank
+                                      currentRank = index + 1; // 1-based ranking
+                                    }
+
+                                    if (currentRank > 0) {
+                                      const prizeForRank =
+                                        contestDetails.prizes.find(
+                                          (prize: any) =>
+                                            prize.position === currentRank
+                                        );
+                                      if (prizeForRank) {
+                                        const prizeAmount = centsToDollars(
+                                          prizeForRank.amount
+                                        );
+                                        return {
+                                          amount: prizeAmount,
+                                          label: "Expected",
+                                          className:
+                                            "text-slate-700 font-semibold",
+                                        };
+                                      }
                                     }
                                     return {
                                       amount: 0,
@@ -5103,16 +5779,48 @@ export default function ContestDetailClient({
                                     className: "text-red-600 font-semibold",
                                   };
                                 }
+
+                                // For Twitter leaderboard contests, use creator's prize amount
+                                const isTwitterLeaderboard =
+                                  isTwitterTweet &&
+                                  currentContest.contest_type === "leaderboard" &&
+                                  ((currentContest.platform?.toLowerCase() === "twitter" ||
+                                    currentContest.platform?.toLowerCase() === "x") &&
+                                    currentContest.contest_format === "text_image");
+
                                 if (submission.status === "paid") {
-                                  const dollars = submission.earnings
-                                    ? centsToDollars(submission.earnings)
-                                    : 0;
+                                  let dollars = 0;
+
+                                  if (isTwitterLeaderboard) {
+                                    // For Twitter leaderboard, use creator's prize amount based on rank
+                                    const creatorRank = creatorRankingMap.get(submission.creator_id || "");
+                                    if (creatorRank) {
+                                      const contestDetails = currentContest.contest_based_details?.leaderboard_contest;
+                                      const prizeForRank = contestDetails?.prizes?.find(
+                                        (p: any) => p.position === creatorRank
+                                      );
+                                      if (prizeForRank) {
+                                        dollars = centsToDollars(prizeForRank.amount);
+                                      }
+                                    }
+                                    // Fallback to submission.earnings if rank lookup fails
+                                    if (dollars === 0 && submission.earnings) {
+                                      dollars = centsToDollars(submission.earnings);
+                                    }
+                                  } else {
+                                    // For other contests, use submission.earnings directly
+                                    dollars = submission.earnings
+                                      ? centsToDollars(submission.earnings)
+                                      : 0;
+                                  }
+
                                   return {
                                     amount: dollars,
                                     label: "Paid",
                                     className: "text-blue-600 font-semibold",
                                   };
                                 }
+
                                 if (
                                   submission.earnings !== null &&
                                   submission.earnings !== undefined &&
@@ -5282,84 +5990,407 @@ export default function ContestDetailClient({
                                       </div>
                                     </div>
                                   </TableCell>
-                                  <TableCell className="text-center">
-                                    <div className="flex flex-col items-center">
-                                      <span
-                                        className={cn(
-                                          "font-bold  text-sm",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-slate-900"
-                                        )}
-                                      >
-                                        {formatMetricValue(metrics.views)}
-                                      </span>
-                                      <span
-                                        className={cn(
-                                          "text-xs ",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-slate-500"
-                                        )}
-                                      >
-                                        views
-                                      </span>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-center">
-                                    <div className="flex flex-col items-center">
-                                      <div className="flex items-center gap-1">
-                                        <ThumbsUp className="h-3 w-3 text-purple-400" />
-                                        <span
+                                  {/* For Twitter tweets, show tweet text */}
+                                  {isTwitterTweet && (
+                                    <TableCell className="min-w-[200px] max-w-[300px]">
+                                      <div className="flex flex-col gap-2">
+                                        {/* Tweet type badge */}
+                                        <div className="flex items-center gap-2">
+                                          <Badge
+                                            variant="outline"
+                                            className={cn(
+                                              "text-xs px-2 py-0.5",
+                                              (submission.other_stats?.tweet_type === "reply" ||
+                                                submission.other_stats?.tweet_type === "quote" ||
+                                                submission.other_stats?.tweet_type === "retweet")
+                                                ? "bg-purple-100 text-purple-700 border-purple-300"
+                                                : "bg-blue-100 text-blue-700 border-blue-300"
+                                            )}
+                                          >
+                                            {submission.other_stats?.tweet_type === "reply"
+                                              ? "REPLY"
+                                              : submission.other_stats?.tweet_type === "quote"
+                                                ? "QUOTE"
+                                                : submission.other_stats?.tweet_type === "retweet"
+                                                  ? "RETWEET"
+                                                  : "TWEET"}
+                                          </Badge>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark ? "text-slate-400" : "text-slate-500"
+                                            )}
+                                          >
+                                            from @{submission.creator_username}
+                                          </span>
+                                        </div>
+                                        {/* Tweet text */}
+                                        <p
                                           className={cn(
-                                            "font-bold text-sm",
-                                            isDark
-                                              ? "text-white"
-                                              : "text-slate-900"
+                                            "text-sm line-clamp-3",
+                                            isDark ? "text-white" : "text-slate-900"
                                           )}
+                                          title={submission.other_stats?.tweet_text || submission.video_title || ""}
                                         >
-                                          {formatMetricValue(metrics.likes)}
-                                        </span>
-                                      </div>
-                                      <span
-                                        className={cn(
-                                          "text-xs ",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-slate-500"
+                                          {submission.other_stats?.tweet_text || submission.video_title || "No content"}
+                                        </p>
+                                        {/* View tweet link */}
+                                        {submission.content_link && (
+                                          <a
+                                            href={submission.content_link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={cn(
+                                              "text-xs flex items-center gap-1 hover:underline",
+                                              isDark ? "text-purple-400" : "text-purple-600"
+                                            )}
+                                          >
+                                            Click to view tweet
+                                            <ExternalLink className="h-3 w-3" />
+                                          </a>
                                         )}
-                                      >
-                                        likes
-                                      </span>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-center">
-                                    <div className="flex flex-col items-center">
-                                      <div className="flex items-center gap-1">
-                                        <MessageCircle className="h-3 w-3 text-purple-400" />
-                                        <span
-                                          className={cn(
-                                            "font-bold text-sm",
-                                            isDark
-                                              ? "text-white"
-                                              : "text-slate-900 dark:text-slate-100"
+                                      </div>
+                                    </TableCell>
+                                  )}
+                                  {/* For Twitter tweets, show different metrics */}
+                                  {isTwitterTweet ? (
+                                    <>
+                                      {/* Total Points */}
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <span
+                                            className={cn(
+                                              "font-bold text-sm",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-900"
+                                            )}
+                                          >
+                                            {formatMetricValue(
+                                              (submission.other_stats?.base_points || 0) +
+                                              ((submission as any).manual_points_adjustment || 0)
+                                            )}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            total
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      {/* Base Points */}
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <span
+                                            className={cn(
+                                              "font-bold text-sm",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-900"
+                                            )}
+                                          >
+                                            {formatMetricValue(submission.other_stats?.base_points || submission.other_stats?.points || 0)}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            base
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      {/* Manual Points */}
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <span
+                                            className={cn(
+                                              "font-bold text-sm",
+                                              (submission as any).manual_points_adjustment > 0
+                                                ? "text-green-600"
+                                                : (submission as any).manual_points_adjustment < 0
+                                                  ? "text-red-600"
+                                                  : isDark
+                                                    ? "text-white"
+                                                    : "text-slate-900"
+                                            )}
+                                          >
+                                            {(submission as any).manual_points_adjustment > 0 ? "+" : ""}
+                                            {formatMetricValue((submission as any).manual_points_adjustment || 0)}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            manual
+                                          </span>
+                                          {(submission as any).manual_points_reason && (
+                                            <span
+                                              className={cn(
+                                                "text-xs mt-0.5 italic truncate max-w-[100px]",
+                                                isDark ? "text-slate-400" : "text-slate-600"
+                                              )}
+                                              title={(submission as any).manual_points_reason}
+                                            >
+                                              {(submission as any).manual_points_reason.length > 15
+                                                ? (submission as any).manual_points_reason.substring(0, 15) + "..."
+                                                : (submission as any).manual_points_reason}
+                                            </span>
                                           )}
-                                        >
-                                          {formatMetricValue(metrics.comments)}
-                                        </span>
-                                      </div>
-                                      <span
-                                        className={cn(
-                                          "text-xs ",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-slate-500"
+                                        </div>
+                                      </TableCell>
+                                      {/* Likes */}
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <div className="flex items-center gap-1">
+                                            <ThumbsUp className="h-3 w-3 text-purple-400" />
+                                            <span
+                                              className={cn(
+                                                "font-bold text-sm",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-900"
+                                              )}
+                                            >
+                                              {formatMetricValue(submission.other_stats?.likes || 0)}
+                                            </span>
+                                          </div>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            likes
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      {/* Replies */}
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <div className="flex items-center gap-1">
+                                            <MessageCircle className="h-3 w-3 text-purple-400" />
+                                            <span
+                                              className={cn(
+                                                "font-bold text-sm",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-900"
+                                              )}
+                                            >
+                                              {formatMetricValue(submission.other_stats?.replies || 0)}
+                                            </span>
+                                          </div>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            replies
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      {/* Retweets */}
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <span
+                                            className={cn(
+                                              "font-bold text-sm",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-900"
+                                            )}
+                                          >
+                                            {formatMetricValue(submission.other_stats?.retweets || 0)}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            retweets
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      {/* Quote Reposts */}
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <span
+                                            className={cn(
+                                              "font-bold text-sm",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-900"
+                                            )}
+                                          >
+                                            {formatMetricValue(submission.other_stats?.quote_reposts || 0)}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            quote reposts
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      {/* Impressions */}
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <div className="flex items-center gap-1">
+                                            <Eye className="h-3 w-3 text-purple-400" />
+                                            <span
+                                              className={cn(
+                                                "font-bold text-sm",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-900"
+                                              )}
+                                            >
+                                              {formatMetricValue(submission.other_stats?.impressions || 0)}
+                                            </span>
+                                          </div>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            impressions
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      {/* Manual Points Reason */}
+                                      <TableCell className="text-center">
+                                        {(submission as any).manual_points_reason ? (
+                                          <div className="flex flex-col items-center">
+                                            <span
+                                              className={cn(
+                                                "text-xs italic truncate max-w-[150px]",
+                                                isDark ? "text-slate-400" : "text-slate-600"
+                                              )}
+                                              title={(submission as any).manual_points_reason}
+                                            >
+                                              {(submission as any).manual_points_reason.length > 20
+                                                ? (submission as any).manual_points_reason.substring(0, 20) + "..."
+                                                : (submission as any).manual_points_reason}
+                                            </span>
+                                          </div>
+                                        ) : (
+                                          <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>
+                                            —
+                                          </span>
                                         )}
-                                      >
-                                        comments
-                                      </span>
-                                    </div>
-                                  </TableCell>
+                                      </TableCell>
+                                    </>
+                                  ) : (
+                                    <>
+                                      {/* Regular submissions (YouTube/Instagram) */}
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <span
+                                            className={cn(
+                                              "font-bold  text-sm",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-900"
+                                            )}
+                                          >
+                                            {formatMetricValue(metrics.views)}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs ",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            views
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <div className="flex items-center gap-1">
+                                            <ThumbsUp className="h-3 w-3 text-purple-400" />
+                                            <span
+                                              className={cn(
+                                                "font-bold text-sm",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-900"
+                                              )}
+                                            >
+                                              {formatMetricValue(metrics.likes)}
+                                            </span>
+                                          </div>
+                                          <span
+                                            className={cn(
+                                              "text-xs ",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            likes
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <div className="flex items-center gap-1">
+                                            <MessageCircle className="h-3 w-3 text-purple-400" />
+                                            <span
+                                              className={cn(
+                                                "font-bold text-sm",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-900 dark:text-slate-100"
+                                              )}
+                                            >
+                                              {formatMetricValue(metrics.comments)}
+                                            </span>
+                                          </div>
+                                          <span
+                                            className={cn(
+                                              "text-xs ",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            comments
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                    </>
+                                  )}
                                   {/* Dynamic data cells based on contest platform */}
                                   {currentContest.platform
                                     ?.toLowerCase()
@@ -5391,133 +6422,144 @@ export default function ContestDetailClient({
                                                                         </TableCell> */}
                                       </>
                                     )}
-                                  <TableCell className="text-center">
-                                    <div className="flex flex-col items-center">
-                                      <div className="flex flex-col items-center">
-                                        <span
-                                          className={cn(
-                                            "text-lg font-bold tracking-wide",
-                                            expectedInfo.className.includes(
-                                              "text-slate-500"
-                                            )
-                                              ? isDark
-                                                ? "text-slate-400"
-                                                : "text-slate-500"
-                                              : expectedInfo.className.includes(
-                                                "text-slate-700"
-                                              )
-                                                ? isDark
-                                                  ? "text-slate-200"
-                                                  : "text-slate-700"
-                                                : isDark
+                                  {/* Show reward cells for leaderboard contests, hide for Twitter CPM campaigns */}
+                                  {(!((currentContest.platform?.toLowerCase() === "twitter" ||
+                                    currentContest.platform?.toLowerCase() === "x") &&
+                                    currentContest.contest_format === "text_image")) ||
+                                    (currentContest.contest_type === "leaderboard" &&
+                                      ((currentContest.platform?.toLowerCase() === "twitter" ||
+                                        currentContest.platform?.toLowerCase() === "x") &&
+                                        currentContest.contest_format === "text_image")) ? (
+                                    <>
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <div className="flex flex-col items-center">
+                                            <span
+                                              className={cn(
+                                                "text-lg font-bold tracking-wide",
+                                                expectedInfo.className.includes(
+                                                  "text-slate-500"
+                                                )
+                                                  ? isDark
+                                                    ? "text-slate-400"
+                                                    : "text-slate-500"
+                                                  : expectedInfo.className.includes(
+                                                    "text-slate-700"
+                                                  )
+                                                    ? isDark
+                                                      ? "text-slate-200"
+                                                      : "text-slate-700"
+                                                    : isDark
+                                                      ? "text-white"
+                                                      : "text-slate-900"
+                                              )}
+                                            >
+                                              ${expectedInfo.amount.toFixed(2)}
+                                            </span>
+                                            <span
+                                              className={cn(
+                                                "text-xs uppercase tracking-wide",
+                                                isDark
                                                   ? "text-white"
-                                                  : "text-slate-900"
-                                          )}
-                                        >
-                                          ${expectedInfo.amount.toFixed(2)}
-                                        </span>
-                                        <span
-                                          className={cn(
-                                            "text-xs uppercase tracking-wide",
-                                            isDark
-                                              ? "text-white"
-                                              : "text-slate-800"
-                                          )}
-                                        >
-                                          {expectedInfo.label}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-center">
-                                    <div className="flex flex-col items-center">
-                                      {grantedInfo.amount > 0 ? (
+                                                  : "text-slate-800"
+                                              )}
+                                            >
+                                              {expectedInfo.label}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center">
                                         <div className="flex flex-col items-center">
-                                          <span
-                                            className={cn(
-                                              "text-lg font-bold",
-                                              grantedInfo.className.includes(
-                                                "text-red-600"
-                                              )
-                                                ? isDark
-                                                  ? "text-red-400"
-                                                  : "text-red-600"
-                                                : grantedInfo.className.includes(
-                                                  "text-blue-600"
-                                                )
-                                                  ? isDark
-                                                    ? "text-blue-400"
-                                                    : "text-blue-600"
-                                                  : grantedInfo.className.includes(
-                                                    "text-amber-600"
+                                          {grantedInfo.amount > 0 ? (
+                                            <div className="flex flex-col items-center">
+                                              <span
+                                                className={cn(
+                                                  "text-lg font-bold",
+                                                  grantedInfo.className.includes(
+                                                    "text-red-600"
                                                   )
                                                     ? isDark
-                                                      ? "text-amber-400"
-                                                      : "text-amber-600"
+                                                      ? "text-red-400"
+                                                      : "text-red-600"
                                                     : grantedInfo.className.includes(
-                                                      "text-slate-500"
+                                                      "text-blue-600"
                                                     )
                                                       ? isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-500"
-                                                      : isDark
-                                                        ? "text-white"
-                                                        : "text-slate-900"
-                                            )}
-                                          >
-                                            ${grantedInfo.amount.toFixed(2)}
-                                          </span>
-                                          <span
-                                            className={cn(
-                                              "text-xs uppercase tracking-wide",
-                                              isDark
-                                                ? "text-slate-400"
-                                                : "text-slate-500"
-                                            )}
-                                          >
-                                            {grantedInfo.label}
-                                          </span>
-                                        </div>
-                                      ) : (
-                                        <div className="flex flex-col items-center">
-                                          <span
-                                            className={cn(
-                                              "text-sm font-semibold",
-                                              grantedInfo.className.includes(
-                                                "text-red-600"
-                                              )
-                                                ? isDark
-                                                  ? "text-red-400"
-                                                  : "text-red-600"
-                                                : grantedInfo.className.includes(
-                                                  "text-blue-600"
-                                                )
-                                                  ? isDark
-                                                    ? "text-blue-400"
-                                                    : "text-blue-600"
-                                                  : grantedInfo.className.includes(
-                                                    "text-amber-600"
+                                                        ? "text-blue-400"
+                                                        : "text-blue-600"
+                                                      : grantedInfo.className.includes(
+                                                        "text-amber-600"
+                                                      )
+                                                        ? isDark
+                                                          ? "text-amber-400"
+                                                          : "text-amber-600"
+                                                        : grantedInfo.className.includes(
+                                                          "text-slate-500"
+                                                        )
+                                                          ? isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                          : isDark
+                                                            ? "text-white"
+                                                            : "text-slate-900"
+                                                )}
+                                              >
+                                                ${grantedInfo.amount.toFixed(2)}
+                                              </span>
+                                              <span
+                                                className={cn(
+                                                  "text-xs uppercase tracking-wide",
+                                                  isDark
+                                                    ? "text-slate-400"
+                                                    : "text-slate-500"
+                                                )}
+                                              >
+                                                {grantedInfo.label}
+                                              </span>
+                                            </div>
+                                          ) : (
+                                            <div className="flex flex-col items-center">
+                                              <span
+                                                className={cn(
+                                                  "text-sm font-semibold",
+                                                  grantedInfo.className.includes(
+                                                    "text-red-600"
                                                   )
                                                     ? isDark
-                                                      ? "text-amber-400"
-                                                      : "text-amber-600"
+                                                      ? "text-red-400"
+                                                      : "text-red-600"
                                                     : grantedInfo.className.includes(
-                                                      "text-slate-500"
+                                                      "text-blue-600"
                                                     )
                                                       ? isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-500"
-                                                      : isDark
-                                                        ? "text-white"
-                                                        : "text-slate-900"
-                                            )}
-                                          >
-                                            {grantedInfo.label}
-                                          </span>
+                                                        ? "text-blue-400"
+                                                        : "text-blue-600"
+                                                      : grantedInfo.className.includes(
+                                                        "text-amber-600"
+                                                      )
+                                                        ? isDark
+                                                          ? "text-amber-400"
+                                                          : "text-amber-600"
+                                                        : grantedInfo.className.includes(
+                                                          "text-slate-500"
+                                                        )
+                                                          ? isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                          : isDark
+                                                            ? "text-white"
+                                                            : "text-slate-900"
+                                                )}
+                                              >
+                                                {grantedInfo.label}
+                                              </span>
+                                            </div>
+                                          )}
                                         </div>
-                                      )}
-                                    </div>
-                                  </TableCell>
+                                      </TableCell>
+                                    </>
+                                  ) : null}
                                   <TableCell className="text-center">
                                     <div className="flex flex-col items-center">
                                       <Badge
@@ -5578,73 +6620,144 @@ export default function ContestDetailClient({
                                         )}
                                         align="end"
                                       >
-                                        {currentContest.post_contest_status !==
-                                          "payouts_processed" && (
-                                            <>
-                                              <DropdownMenuLabel className="text-purple-500">
-                                                Change Status
-                                              </DropdownMenuLabel>
-                                              <DropdownMenuSeparator />
-                                            </>
-                                          )}
-                                        {submission.status !== "verified" &&
-                                          currentContest.post_contest_status !==
-                                          "payouts_processed" &&
-                                          (submission.status === "paid" ? (
+                                        {/* Twitter-specific moderation controls */}
+                                        {isTwitterTweet ? (
+                                          <>
+                                            <DropdownMenuLabel className="text-purple-500">
+                                              Moderation
+                                            </DropdownMenuLabel>
+                                            <DropdownMenuSeparator />
+                                            {statusToUse !== "approved" && (
+                                              <DropdownMenuItem
+                                                disabled={isLoading}
+                                                onClick={() =>
+                                                  handleModerateTwitterTweet(
+                                                    submission.id,
+                                                    "approve"
+                                                  )
+                                                }
+                                              >
+                                                <CheckCircle2 className="h-4 w-4 mr-2" />
+                                                Approve Tweet
+                                              </DropdownMenuItem>
+                                            )}
+                                            {statusToUse !== "rejected" && (
+                                              <DropdownMenuItem
+                                                disabled={isLoading}
+                                                onClick={() => {
+                                                  setPendingRejectionSubmission(submission.id);
+                                                  setRejectionModalOpen(true);
+                                                }}
+                                                className="text-red-600"
+                                              >
+                                                <XCircle className="h-4 w-4 mr-2" />
+                                                Reject Tweet
+                                              </DropdownMenuItem>
+                                            )}
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuLabel className="text-purple-500">
+                                              Points
+                                            </DropdownMenuLabel>
                                             <DropdownMenuItem
                                               disabled={isLoading}
-                                              onClick={() =>
-                                                setConfirmReversal({
+                                              onClick={() => {
+                                                setPendingManualPointsSubmission({
                                                   id: submission.id,
-                                                  target: "verified",
-                                                })
-                                              }
+                                                  type: "tweet",
+                                                });
+                                                setManualPointsModalOpen(true);
+                                              }}
                                             >
-                                              Mark as Verified
+                                              <Star className="h-4 w-4 mr-2" />
+                                              Adjust Tweet Points
                                             </DropdownMenuItem>
-                                          ) : (
                                             <DropdownMenuItem
                                               disabled={isLoading}
-                                              onClick={() =>
-                                                handleUpdateSubmissionStatus(
-                                                  submission.id,
-                                                  "verified"
-                                                )
-                                              }
-                                            >
-                                              Mark as Verified
-                                            </DropdownMenuItem>
-                                          ))}
-                                        {submission.status !== "rejected" &&
-                                          currentContest.post_contest_status !==
-                                          "payouts_processed" &&
-                                          (submission.status === "paid" ? (
-                                            <DropdownMenuItem
-                                              disabled={isLoading}
-                                              onClick={() =>
-                                                setConfirmReversal({
+                                              onClick={() => {
+                                                setPendingManualPointsSubmission({
                                                   id: submission.id,
-                                                  target: "rejected",
-                                                  needRejectionReason: true,
-                                                })
-                                              }
-                                              className="text-red-600"
+                                                  type: "leaderboard",
+                                                  creatorId: submission.creator_id || undefined,
+                                                });
+                                                setManualPointsModalOpen(true);
+                                              }}
                                             >
-                                              Mark as Rejected
+                                              <Users className="h-4 w-4 mr-2" />
+                                              Adjust Creator Points (All Tweets)
                                             </DropdownMenuItem>
-                                          ) : (
-                                            <DropdownMenuItem
-                                              disabled={isLoading}
-                                              onClick={() =>
-                                                handleRejectSubmission(
-                                                  submission.id
-                                                )
-                                              }
-                                              className="text-red-600"
-                                            >
-                                              Mark as Rejected
-                                            </DropdownMenuItem>
-                                          ))}
+                                          </>
+                                        ) : (
+                                          <>
+                                            {/* Regular submission controls */}
+                                            {currentContest.post_contest_status !==
+                                              "payouts_processed" && (
+                                                <>
+                                                  <DropdownMenuLabel className="text-purple-500">
+                                                    Change Status
+                                                  </DropdownMenuLabel>
+                                                  <DropdownMenuSeparator />
+                                                </>
+                                              )}
+                                            {submission.status !== "verified" &&
+                                              currentContest.post_contest_status !==
+                                              "payouts_processed" &&
+                                              (submission.status === "paid" ? (
+                                                <DropdownMenuItem
+                                                  disabled={isLoading}
+                                                  onClick={() =>
+                                                    setConfirmReversal({
+                                                      id: submission.id,
+                                                      target: "verified",
+                                                    })
+                                                  }
+                                                >
+                                                  Mark as Verified
+                                                </DropdownMenuItem>
+                                              ) : (
+                                                <DropdownMenuItem
+                                                  disabled={isLoading}
+                                                  onClick={() =>
+                                                    handleUpdateSubmissionStatus(
+                                                      submission.id,
+                                                      "verified"
+                                                    )
+                                                  }
+                                                >
+                                                  Mark as Verified
+                                                </DropdownMenuItem>
+                                              ))}
+                                            {submission.status !== "rejected" &&
+                                              currentContest.post_contest_status !==
+                                              "payouts_processed" &&
+                                              (submission.status === "paid" ? (
+                                                <DropdownMenuItem
+                                                  disabled={isLoading}
+                                                  onClick={() =>
+                                                    setConfirmReversal({
+                                                      id: submission.id,
+                                                      target: "rejected",
+                                                      needRejectionReason: true,
+                                                    })
+                                                  }
+                                                  className="text-red-600"
+                                                >
+                                                  Mark as Rejected
+                                                </DropdownMenuItem>
+                                              ) : (
+                                                <DropdownMenuItem
+                                                  disabled={isLoading}
+                                                  onClick={() =>
+                                                    handleRejectSubmission(
+                                                      submission.id
+                                                    )
+                                                  }
+                                                  className="text-red-600"
+                                                >
+                                                  Mark as Rejected
+                                                </DropdownMenuItem>
+                                              ))}
+                                          </>
+                                        )}
                                         {submission.status !== "pending" &&
                                           currentContest.post_contest_status !==
                                           "payouts_processed" &&
@@ -5673,6 +6786,7 @@ export default function ContestDetailClient({
                                               Set to Pending
                                             </DropdownMenuItem>
                                           ))}
+                                        {/* Show payment options for all submissions in verification/payout stages, including Twitter leaderboard contests */}
                                         {submission.status !== "paid" &&
                                           isAdminView &&
                                           (currentContest.post_contest_status ===
@@ -5680,7 +6794,10 @@ export default function ContestDetailClient({
                                             currentContest.post_contest_status ===
                                             "verification_complete" ||
                                             currentContest.post_contest_status ===
-                                            "payouts_processed") && (
+                                            "payouts_processed") &&
+                                          // For Twitter tweets, only show payment options for leaderboard contests
+                                          (!isTwitterTweet ||
+                                            (isTwitterTweet && currentContest.contest_type === "leaderboard")) && (
                                             <>
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -5772,21 +6889,66 @@ export default function ContestDetailClient({
                                 <TableHead className="text-center">
                                   Status
                                 </TableHead>
-                                <TableHead className="text-center">
-                                  Views
-                                </TableHead>
-                                <TableHead className="text-center">
-                                  Likes
-                                </TableHead>
-                                <TableHead className="text-center">
-                                  Comments
-                                </TableHead>
-                                <TableHead className="text-center">
-                                  Expected Reward
-                                </TableHead>
-                                <TableHead className="text-center">
-                                  Reward Granted
-                                </TableHead>
+                                {/* For Twitter campaigns, show Twitter-specific metrics */}
+                                {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                  currentContest.platform?.toLowerCase() === "x") &&
+                                  currentContest.contest_format === "text_image") ? (
+                                  <>
+                                    <TableHead className="text-center">
+                                      Total Points
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      Base Points
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      Manual Points
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      Likes
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      Replies
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      Retweets
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      Quote Reposts
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      Impressions
+                                    </TableHead>
+                                  </>
+                                ) : (
+                                  <>
+                                    <TableHead className="text-center">
+                                      Views
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      Likes
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      Comments
+                                    </TableHead>
+                                  </>
+                                )}
+                                {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
+                                {(!((currentContest.platform?.toLowerCase() === "twitter" ||
+                                  currentContest.platform?.toLowerCase() === "x") &&
+                                  currentContest.contest_format === "text_image")) ||
+                                  (currentContest.contest_type === "leaderboard" &&
+                                    ((currentContest.platform?.toLowerCase() === "twitter" ||
+                                      currentContest.platform?.toLowerCase() === "x") &&
+                                      currentContest.contest_format === "text_image")) ? (
+                                  <>
+                                    <TableHead className="text-center">
+                                      Expected Reward
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      Reward Granted
+                                    </TableHead>
+                                  </>
+                                ) : null}
                                 {(() => {
                                   const flatFeeBonus =
                                     currentContest.contest_type === "cpm"
@@ -5807,6 +6969,26 @@ export default function ContestDetailClient({
                                       </TableHead>
                                     </>
                                   )}
+                                {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard campaigns */}
+                                {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                  currentContest.platform?.toLowerCase() === "x") &&
+                                  currentContest.contest_format === "text_image" &&
+                                  currentContest.contest_type === "leaderboard") && (
+                                    <>
+                                      <TableHead className="text-center">
+                                        Manual Points Adjustment
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Manual Points Reason
+                                      </TableHead>
+                                    </>
+                                  )}
+                                {/* Rejection Reason Column - Show if there are any rejected creators */}
+                                {showRejectionReasonColumn && (
+                                  <TableHead className="text-center">
+                                    Rejection Reason
+                                  </TableHead>
+                                )}
                                 <TableHead className="text-center">
                                   First Submitted
                                 </TableHead>
@@ -5862,69 +7044,185 @@ export default function ContestDetailClient({
                                           {group.totalCount}
                                         </TableCell>
                                         <TableCell>
-                                          <div className="flex flex-wrap gap-1 justify-center">
-                                            <Badge
-                                              variant="outline"
-                                              className="text-xs"
-                                            >
-                                              All: {group.statusCounts.all}
-                                            </Badge>
-                                            {group.statusCounts.verified >
-                                              0 && (
-                                                <Badge className="bg-green-500 text-white text-xs">
-                                                  V: {group.statusCounts.verified}
+                                          <div className="flex flex-col items-center gap-1">
+                                            {/* Creator-level moderation status for Twitter campaigns */}
+                                            {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                              currentContest.platform?.toLowerCase() === "x") &&
+                                              currentContest.contest_format === "text_image" &&
+                                              group.creator_moderation_status) ? (
+                                              <>
+                                                {group.creator_moderation_status === "rejected" ? (
+                                                  <Badge className="bg-red-500 text-white text-xs">
+                                                    Rejected
+                                                  </Badge>
+                                                ) : group.creator_moderation_status === "approved" ? (
+                                                  <Badge className="bg-green-500 text-white text-xs">
+                                                    Approved
+                                                  </Badge>
+                                                ) : (
+                                                  <Badge className="bg-yellow-500 text-white text-xs">
+                                                    Pending
+                                                  </Badge>
+                                                )}
+                                                {group.creator_rejection_reason && (
+                                                  <span
+                                                    className={cn(
+                                                      "text-xs italic truncate max-w-[150px] text-center",
+                                                      isDark ? "text-red-400" : "text-red-600"
+                                                    )}
+                                                    title={group.creator_rejection_reason}
+                                                  >
+                                                    {group.creator_rejection_reason.length > 20
+                                                      ? group.creator_rejection_reason.substring(0, 20) + "..."
+                                                      : group.creator_rejection_reason}
+                                                  </span>
+                                                )}
+                                              </>
+                                            ) : (
+                                              <div className="flex flex-wrap gap-1 justify-center">
+                                                <Badge
+                                                  variant="outline"
+                                                  className="text-xs"
+                                                >
+                                                  All: {group.statusCounts.all}
                                                 </Badge>
-                                              )}
-                                            {group.statusCounts.paid > 0 && (
-                                              <Badge className="bg-blue-500 text-white text-xs">
-                                                P: {group.statusCounts.paid}
-                                              </Badge>
+                                                {group.statusCounts.verified >
+                                                  0 && (
+                                                    <Badge className="bg-green-500 text-white text-xs">
+                                                      V: {group.statusCounts.verified}
+                                                    </Badge>
+                                                  )}
+                                                {group.statusCounts.paid > 0 && (
+                                                  <Badge className="bg-blue-500 text-white text-xs">
+                                                    P: {group.statusCounts.paid}
+                                                  </Badge>
+                                                )}
+                                                {group.statusCounts.pending > 0 && (
+                                                  <Badge className="bg-yellow-500 text-white text-xs">
+                                                    Pend:{" "}
+                                                    {group.statusCounts.pending}
+                                                  </Badge>
+                                                )}
+                                                {group.statusCounts.rejected >
+                                                  0 && (
+                                                    <Badge className="bg-red-500 text-white text-xs">
+                                                      R: {group.statusCounts.rejected}
+                                                    </Badge>
+                                                  )}
+                                              </div>
                                             )}
-                                            {group.statusCounts.pending > 0 && (
-                                              <Badge className="bg-yellow-500 text-white text-xs">
-                                                Pend:{" "}
-                                                {group.statusCounts.pending}
-                                              </Badge>
-                                            )}
-                                            {group.statusCounts.rejected >
-                                              0 && (
-                                                <Badge className="bg-red-500 text-white text-xs">
-                                                  R: {group.statusCounts.rejected}
-                                                </Badge>
-                                              )}
                                           </div>
                                         </TableCell>
-                                        <TableCell className="text-center">
-                                          {group.metrics.views.toLocaleString()}
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                          {group.metrics.likes.toLocaleString()}
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                          {group.metrics.comments.toLocaleString()}
-                                        </TableCell>
-                                        <TableCell className="text-center font-medium">
-                                          <div className="flex items-center justify-center gap-1">
-                                            {formatMoney(
-                                              group.earnings.expected
-                                            )}
-                                            {group.isCapped && (
-                                              <span
-                                                className="text-amber-600 cursor-help"
-                                                title={`Capped at ${formatMoney(
-                                                  currentContest.max_earnings_per_creator
-                                                )}. Original: ${formatMoney(
-                                                  group.earningsBeforeCap
-                                                )}`}
-                                              >
-                                                ⚠️
-                                              </span>
-                                            )}
-                                          </div>
-                                        </TableCell>
-                                        <TableCell className="text-center font-medium text-green-600">
-                                          {formatMoney(group.earnings.granted)}
-                                        </TableCell>
+                                        {/* For Twitter campaigns, show Twitter-specific metrics */}
+                                        {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                          currentContest.platform?.toLowerCase() === "x") &&
+                                          currentContest.contest_format === "text_image") ? (
+                                          <>
+                                            {/* Total Points */}
+                                            <TableCell className="text-center">
+                                              <div className="flex flex-col items-center">
+                                                <span className={cn("font-bold text-sm", isDark ? "text-white" : "text-slate-900")}>
+                                                  {formatMetricValue((group.metrics.base_points || 0) + (group.metrics.manual_points_adjustment || 0))}
+                                                </span>
+                                                <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                                  total
+                                                </span>
+                                              </div>
+                                            </TableCell>
+                                            {/* Base Points */}
+                                            <TableCell className="text-center">
+                                              <div className="flex flex-col items-center">
+                                                <span className={cn("font-bold text-sm", isDark ? "text-white" : "text-slate-900")}>
+                                                  {formatMetricValue(group.metrics.base_points || 0)}
+                                                </span>
+                                                <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                                  base
+                                                </span>
+                                              </div>
+                                            </TableCell>
+                                            {/* Manual Points */}
+                                            <TableCell className="text-center">
+                                              <div className="flex flex-col items-center">
+                                                <span className={cn(
+                                                  "font-bold text-sm",
+                                                  group.metrics.manual_points_adjustment > 0
+                                                    ? "text-green-600"
+                                                    : group.metrics.manual_points_adjustment < 0
+                                                      ? "text-red-600"
+                                                      : isDark
+                                                        ? "text-white"
+                                                        : "text-slate-900"
+                                                )}>
+                                                  {group.metrics.manual_points_adjustment > 0 ? "+" : ""}
+                                                  {formatMetricValue(group.metrics.manual_points_adjustment || 0)}
+                                                </span>
+                                                <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                                  manual
+                                                </span>
+                                              </div>
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                              {formatMetricValue(group.metrics.likes || 0)}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                              {formatMetricValue(group.metrics.comments || 0)}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                              {formatMetricValue(group.metrics.retweets || 0)}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                              {formatMetricValue(group.metrics.quote_reposts || 0)}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                              {formatMetricValue(group.metrics.impressions || 0)}
+                                            </TableCell>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <TableCell className="text-center">
+                                              {group.metrics.views.toLocaleString()}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                              {group.metrics.likes.toLocaleString()}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                              {group.metrics.comments.toLocaleString()}
+                                            </TableCell>
+                                          </>
+                                        )}
+                                        {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
+                                        {(!((currentContest.platform?.toLowerCase() === "twitter" ||
+                                          currentContest.platform?.toLowerCase() === "x") &&
+                                          currentContest.contest_format === "text_image")) ||
+                                          (currentContest.contest_type === "leaderboard" &&
+                                            ((currentContest.platform?.toLowerCase() === "twitter" ||
+                                              currentContest.platform?.toLowerCase() === "x") &&
+                                              currentContest.contest_format === "text_image")) ? (
+                                          <>
+                                            <TableCell className="text-center font-medium">
+                                              <div className="flex items-center justify-center gap-1">
+                                                {formatMoney(
+                                                  group.earnings.expected
+                                                )}
+                                                {group.isCapped && (
+                                                  <span
+                                                    className="text-amber-600 cursor-help"
+                                                    title={`Capped at ${formatMoney(
+                                                      currentContest.max_earnings_per_creator
+                                                    )}. Original: ${formatMoney(
+                                                      group.earningsBeforeCap
+                                                    )}`}
+                                                  >
+                                                    ⚠️
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </TableCell>
+                                            <TableCell className="text-center font-medium text-green-600">
+                                              {formatMoney(group.earnings.granted)}
+                                            </TableCell>
+                                          </>
+                                        ) : null}
                                         {(() => {
                                           const flatFeeBonus =
                                             currentContest.contest_type ===
@@ -5949,29 +7247,169 @@ export default function ContestDetailClient({
                                               </TableCell>
                                             </>
                                           )}
+                                        {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard campaigns */}
+                                        {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                          currentContest.platform?.toLowerCase() === "x") &&
+                                          currentContest.contest_format === "text_image" &&
+                                          currentContest.contest_type === "leaderboard") && (
+                                            <>
+                                              <TableCell className="text-center">
+                                                <div className="flex flex-col items-center">
+                                                  <span className={cn(
+                                                    "font-semibold text-sm",
+                                                    group.metrics.manual_points_adjustment > 0
+                                                      ? "text-green-600"
+                                                      : group.metrics.manual_points_adjustment < 0
+                                                        ? "text-red-600"
+                                                        : isDark
+                                                          ? "text-white"
+                                                          : "text-slate-900"
+                                                  )}>
+                                                    {group.metrics.manual_points_adjustment > 0 ? "+" : ""}
+                                                    {formatMetricValue(group.metrics.manual_points_adjustment || 0)}
+                                                  </span>
+                                                </div>
+                                              </TableCell>
+                                              <TableCell className="text-center">
+                                                {group.metrics.manual_points_reason ? (
+                                                  <div className="flex flex-col items-center max-w-[200px] mx-auto">
+                                                    <span
+                                                      className={cn(
+                                                        "text-xs italic truncate",
+                                                        isDark ? "text-slate-300" : "text-slate-700"
+                                                      )}
+                                                      title={group.metrics.manual_points_reason}
+                                                    >
+                                                      {group.metrics.manual_points_reason.length > 30
+                                                        ? group.metrics.manual_points_reason.substring(0, 30) + "..."
+                                                        : group.metrics.manual_points_reason}
+                                                    </span>
+                                                  </div>
+                                                ) : (
+                                                  <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>
+                                                    —
+                                                  </span>
+                                                )}
+                                              </TableCell>
+                                            </>
+                                          )}
+                                        {/* Rejection Reason Column */}
+                                        {showRejectionReasonColumn && (
+                                          <TableCell className="text-center">
+                                            {group.creator_rejection_reason ? (
+                                              <div className="flex flex-col items-center max-w-[200px] mx-auto">
+                                                <span
+                                                  className={cn(
+                                                    "text-xs italic truncate",
+                                                    isDark ? "text-red-400" : "text-red-600"
+                                                  )}
+                                                  title={group.creator_rejection_reason}
+                                                >
+                                                  {group.creator_rejection_reason.length > 30
+                                                    ? group.creator_rejection_reason.substring(0, 30) + "..."
+                                                    : group.creator_rejection_reason}
+                                                </span>
+                                              </div>
+                                            ) : (
+                                              <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>
+                                                —
+                                              </span>
+                                            )}
+                                          </TableCell>
+                                        )}
                                         <TableCell className="text-center text-sm">
                                           {formatLocalDateTime(
                                             group.firstSubmittedAt
                                           )}
                                         </TableCell>
                                         <TableCell className="text-center">
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className={cn(
-                                              "border",
-                                              isDark
-                                                ? "bg-[#170337] border-gray-600 text-white"
-                                                : "border-gray-400 bg-white text-gray-800"
-                                            )}
-                                            onClick={() =>
-                                              setSelectedCreatorForModal(
-                                                group.creator.id
-                                              )
-                                            }
-                                          >
-                                            View All ({group.totalCount})
-                                          </Button>
+                                          <div className="flex flex-col items-center gap-2">
+                                            <div className="flex items-center gap-2">
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className={cn(
+                                                  "border",
+                                                  isDark
+                                                    ? "bg-[#170337] border-gray-600 text-white"
+                                                    : "border-gray-400 bg-white text-gray-800"
+                                                )}
+                                                onClick={() =>
+                                                  setSelectedCreatorForModal(
+                                                    group.creator.id
+                                                  )
+                                                }
+                                              >
+                                                View All ({group.totalCount})
+                                              </Button>
+                                              {/* Creator moderation options for Twitter campaigns */}
+                                              {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                                currentContest.platform?.toLowerCase() === "x") &&
+                                                currentContest.contest_format === "text_image") && (
+                                                  <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                      <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="h-8 w-8 p-0"
+                                                      >
+                                                        <MoreVertical className="h-4 w-4" />
+                                                      </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                      {group.creator_moderation_status !== "approved" && (
+                                                        <DropdownMenuItem
+                                                          onClick={async () => {
+                                                            try {
+                                                              const response = await fetch(
+                                                                `/api/contests/${contestId}/moderate-creator`,
+                                                                {
+                                                                  method: "POST",
+                                                                  headers: { "Content-Type": "application/json" },
+                                                                  body: JSON.stringify({
+                                                                    creatorId: group.creator.id,
+                                                                    action: "approve",
+                                                                  }),
+                                                                }
+                                                              );
+                                                              if (response.ok) {
+                                                                // Refresh the page data
+                                                                window.location.reload();
+                                                              } else {
+                                                                const error = await response.json();
+                                                                alert(error.error || "Failed to approve creator");
+                                                              }
+                                                            } catch (error) {
+                                                              console.error("Error approving creator:", error);
+                                                              alert("Failed to approve creator");
+                                                            }
+                                                          }}
+                                                          className="text-green-600"
+                                                        >
+                                                          <CheckCircle className="h-4 w-4 mr-2" />
+                                                          Approve Creator
+                                                        </DropdownMenuItem>
+                                                      )}
+                                                      <DropdownMenuItem
+                                                        onClick={() => {
+                                                          setPendingTwitterRejection({
+                                                            id: group.creator.id,
+                                                            type: 'creator',
+                                                            creatorId: group.creator.id,
+                                                            creatorUsername: group.creator.username,
+                                                          });
+                                                          setTwitterRejectionModalOpen(true);
+                                                        }}
+                                                        className="text-red-600"
+                                                      >
+                                                        <XCircle className="h-4 w-4 mr-2" />
+                                                        Reject Creator
+                                                      </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                  </DropdownMenu>
+                                                )}
+                                            </div>
+                                          </div>
                                         </TableCell>
                                       </TableRow>
                                     );
@@ -7108,6 +8546,21 @@ export default function ContestDetailClient({
         }
       />
 
+      {/* Twitter-specific rejection modal */}
+      <TwitterRejectionModal
+        isOpen={twitterRejectionModalOpen}
+        onClose={() => {
+          setTwitterRejectionModalOpen(false);
+          setPendingTwitterRejection(null);
+        }}
+        onConfirm={handleTwitterRejectionConfirm}
+        isLoading={pendingTwitterRejection ? (pendingTwitterRejection.type === 'creator'
+          ? Object.values(isLoadingSubmission).some(v => v)
+          : isLoadingSubmission[pendingTwitterRejection.id] || false) : false}
+        isCreatorRejection={pendingTwitterRejection?.type === 'creator'}
+        creatorUsername={pendingTwitterRejection?.creatorUsername}
+      />
+
       {/* Custom Pay Modal only */}
       <PaymentModal
         isOpen={paymentModalOpen}
@@ -7120,6 +8573,46 @@ export default function ContestDetailClient({
         initialMode="custom"
         showModeSwitcher={false}
         showProofAndDescription={false}
+      />
+
+      {/* Manual Points Adjustment Modal */}
+      <ManualPointsModal
+        isOpen={manualPointsModalOpen}
+        onClose={() => {
+          setManualPointsModalOpen(false);
+          setPendingManualPointsSubmission(null);
+        }}
+        onConfirm={handleManualPointsConfirm}
+        isLoading={
+          pendingManualPointsSubmission
+            ? isLoadingSubmission[pendingManualPointsSubmission.id] || false
+            : false
+        }
+        adjustmentType={pendingManualPointsSubmission?.type || "tweet"}
+        currentPoints={
+          pendingManualPointsSubmission
+            ? (() => {
+              const submission = currentSubmissions.find(
+                (s) => s.id === pendingManualPointsSubmission.id
+              );
+              if (pendingManualPointsSubmission.type === "leaderboard") {
+                // Get total points from leaderboard (would need to fetch or calculate)
+                return submission?.other_stats?.points || 0;
+              }
+              return submission?.other_stats?.points || 0;
+            })()
+            : 0
+        }
+        creatorName={
+          pendingManualPointsSubmission
+            ? (() => {
+              const submission = currentSubmissions.find(
+                (s) => s.id === pendingManualPointsSubmission.id
+              );
+              return submission?.creator_display_name || submission?.creator_username || undefined;
+            })()
+            : undefined
+        }
       />
 
       {/* Reversal confirmation dialog */}
