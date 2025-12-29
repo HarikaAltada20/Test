@@ -335,6 +335,10 @@ export default function ContestDetailClient({
   // Refresh metrics state
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
 
+  // Twitter campaign metrics state
+  const [twitterMetrics, setTwitterMetrics] = useState<any>(null);
+  const [loadingMetrics, setLoadingMetrics] = useState(false);
+
   // Rejection modal state
   const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
   const [pendingRejectionSubmission, setPendingRejectionSubmission] = useState<
@@ -971,6 +975,13 @@ export default function ContestDetailClient({
   useEffect(() => {
     setCurrentContest(contest);
   }, [contest]);
+
+  // Fetch Twitter metrics on load if this is a Twitter campaign
+  useEffect(() => {
+    if (currentContest?.platform?.toLowerCase() === "twitter") {
+      fetchTwitterMetrics();
+    }
+  }, [currentContest?.platform, contestId]);
 
   if (!currentContest) {
     return <p>Loading contest details or contest not found...</p>;
@@ -1778,6 +1789,31 @@ export default function ContestDetailClient({
     return options.filter((opt) => opt.value !== current);
   };
 
+  // Fetch Twitter campaign metrics
+  const fetchTwitterMetrics = async () => {
+    if (!contestId) return;
+
+    setLoadingMetrics(true);
+
+    try {
+      const response = await fetch(
+        `/api/contests/${contestId}/twitter-metrics`
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to fetch Twitter metrics");
+      }
+
+      setTwitterMetrics(data.metrics || null);
+    } catch (err: any) {
+      console.error("Error fetching Twitter metrics:", err);
+      setTwitterMetrics(null);
+    } finally {
+      setLoadingMetrics(false);
+    }
+  };
+
   const handleRefreshMetrics = async () => {
     // Prevent multiple clicks
     if (isRefreshingMetrics) {
@@ -1824,6 +1860,11 @@ export default function ContestDetailClient({
         title: "Success! 🎉",
         description: `${result.message}. Budget and leaderboard updated!`,
       });
+
+      // Refresh Twitter metrics after refresh
+      if (currentContest.platform?.toLowerCase() === "twitter") {
+        fetchTwitterMetrics();
+      }
 
       // Refresh the page to show updated data
       setTimeout(() => {
@@ -2936,214 +2977,690 @@ export default function ContestDetailClient({
               //   </CardContent>
               // </Card>
             )}
+        </div>
 
-          {/* Budget Progress Tracker - Two-Color Visualization (CPM) */}
-          {currentContest.contest_type === "cpm" &&
-            currentContest.contest_based_details?.cpm_contest?.total_budget !=
-            null &&
-            currentContest.contest_based_details.cpm_contest.total_budget >
-            0 && (
-              <div
+        {/* Live Twitter Campaign Metrics */}
+        {currentContest.platform?.toLowerCase() === "twitter" && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2
                 className={cn(
-                  "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                  isDark
-                    ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-indigo-500/20"
-                    : "bg-gradient-to-br from-white to-indigo-50 border border-indigo-100"
+                  "text-xl font-bold",
+                  isDark ? "text-white" : "text-slate-900"
                 )}
               >
-                <div className="p-6 relative z-10">
-                  <div className="flex items-center mb-4">
-                    <div
-                      className={cn(
-                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm mr-4",
-                        isDark
-                          ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                          : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white"
-                      )}
-                    >
-                      <BarChart3
-                        className={cn(
-                          "h-6 w-6",
-                          isDark ? "text-white" : "text-white"
-                        )}
-                      />
-                    </div>
-                    <div>
-                      <h3
-                        className={cn(
-                          "text-lg font-bold",
-                          isDark
-                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-indigo-200 bg-clip-text text-transparent"
-                            : "text-gray-900"
-                        )}
-                      >
-                        Budget Tracker
-                      </h3>
-                      <p
-                        className={cn(
-                          "text-sm",
-                          isDark
-                            ? "text-white/80 drop-shadow-sm"
-                            : "text-gray-600"
-                        )}
-                      >
-                        Monitor spending progress
-                      </p>
-                    </div>
-                  </div>
-                  <BudgetProgress
-                    contest={{
-                      total_budget:
-                        currentContest.contest_based_details.cpm_contest
-                          .total_budget,
-                      contest_based_details:
-                        currentContest.contest_based_details,
-                      contest_type: currentContest.contest_type,
-                      max_earnings_per_creator:
-                        currentContest.max_earnings_per_creator,
-                    }}
-                    submissions={currentSubmissions as any}
-                    showDetailed={true}
-                  />
-                </div>
-              </div>
-            )}
-
-          {/* Budget Progress Tracker - For Leaderboard with total_budget */}
-          {currentContest.contest_type === "leaderboard" &&
-            currentContest.contest_based_details?.leaderboard_contest
-              ?.total_budget != null &&
-            currentContest.contest_based_details.leaderboard_contest
-              .total_budget > 0 && (
-              <div
+                Live Campaign Metrics
+              </h2>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchTwitterMetrics}
+                disabled={loadingMetrics}
                 className={cn(
-                  "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                  "flex items-center gap-2",
                   isDark
-                    ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-emerald-500/20"
-                    : "bg-gradient-to-br from-white to-emerald-50 border border-emerald-100"
+                    ? "border-slate-700 text-slate-300 hover:bg-slate-800"
+                    : "border-slate-300 text-slate-700 hover:bg-slate-50"
                 )}
               >
-                <div className="p-6 relative z-10">
-                  <div className="flex items-center mb-4">
-                    <div
-                      className={cn(
-                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm mr-4",
-                        isDark
-                          ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                          : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white"
-                      )}
-                    >
-                      <BarChart3 className="h-6 w-6 text-white" />
-                    </div>
-                    <div>
-                      <h3
-                        className={cn(
-                          "text-lg font-bold",
-                          isDark
-                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent"
-                            : "text-gray-900"
-                        )}
-                      >
-                        Budget Tracker
-                      </h3>
-                      <p
-                        className={cn(
-                          "text-sm",
-                          isDark
-                            ? "text-white/80 drop-shadow-sm"
-                            : "text-gray-600"
-                        )}
-                      >
-                        Monitor bonus spending progress
-                      </p>
-                    </div>
-                  </div>
-                  <BudgetProgress
-                    contest={{
-                      total_budget:
-                        currentContest.contest_based_details.leaderboard_contest
-                          .total_budget,
-                      contest_based_details:
-                        currentContest.contest_based_details,
-                      contest_type: currentContest.contest_type,
-                      max_earnings_per_creator:
-                        currentContest.max_earnings_per_creator,
-                    }}
-                    submissions={currentSubmissions as any}
-                    showDetailed={true}
-                  />
-                </div>
+                <RefreshCw
+                  className={cn("h-4 w-4", loadingMetrics && "animate-spin")}
+                />
+                Refresh
+              </Button>
+            </div>
+            {loadingMetrics ? (
+              <div className="flex items-center justify-center py-12">
+                <RefreshCw className="h-6 w-6 animate-spin text-blue-600" />
               </div>
-            )}
-
-          {/* Submissions Count Card */}
-          <div
-            className={cn(
-              "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-              isDark
-                ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
-                : "bg-gradient-to-br from-white to-purple-50 border border-purple-100"
-            )}
-          >
-            <div className="p-6 relative z-10">
-              <div className="flex items-center justify-between mb-4">
+            ) : twitterMetrics ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Total Tweets Card */}
                 <div
                   className={cn(
-                    "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                     isDark
-                      ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                      : "bg-gradient-to-br from-purple-500 to-purple-600 text-white"
+                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
+                      : "bg-gradient-to-br from-white to-blue-50 border border-blue-100"
                   )}
                 >
-                  <Users
-                    className={cn(
-                      "h-6 w-6",
-                      isDark ? "text-white" : "text-white"
-                    )}
-                  />
+                  <div className="p-6 relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div
+                        className={cn(
+                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                          isDark
+                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                            : "bg-gradient-to-br from-blue-500 to-blue-600 text-white"
+                        )}
+                      >
+                        <FileText className="h-6 w-6" />
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={cn(
+                            "text-sm font-medium uppercase tracking-wide",
+                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                          )}
+                        >
+                          Total Tweets
+                        </p>
+                        <p
+                          className={cn(
+                            "text-2xl font-bold mt-1",
+                            isDark
+                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
+                              : "text-gray-900"
+                          )}
+                        >
+                          {(twitterMetrics.total_filtered_tweets || 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        "h-1 w-full rounded-full",
+                        isDark
+                          ? "bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400 shadow-lg shadow-blue-400/70 animate-pulse"
+                          : "bg-gradient-to-r from-blue-200 to-blue-300"
+                      )}
+                    ></div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p
-                    className={cn(
-                      "text-sm font-medium uppercase tracking-wide",
-                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
-                    )}
-                  >
-                    Submissions
-                  </p>
-                  <p
-                    className={cn(
-                      "text-2xl font-bold mt-1",
-                      isDark
-                        ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
-                        : "text-gray-900"
-                    )}
-                  >
-                    {currentSubmissions.length}
-                  </p>
-                </div>
-              </div>
-              <div className="mb-4">
-                <p
+
+                {/* Total Participants Card */}
+                <div
                   className={cn(
-                    "text-sm font-medium",
-                    isDark ? "text-white/80 drop-shadow-sm" : "text-gray-600"
+                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                    isDark
+                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
+                      : "bg-gradient-to-br from-white to-purple-50 border border-purple-100"
                   )}
                 >
-                  Total entries
-                </p>
+                  <div className="p-6 relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div
+                        className={cn(
+                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                          isDark
+                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                            : "bg-gradient-to-br from-purple-500 to-purple-600 text-white"
+                        )}
+                      >
+                        <Users className="h-6 w-6" />
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={cn(
+                            "text-sm font-medium uppercase tracking-wide",
+                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                          )}
+                        >
+                          Participants
+                        </p>
+                        <p
+                          className={cn(
+                            "text-2xl font-bold mt-1",
+                            isDark
+                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
+                              : "text-gray-900"
+                          )}
+                        >
+                          {(twitterMetrics.total_participants || 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        "h-1 w-full rounded-full",
+                        isDark
+                          ? "bg-gradient-to-r from-purple-400 via-indigo-400 to-violet-400 shadow-lg shadow-purple-400/70 animate-pulse"
+                          : "bg-gradient-to-r from-purple-200 to-purple-300"
+                      )}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Total Likes Card */}
+                <div
+                  className={cn(
+                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                    isDark
+                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-pink-500/20"
+                      : "bg-gradient-to-br from-white to-pink-50 border border-pink-100"
+                  )}
+                >
+                  <div className="p-6 relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div
+                        className={cn(
+                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                          isDark
+                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                            : "bg-gradient-to-br from-pink-500 to-pink-600 text-white"
+                        )}
+                      >
+                        <ThumbsUp className="h-6 w-6" />
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={cn(
+                            "text-sm font-medium uppercase tracking-wide",
+                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                          )}
+                        >
+                          Total Likes
+                        </p>
+                        <p
+                          className={cn(
+                            "text-2xl font-bold mt-1",
+                            isDark
+                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-pink-200 bg-clip-text text-transparent"
+                              : "text-gray-900"
+                          )}
+                        >
+                          {(twitterMetrics.total_likes || 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        "h-1 w-full rounded-full",
+                        isDark
+                          ? "bg-gradient-to-r from-pink-400 via-rose-400 to-red-400 shadow-lg shadow-pink-400/70 animate-pulse"
+                          : "bg-gradient-to-r from-pink-200 to-pink-300"
+                      )}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Total Impressions Card */}
+                <div
+                  className={cn(
+                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                    isDark
+                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-green-500/20"
+                      : "bg-gradient-to-br from-white to-green-50 border border-green-100"
+                  )}
+                >
+                  <div className="p-6 relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div
+                        className={cn(
+                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                          isDark
+                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                            : "bg-gradient-to-br from-green-500 to-green-600 text-white"
+                        )}
+                      >
+                        <Eye className="h-6 w-6" />
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={cn(
+                            "text-sm font-medium uppercase tracking-wide",
+                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                          )}
+                        >
+                          Impressions
+                        </p>
+                        <p
+                          className={cn(
+                            "text-2xl font-bold mt-1",
+                            isDark
+                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-green-200 bg-clip-text text-transparent"
+                              : "text-gray-900"
+                          )}
+                        >
+                          {(twitterMetrics.total_impressions || 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        "h-1 w-full rounded-full",
+                        isDark
+                          ? "bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400 shadow-lg shadow-green-400/70 animate-pulse"
+                          : "bg-gradient-to-r from-green-200 to-green-300"
+                      )}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Total Replies Card */}
+                <div
+                  className={cn(
+                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                    isDark
+                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-orange-500/20"
+                      : "bg-gradient-to-br from-white to-orange-50 border border-orange-100"
+                  )}
+                >
+                  <div className="p-6 relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div
+                        className={cn(
+                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                          isDark
+                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                            : "bg-gradient-to-br from-orange-500 to-orange-600 text-white"
+                        )}
+                      >
+                        <MessageCircle className="h-6 w-6" />
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={cn(
+                            "text-sm font-medium uppercase tracking-wide",
+                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                          )}
+                        >
+                          Replies
+                        </p>
+                        <p
+                          className={cn(
+                            "text-2xl font-bold mt-1",
+                            isDark
+                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-orange-200 bg-clip-text text-transparent"
+                              : "text-gray-900"
+                          )}
+                        >
+                          {(twitterMetrics.total_replies || 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        "h-1 w-full rounded-full",
+                        isDark
+                          ? "bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-400 shadow-lg shadow-orange-400/70 animate-pulse"
+                          : "bg-gradient-to-r from-orange-200 to-orange-300"
+                      )}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Total Retweets Card */}
+                <div
+                  className={cn(
+                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                    isDark
+                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-cyan-500/20"
+                      : "bg-gradient-to-br from-white to-cyan-50 border border-cyan-100"
+                  )}
+                >
+                  <div className="p-6 relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div
+                        className={cn(
+                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                          isDark
+                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                            : "bg-gradient-to-br from-cyan-500 to-cyan-600 text-white"
+                        )}
+                      >
+                        <Share2 className="h-6 w-6" />
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={cn(
+                            "text-sm font-medium uppercase tracking-wide",
+                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                          )}
+                        >
+                          Retweets
+                        </p>
+                        <p
+                          className={cn(
+                            "text-2xl font-bold mt-1",
+                            isDark
+                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-cyan-200 bg-clip-text text-transparent"
+                              : "text-gray-900"
+                          )}
+                        >
+                          {(twitterMetrics.total_retweets || 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        "h-1 w-full rounded-full",
+                        isDark
+                          ? "bg-gradient-to-r from-cyan-400 via-teal-400 to-green-400 shadow-lg shadow-cyan-400/70 animate-pulse"
+                          : "bg-gradient-to-r from-cyan-200 to-cyan-300"
+                      )}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Total Quote Reposts Card */}
+                <div
+                  className={cn(
+                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                    isDark
+                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-indigo-500/20"
+                      : "bg-gradient-to-br from-white to-indigo-50 border border-indigo-100"
+                  )}
+                >
+                  <div className="p-6 relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div
+                        className={cn(
+                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                          isDark
+                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                            : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white"
+                        )}
+                      >
+                        <RefreshCw className="h-6 w-6" />
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={cn(
+                            "text-sm font-medium uppercase tracking-wide",
+                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                          )}
+                        >
+                          Quote Reposts
+                        </p>
+                        <p
+                          className={cn(
+                            "text-2xl font-bold mt-1",
+                            isDark
+                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-indigo-200 bg-clip-text text-transparent"
+                              : "text-gray-900"
+                          )}
+                        >
+                          {(twitterMetrics.total_quote_reposts || 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        "h-1 w-full rounded-full",
+                        isDark
+                          ? "bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 shadow-lg shadow-indigo-400/70 animate-pulse"
+                          : "bg-gradient-to-r from-indigo-200 to-indigo-300"
+                      )}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Total Points Card */}
+                <div
+                  className={cn(
+                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                    isDark
+                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-yellow-500/20"
+                      : "bg-gradient-to-br from-white to-yellow-50 border border-yellow-100"
+                  )}
+                >
+                  <div className="p-6 relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div
+                        className={cn(
+                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                          isDark
+                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                            : "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white"
+                        )}
+                      >
+                        <TrendingUp className="h-6 w-6" />
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={cn(
+                            "text-sm font-medium uppercase tracking-wide",
+                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                          )}
+                        >
+                          Total Points
+                        </p>
+                        <p
+                          className={cn(
+                            "text-2xl font-bold mt-1",
+                            isDark
+                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-yellow-200 bg-clip-text text-transparent"
+                              : "text-gray-900"
+                          )}
+                        >
+                          {(twitterMetrics.total_points || 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        "h-1 w-full rounded-full",
+                        isDark
+                          ? "bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 shadow-lg shadow-yellow-400/70 animate-pulse"
+                          : "bg-gradient-to-r from-yellow-200 to-yellow-300"
+                      )}
+                    ></div>
+                  </div>
+                </div>
               </div>
+            ) : (
               <div
                 className={cn(
-                  "h-1 w-full rounded-full",
+                  "rounded-2xl p-8 text-center border",
                   isDark
-                    ? "bg-gradient-to-r from-purple-400 via-violet-400 to-fuchsia-400 shadow-lg shadow-purple-400/70 animate-pulse"
-                    : "bg-gradient-to-r from-purple-200 to-purple-300"
+                    ? "bg-[#180438] border-white/20 text-white/70"
+                    : "bg-white border-slate-200 text-slate-600"
                 )}
-              ></div>
-            </div>
+              >
+                <p>No metrics available yet. Metrics will appear after the first refresh.</p>
+              </div>
+            )}
           </div>
-          {/* <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
+        )}
+
+        {/* Budget Progress Tracker - Two-Color Visualization (CPM) */}
+        {currentContest.contest_type === "cpm" &&
+          currentContest.contest_based_details?.cpm_contest?.total_budget !=
+          null &&
+          currentContest.contest_based_details.cpm_contest.total_budget >
+          0 && (
+            <div
+              className={cn(
+                "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                isDark
+                  ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-indigo-500/20"
+                  : "bg-gradient-to-br from-white to-indigo-50 border border-indigo-100"
+              )}
+            >
+              <div className="p-6 relative z-10">
+                <div className="flex items-center mb-4">
+                  <div
+                    className={cn(
+                      "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm mr-4",
+                      isDark
+                        ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                        : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white"
+                    )}
+                  >
+                    <BarChart3
+                      className={cn(
+                        "h-6 w-6",
+                        isDark ? "text-white" : "text-white"
+                      )}
+                    />
+                  </div>
+                  <div>
+                    <h3
+                      className={cn(
+                        "text-lg font-bold",
+                        isDark
+                          ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-indigo-200 bg-clip-text text-transparent"
+                          : "text-gray-900"
+                      )}
+                    >
+                      Budget Tracker
+                    </h3>
+                    <p
+                      className={cn(
+                        "text-sm",
+                        isDark
+                          ? "text-white/80 drop-shadow-sm"
+                          : "text-gray-600"
+                      )}
+                    >
+                      Monitor spending progress
+                    </p>
+                  </div>
+                </div>
+                <BudgetProgress
+                  contest={{
+                    total_budget:
+                      currentContest.contest_based_details.cpm_contest
+                        .total_budget,
+                    contest_based_details:
+                      currentContest.contest_based_details,
+                    contest_type: currentContest.contest_type,
+                    max_earnings_per_creator:
+                      currentContest.max_earnings_per_creator,
+                  }}
+                  submissions={currentSubmissions as any}
+                  showDetailed={true}
+                />
+              </div>
+            </div>
+          )}
+
+        {/* Budget Progress Tracker - For Leaderboard with total_budget */}
+        {currentContest.contest_type === "leaderboard" &&
+          currentContest.contest_based_details?.leaderboard_contest
+            ?.total_budget != null &&
+          currentContest.contest_based_details.leaderboard_contest
+            .total_budget > 0 && (
+            <div
+              className={cn(
+                "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                isDark
+                  ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-emerald-500/20"
+                  : "bg-gradient-to-br from-white to-emerald-50 border border-emerald-100"
+              )}
+            >
+              <div className="p-6 relative z-10">
+                <div className="flex items-center mb-4">
+                  <div
+                    className={cn(
+                      "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm mr-4",
+                      isDark
+                        ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                        : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white"
+                    )}
+                  >
+                    <BarChart3 className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h3
+                      className={cn(
+                        "text-lg font-bold",
+                        isDark
+                          ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent"
+                          : "text-gray-900"
+                      )}
+                    >
+                      Budget Tracker
+                    </h3>
+                    <p
+                      className={cn(
+                        "text-sm",
+                        isDark
+                          ? "text-white/80 drop-shadow-sm"
+                          : "text-gray-600"
+                      )}
+                    >
+                      Monitor bonus spending progress
+                    </p>
+                  </div>
+                </div>
+                <BudgetProgress
+                  contest={{
+                    total_budget:
+                      currentContest.contest_based_details.leaderboard_contest
+                        .total_budget,
+                    contest_based_details:
+                      currentContest.contest_based_details,
+                    contest_type: currentContest.contest_type,
+                    max_earnings_per_creator:
+                      currentContest.max_earnings_per_creator,
+                  }}
+                  submissions={currentSubmissions as any}
+                  showDetailed={true}
+                />
+              </div>
+            </div>
+          )}
+
+        {/* Submissions Count Card */}
+        <div
+          className={cn(
+            "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+            isDark
+              ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
+              : "bg-gradient-to-br from-white to-purple-50 border border-purple-100"
+          )}
+        >
+          <div className="p-6 relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <div
+                className={cn(
+                  "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                  isDark
+                    ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                    : "bg-gradient-to-br from-purple-500 to-purple-600 text-white"
+                )}
+              >
+                <Users
+                  className={cn(
+                    "h-6 w-6",
+                    isDark ? "text-white" : "text-white"
+                  )}
+                />
+              </div>
+              <div className="text-right">
+                <p
+                  className={cn(
+                    "text-sm font-medium uppercase tracking-wide",
+                    isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                  )}
+                >
+                  Submissions
+                </p>
+                <p
+                  className={cn(
+                    "text-2xl font-bold mt-1",
+                    isDark
+                      ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
+                      : "text-gray-900"
+                  )}
+                >
+                  {currentSubmissions.length}
+                </p>
+              </div>
+            </div>
+            <div className="mb-4">
+              <p
+                className={cn(
+                  "text-sm font-medium",
+                  isDark ? "text-white/80 drop-shadow-sm" : "text-gray-600"
+                )}
+              >
+                Total entries
+              </p>
+            </div>
+            <div
+              className={cn(
+                "h-1 w-full rounded-full",
+                isDark
+                  ? "bg-gradient-to-r from-purple-400 via-violet-400 to-fuchsia-400 shadow-lg shadow-purple-400/70 animate-pulse"
+                  : "bg-gradient-to-r from-purple-200 to-purple-300"
+              )}
+            ></div>
+          </div>
+        </div>
+        {/* <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
@@ -3163,7 +3680,6 @@ export default function ContestDetailClient({
               </div>
             </CardContent>
           </Card> */}
-        </div>
       </div>
 
       {/* Main Content Tabs */}

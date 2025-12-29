@@ -864,10 +864,18 @@ export async function POST(
       .eq("is_eligible", true)
       .not("target_tweet_id", "is", null); // Only raid engagements
 
+    // Get total participants count
+    const { count: totalParticipants } = await supabaseAdmin
+      .from("twitter_campaign_participants")
+      .select("*", { count: "exact", head: true })
+      .eq("contest_id", contestId)
+      .eq("is_active", true);
+
     await supabaseAdmin
       .from("twitter_campaign_metrics")
       .update({
         total_filtered_tweets: filteredTweetsCount || 0,
+        total_participants: totalParticipants || 0,
         total_likes: totalLikes,
         total_replies: totalReplies,
         total_retweets: totalRetweets,
