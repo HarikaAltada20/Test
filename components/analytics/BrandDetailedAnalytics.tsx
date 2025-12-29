@@ -153,7 +153,7 @@ export default function BrandDetailedAnalytics({
         <h2 className="text-lg font-semibold">Contest Status Overview</h2>
       </div>
 
-      <div className="grid gap-3 sm:gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-9">
+      <div className="grid gap-3 sm:gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-9">
         <div
           className={cn(
             "rounded-lg py-4",

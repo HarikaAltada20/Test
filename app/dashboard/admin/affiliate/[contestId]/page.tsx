@@ -216,7 +216,7 @@ export default function ContestAffiliatePage() {
   };
 
   return (
-    <div className="space-y-6 px-3 sm:px-4 lg:px-8">
+    <div className="space-y-6 px-3 sm:px-4 lg:px-8 w-full max-w-full overflow-hidden">
       <Card
         className={cn(
           "shadow-md hover:shadow-lg transition-shadow duration-200",
@@ -352,14 +352,14 @@ export default function ContestAffiliatePage() {
                     />
                   </TableHead>
                   <TableHead>Winner</TableHead>
-                  <TableHead className="hidden sm:table-cell">
+                  <TableHead className="sm:table-cell">
                     Referrer
                   </TableHead>
                   <TableHead>Winnings</TableHead>
-                  <TableHead className="hidden md:table-cell">
+                  <TableHead className=" md:table-cell">
                     Commission (10%)
                   </TableHead>
-                  <TableHead className="text-right">Status</TableHead>
+                  <TableHead className=" md:table-cell">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -428,16 +428,16 @@ export default function ContestAffiliatePage() {
                       <TableCell className="max-w-[140px] sm:max-w-none">
                         @{i.winner_username || i.winner_user_id.slice(0, 6)}
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell max-w-[140px] sm:max-w-none">
+                      <TableCell className="sm:table-cell max-w-[140px] sm:max-w-none">
                         @{i.referrer_username || i.referrer_user_id.slice(0, 6)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         ${(i.winning_amount_cents / 100).toFixed(2)}
                       </TableCell>
-                      <TableCell className="hidden md:table-cell whitespace-nowrap">
+                      <TableCell className=" md:table-cell whitespace-nowrap">
                         ${(i.default_commission_cents / 100).toFixed(2)}
                       </TableCell>
-                      <TableCell className="text-right capitalize">
+                      <TableCell className="md:table-cell whitespace-nowrap">
                         {i.status}
                       </TableCell>
                     </TableRow>

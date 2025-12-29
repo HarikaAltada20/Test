@@ -90,8 +90,9 @@ const RotatingTagline = () => {
 
   return (
     <p
-      className={`text-lg md:text-xl text-gray-600 mb-6 transition-opacity duration-300 ${isVisible ? "opacity-100" : "opacity-0"
-        }`}
+      className={`text-lg md:text-xl text-gray-600 mb-6 transition-opacity duration-300 ${
+        isVisible ? "opacity-100" : "opacity-0"
+      }`}
     >
       {taglines[currentTagline]}
     </p>
@@ -196,7 +197,6 @@ export default function PricingClient() {
       if (section2Ref.current) observer.unobserve(section2Ref.current);
     };
   }, [isLoadingUser, isLoading]);
-
 
   // Check for authenticated user
   useEffect(() => {
@@ -445,9 +445,9 @@ export default function PricingClient() {
 
           <div className="container mx-auto px-4 text-center relative z-10">
             {/* Premium Badge */}
-            <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-4 py-2 sm:px-6 sm:py-3 mb-8 flex-wrap">
-              <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
-              <span className="text-base sm:text-lg font-semibold bg-white bg-clip-text text-transparent text-center">
+            <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-4 sm:py-2 md:px-6 md:py-3 mb-6 sm:mb-8 flex-wrap justify-center max-w-full">
+              <Crown className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 text-white flex-shrink-0" />
+              <span className="text-xs sm:text-sm md:text-base lg:text-lg font-semibold bg-white bg-clip-text text-transparent text-center leading-tight">
                 #1 Gamified Creator Marketing Platform
               </span>
             </div>
@@ -510,92 +510,105 @@ export default function PricingClient() {
           </div>
         </section>
 
-        <Alert className="max-w-7xl mx-auto border border-yellow-400 bg-yellow-500/20 text-yellow-500 rounded-md shadow-sm">
-          <AlertTriangle className="h-5 w-5" color="#facc15" />
-          <AlertDescription className="mt-[2px] text-md">
+        <Alert className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border border-yellow-400 bg-yellow-500/20 text-yellow-500 rounded-md shadow-sm">
+          <AlertTriangle
+            className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0"
+            color="#facc15"
+          />
+          <AlertDescription className="mt-[2px] text-sm sm:text-base md:text-md">
             <strong>For Creators:</strong> You don't need a subscription to
             participate in contests. Simply browse available opportunities and
             submit your content to win prizes!
           </AlertDescription>
         </Alert>
 
-        <div className="max-w-[1250px] py-12 mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-          <Card className="bg-[#000825] rounded-2xl text-white hover:bg-[#B16FF43D] hover:shadow-lg hover:scale-105 transition border-2 border-[#7F39EC] hover:border-2 hover:border-[#7F39EC] cursor-pointer">
-            <CardHeader className="mb-2">
-              <CardTitle className="flex items-center gap-3">
-                <div className="rounded-full p-2 border flex items-center justify-center">
-                  <Trophy className="h-6 w-6 text-white" />
+        <div className="max-w-[1250px] py-6 sm:py-8 md:py-10 lg:py-12 px-4 sm:px-6 lg:px-8 mx-auto grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8 mb-6 sm:mb-8">
+          <Card className="bg-[#000825] rounded-xl sm:rounded-2xl text-white hover:bg-[#B16FF43D] hover:shadow-lg hover:scale-[1.02] md:hover:scale-105 transition border-2 border-[#7F39EC] hover:border-2 hover:border-[#7F39EC] cursor-pointer">
+            <CardHeader className="mb-2 px-4 sm:px-6 pt-4 sm:pt-6">
+              <CardTitle className="flex items-center gap-2 sm:gap-3 text-base sm:text-lg md:text-xl">
+                <div className="rounded-full p-1.5 sm:p-2 border flex items-center justify-center flex-shrink-0">
+                  <Trophy className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-white" />
                 </div>
-                How It Works for Creators
+                <span className="leading-tight">How It Works for Creators</span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4 sm:space-y-5 md:space-y-6 px-4 sm:px-6 pb-4 sm:pb-6">
               {[
                 "Browse available contests",
                 "Submit your content",
                 "Win prizes based on performance",
                 "No subscription required",
               ].map((text, idx) => (
-                <div key={idx} className="flex items-center gap-3">
+                <div key={idx} className="flex items-center gap-2 sm:gap-3">
                   <div
-                    className="rounded-full p-3 flex items-center justify-center"
+                    className="rounded-full p-2 sm:p-2.5 md:p-3 flex items-center justify-center flex-shrink-0"
                     style={{
                       backgroundImage:
                         "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
                     }}
                   >
-                    <Check className="h-6 w-6 text-white" strokeWidth={3} />
+                    <Check
+                      className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-white"
+                      strokeWidth={3}
+                    />
                   </div>
-                  <span className="text-lg">{text}</span>
+                  <span className="text-sm sm:text-base md:text-lg leading-relaxed">
+                    {text}
+                  </span>
                 </div>
               ))}
             </CardContent>
           </Card>
 
-          <Card className="bg-[#000825] rounded-2xl text-white hover:bg-[#B16FF43D] border-2 border-[#7F39EC] hover:shadow-lg hover:scale-105 transition hover:border-2 hover:border-[#7F39EC] cursor-pointer">
-            <CardHeader className="mb-2">
-              <CardTitle className="flex items-center gap-3">
-                <div className="rounded-full p-2 border flex items-center justify-center">
-                  <Building2 className="h-6 w-6 text-white" />
+          <Card className="bg-[#000825] rounded-xl sm:rounded-2xl text-white hover:bg-[#B16FF43D] border-2 border-[#7F39EC] hover:shadow-lg hover:scale-[1.02] md:hover:scale-105 transition hover:border-2 hover:border-[#7F39EC] cursor-pointer">
+            <CardHeader className="mb-2 px-4 sm:px-6 pt-4 sm:pt-6">
+              <CardTitle className="flex items-center gap-2 sm:gap-3 text-base sm:text-lg md:text-xl">
+                <div className="rounded-full p-1.5 sm:p-2 border flex items-center justify-center flex-shrink-0">
+                  <Building2 className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-white" />
                 </div>
-                For Brands & Advertisers
+                <span className="leading-tight">For Brands & Advertisers</span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4 sm:space-y-5 md:space-y-6 px-4 sm:px-6 pb-4 sm:pb-6">
               {[
                 "Launch creator contests",
                 "Access to 5,000+ creators",
                 "Full content ownership",
                 "Subscription plans available",
               ].map((text, idx) => (
-                <div key={idx} className="flex items-center gap-3">
+                <div key={idx} className="flex items-center gap-2 sm:gap-3">
                   <div
-                    className="rounded-full p-3 flex items-center justify-center"
+                    className="rounded-full p-2 sm:p-2.5 md:p-3 flex items-center justify-center flex-shrink-0"
                     style={{
                       backgroundImage:
                         "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
                     }}
                   >
-                    <Check className="h-6 w-6 text-white" strokeWidth={3} />
+                    <Check
+                      className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-white"
+                      strokeWidth={3}
+                    />
                   </div>
-                  <span className="text-lg">{text}</span>
+                  <span className="text-sm sm:text-base md:text-lg leading-relaxed">
+                    {text}
+                  </span>
                 </div>
               ))}
             </CardContent>
           </Card>
         </div>
 
-        <div className="pb-16 text-center">
+        <div className="pb-8 sm:pb-12 md:pb-16 px-4 sm:px-6 text-center">
           <Button
             asChild
-            className="rounded-3xl mt-8 relative text-white text-white font-bold px-8 py-6 text-lg overflow-hidden"
+            className="rounded-2xl sm:rounded-3xl mt-4 sm:mt-6 md:mt-8 relative text-white font-bold px-4 py-3 sm:px-6 sm:py-4 md:px-8 md:py-6 text-sm sm:text-base md:text-lg overflow-hidden w-full sm:w-auto"
             style={{
               background:
                 "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
             }}
           >
             <div className="scan-line"></div>
-            <Link href="/dashboard/opportunities">
+            <Link href="/dashboard/opportunities" className="w-full sm:w-auto">
               Browse Available Contests
             </Link>
           </Button>
@@ -639,9 +652,9 @@ export default function PricingClient() {
 
         <div className="container mx-auto px-4 text-center relative z-10">
           {/* Premium Badge */}
-          <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-4 py-2 sm:px-6 sm:py-3 mb-8 flex-wrap">
-            <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
-            <span className="text-base sm:text-lg font-semibold bg-white bg-clip-text text-transparent text-center">
+          <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-4 sm:py-2 md:px-6 md:py-3 mb-6 sm:mb-8 flex-wrap justify-center max-w-full">
+            <Crown className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 text-white flex-shrink-0" />
+            <span className="text-xs sm:text-sm md:text-base lg:text-lg font-semibold bg-white bg-clip-text text-transparent text-center leading-tight">
               #1 Gamified Creator Marketing Platform
             </span>
           </div>
@@ -757,14 +770,16 @@ export default function PricingClient() {
                 <span className="text-sm">Select the ideal payment plan</span>
               </div>
               <h2
-                className={`text-3xl md:text-5xl font-bold mb-4 ${section1Visible ? "slide-up" : "opacity-0"
-                  }`}
+                className={`text-3xl md:text-5xl font-bold mb-4 ${
+                  section1Visible ? "slide-up" : "opacity-0"
+                }`}
               >
                 Choose Your Game <span className="text-purple-400">Plan</span>
               </h2>
               <p
-                className={`${section1Visible ? "slide-left" : "opacity-0"
-                  } text-gray-300 text-lg md:text-xl mb-8`}
+                className={`${
+                  section1Visible ? "slide-left" : "opacity-0"
+                } text-gray-300 text-lg md:text-xl mb-8`}
               >
                 Select the perfect plan to start winning with creator contests
               </p>
@@ -792,13 +807,14 @@ export default function PricingClient() {
               )} */}
 
               <div className="mt-6 flex justify-center">
-                <div className="flex items-center gap-4  px-4 py-2 rounded-full">
+                <div className="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-2 rounded-full flex-wrap justify-center">
                   {/* Monthly label */}
                   <span
-                    className={`cursor-pointer text-lg font-medium transition-colors ${billingCycle === "monthly"
-                      ? "text-white"
-                      : "text-gray-400"
-                      }`}
+                    className={`cursor-pointer text-sm sm:text-lg font-medium transition-colors ${
+                      billingCycle === "monthly"
+                        ? "text-white"
+                        : "text-gray-400"
+                    }`}
                     onClick={() => setBillingCycle("monthly")}
                   >
                     Monthly Subscription
@@ -807,23 +823,26 @@ export default function PricingClient() {
                   {/* Toggle switch */}
                   <button
                     onClick={handleToggle}
-                    className={`relative w-14 h-7 rounded-full transition-colors ${billingCycle === "monthly"
-                      ? "bg-gray-600"
-                      : "bg-purple-500"
-                      }`}
+                    className={`relative w-12 h-6 sm:w-14 sm:h-7 rounded-full transition-colors flex-shrink-0 ${
+                      billingCycle === "monthly"
+                        ? "bg-gray-600"
+                        : "bg-purple-500"
+                    }`}
                   >
                     <span
-                      className={`absolute top-1 text-lg left-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${billingCycle === "yearly"
-                        ? "translate-x-7"
-                        : "translate-x-0"
-                        }`}
+                      className={`absolute top-0.5 left-0.5 sm:top-1 sm:left-1 w-4 h-4 sm:w-5 sm:h-5 bg-white rounded-full shadow transition-transform ${
+                        billingCycle === "yearly"
+                          ? "translate-x-6 sm:translate-x-7"
+                          : "translate-x-0"
+                      }`}
                     />
                   </button>
 
                   {/* Yearly label with badge */}
                   <span
-                    className={`cursor-pointer text-lg font-medium flex items-center gap-1 transition-colors ${billingCycle === "yearly" ? "text-white" : "text-gray-400"
-                      }`}
+                    className={`cursor-pointer text-sm sm:text-lg font-medium flex items-center gap-1 transition-colors ${
+                      billingCycle === "yearly" ? "text-white" : "text-gray-400"
+                    }`}
                     onClick={() => setBillingCycle("yearly")}
                   >
                     Yearly Subscription
@@ -840,7 +859,6 @@ export default function PricingClient() {
               <div className="flex items-center justify-center h-[64vh]">
                 <PageLoadingSpinner mode="dark" />
                 <p className="text-gray-600">Loading pricing plans...</p>
-
               </div>
             )}
 
@@ -861,10 +879,11 @@ export default function PricingClient() {
                     <div
                       key={plan.id}
                       className={`relative flex flex-col rounded-xl w-full max-w-sm mx-auto p-6 hover:shadow-lg hover:scale-105 transition 
-                      ${isMostPopular
+                      ${
+                        isMostPopular
                           ? "border-2 border-purple-500 shadow-xl"
                           : "border border-gray-700 shadow-sm"
-                        }
+                      }
                       bg-gradient-to-b from-purple-900/10 to-purple-900/3`}
                     >
                       {isMostPopular && (
@@ -958,10 +977,10 @@ export default function PricingClient() {
                               {plan.features.analytics === "basic"
                                 ? "Advanced analytics & insights"
                                 : plan.features.analytics === "advanced"
-                                  ? "Advanced analytics & insights"
-                                  : plan.features.analytics === "comprehensive"
-                                    ? "Comprehensive analytics dashboard"
-                                    : plan.features.analytics}
+                                ? "Advanced analytics & insights"
+                                : plan.features.analytics === "comprehensive"
+                                ? "Comprehensive analytics dashboard"
+                                : plan.features.analytics}
                             </span>
                           </div>
                         )}
@@ -973,8 +992,8 @@ export default function PricingClient() {
                                 {plan.features.support === "priority"
                                   ? "Prioritized customer support"
                                   : plan.features.support === "premium"
-                                    ? "Premium 24/7 dedicated support"
-                                    : plan.features.support}
+                                  ? "Premium 24/7 dedicated support"
+                                  : plan.features.support}
                               </span>
                             </div>
                           )}
@@ -1075,8 +1094,9 @@ export default function PricingClient() {
         <div className="bg-[#0b0e26] text-white py-16 px-6">
           <div className="max-w-[1200px] mx-auto text-center">
             <h2
-              className={`text-3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform ${section2Visible ? "slide-up" : "opacity-0"
-                }`}
+              className={`text-3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform ${
+                section2Visible ? "slide-up" : "opacity-0"
+              }`}
             >
               What's Included in{" "}
               <span
@@ -1094,8 +1114,9 @@ export default function PricingClient() {
               </span>
             </h2>
             <p
-              className={`${section2Visible ? "slide-left" : "opacity-0"
-                } text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg`}
+              className={`${
+                section2Visible ? "slide-left" : "opacity-0"
+              } text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg`}
             >
               Essential Elements for Your Influencer Marketing Strategy
             </p>
@@ -1144,8 +1165,9 @@ export default function PricingClient() {
                 right for you?
               </h2>
               <p
-                className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${visible ? "slide-left" : ""
-                  }`}
+                className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${
+                  visible ? "slide-left" : ""
+                }`}
                 style={{ animationDelay: "1s" }}
               >
                 Book a demo with{" "}
@@ -1153,8 +1175,9 @@ export default function PricingClient() {
                 Founder of Game Of Creators
               </p>
               <p
-                className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${visible ? "slide-left" : ""
-                  }`}
+                className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${
+                  visible ? "slide-left" : ""
+                }`}
                 style={{ animationDelay: "1.5s" }}
               >
                 Join hundreds of businesses driving success with Game Of
@@ -1176,7 +1199,6 @@ export default function PricingClient() {
                 Book a Demo
                 <ArrowRight className="h-5 w-5" />
               </a>
-
             </div>
 
             {/* Image Section */}
