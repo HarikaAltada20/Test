@@ -558,29 +558,42 @@ export async function POST(
       .update(targetMetrics)
       .eq("contest_id", contestId);
 
-    // 6. DELETE ALL EXISTING RAID ENGAGEMENTS FOR FRESH REFRESH
-    // This ensures deleted tweets are removed and we start from scratch
-    // Also reset leaderboard points for raid engagements
-    console.log(`[fetch-raid-engagements] Deleting all existing raid engagements for fresh refresh...`);
-    
-    // Delete all raid engagements (tweets with target_tweet_id)
-    const { error: deleteError } = await supabaseAdmin
+    // ============================================================================
+    // PRESERVE MODERATION: Fetch existing raid engagements BEFORE refresh
+    // This ensures moderation_status and manual_points_adjustment are not lost
+    // ============================================================================
+    console.log(`[fetch-raid-engagements] Fetching existing raid engagements to preserve moderation data...`);
+    const { data: existingRaidEngagements, error: existingEngagementsError } = await supabaseAdmin
       .from("twitter_campaign_tweets")
-      .delete()
+      .select("tweet_id, moderation_status, manual_points_adjustment, manual_points_reason, is_eligible")
       .eq("contest_id", contestId)
-      .not("target_tweet_id", "is", null); // Only delete raid engagements (those with target_tweet_id)
+      .not("target_tweet_id", "is", null); // Only raid engagements (those with target_tweet_id)
 
-    if (deleteError) {
-      console.error("[fetch-raid-engagements] Error deleting existing raid engagements:", deleteError);
-      // Continue anyway - we'll upsert which will update existing ones
-    } else {
-      console.log(`[fetch-raid-engagements] Successfully deleted all existing raid engagements`);
+    if (existingEngagementsError) {
+      console.error("[fetch-raid-engagements] Error fetching existing raid engagements:", existingEngagementsError);
     }
 
-    // Note: Leaderboard will be recalculated from scratch by updateRaidLeaderboard()
-    // which aggregates points from twitter_campaign_tweets table
+    // Create a map for quick lookup of moderation data
+    const existingEngagementsMap = new Map(
+      (existingRaidEngagements || []).map((e: any) => [
+        e.tweet_id,
+        {
+          moderation_status: e.moderation_status || "pending",
+          manual_points_adjustment: e.manual_points_adjustment || 0,
+          manual_points_reason: e.manual_points_reason || null,
+          was_eligible: e.is_eligible || false,
+        },
+      ])
+    );
 
-    // 7. Process all engagements (comments, retweets, quote reposts)
+    console.log(
+      `[fetch-raid-engagements] Found ${existingEngagementsMap.size} existing raid engagements to preserve moderation for`
+    );
+
+    // Track which tweet_ids we see in the fresh API response
+    const freshEngagementIds = new Set<string>();
+
+    // 6. Process all engagements (comments, retweets, quote reposts)
     const engagements: any[] = [];
     const campaignStartDate = contest.start_date
       ? new Date(contest.start_date)
@@ -677,26 +690,41 @@ export async function POST(
         ? `https://x.com/${screenName}/status/${tweetId}`
         : "";
 
+      // Track that we saw this engagement in the fresh API response
+      freshEngagementIds.add(tweetId);
+
+      // Get existing moderation data if engagement exists
+      const existingModeration = existingEngagementsMap.get(tweetId);
+
       const engagement = {
         contest_id: contestId,
         creator_id: creatorId,
         tweet_id: tweetId,
         tweet_url: tweetUrl,
         twitter_username: screenName,
-        tweet_text: tweet.text || tweet.full_text || "",
+        tweet_text: tweet.text || tweet.full_text || "", // Updated text (handles edits)
         tweet_created_at: new Date(tweet.created_at || tweet.created_at_iso || new Date()).toISOString(),
         tweet_type: engagementType === "comment" ? "reply" : engagementType === "quote_repost" ? "quote" : engagementType,
         target_tweet_id: targetTweetId, // Mark as raid engagement
-        is_eligible: true,
-        eligibility_reason: `Raid engagement: ${engagementType} on target tweet`,
-        filter_status: "eligible",
+        
+        // Metrics - always update from fresh API data
         likes: tweet.likes || tweet.favorites || tweet.favorite_count || 0,
         replies: tweet.replies || tweet.reply_count || 0,
         retweets: tweet.retweets || tweet.retweet_count || 0,
         quote_reposts: tweet.quotes || tweet.quote_count || 0,
         impressions: parseInt(tweet.views || tweet.view_count || "0", 10),
-        points: Math.round(basePoints + engagementBonusPoints), // Round to integer
+        points: Math.round(basePoints + engagementBonusPoints), // Recalculate based on fresh metrics
         points_calculated_at: new Date().toISOString(),
+        
+        // Eligibility - re-check based on current data (passed filter, so eligible)
+        is_eligible: true,
+        eligibility_reason: `Raid engagement: ${engagementType} on target tweet`,
+        filter_status: "eligible",
+        
+        // PRESERVE moderation fields if they exist, otherwise default
+        moderation_status: existingModeration?.moderation_status || "pending",
+        manual_points_adjustment: existingModeration?.manual_points_adjustment || 0,
+        manual_points_reason: existingModeration?.manual_points_reason || null,
       };
 
       engagements.push(engagement);
@@ -713,11 +741,24 @@ export async function POST(
       },
     });
 
-    // 8. Upsert engagements to twitter_campaign_tweets table
+    // 7. UPSERT engagements to twitter_campaign_tweets table (with deduplication)
     if (engagements.length > 0) {
+      // CRITICAL FIX: Deduplicate engagements before upserting to avoid "ON CONFLICT DO UPDATE cannot affect row a second time" error
+      // Keep the last occurrence of each (contest_id, tweet_id) pair (most recent data)
+      const engagementKeyMap = new Map<string, any>();
+      for (const engagement of engagements) {
+        const key = `${engagement.contest_id}:${engagement.tweet_id}`;
+        engagementKeyMap.set(key, engagement);
+      }
+      const deduplicatedEngagements = Array.from(engagementKeyMap.values());
+      
+      console.log(
+        `[fetch-raid-engagements] Deduplicated ${engagements.length} engagements to ${deduplicatedEngagements.length} unique engagements`
+      );
+
       const { error: upsertError } = await supabaseAdmin
         .from("twitter_campaign_tweets")
-        .upsert(engagements, {
+        .upsert(deduplicatedEngagements, {
           onConflict: "contest_id,tweet_id",
         });
 
@@ -730,10 +771,62 @@ export async function POST(
           { error: "Failed to save engagements", details: upsertError },
           { status: 500 }
         );
+      } else {
+        console.log(
+          `[fetch-raid-engagements] Successfully upserted ${deduplicatedEngagements.length} raid engagements`
+        );
       }
     }
 
-    // 9. Calculate total_* metrics from all participant engagements
+    // ============================================================================
+    // HANDLE DELETED ENGAGEMENTS (those that were in DB but not in fresh API response)
+    // ============================================================================
+    console.log(`[fetch-raid-engagements] Processing deleted/edited engagements...`);
+    
+    // Find engagements that were in DB but not in fresh API response
+    const engagementsToMarkAsDeleted = Array.from(existingEngagementsMap.keys()).filter(
+      (tweetId) => !freshEngagementIds.has(tweetId)
+    );
+
+    if (engagementsToMarkAsDeleted.length > 0) {
+      console.log(
+        `[fetch-raid-engagements] Marking ${engagementsToMarkAsDeleted.length} engagements as deleted/ineligible`
+      );
+
+      // Batch update deleted engagements (chunks of 100 for performance)
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < engagementsToMarkAsDeleted.length; i += BATCH_SIZE) {
+        const batch = engagementsToMarkAsDeleted.slice(i, i + BATCH_SIZE);
+        
+        // Mark as deleted/ineligible, but PRESERVE moderation status
+        const { error: updateError } = await supabaseAdmin
+          .from("twitter_campaign_tweets")
+          .update({
+            is_eligible: false,
+            filter_status: "deleted",
+            eligibility_reason:
+              "Engagement no longer found in API response or no longer matches campaign rules",
+            // DO NOT update moderation_status - preserve it!
+            // DO NOT update manual_points_adjustment - preserve it!
+            // DO NOT update manual_points_reason - preserve it!
+          })
+          .eq("contest_id", contestId)
+          .in("tweet_id", batch);
+
+        if (updateError) {
+          console.error(
+            `[fetch-raid-engagements] Error marking engagements as deleted (batch ${Math.floor(i / BATCH_SIZE) + 1}):`,
+            updateError
+          );
+        } else {
+          console.log(
+            `[fetch-raid-engagements] Marked ${batch.length} engagements as deleted (batch ${Math.floor(i / BATCH_SIZE) + 1})`
+          );
+        }
+      }
+    }
+
+    // 8. Calculate total_* metrics from all participant engagements
     // This aggregates likes/replies/retweets/quotes/impressions from participant's engagements
     const { data: allRaidEngagements } = await supabaseAdmin
       .from("twitter_campaign_tweets")
@@ -760,10 +853,10 @@ export async function POST(
       });
     }
 
-    // 10. Update leaderboard with raid engagement points
+    // 9. Update leaderboard with raid engagement points
     await updateRaidLeaderboard(contestId, supabaseAdmin);
 
-    // 11. Update total_* metrics and total_filtered_tweets in metrics table
+    // 10. Update total_* metrics and total_filtered_tweets in metrics table
     const { count: filteredTweetsCount } = await supabaseAdmin
       .from("twitter_campaign_tweets")
       .select("*", { count: "exact", head: true })
@@ -784,6 +877,23 @@ export async function POST(
         last_updated_at: new Date().toISOString(),
       })
       .eq("contest_id", contestId);
+
+    // 11. Update last_metrics_updated in contests table (same logic as awareness campaigns)
+    const currentTime = new Date().toISOString();
+    console.log(`[fetch-raid-engagements] Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime}`);
+    
+    const { data: updateData, error: updateError } = await supabaseAdmin
+      .from('contests')
+      .update({ last_metrics_updated: currentTime })
+      .eq('id', contestId)
+      .select();
+
+    if (updateError) {
+      console.error(`[fetch-raid-engagements] Failed to update last_metrics_updated for contest ${contestId}:`, updateError);
+      // Don't fail the request, just log the error
+    } else {
+      console.log(`[fetch-raid-engagements] Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`);
+    }
 
     // 12. If targets reached, log it (you can add logic to end campaign here)
     if (targetMetrics.targets_reached) {
