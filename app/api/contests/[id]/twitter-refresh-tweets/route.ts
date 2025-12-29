@@ -619,9 +619,22 @@ export async function POST(
     console.log(`[twitter-refresh-tweets] Batch upserting ${allTweetsToUpsert.length} tweets in chunks of ${TWEET_UPSERT_CHUNK_SIZE}...`);
     
     if (allTweetsToUpsert.length > 0) {
+      // CRITICAL FIX: Deduplicate tweets before upserting to avoid "ON CONFLICT DO UPDATE cannot affect row a second time" error
+      // Keep the last occurrence of each (contest_id, tweet_id) pair (most recent data)
+      const tweetKeyMap = new Map<string, any>();
+      for (const tweet of allTweetsToUpsert) {
+        const key = `${tweet.contest_id}:${tweet.tweet_id}`;
+        tweetKeyMap.set(key, tweet);
+      }
+      const deduplicatedTweets = Array.from(tweetKeyMap.values());
+      
+      console.log(
+        `[twitter-refresh-tweets] Deduplicated ${allTweetsToUpsert.length} tweets to ${deduplicatedTweets.length} unique tweets`
+      );
+      
       // Upsert in chunks to avoid overwhelming the database
-      for (let i = 0; i < allTweetsToUpsert.length; i += TWEET_UPSERT_CHUNK_SIZE) {
-        const chunk = allTweetsToUpsert.slice(i, i + TWEET_UPSERT_CHUNK_SIZE);
+      for (let i = 0; i < deduplicatedTweets.length; i += TWEET_UPSERT_CHUNK_SIZE) {
+        const chunk = deduplicatedTweets.slice(i, i + TWEET_UPSERT_CHUNK_SIZE);
         
         const { error: upsertError } = await supabaseAdmin
           .from("twitter_campaign_tweets")
@@ -637,14 +650,15 @@ export async function POST(
               error: upsertError,
             }
           );
+          // Continue processing other chunks even if one fails
         } else {
           console.log(
-            `[twitter-refresh-tweets] Successfully batch upserted ${chunk.length} tweets (chunk ${Math.floor(i / TWEET_UPSERT_CHUNK_SIZE) + 1} of ${Math.ceil(allTweetsToUpsert.length / TWEET_UPSERT_CHUNK_SIZE)})`
+            `[twitter-refresh-tweets] Successfully batch upserted ${chunk.length} tweets (chunk ${Math.floor(i / TWEET_UPSERT_CHUNK_SIZE) + 1} of ${Math.ceil(deduplicatedTweets.length / TWEET_UPSERT_CHUNK_SIZE)})`
           );
         }
       }
       
-      console.log(`[twitter-refresh-tweets] Completed batch upsert of ${allTweetsToUpsert.length} tweets`);
+      console.log(`[twitter-refresh-tweets] Completed batch upsert of ${deduplicatedTweets.length} tweets`);
     } else {
       console.log(`[twitter-refresh-tweets] No tweets to upsert`);
     }
@@ -903,7 +917,8 @@ export async function POST(
       });
 
       if (upsertPayload.length > 0) {
-        const { error: leaderboardUpsertError } = await supabase
+        // Use admin client for leaderboard upsert to ensure permissions
+        const { error: leaderboardUpsertError } = await supabaseAdmin
           .from("twitter_campaign_leaderboard")
           .upsert(upsertPayload, {
             onConflict: "contest_id,creator_id",
@@ -922,6 +937,10 @@ export async function POST(
             upsertPayload.length
           );
         }
+      } else {
+        console.log(
+          "[twitter-refresh-tweets] No leaderboard entries to upsert (no eligible tweets found)"
+        );
       }
     } else {
       console.log(
