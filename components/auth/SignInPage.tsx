@@ -85,10 +85,33 @@ export default function SignInPage() {
         console.warn("Failed to record login IP:", err);
       }
 
+      // Fetch user profile from users table to get proper display name
+      let displayName = "User";
+      try {
+        const { data: userProfile } = await supabase
+          .from("users")
+          .select("full_name, username")
+          .eq("id", data.user.id)
+          .single();
+
+        if (userProfile) {
+          displayName =
+            userProfile.full_name ||
+            userProfile.username ||
+            data.user?.user_metadata?.full_name ||
+            "User";
+        } else {
+          // Fallback to user_metadata if profile not found
+          displayName = data.user?.user_metadata?.full_name || "User";
+        }
+      } catch (err) {
+        console.warn("Failed to fetch user profile:", err);
+        // Fallback to user_metadata
+        displayName = data.user?.user_metadata?.full_name || "User";
+      }
+
       toast({
-        title: `Welcome back, ${
-          data.user?.user_metadata?.full_name || "User"
-        }!`,
+        title: `Welcome back, ${displayName}!`,
         description: "You have successfully signed in.",
         duration: TOAST_DURATION_SHORT,
       });
