@@ -328,6 +328,7 @@ export default function CreateContestPage({
   >("");
   const [keywords, setKeywords] = useState<string[]>([""]); // For brief step
   const [mentions, setMentions] = useState<string[]>([""]); // Tracking (@mentions)
+  const [maxParticipants, setMaxParticipants] = useState<number | "">(""); // Max participants for Twitter campaigns
   const [targetLikes, setTargetLikes] = useState<number | "">("");
   const [targetReplies, setTargetReplies] = useState<number | "">("");
   const [targetRetweets, setTargetRetweets] = useState<number | "">("");
@@ -1865,6 +1866,9 @@ export default function CreateContestPage({
         if (filteredMentions.length > 0) {
           twitterCampaign.mentions = filteredMentions;
         }
+        if (maxParticipants && typeof maxParticipants === "number" && maxParticipants > 0) {
+          twitterCampaign.max_participants = maxParticipants;
+        }
 
         if (contentType !== "raid") {
           if (keywordsRequirementMode) {
@@ -2797,6 +2801,9 @@ export default function CreateContestPage({
         if (filteredMentions.length > 0) {
           twitterCampaign.mentions = filteredMentions;
         }
+        if (maxParticipants && typeof maxParticipants === "number" && maxParticipants > 0) {
+          twitterCampaign.max_participants = maxParticipants;
+        }
 
         if (contentType !== "raid") {
           if (keywordsRequirementMode) {
@@ -3315,6 +3322,9 @@ export default function CreateContestPage({
         }
         if (twitterCampaign.mentions_requirement_mode) {
           setMentionsRequirementMode(twitterCampaign.mentions_requirement_mode);
+        }
+        if (twitterCampaign.max_participants) {
+          setMaxParticipants(twitterCampaign.max_participants);
         }
       }
     }, 100);
@@ -8147,6 +8157,38 @@ export default function CreateContestPage({
                         </label>
                       </RadioGroup>
                     </div>
+                  </div>
+
+                  {/* Max Participants section */}
+                  <div className="space-y-3 mt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-medium">Max Participants</h3>
+                      </div>
+                      <p
+                        className={cn(
+                          "text-xs",
+                          isDark ? "text-gray-300" : "text-gray-500"
+                        )}
+                      >
+                        Optional: Limit the maximum number of participants for this campaign
+                      </p>
+                    </div>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={maxParticipants}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setMaxParticipants(value === "" ? "" : parseInt(value, 10));
+                      }}
+                      placeholder="No limit (leave empty)"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
+                    />
                   </div>
                 </>
               )}

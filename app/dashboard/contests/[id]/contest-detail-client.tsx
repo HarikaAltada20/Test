@@ -1835,8 +1835,9 @@ export default function ContestDetailClient({
 
     try {
       // Add timeout for long-running requests
+      // Twitter refresh can take 60-90+ seconds (especially for raid campaigns with multiple API calls)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout (2 minutes)
 
       const response = await fetch(
         `/api/contests/${contestId}/refresh-metrics`,
@@ -2867,6 +2868,93 @@ export default function ContestDetailClient({
               // </Card>
             )}
 
+          {/* Participants Card - Show for Twitter text_image contests */}
+          {(() => {
+            const isTwitterTextImage =
+              (currentContest?.platform?.toLowerCase() === "twitter" || currentContest?.platform?.toLowerCase() === "x") &&
+              currentContest?.contest_format === "text_image";
+
+            if (isTwitterTextImage) {
+              const participantsCount = twitterMetrics?.total_participants || 0;
+              const maxParticipants = twitterMetrics?.max_participants || currentContest?.contest_based_details?.twitter_campaign?.max_participants;
+              const displayValue = maxParticipants
+                ? `${participantsCount} / ${maxParticipants}`
+                : participantsCount;
+
+              return (
+                <div
+                  className={cn(
+                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                    isDark
+                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
+                      : "bg-gradient-to-br from-white to-purple-50 border border-purple-100"
+                  )}
+                >
+                  <div className="p-6 relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div
+                        className={cn(
+                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                          isDark
+                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                            : "bg-gradient-to-br from-purple-500 to-purple-600 text-white"
+                        )}
+                      >
+                        <Users
+                          className={cn(
+                            "h-6 w-6",
+                            isDark ? "text-white" : "text-white"
+                          )}
+                        />
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={cn(
+                            "text-sm font-medium uppercase tracking-wide",
+                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                          )}
+                        >
+                          Participants
+                        </p>
+                        <p
+                          className={cn(
+                            "text-2xl font-bold mt-1",
+                            isDark
+                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
+                              : "text-gray-900"
+                          )}
+                        >
+                          {displayValue}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mb-4">
+                      <p
+                        className={cn(
+                          "text-sm font-medium",
+                          isDark
+                            ? "text-white/80 drop-shadow-sm"
+                            : "text-gray-600"
+                        )}
+                      >
+                        {maxParticipants ? "Joined / Max limit" : "Total joined"}
+                      </p>
+                    </div>
+                    <div
+                      className={cn(
+                        "h-1 w-full rounded-full",
+                        isDark
+                          ? "bg-gradient-to-r from-purple-400 via-indigo-400 to-violet-400 shadow-lg shadow-purple-400/70 animate-pulse"
+                          : "bg-gradient-to-r from-purple-200 to-purple-300"
+                      )}
+                    ></div>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           {currentContest.contest_type === "cpm" &&
             currentContest.contest_based_details?.cpm_contest?.total_budget !=
             null && (
@@ -3014,430 +3102,390 @@ export default function ContestDetailClient({
                 <RefreshCw className="h-6 w-6 animate-spin text-blue-600" />
               </div>
             ) : twitterMetrics ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Total Tweets Card */}
-                <div
-                  className={cn(
-                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                    isDark
-                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
-                      : "bg-gradient-to-br from-white to-blue-50 border border-blue-100"
-                  )}
-                >
-                  <div className="p-6 relative z-10">
-                    <div className="flex items-center justify-between mb-4">
-                      <div
-                        className={cn(
-                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                          isDark
-                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                            : "bg-gradient-to-br from-blue-500 to-blue-600 text-white"
-                        )}
-                      >
-                        <FileText className="h-6 w-6" />
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className={cn(
-                            "text-sm font-medium uppercase tracking-wide",
-                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
-                          )}
-                        >
-                          Total Tweets
-                        </p>
-                        <p
-                          className={cn(
-                            "text-2xl font-bold mt-1",
-                            isDark
-                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
-                              : "text-gray-900"
-                          )}
-                        >
-                          {(twitterMetrics.total_filtered_tweets || 0).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
+              <div className="space-y-6">
+                {/* Helper function for metric cards - inline component */}
+                {(() => {
+                  const renderMetricCard = (
+                    icon: React.ReactNode,
+                    label: string,
+                    value: string | number,
+                    iconBgClass: string,
+                    barGradientClass: string,
+                    description?: string
+                  ) => (
                     <div
                       className={cn(
-                        "h-1 w-full rounded-full",
+                        "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                         isDark
-                          ? "bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400 shadow-lg shadow-blue-400/70 animate-pulse"
-                          : "bg-gradient-to-r from-blue-200 to-blue-300"
+                          ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
+                          : "bg-gradient-to-br from-white to-blue-50 border border-blue-100"
                       )}
-                    ></div>
-                  </div>
-                </div>
+                    >
+                      <div className="p-6 relative z-10">
+                        <div className="flex items-center justify-between mb-4">
+                          <div
+                            className={cn(
+                              "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                              iconBgClass
+                            )}
+                          >
+                            {icon}
+                          </div>
+                          <div className="text-right">
+                            <p
+                              className={cn(
+                                "text-sm font-medium uppercase tracking-wide",
+                                isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                              )}
+                            >
+                              {label}
+                            </p>
+                            <p
+                              className={cn(
+                                "text-2xl font-bold mt-1",
+                                isDark
+                                  ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
+                                  : "text-gray-900"
+                              )}
+                            >
+                              {typeof value === "number" ? value.toLocaleString() : value}
+                            </p>
+                          </div>
+                        </div>
+                        {description && (
+                          <p
+                            className={cn(
+                              "text-xs mb-2",
+                              isDark ? "text-gray-300" : "text-gray-600"
+                            )}
+                          >
+                            {description}
+                          </p>
+                        )}
+                        <div
+                          className={cn(
+                            "h-1 w-full rounded-full",
+                            barGradientClass
+                          )}
+                        ></div>
+                      </div>
+                    </div>
+                  );
 
-                {/* Total Participants Card */}
-                <div
-                  className={cn(
-                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                    isDark
-                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
-                      : "bg-gradient-to-br from-white to-purple-50 border border-purple-100"
-                  )}
-                >
-                  <div className="p-6 relative z-10">
-                    <div className="flex items-center justify-between mb-4">
-                      <div
-                        className={cn(
-                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                          isDark
-                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                            : "bg-gradient-to-br from-purple-500 to-purple-600 text-white"
-                        )}
-                      >
-                        <Users className="h-6 w-6" />
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className={cn(
-                            "text-sm font-medium uppercase tracking-wide",
-                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
-                          )}
-                        >
-                          Participants
-                        </p>
-                        <p
-                          className={cn(
-                            "text-2xl font-bold mt-1",
-                            isDark
-                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
-                              : "text-gray-900"
-                          )}
-                        >
-                          {(twitterMetrics.total_participants || 0).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div
-                      className={cn(
-                        "h-1 w-full rounded-full",
-                        isDark
-                          ? "bg-gradient-to-r from-purple-400 via-indigo-400 to-violet-400 shadow-lg shadow-purple-400/70 animate-pulse"
-                          : "bg-gradient-to-r from-purple-200 to-purple-300"
-                      )}
-                    ></div>
-                  </div>
-                </div>
+                  const isRaidCampaign =
+                    (currentContest as any).content_type === "raid" &&
+                    currentContest?.contest_format === "text_image";
 
-                {/* Total Likes Card */}
-                <div
-                  className={cn(
-                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                    isDark
-                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-pink-500/20"
-                      : "bg-gradient-to-br from-white to-pink-50 border border-pink-100"
-                  )}
-                >
-                  <div className="p-6 relative z-10">
-                    <div className="flex items-center justify-between mb-4">
-                      <div
-                        className={cn(
-                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                          isDark
-                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                            : "bg-gradient-to-br from-pink-500 to-pink-600 text-white"
-                        )}
-                      >
-                        <ThumbsUp className="h-6 w-6" />
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className={cn(
-                            "text-sm font-medium uppercase tracking-wide",
-                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
-                          )}
-                        >
-                          Total Likes
-                        </p>
-                        <p
-                          className={cn(
-                            "text-2xl font-bold mt-1",
-                            isDark
-                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-pink-200 bg-clip-text text-transparent"
-                              : "text-gray-900"
-                          )}
-                        >
-                          {(twitterMetrics.total_likes || 0).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div
-                      className={cn(
-                        "h-1 w-full rounded-full",
-                        isDark
-                          ? "bg-gradient-to-r from-pink-400 via-rose-400 to-red-400 shadow-lg shadow-pink-400/70 animate-pulse"
-                          : "bg-gradient-to-r from-pink-200 to-pink-300"
-                      )}
-                    ></div>
-                  </div>
-                </div>
+                  // Get raid target data from contest_based_details (source of truth) or twitterMetrics (synced)
+                  const raidTarget = currentContest?.contest_based_details?.twitter_campaign?.raid_target;
+                  const targetTweetUrl = twitterMetrics?.target_tweet_url || raidTarget?.link || null;
+                  const targetMetrics = raidTarget?.metrics || {};
 
-                {/* Total Impressions Card */}
-                <div
-                  className={cn(
-                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                    isDark
-                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-green-500/20"
-                      : "bg-gradient-to-br from-white to-green-50 border border-green-100"
-                  )}
-                >
-                  <div className="p-6 relative z-10">
-                    <div className="flex items-center justify-between mb-4">
-                      <div
-                        className={cn(
-                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                          isDark
-                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                            : "bg-gradient-to-br from-green-500 to-green-600 text-white"
-                        )}
-                      >
-                        <Eye className="h-6 w-6" />
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className={cn(
-                            "text-sm font-medium uppercase tracking-wide",
-                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
-                          )}
-                        >
-                          Impressions
-                        </p>
-                        <p
-                          className={cn(
-                            "text-2xl font-bold mt-1",
-                            isDark
-                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-green-200 bg-clip-text text-transparent"
-                              : "text-gray-900"
-                          )}
-                        >
-                          {(twitterMetrics.total_impressions || 0).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div
-                      className={cn(
-                        "h-1 w-full rounded-full",
-                        isDark
-                          ? "bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400 shadow-lg shadow-green-400/70 animate-pulse"
-                          : "bg-gradient-to-r from-green-200 to-green-300"
-                      )}
-                    ></div>
-                  </div>
-                </div>
+                  // Get target values - prefer twitterMetrics (synced) but fallback to contest data
+                  const targetLikes = twitterMetrics?.target_likes ?? (targetMetrics.likes ? parseInt(String(targetMetrics.likes), 10) : null);
+                  const targetComments = twitterMetrics?.target_comments ?? (targetMetrics.comments ? parseInt(String(targetMetrics.comments), 10) : null);
+                  const targetRetweets = twitterMetrics?.target_retweets ?? (targetMetrics.retweets ? parseInt(String(targetMetrics.retweets), 10) : null);
+                  const targetQuoteReposts = twitterMetrics?.target_quote_reposts ?? (targetMetrics.quote_reposts ? parseInt(String(targetMetrics.quote_reposts), 10) : null);
 
-                {/* Total Replies Card */}
-                <div
-                  className={cn(
-                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                    isDark
-                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-orange-500/20"
-                      : "bg-gradient-to-br from-white to-orange-50 border border-orange-100"
-                  )}
-                >
-                  <div className="p-6 relative z-10">
-                    <div className="flex items-center justify-between mb-4">
-                      <div
-                        className={cn(
-                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                          isDark
-                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                            : "bg-gradient-to-br from-orange-500 to-orange-600 text-white"
-                        )}
-                      >
-                        <MessageCircle className="h-6 w-6" />
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className={cn(
-                            "text-sm font-medium uppercase tracking-wide",
-                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
-                          )}
-                        >
-                          Replies
-                        </p>
-                        <p
-                          className={cn(
-                            "text-2xl font-bold mt-1",
-                            isDark
-                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-orange-200 bg-clip-text text-transparent"
-                              : "text-gray-900"
-                          )}
-                        >
-                          {(twitterMetrics.total_replies || 0).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div
-                      className={cn(
-                        "h-1 w-full rounded-full",
-                        isDark
-                          ? "bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-400 shadow-lg shadow-orange-400/70 animate-pulse"
-                          : "bg-gradient-to-r from-orange-200 to-orange-300"
-                      )}
-                    ></div>
-                  </div>
-                </div>
+                  // Debug: Log values to help troubleshoot
+                  if (currentContest.platform?.toLowerCase() === "twitter") {
+                    console.log("[Raid Debug] content_type:", (currentContest as any).content_type);
+                    console.log("[Raid Debug] contest_format:", currentContest?.contest_format);
+                    console.log("[Raid Debug] isRaidCampaign:", isRaidCampaign);
+                    console.log("[Raid Debug] raidTarget from contest:", raidTarget);
+                    console.log("[Raid Debug] targetTweetUrl:", targetTweetUrl);
+                    console.log("[Raid Debug] targetMetrics:", targetMetrics);
+                  }
 
-                {/* Total Retweets Card */}
-                <div
-                  className={cn(
-                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                    isDark
-                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-cyan-500/20"
-                      : "bg-gradient-to-br from-white to-cyan-50 border border-cyan-100"
-                  )}
-                >
-                  <div className="p-6 relative z-10">
-                    <div className="flex items-center justify-between mb-4">
-                      <div
-                        className={cn(
-                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                          isDark
-                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                            : "bg-gradient-to-br from-cyan-500 to-cyan-600 text-white"
-                        )}
-                      >
-                        <Share2 className="h-6 w-6" />
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className={cn(
-                            "text-sm font-medium uppercase tracking-wide",
-                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                  return (
+                    <>
+                      {/* For Raid Campaigns: Show Target Tweet, Target Metrics, and Current Achieved */}
+                      {isRaidCampaign && (
+                        <>
+                          {/* Target Tweet Section - Show first */}
+                          {targetTweetUrl && (
+                            <div className="mb-6">
+                              <h3
+                                className={cn(
+                                  "text-lg font-semibold mb-4 flex items-center gap-2",
+                                  isDark ? "text-white" : "text-slate-900"
+                                )}
+                              >
+                                <Share2 className="h-5 w-5 text-sky-500" />
+                                Target Tweet
+                              </h3>
+                              <div
+                                className={cn(
+                                  "rounded-xl p-6 border",
+                                  isDark
+                                    ? "bg-slate-900/40 border-slate-700"
+                                    : "bg-slate-50 border-slate-200"
+                                )}
+                              >
+                                <a
+                                  href={targetTweetUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={cn(
+                                    "inline-flex items-center gap-2 text-sm font-medium break-all hover:underline",
+                                    isDark
+                                      ? "text-sky-300 hover:text-sky-200"
+                                      : "text-sky-600 hover:text-sky-700"
+                                  )}
+                                >
+                                  {targetTweetUrl}
+                                  <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                                </a>
+                              </div>
+                            </div>
                           )}
-                        >
-                          Retweets
-                        </p>
-                        <p
-                          className={cn(
-                            "text-2xl font-bold mt-1",
-                            isDark
-                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-cyan-200 bg-clip-text text-transparent"
-                              : "text-gray-900"
-                          )}
-                        >
-                          {(twitterMetrics.total_retweets || 0).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div
-                      className={cn(
-                        "h-1 w-full rounded-full",
-                        isDark
-                          ? "bg-gradient-to-r from-cyan-400 via-teal-400 to-green-400 shadow-lg shadow-cyan-400/70 animate-pulse"
-                          : "bg-gradient-to-r from-cyan-200 to-cyan-300"
-                      )}
-                    ></div>
-                  </div>
-                </div>
 
-                {/* Total Quote Reposts Card */}
-                <div
-                  className={cn(
-                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                    isDark
-                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-indigo-500/20"
-                      : "bg-gradient-to-br from-white to-indigo-50 border border-indigo-100"
-                  )}
-                >
-                  <div className="p-6 relative z-10">
-                    <div className="flex items-center justify-between mb-4">
-                      <div
-                        className={cn(
-                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                          isDark
-                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                            : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white"
-                        )}
-                      >
-                        <RefreshCw className="h-6 w-6" />
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className={cn(
-                            "text-sm font-medium uppercase tracking-wide",
-                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
-                          )}
-                        >
-                          Quote Reposts
-                        </p>
-                        <p
-                          className={cn(
-                            "text-2xl font-bold mt-1",
-                            isDark
-                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-indigo-200 bg-clip-text text-transparent"
-                              : "text-gray-900"
-                          )}
-                        >
-                          {(twitterMetrics.total_quote_reposts || 0).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div
-                      className={cn(
-                        "h-1 w-full rounded-full",
-                        isDark
-                          ? "bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 shadow-lg shadow-indigo-400/70 animate-pulse"
-                          : "bg-gradient-to-r from-indigo-200 to-indigo-300"
-                      )}
-                    ></div>
-                  </div>
-                </div>
+                          {/* Target Metrics Section - Only show metrics that are set (not null, not 0) */}
+                          {(() => {
+                            const hasTargetMetrics =
+                              (targetLikes !== null && targetLikes > 0) ||
+                              (targetComments !== null && targetComments > 0) ||
+                              (targetRetweets !== null && targetRetweets > 0) ||
+                              (targetQuoteReposts !== null && targetQuoteReposts > 0);
 
-                {/* Total Points Card */}
-                <div
-                  className={cn(
-                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                    isDark
-                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-yellow-500/20"
-                      : "bg-gradient-to-br from-white to-yellow-50 border border-yellow-100"
-                  )}
-                >
-                  <div className="p-6 relative z-10">
-                    <div className="flex items-center justify-between mb-4">
-                      <div
-                        className={cn(
-                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                          isDark
-                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                            : "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white"
-                        )}
-                      >
-                        <TrendingUp className="h-6 w-6" />
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className={cn(
-                            "text-sm font-medium uppercase tracking-wide",
-                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
-                          )}
-                        >
-                          Total Points
-                        </p>
-                        <p
-                          className={cn(
-                            "text-2xl font-bold mt-1",
-                            isDark
-                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-yellow-200 bg-clip-text text-transparent"
-                              : "text-gray-900"
-                          )}
-                        >
-                          {(twitterMetrics.total_points || 0).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div
-                      className={cn(
-                        "h-1 w-full rounded-full",
-                        isDark
-                          ? "bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 shadow-lg shadow-yellow-400/70 animate-pulse"
-                          : "bg-gradient-to-r from-yellow-200 to-yellow-300"
+                            return hasTargetMetrics ? (
+                              <div className="mb-6">
+                                <h3
+                                  className={cn(
+                                    "text-lg font-semibold mb-4",
+                                    isDark ? "text-white" : "text-slate-900"
+                                  )}
+                                >
+                                  Target Metrics
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                  {targetLikes !== null && targetLikes > 0 && renderMetricCard(
+                                    <ThumbsUp className="h-6 w-6" />,
+                                    "Target Likes",
+                                    targetLikes,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-pink-500 to-pink-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-pink-400 via-rose-400 to-red-400 shadow-lg shadow-pink-400/70 animate-pulse" : "bg-gradient-to-r from-pink-200 to-pink-300"
+                                  )}
+                                  {targetComments !== null && targetComments > 0 && renderMetricCard(
+                                    <MessageCircle className="h-6 w-6" />,
+                                    "Target Comments",
+                                    targetComments,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-orange-500 to-orange-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-400 shadow-lg shadow-orange-400/70 animate-pulse" : "bg-gradient-to-r from-orange-200 to-orange-300"
+                                  )}
+                                  {targetRetweets !== null && targetRetweets > 0 && renderMetricCard(
+                                    <Share2 className="h-6 w-6" />,
+                                    "Target Retweets",
+                                    targetRetweets,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-cyan-500 to-cyan-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-cyan-400 via-teal-400 to-green-400 shadow-lg shadow-cyan-400/70 animate-pulse" : "bg-gradient-to-r from-cyan-200 to-cyan-300"
+                                  )}
+                                  {targetQuoteReposts !== null && targetQuoteReposts > 0 && renderMetricCard(
+                                    <RefreshCw className="h-6 w-6" />,
+                                    "Target Quote Reposts",
+                                    targetQuoteReposts,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 shadow-lg shadow-indigo-400/70 animate-pulse" : "bg-gradient-to-r from-indigo-200 to-indigo-300"
+                                  )}
+                                </div>
+                              </div>
+                            ) : null;
+                          })()}
+
+                          {/* Current Metrics Achieved Section (from target_current_*) */}
+                          {(() => {
+                            const hasCurrentMetrics =
+                              twitterMetrics.target_current_likes !== null ||
+                              twitterMetrics.target_current_comments !== null ||
+                              twitterMetrics.target_current_retweets !== null ||
+                              twitterMetrics.target_current_quote_reposts !== null ||
+                              twitterMetrics.target_current_views !== null ||
+                              twitterMetrics.targets_reached !== null;
+
+                            return hasCurrentMetrics ? (
+                              <div className="mb-6">
+                                <h3
+                                  className={cn(
+                                    "text-lg font-semibold mb-4",
+                                    isDark ? "text-white" : "text-slate-900"
+                                  )}
+                                >
+                                  Current Metrics Achieved
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+                                  {twitterMetrics.target_current_likes !== null && renderMetricCard(
+                                    <ThumbsUp className="h-6 w-6" />,
+                                    "Current Likes",
+                                    twitterMetrics.target_current_likes || 0,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-pink-500 to-pink-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-pink-400 via-rose-400 to-red-400 shadow-lg shadow-pink-400/70 animate-pulse" : "bg-gradient-to-r from-pink-200 to-pink-300"
+                                  )}
+                                  {twitterMetrics.target_current_comments !== null && renderMetricCard(
+                                    <MessageCircle className="h-6 w-6" />,
+                                    "Current Comments",
+                                    twitterMetrics.target_current_comments || 0,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-orange-500 to-orange-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-400 shadow-lg shadow-orange-400/70 animate-pulse" : "bg-gradient-to-r from-orange-200 to-orange-300"
+                                  )}
+                                  {twitterMetrics.target_current_retweets !== null && renderMetricCard(
+                                    <Share2 className="h-6 w-6" />,
+                                    "Current Retweets",
+                                    twitterMetrics.target_current_retweets || 0,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-cyan-500 to-cyan-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-cyan-400 via-teal-400 to-green-400 shadow-lg shadow-cyan-400/70 animate-pulse" : "bg-gradient-to-r from-cyan-200 to-cyan-300"
+                                  )}
+                                  {twitterMetrics.target_current_quote_reposts !== null && renderMetricCard(
+                                    <RefreshCw className="h-6 w-6" />,
+                                    "Current Quote Reposts",
+                                    twitterMetrics.target_current_quote_reposts || 0,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 shadow-lg shadow-indigo-400/70 animate-pulse" : "bg-gradient-to-r from-indigo-200 to-indigo-300"
+                                  )}
+                                  {twitterMetrics.target_current_views !== null && renderMetricCard(
+                                    <Eye className="h-6 w-6" />,
+                                    "Current Views",
+                                    twitterMetrics.target_current_views || 0,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-green-500 to-green-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400 shadow-lg shadow-green-400/70 animate-pulse" : "bg-gradient-to-r from-green-200 to-green-300"
+                                  )}
+                                </div>
+                                {/* Targets Reached Status */}
+                                {twitterMetrics.targets_reached !== null && (
+                                  <div
+                                    className={cn(
+                                      "rounded-xl p-4 border flex items-center gap-3",
+                                      twitterMetrics.targets_reached
+                                        ? isDark
+                                          ? "bg-green-900/30 border-green-700"
+                                          : "bg-green-50 border-green-200"
+                                        : isDark
+                                          ? "bg-yellow-900/30 border-yellow-700"
+                                          : "bg-yellow-50 border-yellow-200"
+                                    )}
+                                  >
+                                    {twitterMetrics.targets_reached ? (
+                                      <CheckCircle2
+                                        className={cn(
+                                          "h-6 w-6 flex-shrink-0",
+                                          isDark ? "text-green-400" : "text-green-600"
+                                        )}
+                                      />
+                                    ) : (
+                                      <Clock
+                                        className={cn(
+                                          "h-6 w-6 flex-shrink-0",
+                                          isDark ? "text-yellow-400" : "text-yellow-600"
+                                        )}
+                                      />
+                                    )}
+                                    <div>
+                                      <p
+                                        className={cn(
+                                          "text-sm font-semibold",
+                                          twitterMetrics.targets_reached
+                                            ? isDark
+                                              ? "text-green-300"
+                                              : "text-green-800"
+                                            : isDark
+                                              ? "text-yellow-300"
+                                              : "text-yellow-800"
+                                        )}
+                                      >
+                                        {twitterMetrics.targets_reached
+                                          ? "Targets Reached"
+                                          : "Targets Not Yet Reached"}
+                                      </p>
+                                      <p
+                                        className={cn(
+                                          "text-xs mt-1",
+                                          twitterMetrics.targets_reached
+                                            ? isDark
+                                              ? "text-green-400"
+                                              : "text-green-700"
+                                            : isDark
+                                              ? "text-yellow-400"
+                                              : "text-yellow-700"
+                                        )}
+                                      >
+                                        {twitterMetrics.targets_reached
+                                          ? "All target metrics have been achieved. Contest will end when targets are reached."
+                                          : "Keep engaging with the target tweet to reach the goals!"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : null;
+                          })()}
+                        </>
                       )}
-                    ></div>
-                  </div>
-                </div>
+
+                      {/* General Campaign Metrics Section (for both raid and awareness) */}
+                      <div>
+                        <h3
+                          className={cn(
+                            "text-lg font-semibold mb-4",
+                            isDark ? "text-white" : "text-slate-900"
+                          )}
+                        >
+                          Campaign Metrics
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                          {renderMetricCard(
+                            <FileText className="h-6 w-6" />,
+                            "Total Tweets",
+                            twitterMetrics.total_filtered_tweets || 0,
+                            isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-blue-500 to-blue-600 text-white",
+                            isDark ? "bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400 shadow-lg shadow-blue-400/70 animate-pulse" : "bg-gradient-to-r from-blue-200 to-blue-300"
+                          )}
+                          {/* Participants card removed - already shown in summary cards above */}
+                          {renderMetricCard(
+                            <ThumbsUp className="h-6 w-6" />,
+                            "Total Likes",
+                            twitterMetrics.total_likes || 0,
+                            isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-pink-500 to-pink-600 text-white",
+                            isDark ? "bg-gradient-to-r from-pink-400 via-rose-400 to-red-400 shadow-lg shadow-pink-400/70 animate-pulse" : "bg-gradient-to-r from-pink-200 to-pink-300"
+                          )}
+                          {renderMetricCard(
+                            <MessageCircle className="h-6 w-6" />,
+                            "Total Replies",
+                            twitterMetrics.total_replies || 0,
+                            isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-orange-500 to-orange-600 text-white",
+                            isDark ? "bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-400 shadow-lg shadow-orange-400/70 animate-pulse" : "bg-gradient-to-r from-orange-200 to-orange-300"
+                          )}
+                          {renderMetricCard(
+                            <Share2 className="h-6 w-6" />,
+                            "Total Retweets",
+                            twitterMetrics.total_retweets || 0,
+                            isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-cyan-500 to-cyan-600 text-white",
+                            isDark ? "bg-gradient-to-r from-cyan-400 via-teal-400 to-green-400 shadow-lg shadow-cyan-400/70 animate-pulse" : "bg-gradient-to-r from-cyan-200 to-cyan-300"
+                          )}
+                          {renderMetricCard(
+                            <RefreshCw className="h-6 w-6" />,
+                            "Total Quote Reposts",
+                            twitterMetrics.total_quote_reposts || 0,
+                            isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white",
+                            isDark ? "bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 shadow-lg shadow-indigo-400/70 animate-pulse" : "bg-gradient-to-r from-indigo-200 to-indigo-300"
+                          )}
+                          {renderMetricCard(
+                            <Eye className="h-6 w-6" />,
+                            "Total Impressions",
+                            twitterMetrics.total_impressions || 0,
+                            isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-green-500 to-green-600 text-white",
+                            isDark ? "bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400 shadow-lg shadow-green-400/70 animate-pulse" : "bg-gradient-to-r from-green-200 to-green-300"
+                          )}
+                          {renderMetricCard(
+                            <TrendingUp className="h-6 w-6" />,
+                            "Total Points",
+                            twitterMetrics.total_points || 0,
+                            isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white",
+                            isDark ? "bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 shadow-lg shadow-yellow-400/70 animate-pulse" : "bg-gradient-to-r from-yellow-200 to-yellow-300"
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             ) : (
               <div

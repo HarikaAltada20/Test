@@ -747,7 +747,7 @@ export default function OpportunitiesPage({
       : [];
     const contestSubcategories =
       typeof contest.subcategories === "object" &&
-      contest.subcategories !== null
+        contest.subcategories !== null
         ? (contest.subcategories as Record<string, string[]>)
         : {};
     const contestInterests = Array.isArray(contest.interests)
@@ -949,7 +949,7 @@ export default function OpportunitiesPage({
         : [];
       const contestSubcategories =
         typeof contest.subcategories === "object" &&
-        contest.subcategories !== null
+          contest.subcategories !== null
           ? (contest.subcategories as Record<string, string[]>)
           : {};
       const contestInterests = Array.isArray(contest.interests)
@@ -1056,12 +1056,12 @@ export default function OpportunitiesPage({
         case "cpm_rate_asc":
           const rateA =
             a.contest_type === "cpm" &&
-            a.contest_based_details?.cpm_contest?.cpm_rate_usd
+              a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1; // Use -1 to sort contests without CPM rate last
           const rateB =
             b.contest_type === "cpm" &&
-            b.contest_based_details?.cpm_contest?.cpm_rate_usd
+              b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           if (rateA === -1 && rateB === -1) return 0;
@@ -1137,30 +1137,30 @@ export default function OpportunitiesPage({
         {(contest.status === "active" ||
           contest.status === "upcoming" ||
           contest.status === "ended") && (
-          <div className="absolute top-3 right-3 z-10 flex flex-row gap-2">
-            <Badge
-              className={cn(
-                "capitalize text-sm px-3 py-1 font-medium border",
-                contest.status === "active" && "bg-[#7F39EC] text-white",
-                contest.status === "upcoming" && "bg-[#7F39EC] text-white",
-                contest.status === "ended" && "bg-[#7F39EC] text-white"
-              )}
-            >
-              {contest.status === "active"
-                ? "Live"
-                : contest.status === "upcoming"
-                ? "Upcoming"
-                : contest.status === "ended"
-                ? "Ended"
-                : contest.status || "Unknown"}
-            </Badge>
-            {contest.post_contest_status === "payouts_processed" && (
-              <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
-                Completed
+            <div className="absolute top-3 right-3 z-10 flex flex-row gap-2">
+              <Badge
+                className={cn(
+                  "capitalize text-sm px-3 py-1 font-medium border",
+                  contest.status === "active" && "bg-[#7F39EC] text-white",
+                  contest.status === "upcoming" && "bg-[#7F39EC] text-white",
+                  contest.status === "ended" && "bg-[#7F39EC] text-white"
+                )}
+              >
+                {contest.status === "active"
+                  ? "Live"
+                  : contest.status === "upcoming"
+                    ? "Upcoming"
+                    : contest.status === "ended"
+                      ? "Ended"
+                      : contest.status || "Unknown"}
               </Badge>
-            )}
-          </div>
-        )}
+              {contest.post_contest_status === "payouts_processed" && (
+                <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
+                  Completed
+                </Badge>
+              )}
+            </div>
+          )}
         {/* Thumbnail */}
         <div className="w-full sm:w-64 md:w-80 lg:w-72 xl:w-96 sm:h-[200px] md:h-[220px] lg:h-[250px] min-h-[12rem] flex-shrink-0 flex items-center justify-center overflow-hidden relative">
           {contest.thumbnail_url ? (
@@ -1188,59 +1188,107 @@ export default function OpportunitiesPage({
             </CardTitle>
             {/* Badges */}
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-              {contest.multiple_submissions_enabled && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-sm px-3 py-1 font-medium",
-                    isDark
-                      ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                      : "bg-purple-50 text-purple-700 border-purple-200"
-                  )}
-                >
-                  <CheckCheck className="h-3 w-3 mr-1" />
-                  {(contest.max_submissions_per_creator ?? 1) > 1
-                    ? `${contest.max_submissions_per_creator} Submissions`
-                    : "Multiple Entries"}
-                </Badge>
-              )}
-              {contest.content_type && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-sm px-3 py-1 font-medium",
-                    isDark
-                      ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
-                      : "bg-blue-50 text-blue-700 border-blue-200"
-                  )}
-                >
-                  <Tag className="h-3 w-3 mr-1" />
-                  {contest.content_type.toUpperCase()}
-                </Badge>
-              )}
+              {/* Show campaign type badge (RAID/AWARENESS) for Twitter text_image contests */}
+              {(() => {
+                const isTwitterTextImage =
+                  (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                  contest.contest_format === "text_image";
+
+                if (isTwitterTextImage) {
+                  const campaignType = contest.contest_based_details?.twitter_campaign?.campaign_type;
+                  if (campaignType === "raid" || campaignType === "awareness") {
+                    return (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-sm px-3 py-1 font-medium",
+                          isDark
+                            ? campaignType === "raid"
+                              ? "bg-red-900/30 text-red-300 border-red-700/50"
+                              : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
+                            : campaignType === "raid"
+                              ? "bg-red-50 text-red-700 border-red-200"
+                              : "bg-cyan-50 text-cyan-700 border-cyan-200"
+                        )}
+                      >
+                        {campaignType.toUpperCase()}
+                      </Badge>
+                    );
+                  }
+                  return null;
+                }
+
+                if (contest.multiple_submissions_enabled) {
+                  return (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-sm px-3 py-1 font-medium",
+                        isDark
+                          ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                          : "bg-purple-50 text-purple-700 border-purple-200"
+                      )}
+                    >
+                      <CheckCheck className="h-3 w-3 mr-1" />
+                      {(contest.max_submissions_per_creator ?? 1) > 1
+                        ? `${contest.max_submissions_per_creator} Submissions`
+                        : "Multiple Entries"}
+                    </Badge>
+                  );
+                }
+                return null;
+              })()}
+              {/* Content Type Badge - Don't show for Twitter text_image contests (we show campaign_type badge instead) */}
+              {(() => {
+                const isTwitterTextImage =
+                  (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                  contest.contest_format === "text_image";
+
+                if (isTwitterTextImage) {
+                  return null;
+                }
+
+                if (contest.content_type) {
+                  return (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-sm px-3 py-1 font-medium",
+                        isDark
+                          ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
+                          : "bg-blue-50 text-blue-700 border-blue-200"
+                      )}
+                    >
+                      <Tag className="h-3 w-3 mr-1" />
+                      {contest.content_type.toUpperCase()}
+                    </Badge>
+                  );
+                }
+                return null;
+              })()}
               {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
                 contest.contest_based_details?.leaderboard_contest
                   ?.flat_fee_bonus) && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-sm px-3 py-1 font-medium",
-                    isDark
-                      ? "bg-green-900/30 text-green-300 border-green-700/50"
-                      : "bg-green-50 text-green-700 border-green-200"
-                  )}
-                >
-                  <Gift className="h-3 w-3 mr-1" />
-                  {formatMoney(
-                    contest.contest_based_details?.cpm_contest
-                      ?.flat_fee_bonus ||
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-sm px-3 py-1 font-medium",
+                      isDark
+                        ? "bg-green-900/30 text-green-300 border-green-700/50"
+                        : "bg-green-50 text-green-700 border-green-200"
+                    )}
+                  >
+                    <Gift className="h-3 w-3 mr-1" />
+                    {formatMoney(
+                      contest.contest_based_details?.cpm_contest
+                        ?.flat_fee_bonus ||
                       contest.contest_based_details?.leaderboard_contest
                         ?.flat_fee_bonus ||
                       0
-                  )}
-                  /submission
-                </Badge>
-              )}
+                    )}
+                    /submission
+                  </Badge>
+                )}
               {contest.bonus_details?.description_html && (
                 <Badge
                   variant="outline"
@@ -1317,30 +1365,67 @@ export default function OpportunitiesPage({
                   </span>
                 </div>
               )}
-              {contest.live_submission_count !== null &&
-                contest.live_submission_count !== undefined && (
-                  <div className="flex items-center">
-                    <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span
-                      style={{
-                        color: isDark ? "white" : "#475569",
-                        transition: "none",
-                      }}
-                    >
-                      Submissions:{" "}
-                      <span className="font-medium">
-                        {contest.live_submission_count}
+              {/* For Twitter text_image contests, show participants instead of submissions */}
+              {(() => {
+                const isTwitterTextImage =
+                  (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                  contest.contest_format === "text_image";
+
+                if (isTwitterTextImage) {
+                  // For Twitter contests, show participants count if available
+                  const participantsCount = contest.twitter_participants_count ?? 0;
+                  const maxParticipants = contest.twitter_max_participants;
+                  const displayValue = maxParticipants
+                    ? `${participantsCount} / ${maxParticipants}`
+                    : participantsCount;
+
+                  return (
+                    <div className="flex items-center">
+                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Participants:{" "}
+                        <span className="font-medium">
+                          {displayValue}
+                        </span>
                       </span>
-                    </span>
-                  </div>
-                )}
+                    </div>
+                  );
+                }
+
+                // For non-Twitter contests, show submissions count
+                if (contest.live_submission_count !== null &&
+                  contest.live_submission_count !== undefined) {
+                  return (
+                    <div className="flex items-center">
+                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Submissions:{" "}
+                        <span className="font-medium">
+                          {contest.live_submission_count}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               {(() => {
                 const contestCategories = Array.isArray(contest.categories)
                   ? contest.categories
                   : [];
                 const contestSubcategories =
                   typeof contest.subcategories === "object" &&
-                  contest.subcategories !== null
+                    contest.subcategories !== null
                     ? (contest.subcategories as Record<string, string[]>)
                     : {};
                 const contestInterests = Array.isArray(contest.interests)
@@ -1389,17 +1474,17 @@ export default function OpportunitiesPage({
                     {contest.contest_type === "cpm"
                       ? "CPM Based"
                       : contest.contest_type === "leaderboard"
-                      ? "Leaderboard"
-                      : contest.contest_type
-                      ? contest.contest_type.charAt(0).toUpperCase() +
-                        contest.contest_type.slice(1)
-                      : "N/A"}
+                        ? "Leaderboard"
+                        : contest.contest_type
+                          ? contest.contest_type.charAt(0).toUpperCase() +
+                          contest.contest_type.slice(1)
+                          : "N/A"}
                   </span>
                 </span>
               </div>
               {contest.contest_type === "cpm" &&
                 contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
-                  null && (
+                null && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                     <span
@@ -1421,7 +1506,7 @@ export default function OpportunitiesPage({
                 )}
               {contest.contest_type === "cpm" &&
                 contest.contest_based_details?.cpm_contest?.total_budget !=
-                  null &&
+                null &&
                 contest.contest_based_details.cpm_contest.total_budget > 0 && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
@@ -1444,7 +1529,7 @@ export default function OpportunitiesPage({
                 contest.contest_based_details?.leaderboard_contest
                   ?.total_prize != null &&
                 contest.contest_based_details.leaderboard_contest.total_prize >
-                  0 && (
+                0 && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                     <span
@@ -1468,7 +1553,7 @@ export default function OpportunitiesPage({
             {/* Budget Spent Progress Bar for CPM contests */}
             {contest.contest_type === "cpm" &&
               contest.contest_based_details?.cpm_contest?.total_budget !=
-                null &&
+              null &&
               contest.contest_based_details.cpm_contest.total_budget > 0 &&
               (() => {
                 const totalBudget =
@@ -1665,8 +1750,8 @@ export default function OpportunitiesPage({
                       ? "bg-[#7F39EC] text-white"
                       : "bg-[#7F39EC] text-white"
                     : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 )}
                 title="Text/Image Opportunities"
               >
@@ -1683,8 +1768,8 @@ export default function OpportunitiesPage({
                       ? "bg-[#7F39EC] text-white"
                       : "bg-[#7F39EC] text-white"
                     : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 )}
                 title="Video Opportunities"
               >
@@ -1704,8 +1789,8 @@ export default function OpportunitiesPage({
                       ? "bg-[#7F39EC] text-white"
                       : "bg-[#7F39EC] text-white"
                     : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 )}
                 title="Grid View"
               >
@@ -1722,8 +1807,8 @@ export default function OpportunitiesPage({
                       ? "bg-[#7F39EC] text-white"
                       : "bg-[#7F39EC] text-white"
                     : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 )}
                 title="List View"
               >
@@ -1935,11 +2020,11 @@ export default function OpportunitiesPage({
                         className={cn(
                           "capitalize text-sm px-3 py-1 font-medium border",
                           contest.status === "active" &&
-                            "bg-[#7F39EC] text-white",
+                          "bg-[#7F39EC] text-white",
                           contest.status === "upcoming" &&
-                            "bg-[#7F39EC] text-white",
+                          "bg-[#7F39EC] text-white",
                           contest.status === "ended" &&
-                            "bg-[#7F39EC] text-white",
+                          "bg-[#7F39EC] text-white",
                           !["active", "upcoming", "ended"].includes(
                             contest.status
                           ) && "bg-[#7F39EC] text-white"
@@ -1977,60 +2062,108 @@ export default function OpportunitiesPage({
                     >
                       {/* New Features Indicators */}
                       <div className="flex flex-wrap items-center gap-2 mb-3">
-                        {contest.multiple_submissions_enabled && (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[12px]",
-                              isDark
-                                ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                                : "bg-purple-50 text-purple-700 border-purple-200"
-                            )}
-                          >
-                            <CheckCheck className="h-3 w-3 mr-1" />
-                            {contest.max_submissions_per_creator > 1
-                              ? `${contest.max_submissions_per_creator} Submissions`
-                              : "Multiple Entries"}
-                          </Badge>
-                        )}
+                        {/* Show campaign type badge (RAID/AWARENESS) for Twitter text_image contests */}
+                        {(() => {
+                          const isTwitterTextImage =
+                            (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                            contest.contest_format === "text_image";
+
+                          if (isTwitterTextImage) {
+                            const campaignType = contest.contest_based_details?.twitter_campaign?.campaign_type;
+                            if (campaignType === "raid" || campaignType === "awareness") {
+                              return (
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[12px]",
+                                    isDark
+                                      ? campaignType === "raid"
+                                        ? "bg-red-900/30 text-red-300 border-red-700/50"
+                                        : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
+                                      : campaignType === "raid"
+                                        ? "bg-red-50 text-red-700 border-red-200"
+                                        : "bg-cyan-50 text-cyan-700 border-cyan-200"
+                                  )}
+                                >
+                                  {campaignType.toUpperCase()}
+                                </Badge>
+                              );
+                            }
+                            return null;
+                          }
+
+                          if (contest.multiple_submissions_enabled) {
+                            return (
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[12px]",
+                                  isDark
+                                    ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                                    : "bg-purple-50 text-purple-700 border-purple-200"
+                                )}
+                              >
+                                <CheckCheck className="h-3 w-3 mr-1" />
+                                {contest.max_submissions_per_creator > 1
+                                  ? `${contest.max_submissions_per_creator} Submissions`
+                                  : "Multiple Entries"}
+                              </Badge>
+                            );
+                          }
+                          return null;
+                        })()}
                         {(contest.contest_based_details?.cpm_contest
                           ?.flat_fee_bonus ||
                           contest.contest_based_details?.leaderboard_contest
                             ?.flat_fee_bonus) && (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[12px]",
-                              isDark
-                                ? "bg-green-900/30 text-green-300 border-green-700/50"
-                                : "bg-green-50 text-green-700 border-green-200"
-                            )}
-                          >
-                            <Gift className="h-3 w-3 mr-1" />
-                            {formatMoney(
-                              contest.contest_based_details?.cpm_contest
-                                ?.flat_fee_bonus ||
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[12px]",
+                                isDark
+                                  ? "bg-green-900/30 text-green-300 border-green-700/50"
+                                  : "bg-green-50 text-green-700 border-green-200"
+                              )}
+                            >
+                              <Gift className="h-3 w-3 mr-1" />
+                              {formatMoney(
+                                contest.contest_based_details?.cpm_contest
+                                  ?.flat_fee_bonus ||
                                 contest.contest_based_details
                                   ?.leaderboard_contest?.flat_fee_bonus ||
                                 0
-                            )}
-                            /submission
-                          </Badge>
-                        )}
-                        {contest.content_type && (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[12px]",
-                              isDark
-                                ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
-                                : "bg-blue-50 text-blue-700 border-blue-200"
-                            )}
-                          >
-                            <Tag className="h-3 w-3 mr-1" />
-                            {contest.content_type.toUpperCase()}
-                          </Badge>
-                        )}
+                              )}
+                              /submission
+                            </Badge>
+                          )}
+                        {/* Content Type Badge - Don't show for Twitter text_image contests (we show campaign_type badge instead) */}
+                        {(() => {
+                          const isTwitterTextImage =
+                            (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                            contest.contest_format === "text_image";
+
+                          if (isTwitterTextImage) {
+                            return null;
+                          }
+
+                          if (contest.content_type) {
+                            return (
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[12px]",
+                                  isDark
+                                    ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
+                                    : "bg-blue-50 text-blue-700 border-blue-200"
+                                )}
+                              >
+                                <Tag className="h-3 w-3 mr-1" />
+                                {contest.content_type.toUpperCase()}
+                              </Badge>
+                            );
+                          }
+                          return null;
+                        })()}
                         {contest.bonus_details?.description_html && (
                           <Badge
                             variant="outline"
@@ -2105,23 +2238,60 @@ export default function OpportunitiesPage({
                           </span>
                         </div>
                       )}
-                      {contest.live_submission_count !== null &&
-                        contest.live_submission_count !== undefined && (
-                          <div className="flex items-center">
-                            <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                            <span>
-                              Submissions:{" "}
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isDark ? "text-white" : "text-slate-700"
-                                )}
-                              >
-                                {contest.live_submission_count}
+                      {/* For Twitter text_image contests, show participants instead of submissions */}
+                      {(() => {
+                        const isTwitterTextImage =
+                          (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                          contest.contest_format === "text_image";
+
+                        if (isTwitterTextImage) {
+                          // For Twitter contests, show participants count if available
+                          const participantsCount = contest.twitter_participants_count ?? 0;
+                          const maxParticipants = contest.twitter_max_participants;
+                          const displayValue = maxParticipants
+                            ? `${participantsCount} / ${maxParticipants}`
+                            : participantsCount;
+
+                          return (
+                            <div className="flex items-center">
+                              <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                              <span>
+                                Participants:{" "}
+                                <span
+                                  className={cn(
+                                    "font-medium",
+                                    isDark ? "text-white" : "text-slate-700"
+                                  )}
+                                >
+                                  {displayValue}
+                                </span>
                               </span>
-                            </span>
-                          </div>
-                        )}
+                            </div>
+                          );
+                        }
+
+                        // For non-Twitter contests, show submissions count
+                        if (contest.live_submission_count !== null &&
+                          contest.live_submission_count !== undefined) {
+                          return (
+                            <div className="flex items-center">
+                              <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                              <span>
+                                Submissions:{" "}
+                                <span
+                                  className={cn(
+                                    "font-medium",
+                                    isDark ? "text-white" : "text-slate-700"
+                                  )}
+                                >
+                                  {contest.live_submission_count}
+                                </span>
+                              </span>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                       {(() => {
                         const contestCategories = Array.isArray(
                           contest.categories
@@ -2130,11 +2300,11 @@ export default function OpportunitiesPage({
                           : [];
                         const contestSubcategories =
                           typeof contest.subcategories === "object" &&
-                          contest.subcategories !== null
+                            contest.subcategories !== null
                             ? (contest.subcategories as Record<
-                                string,
-                                string[]
-                              >)
+                              string,
+                              string[]
+                            >)
                             : {};
                         const contestInterests = Array.isArray(
                           contest.interests
@@ -2184,11 +2354,11 @@ export default function OpportunitiesPage({
                             {contest.contest_type === "cpm"
                               ? "CPM Based"
                               : contest.contest_type === "leaderboard"
-                              ? "Leaderboard"
-                              : contest.contest_type
-                              ? contest.contest_type.charAt(0).toUpperCase() +
-                                contest.contest_type.slice(1)
-                              : "N/A"}
+                                ? "Leaderboard"
+                                : contest.contest_type
+                                  ? contest.contest_type.charAt(0).toUpperCase() +
+                                  contest.contest_type.slice(1)
+                                  : "N/A"}
                           </span>
                         </span>
                       </div>
@@ -2218,7 +2388,7 @@ export default function OpportunitiesPage({
                         contest.contest_based_details?.cpm_contest
                           ?.total_budget != null &&
                         contest.contest_based_details.cpm_contest.total_budget >
-                          0 && (
+                        0 && (
                           <div className="flex items-center">
                             <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                             <span>
@@ -2290,7 +2460,7 @@ export default function OpportunitiesPage({
                       contest.contest_based_details?.cpm_contest
                         ?.total_budget != null &&
                       contest.contest_based_details.cpm_contest.total_budget >
-                        0 &&
+                      0 &&
                       (() => {
                         const totalBudget =
                           contest.contest_based_details.cpm_contest
@@ -2561,7 +2731,7 @@ export default function OpportunitiesPage({
                         value={size.toString()}
                         className={cn(
                           isDark &&
-                            "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
+                          "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
                         )}
                       >
                         {size}

@@ -505,6 +505,10 @@ export async function POST(
     // 5. Update target tweet metrics in metrics table (target_current_*)
     // Handle different field names from API
     const targetMetrics: {
+      contest_id: string;
+      campaign_type: string;
+      target_tweet_id?: string;
+      target_tweet_url?: string;
       target_current_likes: number;
       target_current_comments: number;
       target_current_retweets: number;
@@ -513,6 +517,10 @@ export async function POST(
       last_updated_at: string;
       targets_reached?: boolean | null;
     } = {
+      contest_id: contestId,
+      campaign_type: "raid", // Required field - we know this is a raid campaign
+      target_tweet_id: targetTweetId, // Include target tweet ID if row doesn't exist
+      target_tweet_url: raidTarget.link, // Include target tweet URL if row doesn't exist
       target_current_likes: targetTweet.likes || targetTweet.favorites || targetTweet.favorite_count || 0,
       target_current_comments: targetTweet.replies || targetTweet.reply_count || 0,
       target_current_retweets: targetTweet.retweets || targetTweet.retweet_count || 0,
@@ -525,6 +533,12 @@ export async function POST(
     };
 
     // Get target values from metrics table (they're synced from contests)
+    // If not in metrics table, fall back to contest data
+    let targetLikes: number | null = null;
+    let targetComments: number | null = null;
+    let targetRetweets: number | null = null;
+    let targetQuoteReposts: number | null = null;
+
     const { data: existingMetrics } = await supabaseAdmin
       .from("twitter_campaign_metrics")
       .select("target_likes, target_comments, target_retweets, target_quote_reposts")
@@ -532,31 +546,87 @@ export async function POST(
       .maybeSingle();
 
     if (existingMetrics) {
-      // Check if targets are reached
-      const targetsReached =
-        (existingMetrics.target_likes === null ||
-          existingMetrics.target_likes === 0 ||
-          targetMetrics.target_current_likes >= existingMetrics.target_likes) &&
-        (existingMetrics.target_comments === null ||
-          existingMetrics.target_comments === 0 ||
-          targetMetrics.target_current_comments >=
-            existingMetrics.target_comments) &&
-        (existingMetrics.target_retweets === null ||
-          existingMetrics.target_retweets === 0 ||
-          targetMetrics.target_current_retweets >=
-            existingMetrics.target_retweets) &&
-        (existingMetrics.target_quote_reposts === null ||
-          existingMetrics.target_quote_reposts === 0 ||
-          targetMetrics.target_current_quote_reposts >=
-            existingMetrics.target_quote_reposts);
-
-      targetMetrics.targets_reached = targetsReached;
+      targetLikes = existingMetrics.target_likes;
+      targetComments = existingMetrics.target_comments;
+      targetRetweets = existingMetrics.target_retweets;
+      targetQuoteReposts = existingMetrics.target_quote_reposts;
+    } else {
+      // Fallback: Get targets from contest data if metrics row doesn't exist
+      const raidTargetMetrics = raidTarget?.metrics || {};
+      targetLikes = typeof raidTargetMetrics.likes === "number" 
+        ? raidTargetMetrics.likes 
+        : typeof raidTargetMetrics.likes === "string" 
+          ? parseInt(raidTargetMetrics.likes, 10) 
+          : null;
+      targetComments = typeof raidTargetMetrics.comments === "number" 
+        ? raidTargetMetrics.comments 
+        : typeof raidTargetMetrics.comments === "string" 
+          ? parseInt(raidTargetMetrics.comments, 10) 
+          : null;
+      targetRetweets = typeof raidTargetMetrics.retweets === "number" 
+        ? raidTargetMetrics.retweets 
+        : typeof raidTargetMetrics.retweets === "string" 
+          ? parseInt(raidTargetMetrics.retweets, 10) 
+          : null;
+      targetQuoteReposts = typeof raidTargetMetrics.quote_reposts === "number" 
+        ? raidTargetMetrics.quote_reposts 
+        : typeof raidTargetMetrics.quote_reposts === "string" 
+          ? parseInt(raidTargetMetrics.quote_reposts, 10) 
+          : null;
     }
 
+    // Check if targets are reached
+    // Only check targets that are actually set (not null and > 0)
+    // If a target is not set (null or 0), it's ignored (doesn't need to be reached)
+    // Example: If 3 out of 4 targets are set, we only need to check those 3
+    const likesReached = 
+      (targetLikes == null || targetLikes === 0) ||  // Not set, so considered "reached" (ignored)
+      targetMetrics.target_current_likes >= targetLikes;  // Set, so check if reached
+    
+    const commentsReached = 
+      (targetComments == null || targetComments === 0) ||  // Not set, so considered "reached" (ignored)
+      targetMetrics.target_current_comments >= targetComments;  // Set, so check if reached
+    
+    const retweetsReached = 
+      (targetRetweets == null || targetRetweets === 0) ||  // Not set, so considered "reached" (ignored)
+      targetMetrics.target_current_retweets >= targetRetweets;  // Set, so check if reached
+    
+    const quoteRepostsReached = 
+      (targetQuoteReposts == null || targetQuoteReposts === 0) ||  // Not set, so considered "reached" (ignored)
+      targetMetrics.target_current_quote_reposts >= targetQuoteReposts;  // Set, so check if reached
+
+    // All set targets must be reached for targets_reached to be true
+    // If a target is not set, it's automatically "reached" (ignored)
+    // Example: If only likes, comments, and quote_reposts are set (retweets is null),
+    // then we only need likes, comments, and quote_reposts to be reached
+    const targetsReached = likesReached && commentsReached && retweetsReached && quoteRepostsReached;
+
+    targetMetrics.targets_reached = targetsReached;
+    
+    // Log for debugging
+    console.log(`[fetch-raid-engagements] Targets check for contest ${contestId}:`, {
+      target_likes: targetLikes,
+      current_likes: targetMetrics.target_current_likes,
+      likesReached,
+      target_comments: targetComments,
+      current_comments: targetMetrics.target_current_comments,
+      commentsReached,
+      target_retweets: targetRetweets,
+      current_retweets: targetMetrics.target_current_retweets,
+      retweetsReached,
+      target_quote_reposts: targetQuoteReposts,
+      current_quote_reposts: targetMetrics.target_current_quote_reposts,
+      quoteRepostsReached,
+      targetsReached,
+      note: "Only set targets (not null/0) need to be reached. Unset targets are ignored.",
+    });
+
+    // Use upsert instead of update to create row if it doesn't exist
     await supabaseAdmin
       .from("twitter_campaign_metrics")
-      .update(targetMetrics)
-      .eq("contest_id", contestId);
+      .upsert(targetMetrics, {
+        onConflict: "contest_id",
+      });
 
     // ============================================================================
     // PRESERVE MODERATION: Fetch existing raid engagements BEFORE refresh
@@ -871,20 +941,27 @@ export async function POST(
       .eq("contest_id", contestId)
       .eq("is_active", true);
 
+    // Use upsert instead of update to create row if it doesn't exist
     await supabaseAdmin
       .from("twitter_campaign_metrics")
-      .update({
-        total_filtered_tweets: filteredTweetsCount || 0,
-        total_participants: totalParticipants || 0,
-        total_likes: totalLikes,
-        total_replies: totalReplies,
-        total_retweets: totalRetweets,
-        total_quote_reposts: totalQuoteReposts,
-        total_impressions: totalImpressions,
-        total_points: totalPoints,
-        last_updated_at: new Date().toISOString(),
-      })
-      .eq("contest_id", contestId);
+      .upsert(
+        {
+          contest_id: contestId,
+          campaign_type: "raid", // Required field - we know this is a raid campaign
+          total_filtered_tweets: filteredTweetsCount || 0,
+          total_participants: totalParticipants || 0,
+          total_likes: totalLikes,
+          total_replies: totalReplies,
+          total_retweets: totalRetweets,
+          total_quote_reposts: totalQuoteReposts,
+          total_impressions: totalImpressions,
+          total_points: totalPoints,
+          last_updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "contest_id",
+        }
+      );
 
     // 11. Update last_metrics_updated in contests table (same logic as awareness campaigns)
     const currentTime = new Date().toISOString();

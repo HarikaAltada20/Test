@@ -35,6 +35,18 @@ export async function GET(
       );
     }
 
+    // Fetch max_participants from contest_based_details.twitter_campaign
+    let maxParticipants: number | null = null;
+    const { data: contestData } = await supabase
+      .from("contests")
+      .select("contest_based_details")
+      .eq("id", contestId)
+      .maybeSingle();
+    
+    if (contestData?.contest_based_details?.twitter_campaign?.max_participants) {
+      maxParticipants = contestData.contest_based_details.twitter_campaign.max_participants;
+    }
+
     // If no metrics exist yet, return empty/default values
     if (!metrics) {
       return NextResponse.json({
@@ -42,6 +54,7 @@ export async function GET(
         metrics: {
           total_filtered_tweets: 0,
           total_participants: 0,
+          max_participants: maxParticipants,
           total_likes: 0,
           total_replies: 0,
           total_retweets: 0,
@@ -66,9 +79,15 @@ export async function GET(
       });
     }
 
+    // Add max_participants to metrics
+    const metricsWithMaxParticipants = {
+      ...metrics,
+      max_participants: maxParticipants,
+    };
+
     return NextResponse.json({
       success: true,
-      metrics,
+      metrics: metricsWithMaxParticipants,
     });
   } catch (error: any) {
     console.error("[twitter-metrics] Unexpected error", error);
