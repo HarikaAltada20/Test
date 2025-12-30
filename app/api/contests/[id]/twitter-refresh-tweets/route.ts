@@ -148,10 +148,45 @@ export async function POST(
       });
     }
 
+    // Filter out rejected creators (same as YouTube/Instagram - don't fetch their data)
+    const creatorIds = participants.map((p) => p.creator_id);
+    const { data: leaderboardData } = await supabaseAdmin
+      .from("twitter_campaign_leaderboard")
+      .select("creator_id, moderation_status")
+      .eq("contest_id", contestId)
+      .in("creator_id", creatorIds);
+
+    // Create a set of rejected creator IDs
+    const rejectedCreatorIds = new Set(
+      (leaderboardData || [])
+        .filter((entry) => entry.moderation_status === "rejected")
+        .map((entry) => entry.creator_id)
+    );
+
+    // Filter out rejected creators from participants
+    const activeParticipants = participants.filter(
+      (p) => !rejectedCreatorIds.has(p.creator_id)
+    );
+
+    if (activeParticipants.length === 0) {
+      console.log(
+        "[twitter-refresh-tweets] No active non-rejected participants for contest",
+        contestId
+      );
+      return NextResponse.json({
+        success: true,
+        contestId,
+        participantsCount: 0,
+        tweetsFetched: 0,
+        tweetsFiltered: 0,
+        details: [],
+      });
+    }
+
     console.log(
       "[twitter-refresh-tweets] Fetched participants",
       contestId,
-      participants
+      activeParticipants
     );
 
     // Get Twitter campaign config from JSONB (single source of truth)
@@ -265,13 +300,13 @@ export async function POST(
     // ============================================================================
     const BATCH_SIZE = 20; // Process 20 participants in parallel (increased from 10)
     const TWEET_UPSERT_CHUNK_SIZE = 500; // Batch upsert tweets in chunks of 500
-    const participantBatches: typeof participants[] = [];
+    const participantBatches: typeof activeParticipants[] = [];
     
-    for (let i = 0; i < participants.length; i += BATCH_SIZE) {
-      participantBatches.push(participants.slice(i, i + BATCH_SIZE));
+    for (let i = 0; i < activeParticipants.length; i += BATCH_SIZE) {
+      participantBatches.push(activeParticipants.slice(i, i + BATCH_SIZE));
     }
 
-    console.log(`[twitter-refresh-tweets] Processing ${participants.length} participants in ${participantBatches.length} batches of ${BATCH_SIZE}`);
+    console.log(`[twitter-refresh-tweets] Processing ${activeParticipants.length} participants in ${participantBatches.length} batches of ${BATCH_SIZE}`);
     
     // Collect all tweets for batch upserting (much faster than individual upserts)
     const allTweetsToUpsert: any[] = [];
@@ -973,11 +1008,32 @@ export async function POST(
       .eq("contest_id", contestId)
       .eq("is_eligible", true);
 
-    const { count: totalParticipants } = await supabaseAdmin
+    // Get total participants count (excluding rejected creators)
+    // First get all active participants
+    const { data: allParticipants } = await supabaseAdmin
       .from("twitter_campaign_participants")
-      .select("*", { count: "exact", head: true })
+      .select("creator_id")
       .eq("contest_id", contestId)
       .eq("is_active", true);
+
+    // Get rejected creator IDs
+    const allCreatorIds = (allParticipants || []).map((p) => p.creator_id);
+    const { data: allLeaderboardData } = await supabaseAdmin
+      .from("twitter_campaign_leaderboard")
+      .select("creator_id, moderation_status")
+      .eq("contest_id", contestId)
+      .in("creator_id", allCreatorIds);
+
+    const rejectedCreatorIdsSet = new Set(
+      (allLeaderboardData || [])
+        .filter((entry) => entry.moderation_status === "rejected")
+        .map((entry) => entry.creator_id)
+    );
+
+    // Count only non-rejected participants
+    const totalParticipants = (allParticipants || []).filter(
+      (p) => !rejectedCreatorIdsSet.has(p.creator_id)
+    ).length;
 
     // Aggregate total metrics from eligible tweets
     // OPTIMIZED: Only select the columns we need for aggregation
@@ -1019,11 +1075,11 @@ export async function POST(
     return NextResponse.json({
       success: true,
       contestId,
-      participantsCount: participants.length,
+      participantsCount: activeParticipants.length,
       tweetsFetched: totalFetched,
       tweetsFiltered: totalFiltered,
       details: allDetails,
-      participantsRaw: participants,
+      participantsRaw: activeParticipants,
       lastMetricsUpdated: currentTime,
     });
   } catch (error: any) {

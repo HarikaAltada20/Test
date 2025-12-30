@@ -117,9 +117,37 @@ export async function POST(
       });
     }
 
-    // Create map of username -> creator_id for quick lookup
+    // 3a. Filter out rejected creators (same as YouTube/Instagram - don't fetch their data)
+    const creatorIds = participants.map((p) => p.creator_id);
+    const { data: leaderboardData } = await supabaseAdmin
+      .from("twitter_campaign_leaderboard")
+      .select("creator_id, moderation_status")
+      .eq("contest_id", contestId)
+      .in("creator_id", creatorIds);
+
+    // Create a set of rejected creator IDs
+    const rejectedCreatorIds = new Set(
+      (leaderboardData || [])
+        .filter((entry) => entry.moderation_status === "rejected")
+        .map((entry) => entry.creator_id)
+    );
+
+    // Filter out rejected creators from participants
+    const activeParticipants = participants.filter(
+      (p) => !rejectedCreatorIds.has(p.creator_id)
+    );
+
+    if (activeParticipants.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: "No active non-rejected participants",
+        engagementsFound: 0,
+      });
+    }
+
+    // Create map of username -> creator_id for quick lookup (only for non-rejected creators)
     const participantMap = new Map<string, string>();
-    participants.forEach((p) => {
+    activeParticipants.forEach((p) => {
       if (p.twitter_username) {
         const cleanUsername = p.twitter_username.replace("@", "").toLowerCase();
         participantMap.set(cleanUsername, p.creator_id);
@@ -934,12 +962,32 @@ export async function POST(
       .eq("is_eligible", true)
       .not("target_tweet_id", "is", null); // Only raid engagements
 
-    // Get total participants count
-    const { count: totalParticipants } = await supabaseAdmin
+    // Get total participants count (excluding rejected creators)
+    // First get all active participants
+    const { data: allParticipants } = await supabaseAdmin
       .from("twitter_campaign_participants")
-      .select("*", { count: "exact", head: true })
+      .select("creator_id")
       .eq("contest_id", contestId)
       .eq("is_active", true);
+
+    // Get rejected creator IDs
+    const allCreatorIds = (allParticipants || []).map((p) => p.creator_id);
+    const { data: allLeaderboardData } = await supabaseAdmin
+      .from("twitter_campaign_leaderboard")
+      .select("creator_id, moderation_status")
+      .eq("contest_id", contestId)
+      .in("creator_id", allCreatorIds);
+
+    const rejectedCreatorIdsSet = new Set(
+      (allLeaderboardData || [])
+        .filter((entry) => entry.moderation_status === "rejected")
+        .map((entry) => entry.creator_id)
+    );
+
+    // Count only non-rejected participants
+    const totalParticipants = (allParticipants || []).filter(
+      (p) => !rejectedCreatorIdsSet.has(p.creator_id)
+    ).length;
 
     // Use upsert instead of update to create row if it doesn't exist
     await supabaseAdmin

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     const adminSupabase = createAdminClient();
     const { data: contest, error: contestError } = await adminSupabase
       .from("contests_with_status")
-      .select("id, platform, contest_format, moderation_status, status")
+      .select("id, platform, contest_format, moderation_status, status, contest_based_details")
       .eq("id", contestId)
       .maybeSingle();
 
@@ -60,6 +60,51 @@ export async function POST(request: NextRequest) {
         { error: "This contest is not a joinable Twitter campaign" },
         { status: 400 }
       );
+    }
+
+    // Check max_participants limit (excluding rejected creators)
+    const twitterCampaign = (contest as any).contest_based_details?.twitter_campaign;
+    const maxParticipants = twitterCampaign?.max_participants;
+    
+    if (maxParticipants && maxParticipants > 0) {
+      // Get all active participants
+      const { data: allParticipants } = await adminSupabase
+        .from("twitter_campaign_participants")
+        .select("creator_id")
+        .eq("contest_id", contestId)
+        .eq("is_active", true);
+
+      // Get rejected creator IDs
+      const allCreatorIds = (allParticipants || []).map((p) => p.creator_id);
+      const { data: leaderboardData } = await adminSupabase
+        .from("twitter_campaign_leaderboard")
+        .select("creator_id, moderation_status")
+        .eq("contest_id", contestId)
+        .in("creator_id", allCreatorIds);
+
+      const rejectedCreatorIdsSet = new Set(
+        (leaderboardData || [])
+          .filter((entry) => entry.moderation_status === "rejected")
+          .map((entry) => entry.creator_id)
+      );
+
+      // Count only non-rejected participants
+      const currentParticipantCount = (allParticipants || []).filter(
+        (p) => !rejectedCreatorIdsSet.has(p.creator_id)
+      ).length;
+
+      // Check if user is already a participant (even if rejected)
+      const isAlreadyParticipant = (allParticipants || []).some(
+        (p) => p.creator_id === user.id
+      );
+
+      // If not already a participant and limit is reached, reject
+      if (!isAlreadyParticipant && currentParticipantCount >= maxParticipants) {
+        return NextResponse.json(
+          { error: `This campaign has reached the maximum participant limit of ${maxParticipants}. Please try another campaign.` },
+          { status: 400 }
+        );
+      }
     }
 
     // Use admin client to bypass RLS for creator_profiles lookup

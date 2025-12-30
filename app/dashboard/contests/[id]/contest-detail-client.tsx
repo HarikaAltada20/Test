@@ -374,6 +374,11 @@ export default function ContestDetailClient({
   const [activeAnalyticsTab, setActiveAnalyticsTab] = useState<
     "all" | "pending" | "verified" | "rejected" | "paid" | "verified_or_paid"
   >("all");
+
+  // Participant filter for Twitter contests (creator-wise view)
+  const [participantFilter, setParticipantFilter] = useState<
+    "all" | "rejected" | "available"
+  >("all");
   const [sortOption, setSortOption] = useState<
     "views_desc" | "views_asc" | "time_desc" | "time_asc"
   >("views_desc");
@@ -921,14 +926,38 @@ export default function ContestDetailClient({
     );
   }, [groupSubmissionsByCreator]);
 
+  // Filter creator groups by participant filter (for Twitter contests)
+  const filteredCreatorGroups = useMemo(() => {
+    if (!sortedCreatorGroups) return [];
+
+    const isTwitterContest =
+      (currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+      currentContest?.contest_format === "text_image";
+
+    if (!isTwitterContest || participantFilter === "all") {
+      return sortedCreatorGroups;
+    }
+
+    return sortedCreatorGroups.filter((group: any) => {
+      const moderationStatus = group.creator_moderation_status || "pending";
+      if (participantFilter === "rejected") {
+        return moderationStatus === "rejected";
+      } else if (participantFilter === "available") {
+        return moderationStatus !== "rejected";
+      }
+      return true;
+    });
+  }, [sortedCreatorGroups, participantFilter, currentContest]);
+
   // Pagination calculations for creator-wise view
-  const creatorWiseTotalPages = sortedCreatorGroups
-    ? Math.ceil(sortedCreatorGroups.length / creatorWiseItemsPerPage)
+  const creatorWiseTotalPages = filteredCreatorGroups
+    ? Math.ceil(filteredCreatorGroups.length / creatorWiseItemsPerPage)
     : 0;
   const creatorWiseHasNextPage = creatorWisePage < creatorWiseTotalPages;
   const creatorWiseHasPreviousPage = creatorWisePage > 1;
-  const paginatedCreatorGroups = sortedCreatorGroups
-    ? sortedCreatorGroups.slice(
+  const paginatedCreatorGroups = filteredCreatorGroups
+    ? filteredCreatorGroups.slice(
       (creatorWisePage - 1) * creatorWiseItemsPerPage,
       creatorWisePage * creatorWiseItemsPerPage
     )
@@ -938,7 +967,7 @@ export default function ContestDetailClient({
   useEffect(() => {
     setCurrentPage(1);
     setCreatorWisePage(1);
-  }, [activeStatusTab, viewMode, sortOption]);
+  }, [activeStatusTab, viewMode, sortOption, participantFilter]);
 
   // Watch for theme changes from parent layout
   useEffect(() => {
@@ -982,14 +1011,6 @@ export default function ContestDetailClient({
       fetchTwitterMetrics();
     }
   }, [currentContest?.platform, contestId]);
-
-  if (!currentContest) {
-    return <p>Loading contest details or contest not found...</p>;
-  }
-
-  {
-    console.log("contest data", currentContest);
-  }
 
   const getStatusBadgeProps = (contest: Contest) => {
     // For unpublished contests, show moderation status
@@ -1050,7 +1071,6 @@ export default function ContestDetailClient({
         return { text: "Unknown", className: "bg-slate-400 text-white" };
     }
   };
-  const contestStatusBadgeInfo = getStatusBadgeProps(currentContest);
 
   const getSubmissionStatusBadge = (status: Submission["status"] | string) => {
     // Map Twitter moderation status to standard status
@@ -2280,17 +2300,23 @@ export default function ContestDetailClient({
   };
 
   const isContestEditable =
-    currentContest.status !== "ended" && // Never allow editing ended contests
+    currentContest?.status !== "ended" && // Never allow editing ended contests
     (isAdminView || // Admins can edit non-ended contests
-      currentContest.moderation_status === "draft" ||
-      currentContest.moderation_status === "rejected" ||
-      currentContest.moderation_status === "pending_approval" ||
-      (currentContest.moderation_status === "approved" &&
-        currentContest.status === "upcoming"));
+      currentContest?.moderation_status === "draft" ||
+      currentContest?.moderation_status === "rejected" ||
+      currentContest?.moderation_status === "pending_approval" ||
+      (currentContest?.moderation_status === "approved" &&
+        currentContest?.status === "upcoming"));
   const isContestDeletable =
-    currentContest.moderation_status === "draft" ||
-    currentContest.moderation_status === "rejected" ||
-    currentContest.moderation_status === "pending_approval";
+    currentContest?.moderation_status === "draft" ||
+    currentContest?.moderation_status === "rejected" ||
+    currentContest?.moderation_status === "pending_approval";
+
+  if (!currentContest) {
+    return <p>Loading contest details or contest not found...</p>;
+  }
+
+  const contestStatusBadgeInfo = getStatusBadgeProps(currentContest);
 
   return (
     <div>
@@ -7435,392 +7461,344 @@ export default function ContestDetailClient({
                       {/* Creator-wise View Table */}
                       {viewMode === "creator-wise" &&
                         groupSubmissionsByCreator && (
-                          <Table>
-                            <TableHeader>
-                              <TableRow
-                                className={cn(
-                                  "border-b",
-                                  isDark
-                                    ? "bg-[#391A6A] border-gray-600"
-                                    : "bg-slate-100 hover:bg-slate-100 border-slate-200"
-                                )}
-                              >
-                                <TableHead className="w-12">#</TableHead>
-                                <TableHead>Creator</TableHead>
-                                <TableHead className="text-center">
-                                  Total Submissions
-                                </TableHead>
-                                <TableHead className="text-center">
-                                  Status
-                                </TableHead>
-                                {/* For Twitter campaigns, show Twitter-specific metrics */}
-                                {((currentContest.platform?.toLowerCase() === "twitter" ||
-                                  currentContest.platform?.toLowerCase() === "x") &&
-                                  currentContest.contest_format === "text_image") ? (
-                                  <>
-                                    <TableHead className="text-center">
-                                      Total Points
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Base Points
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Manual Points
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Likes
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Replies
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Retweets
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Quote Reposts
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Impressions
-                                    </TableHead>
-                                  </>
-                                ) : (
-                                  <>
-                                    <TableHead className="text-center">
-                                      Views
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Likes
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Comments
-                                    </TableHead>
-                                  </>
-                                )}
-                                {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
-                                {(!((currentContest.platform?.toLowerCase() === "twitter" ||
-                                  currentContest.platform?.toLowerCase() === "x") &&
-                                  currentContest.contest_format === "text_image")) ||
-                                  (currentContest.contest_type === "leaderboard" &&
-                                    ((currentContest.platform?.toLowerCase() === "twitter" ||
-                                      currentContest.platform?.toLowerCase() === "x") &&
-                                      currentContest.contest_format === "text_image")) ? (
-                                  <>
-                                    <TableHead className="text-center">
-                                      Expected Reward
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Reward Granted
-                                    </TableHead>
-                                  </>
-                                ) : null}
-                                {(() => {
-                                  const flatFeeBonus =
-                                    currentContest.contest_type === "cpm"
-                                      ? (
-                                        currentContest.contest_based_details as any
-                                      )?.cpm_contest?.flat_fee_bonus
-                                      : (
-                                        currentContest.contest_based_details as any
-                                      )?.leaderboard_contest?.flat_fee_bonus;
-                                  return flatFeeBonus > 0;
-                                })() && (
-                                    <>
-                                      <TableHead className="text-center">
-                                        Bonus Expected
-                                      </TableHead>
-                                      <TableHead className="text-center">
-                                        Bonus Granted
-                                      </TableHead>
-                                    </>
-                                  )}
-                                {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard campaigns */}
-                                {((currentContest.platform?.toLowerCase() === "twitter" ||
-                                  currentContest.platform?.toLowerCase() === "x") &&
-                                  currentContest.contest_format === "text_image" &&
-                                  currentContest.contest_type === "leaderboard") && (
-                                    <>
-                                      <TableHead className="text-center">
-                                        Manual Points Adjustment
-                                      </TableHead>
-                                      <TableHead className="text-center">
-                                        Manual Points Reason
-                                      </TableHead>
-                                    </>
-                                  )}
-                                {/* Rejection Reason Column - Show if there are any rejected creators */}
-                                {showRejectionReasonColumn && (
-                                  <TableHead className="text-center">
-                                    Rejection Reason
-                                  </TableHead>
-                                )}
-                                <TableHead className="text-center">
-                                  First Submitted
-                                </TableHead>
-                                <TableHead className="text-center">
-                                  Actions
-                                </TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {paginatedCreatorGroups.length === 0 ? (
-                                <TableRow>
-                                  <TableCell
-                                    colSpan={12}
-                                    className="text-center py-8 text-gray-500"
+                          <>
+                            {/* Participant Filter Tabs for Twitter contests */}
+                            {((currentContest?.platform?.toLowerCase() === "twitter" ||
+                              currentContest?.platform?.toLowerCase() === "x") &&
+                              currentContest?.contest_format === "text_image") && (
+                                <div className="mb-4 px-4">
+                                  <Tabs
+                                    value={participantFilter}
+                                    onValueChange={(v) => {
+                                      setParticipantFilter(v as "all" | "rejected" | "available");
+                                      setCreatorWisePage(1);
+                                    }}
                                   >
-                                    No creators found for the selected status
-                                    filter.
-                                  </TableCell>
-                                </TableRow>
-                              ) : (
-                                paginatedCreatorGroups.map(
-                                  (group: any, index: number) => {
-                                    const globalIndex =
-                                      (creatorWisePage - 1) *
-                                      creatorWiseItemsPerPage +
-                                      index;
-                                    return (
-                                      <TableRow key={group.creator.id}>
-                                        <TableCell className="font-medium">
-                                          {globalIndex + 1}
-                                        </TableCell>
-                                        <TableCell>
-                                          <div className="flex items-center gap-2">
-                                            <Avatar className="h-8 w-8">
-                                              <AvatarImage
-                                                src={
-                                                  group.creator
-                                                    .profile_picture_url ||
-                                                  undefined
-                                                }
-                                              />
-                                              <AvatarFallback>
-                                                {group.creator.username?.[0]?.toUpperCase() ||
-                                                  "U"}
-                                              </AvatarFallback>
-                                            </Avatar>
-                                            <span className="font-medium">
-                                              {group.creator.username}
-                                            </span>
-                                          </div>
-                                        </TableCell>
-                                        <TableCell className="text-center font-semibold">
-                                          {group.totalCount}
-                                        </TableCell>
-                                        <TableCell>
-                                          <div className="flex flex-col items-center gap-1">
-                                            {/* Creator-level moderation status for Twitter campaigns */}
-                                            {((currentContest.platform?.toLowerCase() === "twitter" ||
-                                              currentContest.platform?.toLowerCase() === "x") &&
-                                              currentContest.contest_format === "text_image" &&
-                                              group.creator_moderation_status) ? (
-                                              <>
-                                                {group.creator_moderation_status === "rejected" ? (
-                                                  <Badge className="bg-red-500 text-white text-xs">
-                                                    Rejected
-                                                  </Badge>
-                                                ) : group.creator_moderation_status === "approved" ? (
-                                                  <Badge className="bg-green-500 text-white text-xs">
-                                                    Approved
-                                                  </Badge>
-                                                ) : (
-                                                  <Badge className="bg-yellow-500 text-white text-xs">
-                                                    Pending
-                                                  </Badge>
-                                                )}
-                                                {group.creator_rejection_reason && (
-                                                  <span
-                                                    className={cn(
-                                                      "text-xs italic truncate max-w-[150px] text-center",
-                                                      isDark ? "text-red-400" : "text-red-600"
-                                                    )}
-                                                    title={group.creator_rejection_reason}
-                                                  >
-                                                    {group.creator_rejection_reason.length > 20
-                                                      ? group.creator_rejection_reason.substring(0, 20) + "..."
-                                                      : group.creator_rejection_reason}
-                                                  </span>
-                                                )}
-                                              </>
-                                            ) : (
-                                              <div className="flex flex-wrap gap-1 justify-center">
-                                                <Badge
-                                                  variant="outline"
-                                                  className="text-xs"
-                                                >
-                                                  All: {group.statusCounts.all}
-                                                </Badge>
-                                                {group.statusCounts.verified >
-                                                  0 && (
-                                                    <Badge className="bg-green-500 text-white text-xs">
-                                                      V: {group.statusCounts.verified}
-                                                    </Badge>
-                                                  )}
-                                                {group.statusCounts.paid > 0 && (
-                                                  <Badge className="bg-blue-500 text-white text-xs">
-                                                    P: {group.statusCounts.paid}
-                                                  </Badge>
-                                                )}
-                                                {group.statusCounts.pending > 0 && (
-                                                  <Badge className="bg-yellow-500 text-white text-xs">
-                                                    Pend:{" "}
-                                                    {group.statusCounts.pending}
-                                                  </Badge>
-                                                )}
-                                                {group.statusCounts.rejected >
-                                                  0 && (
-                                                    <Badge className="bg-red-500 text-white text-xs">
-                                                      R: {group.statusCounts.rejected}
-                                                    </Badge>
-                                                  )}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </TableCell>
-                                        {/* For Twitter campaigns, show Twitter-specific metrics */}
-                                        {((currentContest.platform?.toLowerCase() === "twitter" ||
-                                          currentContest.platform?.toLowerCase() === "x") &&
-                                          currentContest.contest_format === "text_image") ? (
-                                          <>
-                                            {/* Total Points */}
-                                            <TableCell className="text-center">
-                                              <div className="flex flex-col items-center">
-                                                <span className={cn("font-bold text-sm", isDark ? "text-white" : "text-slate-900")}>
-                                                  {formatMetricValue((group.metrics.base_points || 0) + (group.metrics.manual_points_adjustment || 0))}
-                                                </span>
-                                                <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
-                                                  total
-                                                </span>
-                                              </div>
-                                            </TableCell>
-                                            {/* Base Points */}
-                                            <TableCell className="text-center">
-                                              <div className="flex flex-col items-center">
-                                                <span className={cn("font-bold text-sm", isDark ? "text-white" : "text-slate-900")}>
-                                                  {formatMetricValue(group.metrics.base_points || 0)}
-                                                </span>
-                                                <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
-                                                  base
-                                                </span>
-                                              </div>
-                                            </TableCell>
-                                            {/* Manual Points */}
-                                            <TableCell className="text-center">
-                                              <div className="flex flex-col items-center">
-                                                <span className={cn(
-                                                  "font-bold text-sm",
-                                                  group.metrics.manual_points_adjustment > 0
-                                                    ? "text-green-600"
-                                                    : group.metrics.manual_points_adjustment < 0
-                                                      ? "text-red-600"
-                                                      : isDark
-                                                        ? "text-white"
-                                                        : "text-slate-900"
-                                                )}>
-                                                  {group.metrics.manual_points_adjustment > 0 ? "+" : ""}
-                                                  {formatMetricValue(group.metrics.manual_points_adjustment || 0)}
-                                                </span>
-                                                <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
-                                                  manual
-                                                </span>
-                                              </div>
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                              {formatMetricValue(group.metrics.likes || 0)}
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                              {formatMetricValue(group.metrics.comments || 0)}
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                              {formatMetricValue(group.metrics.retweets || 0)}
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                              {formatMetricValue(group.metrics.quote_reposts || 0)}
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                              {formatMetricValue(group.metrics.impressions || 0)}
-                                            </TableCell>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <TableCell className="text-center">
-                                              {group.metrics.views.toLocaleString()}
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                              {group.metrics.likes.toLocaleString()}
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                              {group.metrics.comments.toLocaleString()}
-                                            </TableCell>
-                                          </>
-                                        )}
-                                        {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
-                                        {(!((currentContest.platform?.toLowerCase() === "twitter" ||
-                                          currentContest.platform?.toLowerCase() === "x") &&
-                                          currentContest.contest_format === "text_image")) ||
-                                          (currentContest.contest_type === "leaderboard" &&
-                                            ((currentContest.platform?.toLowerCase() === "twitter" ||
-                                              currentContest.platform?.toLowerCase() === "x") &&
-                                              currentContest.contest_format === "text_image")) ? (
-                                          <>
-                                            <TableCell className="text-center font-medium">
-                                              <div className="flex items-center justify-center gap-1">
-                                                {formatMoney(
-                                                  group.earnings.expected
-                                                )}
-                                                {group.isCapped && (
-                                                  <span
-                                                    className="text-amber-600 cursor-help"
-                                                    title={`Capped at ${formatMoney(
-                                                      currentContest.max_earnings_per_creator
-                                                    )}. Original: ${formatMoney(
-                                                      group.earningsBeforeCap
-                                                    )}`}
-                                                  >
-                                                    ⚠️
-                                                  </span>
-                                                )}
-                                              </div>
-                                            </TableCell>
-                                            <TableCell className="text-center font-medium text-green-600">
-                                              {formatMoney(group.earnings.granted)}
-                                            </TableCell>
-                                          </>
-                                        ) : null}
-                                        {(() => {
-                                          const flatFeeBonus =
-                                            currentContest.contest_type ===
-                                              "cpm"
-                                              ? (
-                                                currentContest.contest_based_details as any
-                                              )?.cpm_contest?.flat_fee_bonus
-                                              : (
-                                                currentContest.contest_based_details as any
-                                              )?.leaderboard_contest
-                                                ?.flat_fee_bonus;
-                                          return flatFeeBonus > 0;
-                                        })() && (
-                                            <>
-                                              <TableCell className="text-center font-medium">
-                                                {formatMoney(
-                                                  group.bonus.expected
-                                                )}
-                                              </TableCell>
-                                              <TableCell className="text-center font-medium text-green-600">
-                                                {formatMoney(group.bonus.granted)}
-                                              </TableCell>
-                                            </>
+                                    <TabsList className="grid w-full grid-cols-3">
+                                      <TabsTrigger value="all" className="text-sm">
+                                        All Participants
+                                        <Badge
+                                          variant="secondary"
+                                          className={cn(
+                                            "ml-2 px-1.5 py-0.5 text-xs h-5",
+                                            isDark
+                                              ? "text-white bg-[#FFFFFF36]"
+                                              : "text-[#7F39EC] bg-purple-200"
                                           )}
-                                        {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard campaigns */}
-                                        {((currentContest.platform?.toLowerCase() === "twitter" ||
-                                          currentContest.platform?.toLowerCase() === "x") &&
-                                          currentContest.contest_format === "text_image" &&
-                                          currentContest.contest_type === "leaderboard") && (
+                                        >
+                                          {sortedCreatorGroups?.length || 0}
+                                        </Badge>
+                                      </TabsTrigger>
+                                      <TabsTrigger value="rejected" className="text-sm">
+                                        Rejected Participants
+                                        <Badge
+                                          variant="secondary"
+                                          className={cn(
+                                            "ml-2 px-1.5 py-0.5 text-xs h-5",
+                                            isDark
+                                              ? "text-white bg-[#FFFFFF36]"
+                                              : "text-red-600 bg-red-200"
+                                          )}
+                                        >
+                                          {sortedCreatorGroups?.filter((g: any) =>
+                                            (g.creator_moderation_status || "pending") === "rejected"
+                                          ).length || 0}
+                                        </Badge>
+                                      </TabsTrigger>
+                                      <TabsTrigger value="available" className="text-sm">
+                                        Available Participants
+                                        <Badge
+                                          variant="secondary"
+                                          className={cn(
+                                            "ml-2 px-1.5 py-0.5 text-xs h-5",
+                                            isDark
+                                              ? "text-white bg-[#FFFFFF36]"
+                                              : "text-green-600 bg-green-200"
+                                          )}
+                                        >
+                                          {sortedCreatorGroups?.filter((g: any) =>
+                                            (g.creator_moderation_status || "pending") !== "rejected"
+                                          ).length || 0}
+                                        </Badge>
+                                      </TabsTrigger>
+                                    </TabsList>
+                                  </Tabs>
+                                </div>
+                              )}
+                            <Table>
+                              <TableHeader>
+                                <TableRow
+                                  className={cn(
+                                    "border-b",
+                                    isDark
+                                      ? "bg-[#391A6A] border-gray-600"
+                                      : "bg-slate-100 hover:bg-slate-100 border-slate-200"
+                                  )}
+                                >
+                                  <TableHead className="w-12">#</TableHead>
+                                  <TableHead>Creator</TableHead>
+                                  <TableHead className="text-center">
+                                    Total Submissions
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Status
+                                  </TableHead>
+                                  {/* For Twitter campaigns, show Twitter-specific metrics */}
+                                  {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                    currentContest.platform?.toLowerCase() === "x") &&
+                                    currentContest.contest_format === "text_image") ? (
+                                    <>
+                                      <TableHead className="text-center">
+                                        Total Points
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Base Points
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Manual Points
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Likes
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Replies
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Retweets
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Quote Reposts
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Impressions
+                                      </TableHead>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <TableHead className="text-center">
+                                        Views
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Likes
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Comments
+                                      </TableHead>
+                                    </>
+                                  )}
+                                  {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
+                                  {(!((currentContest.platform?.toLowerCase() === "twitter" ||
+                                    currentContest.platform?.toLowerCase() === "x") &&
+                                    currentContest.contest_format === "text_image")) ||
+                                    (currentContest.contest_type === "leaderboard" &&
+                                      ((currentContest.platform?.toLowerCase() === "twitter" ||
+                                        currentContest.platform?.toLowerCase() === "x") &&
+                                        currentContest.contest_format === "text_image")) ? (
+                                    <>
+                                      <TableHead className="text-center">
+                                        Expected Reward
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Reward Granted
+                                      </TableHead>
+                                    </>
+                                  ) : null}
+                                  {(() => {
+                                    const flatFeeBonus =
+                                      currentContest.contest_type === "cpm"
+                                        ? (
+                                          currentContest.contest_based_details as any
+                                        )?.cpm_contest?.flat_fee_bonus
+                                        : (
+                                          currentContest.contest_based_details as any
+                                        )?.leaderboard_contest?.flat_fee_bonus;
+                                    return flatFeeBonus > 0;
+                                  })() && (
+                                      <>
+                                        <TableHead className="text-center">
+                                          Bonus Expected
+                                        </TableHead>
+                                        <TableHead className="text-center">
+                                          Bonus Granted
+                                        </TableHead>
+                                      </>
+                                    )}
+                                  {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard campaigns */}
+                                  {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                    currentContest.platform?.toLowerCase() === "x") &&
+                                    currentContest.contest_format === "text_image" &&
+                                    currentContest.contest_type === "leaderboard") && (
+                                      <>
+                                        <TableHead className="text-center">
+                                          Manual Points Adjustment
+                                        </TableHead>
+                                        <TableHead className="text-center">
+                                          Manual Points Reason
+                                        </TableHead>
+                                      </>
+                                    )}
+                                  {/* Rejection Reason Column - Show if there are any rejected creators */}
+                                  {showRejectionReasonColumn && (
+                                    <TableHead className="text-center">
+                                      Rejection Reason
+                                    </TableHead>
+                                  )}
+                                  <TableHead className="text-center">
+                                    First Submitted
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Actions
+                                  </TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {paginatedCreatorGroups.length === 0 ? (
+                                  <TableRow>
+                                    <TableCell
+                                      colSpan={12}
+                                      className="text-center py-8 text-gray-500"
+                                    >
+                                      No creators found for the selected status
+                                      filter.
+                                    </TableCell>
+                                  </TableRow>
+                                ) : (
+                                  paginatedCreatorGroups.map(
+                                    (group: any, index: number) => {
+                                      const globalIndex =
+                                        (creatorWisePage - 1) *
+                                        creatorWiseItemsPerPage +
+                                        index;
+                                      return (
+                                        <TableRow key={group.creator.id}>
+                                          <TableCell className="font-medium">
+                                            {globalIndex + 1}
+                                          </TableCell>
+                                          <TableCell>
+                                            <div className="flex items-center gap-2">
+                                              <Avatar className="h-8 w-8">
+                                                <AvatarImage
+                                                  src={
+                                                    group.creator
+                                                      .profile_picture_url ||
+                                                    undefined
+                                                  }
+                                                />
+                                                <AvatarFallback>
+                                                  {group.creator.username?.[0]?.toUpperCase() ||
+                                                    "U"}
+                                                </AvatarFallback>
+                                              </Avatar>
+                                              <span className="font-medium">
+                                                {group.creator.username}
+                                              </span>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell className="text-center font-semibold">
+                                            {group.totalCount}
+                                          </TableCell>
+                                          <TableCell>
+                                            <div className="flex flex-col items-center gap-1">
+                                              {/* Creator-level moderation status for Twitter campaigns */}
+                                              {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                                currentContest.platform?.toLowerCase() === "x") &&
+                                                currentContest.contest_format === "text_image" &&
+                                                group.creator_moderation_status) ? (
+                                                <>
+                                                  {group.creator_moderation_status === "rejected" ? (
+                                                    <Badge className="bg-red-500 text-white text-xs">
+                                                      Rejected
+                                                    </Badge>
+                                                  ) : group.creator_moderation_status === "approved" ? (
+                                                    <Badge className="bg-green-500 text-white text-xs">
+                                                      Approved
+                                                    </Badge>
+                                                  ) : (
+                                                    <Badge className="bg-yellow-500 text-white text-xs">
+                                                      Pending
+                                                    </Badge>
+                                                  )}
+                                                  {group.creator_rejection_reason && (
+                                                    <span
+                                                      className={cn(
+                                                        "text-xs italic truncate max-w-[150px] text-center",
+                                                        isDark ? "text-red-400" : "text-red-600"
+                                                      )}
+                                                      title={group.creator_rejection_reason}
+                                                    >
+                                                      {group.creator_rejection_reason.length > 20
+                                                        ? group.creator_rejection_reason.substring(0, 20) + "..."
+                                                        : group.creator_rejection_reason}
+                                                    </span>
+                                                  )}
+                                                </>
+                                              ) : (
+                                                <div className="flex flex-wrap gap-1 justify-center">
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="text-xs"
+                                                  >
+                                                    All: {group.statusCounts.all}
+                                                  </Badge>
+                                                  {group.statusCounts.verified >
+                                                    0 && (
+                                                      <Badge className="bg-green-500 text-white text-xs">
+                                                        V: {group.statusCounts.verified}
+                                                      </Badge>
+                                                    )}
+                                                  {group.statusCounts.paid > 0 && (
+                                                    <Badge className="bg-blue-500 text-white text-xs">
+                                                      P: {group.statusCounts.paid}
+                                                    </Badge>
+                                                  )}
+                                                  {group.statusCounts.pending > 0 && (
+                                                    <Badge className="bg-yellow-500 text-white text-xs">
+                                                      Pend:{" "}
+                                                      {group.statusCounts.pending}
+                                                    </Badge>
+                                                  )}
+                                                  {group.statusCounts.rejected >
+                                                    0 && (
+                                                      <Badge className="bg-red-500 text-white text-xs">
+                                                        R: {group.statusCounts.rejected}
+                                                      </Badge>
+                                                    )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </TableCell>
+                                          {/* For Twitter campaigns, show Twitter-specific metrics */}
+                                          {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                            currentContest.platform?.toLowerCase() === "x") &&
+                                            currentContest.contest_format === "text_image") ? (
                                             <>
+                                              {/* Total Points */}
+                                              <TableCell className="text-center">
+                                                <div className="flex flex-col items-center">
+                                                  <span className={cn("font-bold text-sm", isDark ? "text-white" : "text-slate-900")}>
+                                                    {formatMetricValue((group.metrics.base_points || 0) + (group.metrics.manual_points_adjustment || 0))}
+                                                  </span>
+                                                  <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                                    total
+                                                  </span>
+                                                </div>
+                                              </TableCell>
+                                              {/* Base Points */}
+                                              <TableCell className="text-center">
+                                                <div className="flex flex-col items-center">
+                                                  <span className={cn("font-bold text-sm", isDark ? "text-white" : "text-slate-900")}>
+                                                    {formatMetricValue(group.metrics.base_points || 0)}
+                                                  </span>
+                                                  <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                                    base
+                                                  </span>
+                                                </div>
+                                              </TableCell>
+                                              {/* Manual Points */}
                                               <TableCell className="text-center">
                                                 <div className="flex flex-col items-center">
                                                   <span className={cn(
-                                                    "font-semibold text-sm",
+                                                    "font-bold text-sm",
                                                     group.metrics.manual_points_adjustment > 0
                                                       ? "text-green-600"
                                                       : group.metrics.manual_points_adjustment < 0
@@ -7832,167 +7810,280 @@ export default function ContestDetailClient({
                                                     {group.metrics.manual_points_adjustment > 0 ? "+" : ""}
                                                     {formatMetricValue(group.metrics.manual_points_adjustment || 0)}
                                                   </span>
+                                                  <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                                    manual
+                                                  </span>
                                                 </div>
                                               </TableCell>
                                               <TableCell className="text-center">
-                                                {group.metrics.manual_points_reason ? (
-                                                  <div className="flex flex-col items-center max-w-[200px] mx-auto">
-                                                    <span
-                                                      className={cn(
-                                                        "text-xs italic truncate",
-                                                        isDark ? "text-slate-300" : "text-slate-700"
-                                                      )}
-                                                      title={group.metrics.manual_points_reason}
-                                                    >
-                                                      {group.metrics.manual_points_reason.length > 30
-                                                        ? group.metrics.manual_points_reason.substring(0, 30) + "..."
-                                                        : group.metrics.manual_points_reason}
-                                                    </span>
-                                                  </div>
-                                                ) : (
-                                                  <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>
-                                                    —
-                                                  </span>
-                                                )}
+                                                {formatMetricValue(group.metrics.likes || 0)}
+                                              </TableCell>
+                                              <TableCell className="text-center">
+                                                {formatMetricValue(group.metrics.comments || 0)}
+                                              </TableCell>
+                                              <TableCell className="text-center">
+                                                {formatMetricValue(group.metrics.retweets || 0)}
+                                              </TableCell>
+                                              <TableCell className="text-center">
+                                                {formatMetricValue(group.metrics.quote_reposts || 0)}
+                                              </TableCell>
+                                              <TableCell className="text-center">
+                                                {formatMetricValue(group.metrics.impressions || 0)}
+                                              </TableCell>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <TableCell className="text-center">
+                                                {group.metrics.views.toLocaleString()}
+                                              </TableCell>
+                                              <TableCell className="text-center">
+                                                {group.metrics.likes.toLocaleString()}
+                                              </TableCell>
+                                              <TableCell className="text-center">
+                                                {group.metrics.comments.toLocaleString()}
                                               </TableCell>
                                             </>
                                           )}
-                                        {/* Rejection Reason Column */}
-                                        {showRejectionReasonColumn && (
-                                          <TableCell className="text-center">
-                                            {group.creator_rejection_reason ? (
-                                              <div className="flex flex-col items-center max-w-[200px] mx-auto">
-                                                <span
-                                                  className={cn(
-                                                    "text-xs italic truncate",
-                                                    isDark ? "text-red-400" : "text-red-600"
+                                          {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
+                                          {(!((currentContest.platform?.toLowerCase() === "twitter" ||
+                                            currentContest.platform?.toLowerCase() === "x") &&
+                                            currentContest.contest_format === "text_image")) ||
+                                            (currentContest.contest_type === "leaderboard" &&
+                                              ((currentContest.platform?.toLowerCase() === "twitter" ||
+                                                currentContest.platform?.toLowerCase() === "x") &&
+                                                currentContest.contest_format === "text_image")) ? (
+                                            <>
+                                              <TableCell className="text-center font-medium">
+                                                <div className="flex items-center justify-center gap-1">
+                                                  {formatMoney(
+                                                    group.earnings.expected
                                                   )}
-                                                  title={group.creator_rejection_reason}
-                                                >
-                                                  {group.creator_rejection_reason.length > 30
-                                                    ? group.creator_rejection_reason.substring(0, 30) + "..."
-                                                    : group.creator_rejection_reason}
+                                                  {group.isCapped && (
+                                                    <span
+                                                      className="text-amber-600 cursor-help"
+                                                      title={`Capped at ${formatMoney(
+                                                        currentContest.max_earnings_per_creator
+                                                      )}. Original: ${formatMoney(
+                                                        group.earningsBeforeCap
+                                                      )}`}
+                                                    >
+                                                      ⚠️
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </TableCell>
+                                              <TableCell className="text-center font-medium text-green-600">
+                                                {formatMoney(group.earnings.granted)}
+                                              </TableCell>
+                                            </>
+                                          ) : null}
+                                          {(() => {
+                                            const flatFeeBonus =
+                                              currentContest.contest_type ===
+                                                "cpm"
+                                                ? (
+                                                  currentContest.contest_based_details as any
+                                                )?.cpm_contest?.flat_fee_bonus
+                                                : (
+                                                  currentContest.contest_based_details as any
+                                                )?.leaderboard_contest
+                                                  ?.flat_fee_bonus;
+                                            return flatFeeBonus > 0;
+                                          })() && (
+                                              <>
+                                                <TableCell className="text-center font-medium">
+                                                  {formatMoney(
+                                                    group.bonus.expected
+                                                  )}
+                                                </TableCell>
+                                                <TableCell className="text-center font-medium text-green-600">
+                                                  {formatMoney(group.bonus.granted)}
+                                                </TableCell>
+                                              </>
+                                            )}
+                                          {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard campaigns */}
+                                          {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                            currentContest.platform?.toLowerCase() === "x") &&
+                                            currentContest.contest_format === "text_image" &&
+                                            currentContest.contest_type === "leaderboard") && (
+                                              <>
+                                                <TableCell className="text-center">
+                                                  <div className="flex flex-col items-center">
+                                                    <span className={cn(
+                                                      "font-semibold text-sm",
+                                                      group.metrics.manual_points_adjustment > 0
+                                                        ? "text-green-600"
+                                                        : group.metrics.manual_points_adjustment < 0
+                                                          ? "text-red-600"
+                                                          : isDark
+                                                            ? "text-white"
+                                                            : "text-slate-900"
+                                                    )}>
+                                                      {group.metrics.manual_points_adjustment > 0 ? "+" : ""}
+                                                      {formatMetricValue(group.metrics.manual_points_adjustment || 0)}
+                                                    </span>
+                                                  </div>
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                  {group.metrics.manual_points_reason ? (
+                                                    <div className="flex flex-col items-center max-w-[200px] mx-auto">
+                                                      <span
+                                                        className={cn(
+                                                          "text-xs italic truncate",
+                                                          isDark ? "text-slate-300" : "text-slate-700"
+                                                        )}
+                                                        title={group.metrics.manual_points_reason}
+                                                      >
+                                                        {group.metrics.manual_points_reason.length > 30
+                                                          ? group.metrics.manual_points_reason.substring(0, 30) + "..."
+                                                          : group.metrics.manual_points_reason}
+                                                      </span>
+                                                    </div>
+                                                  ) : (
+                                                    <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>
+                                                      —
+                                                    </span>
+                                                  )}
+                                                </TableCell>
+                                              </>
+                                            )}
+                                          {/* Rejection Reason Column */}
+                                          {showRejectionReasonColumn && (
+                                            <TableCell className="text-center">
+                                              {group.creator_rejection_reason ? (
+                                                <div className="flex flex-col items-center max-w-[200px] mx-auto">
+                                                  <span
+                                                    className={cn(
+                                                      "text-xs italic truncate",
+                                                      isDark ? "text-red-400" : "text-red-600"
+                                                    )}
+                                                    title={group.creator_rejection_reason}
+                                                  >
+                                                    {group.creator_rejection_reason.length > 30
+                                                      ? group.creator_rejection_reason.substring(0, 30) + "..."
+                                                      : group.creator_rejection_reason}
+                                                  </span>
+                                                </div>
+                                              ) : (
+                                                <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>
+                                                  —
                                                 </span>
-                                              </div>
-                                            ) : (
-                                              <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>
-                                                —
-                                              </span>
+                                              )}
+                                            </TableCell>
+                                          )}
+                                          <TableCell className="text-center text-sm">
+                                            {formatLocalDateTime(
+                                              group.firstSubmittedAt
                                             )}
                                           </TableCell>
-                                        )}
-                                        <TableCell className="text-center text-sm">
-                                          {formatLocalDateTime(
-                                            group.firstSubmittedAt
-                                          )}
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                          <div className="flex flex-col items-center gap-2">
-                                            <div className="flex items-center gap-2">
-                                              <Button
-                                                size="sm"
-                                                variant="outline"
-                                                className={cn(
-                                                  "border",
-                                                  isDark
-                                                    ? "bg-[#170337] border-gray-600 text-white"
-                                                    : "border-gray-400 bg-white text-gray-800"
-                                                )}
-                                                onClick={() =>
-                                                  setSelectedCreatorForModal(
-                                                    group.creator.id
-                                                  )
-                                                }
-                                              >
-                                                View All ({group.totalCount})
-                                              </Button>
-                                              {/* Creator moderation options for Twitter campaigns */}
-                                              {((currentContest.platform?.toLowerCase() === "twitter" ||
-                                                currentContest.platform?.toLowerCase() === "x") &&
-                                                currentContest.contest_format === "text_image") && (
-                                                  <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                      <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="h-8 w-8 p-0"
-                                                      >
-                                                        <MoreVertical className="h-4 w-4" />
-                                                      </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                      {group.creator_moderation_status !== "approved" && (
-                                                        <DropdownMenuItem
-                                                          onClick={async () => {
-                                                            try {
-                                                              const response = await fetch(
-                                                                `/api/contests/${contestId}/moderate-creator`,
-                                                                {
-                                                                  method: "POST",
-                                                                  headers: { "Content-Type": "application/json" },
-                                                                  body: JSON.stringify({
-                                                                    creatorId: group.creator.id,
-                                                                    action: "approve",
-                                                                  }),
-                                                                }
-                                                              );
-                                                              if (response.ok) {
-                                                                // Refresh the page data
-                                                                window.location.reload();
-                                                              } else {
-                                                                const error = await response.json();
-                                                                alert(error.error || "Failed to approve creator");
-                                                              }
-                                                            } catch (error) {
-                                                              console.error("Error approving creator:", error);
-                                                              alert("Failed to approve creator");
-                                                            }
-                                                          }}
-                                                          className="text-green-600"
+                                          <TableCell className="text-center">
+                                            <div className="flex flex-col items-center gap-2">
+                                              <div className="flex items-center gap-2">
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  className={cn(
+                                                    "border",
+                                                    isDark
+                                                      ? "bg-[#170337] border-gray-600 text-white"
+                                                      : "border-gray-400 bg-white text-gray-800"
+                                                  )}
+                                                  onClick={() =>
+                                                    setSelectedCreatorForModal(
+                                                      group.creator.id
+                                                    )
+                                                  }
+                                                >
+                                                  View All ({group.totalCount})
+                                                </Button>
+                                                {/* Creator moderation options for Twitter campaigns */}
+                                                {((currentContest.platform?.toLowerCase() === "twitter" ||
+                                                  currentContest.platform?.toLowerCase() === "x") &&
+                                                  currentContest.contest_format === "text_image") && (
+                                                    <DropdownMenu>
+                                                      <DropdownMenuTrigger asChild>
+                                                        <Button
+                                                          size="sm"
+                                                          variant="ghost"
+                                                          className="h-8 w-8 p-0"
                                                         >
-                                                          <CheckCircle className="h-4 w-4 mr-2" />
-                                                          Approve Creator
+                                                          <MoreVertical className="h-4 w-4" />
+                                                        </Button>
+                                                      </DropdownMenuTrigger>
+                                                      <DropdownMenuContent align="end">
+                                                        {group.creator_moderation_status !== "approved" && (
+                                                          <DropdownMenuItem
+                                                            onClick={async () => {
+                                                              try {
+                                                                const response = await fetch(
+                                                                  `/api/contests/${contestId}/moderate-creator`,
+                                                                  {
+                                                                    method: "POST",
+                                                                    headers: { "Content-Type": "application/json" },
+                                                                    body: JSON.stringify({
+                                                                      creatorId: group.creator.id,
+                                                                      action: "approve",
+                                                                    }),
+                                                                  }
+                                                                );
+                                                                if (response.ok) {
+                                                                  // Refresh the page data
+                                                                  window.location.reload();
+                                                                } else {
+                                                                  const error = await response.json();
+                                                                  alert(error.error || "Failed to approve creator");
+                                                                }
+                                                              } catch (error) {
+                                                                console.error("Error approving creator:", error);
+                                                                alert("Failed to approve creator");
+                                                              }
+                                                            }}
+                                                            className="text-green-600"
+                                                          >
+                                                            <CheckCircle className="h-4 w-4 mr-2" />
+                                                            Approve Creator
+                                                          </DropdownMenuItem>
+                                                        )}
+                                                        <DropdownMenuItem
+                                                          onClick={() => {
+                                                            setPendingTwitterRejection({
+                                                              id: group.creator.id,
+                                                              type: 'creator',
+                                                              creatorId: group.creator.id,
+                                                              creatorUsername: group.creator.username,
+                                                            });
+                                                            setTwitterRejectionModalOpen(true);
+                                                          }}
+                                                          className="text-red-600"
+                                                        >
+                                                          <XCircle className="h-4 w-4 mr-2" />
+                                                          Reject Creator
                                                         </DropdownMenuItem>
-                                                      )}
-                                                      <DropdownMenuItem
-                                                        onClick={() => {
-                                                          setPendingTwitterRejection({
-                                                            id: group.creator.id,
-                                                            type: 'creator',
-                                                            creatorId: group.creator.id,
-                                                            creatorUsername: group.creator.username,
-                                                          });
-                                                          setTwitterRejectionModalOpen(true);
-                                                        }}
-                                                        className="text-red-600"
-                                                      >
-                                                        <XCircle className="h-4 w-4 mr-2" />
-                                                        Reject Creator
-                                                      </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                  </DropdownMenu>
-                                                )}
+                                                      </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                  )}
+                                              </div>
                                             </div>
-                                          </div>
-                                        </TableCell>
-                                      </TableRow>
-                                    );
-                                  }
-                                )
-                              )}
-                            </TableBody>
-                          </Table>
+                                          </TableCell>
+                                        </TableRow>
+                                      );
+                                    }
+                                  )
+                                )}
+                              </TableBody>
+                            </Table>
+                          </>
                         )}
 
                       {/* Pagination Controls for Creator-wise View */}
                       {viewMode === "creator-wise" &&
-                        groupSubmissionsByCreator &&
-                        groupSubmissionsByCreator.length > 0 && (
+                        filteredCreatorGroups &&
+                        filteredCreatorGroups.length > 0 && (
                           <div className="mt-6 px-4">
                             <PaginationControls
                               page={creatorWisePage}
                               limit={creatorWiseItemsPerPage}
-                              total={groupSubmissionsByCreator.length}
+                              total={filteredCreatorGroups.length}
                               totalPages={creatorWiseTotalPages}
                               hasNextPage={creatorWiseHasNextPage}
                               hasPreviousPage={creatorWiseHasPreviousPage}

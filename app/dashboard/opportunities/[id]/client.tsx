@@ -227,6 +227,8 @@ export function ContestClientPage({
   const [modalViewMode, setModalViewMode] = useState<"simple" | "detailed">(
     "simple"
   );
+  const [rejectionReasonModalOpen, setRejectionReasonModalOpen] = useState(false);
+  const [rejectionReasonText, setRejectionReasonText] = useState<string>("");
   const [modalCurrentPage, setModalCurrentPage] = useState(1);
   const [modalItemsPerPage] = useState(10); // Show 10 submissions per page
   const [showCreatorVideosModal, setShowCreatorVideosModal] = useState(false);
@@ -6029,49 +6031,104 @@ export function ContestClientPage({
                                   {renderVerificationBadges(
                                     displayEntry.status
                                   )}
+                                  {/* Show rejected badge for Twitter entries */}
+                                  {contest?.platform === "twitter" &&
+                                    (displayEntry as any).moderation_status === "rejected" && (
+                                      <Badge
+                                        className="ml-2 bg-red-500 text-white text-xs"
+                                        variant="destructive"
+                                      >
+                                        Rejected
+                                      </Badge>
+                                    )}
                                 </div>
-                                <p className={cn(
-                                  "text-xs mb-2",
-                                  isDark ? "text-gray-300" : "text-slate-500"
-                                )}>
-                                  Submitted:{" "}
-                                  {formatTimeAgo(displayEntry.created_at)}
-                                </p>
-                                {/* Twitter Metrics - Horizontal Layout */}
-                                {contest?.platform === "twitter" && (displayEntry as any).total_eligible_tweets !== undefined && (
-                                  <div className="flex flex-wrap items-center gap-3 mt-1">
-                                    <div className="flex items-center gap-1">
-                                      <FileText className={cn("h-3.5 w-3.5", isDark ? "text-gray-400" : "text-slate-500")} />
-                                      <span className={cn("text-xs", isDark ? "text-gray-400" : "text-slate-600")}>
-                                        {(displayEntry as any).total_eligible_tweets || 0} tweets
-                                      </span>
+                                {/* Show rejection reason if available - compact UI */}
+                                {contest?.platform === "twitter" &&
+                                  (displayEntry as any).moderation_status === "rejected" &&
+                                  (displayEntry as any).rejection_reason && (
+                                    <div className="flex items-center gap-2 mt-1 mb-2">
+                                      <AlertCircle className={cn("h-4 w-4 flex-shrink-0", isDark ? "text-red-400" : "text-red-600")} />
+                                      <p className={cn(
+                                        "text-xs flex-1 truncate",
+                                        isDark ? "text-red-300" : "text-red-600"
+                                      )}>
+                                        <span className="font-medium">Rejection Reason:</span>{" "}
+                                        {(displayEntry as any).rejection_reason.length > 50
+                                          ? `${(displayEntry as any).rejection_reason.substring(0, 50)}...`
+                                          : (displayEntry as any).rejection_reason}
+                                      </p>
+                                      {(displayEntry as any).rejection_reason.length > 50 && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                          onClick={() => {
+                                            setRejectionReasonModalOpen(true);
+                                            setRejectionReasonText((displayEntry as any).rejection_reason);
+                                          }}
+                                        >
+                                          More
+                                        </Button>
+                                      )}
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                      <Eye className={cn("h-3.5 w-3.5", isDark ? "text-gray-400" : "text-slate-500")} />
-                                      <span className={cn("text-xs", isDark ? "text-gray-400" : "text-slate-600")}>
-                                        {((displayEntry as any).total_impressions || 0).toLocaleString()} impressions
-                                      </span>
+                                  )}
+                                {/* Show explanation for rejected entries */}
+                                {contest?.platform === "twitter" &&
+                                  (displayEntry as any).moderation_status === "rejected" && (
+                                    <p className={cn(
+                                      "text-xs mb-2",
+                                      isDark ? "text-red-300" : "text-red-600"
+                                    )}>
+                                      Your entry has been rejected.
+                                    </p>
+                                  )}
+                                {!(contest?.platform === "twitter" &&
+                                  (displayEntry as any).moderation_status === "rejected") && (
+                                    <p className={cn(
+                                      "text-xs mb-2",
+                                      isDark ? "text-gray-300" : "text-slate-500"
+                                    )}>
+                                      Submitted:{" "}
+                                      {formatTimeAgo(displayEntry.created_at)}
+                                    </p>
+                                  )}
+                                {/* Twitter Metrics - Horizontal Layout - Hide for rejected entries */}
+                                {contest?.platform === "twitter" &&
+                                  (displayEntry as any).total_eligible_tweets !== undefined &&
+                                  !((displayEntry as any).moderation_status === "rejected") && (
+                                    <div className="flex flex-wrap items-center gap-3 mt-1">
+                                      <div className="flex items-center gap-1">
+                                        <FileText className={cn("h-3.5 w-3.5", isDark ? "text-gray-400" : "text-slate-500")} />
+                                        <span className={cn("text-xs", isDark ? "text-gray-400" : "text-slate-600")}>
+                                          {(displayEntry as any).total_eligible_tweets || 0} tweets
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <Eye className={cn("h-3.5 w-3.5", isDark ? "text-gray-400" : "text-slate-500")} />
+                                        <span className={cn("text-xs", isDark ? "text-gray-400" : "text-slate-600")}>
+                                          {((displayEntry as any).total_impressions || 0).toLocaleString()} impressions
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <ThumbsUp className="h-3.5 w-3.5 text-pink-500" />
+                                        <span className={cn("text-xs", isDark ? "text-gray-300" : "text-gray-700")}>
+                                          {(displayEntry as any).total_likes || 0}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <RefreshCw className="h-3.5 w-3.5 text-green-500" />
+                                        <span className={cn("text-xs", isDark ? "text-gray-300" : "text-gray-700")}>
+                                          {(displayEntry as any).total_retweets || 0}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <MessageCircle className={cn("h-3.5 w-3.5", isDark ? "text-gray-400" : "text-gray-600")} />
+                                        <span className={cn("text-xs", isDark ? "text-gray-300" : "text-gray-700")}>
+                                          {(displayEntry as any).total_replies || 0}
+                                        </span>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                      <ThumbsUp className="h-3.5 w-3.5 text-pink-500" />
-                                      <span className={cn("text-xs", isDark ? "text-gray-300" : "text-gray-700")}>
-                                        {(displayEntry as any).total_likes || 0}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <RefreshCw className="h-3.5 w-3.5 text-green-500" />
-                                      <span className={cn("text-xs", isDark ? "text-gray-300" : "text-gray-700")}>
-                                        {(displayEntry as any).total_retweets || 0}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <MessageCircle className={cn("h-3.5 w-3.5", isDark ? "text-gray-400" : "text-gray-600")} />
-                                      <span className={cn("text-xs", isDark ? "text-gray-300" : "text-gray-700")}>
-                                        {(displayEntry as any).total_replies || 0}
-                                      </span>
-                                    </div>
-                                  </div>
-                                )}
+                                  )}
                               </div>
                             </div>
                           </div>
@@ -6114,6 +6171,12 @@ export function ContestClientPage({
                               )}
                             </div>
                             {(() => {
+                              // Don't show winning zone for rejected entries
+                              if (contest?.platform === "twitter" &&
+                                (displayEntry as any).moderation_status === "rejected") {
+                                return null;
+                              }
+
                               let prizeDisplay = null;
                               if (displayEntry.earnings > 0) {
                                 // Show actual earnings for verified or paid submissions; otherwise show expected
@@ -7985,6 +8048,39 @@ export function ContestClientPage({
           </TabPanel>
         </TabContent>
       </div>
+
+      {/* Rejection Reason Modal */}
+      <Dialog open={rejectionReasonModalOpen} onOpenChange={setRejectionReasonModalOpen}>
+        <DialogContent className={cn(
+          "max-w-md",
+          isDark ? "bg-[#1a1a1a] border-gray-700" : "bg-white border-gray-300"
+        )}>
+          <DialogHeader>
+            <DialogTitle className={cn(
+              isDark ? "text-white" : "text-gray-900"
+            )}>
+              Rejection Reason
+            </DialogTitle>
+          </DialogHeader>
+          <div className={cn(
+            "mt-4 p-4 rounded-lg",
+            isDark ? "bg-[#2a2a2a] text-gray-200" : "bg-gray-50 text-gray-800"
+          )}>
+            <p className="text-sm whitespace-pre-wrap">{rejectionReasonText}</p>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button
+              onClick={() => setRejectionReasonModalOpen(false)}
+              variant="outline"
+              className={cn(
+                isDark ? "border-gray-700 hover:bg-gray-800" : ""
+              )}
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

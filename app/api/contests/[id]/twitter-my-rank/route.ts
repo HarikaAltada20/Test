@@ -30,6 +30,8 @@ export async function GET(
       );
     }
 
+    // Fetch leaderboard entry including moderation_status and rejection_reason
+    // Note: We don't filter by moderation_status here so rejected entries are still visible to the user
     const { data, error } = await supabase
       .from("twitter_campaign_leaderboard")
       .select("*")
@@ -55,7 +57,30 @@ export async function GET(
       return NextResponse.json({ success: true, entry: null });
     }
 
-    return NextResponse.json({ success: true, entry: data });
+    // Fetch user profile data to include username and full_name
+    // This ensures rejected entries still show user details
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .select("id, username, full_name")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (userError) {
+      console.error(
+        "[twitter-my-rank] Error fetching user profile data",
+        userError
+      );
+      // Not fatal: return entry without enriched username
+    }
+
+    // Enrich the entry with user profile data
+    const enrichedEntry = {
+      ...data,
+      app_username: userData?.username || null,
+      app_full_name: userData?.full_name || null,
+    };
+
+    return NextResponse.json({ success: true, entry: enrichedEntry });
   } catch (err: any) {
     console.error("[twitter-my-rank] Unexpected error", err);
     return NextResponse.json(

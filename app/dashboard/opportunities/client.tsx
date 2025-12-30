@@ -627,8 +627,37 @@ export default function OpportunitiesPage({
           setAvailableContests([]);
         } else {
           // For leaderboard contests, calculate actual budget spent from submissions (CPM now uses real-time budget_spent field)
+          // For Twitter contests, fetch participant count from twitter_campaign_metrics
           const contestsWithCalculatedBudgets = await Promise.all(
             (contests || []).map(async (contest) => {
+              let updatedContest = { ...contest };
+
+              // Check if this is a Twitter text_image contest
+              const isTwitterTextImage =
+                (contest.platform?.toLowerCase() === "twitter" ||
+                  contest.platform?.toLowerCase() === "x") &&
+                contest.contest_format === "text_image";
+
+              // Fetch participant count from twitter_campaign_metrics for Twitter contests
+              if (isTwitterTextImage) {
+                const { data: metrics } = await supabase
+                  .from("twitter_campaign_metrics")
+                  .select("total_participants, max_participants")
+                  .eq("contest_id", contest.id)
+                  .maybeSingle();
+
+                if (metrics) {
+                  updatedContest.twitter_participants_count =
+                    metrics.total_participants || 0;
+                  updatedContest.twitter_max_participants =
+                    metrics.max_participants;
+                } else {
+                  updatedContest.twitter_participants_count = 0;
+                  updatedContest.twitter_max_participants = null;
+                }
+              }
+
+              // For leaderboard contests, calculate actual budget spent from submissions
               if (
                 contest.contest_type === "leaderboard" &&
                 contest.contest_based_details?.leaderboard_contest
@@ -653,18 +682,19 @@ export default function OpportunitiesPage({
                 );
 
                 // Update the contest object with calculated budget spent
-                return {
-                  ...contest,
+                updatedContest = {
+                  ...updatedContest,
                   contest_based_details: {
-                    ...contest.contest_based_details,
+                    ...updatedContest.contest_based_details,
                     leaderboard_contest: {
-                      ...contest.contest_based_details.leaderboard_contest,
+                      ...updatedContest.contest_based_details.leaderboard_contest,
                       budget_spent: Math.round(actualBudgetSpent * 100), // Convert to cents
                     },
                   },
                 };
               }
-              return contest;
+
+              return updatedContest;
             })
           );
 

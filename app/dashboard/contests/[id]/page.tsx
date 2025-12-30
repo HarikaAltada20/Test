@@ -125,6 +125,7 @@ export default async function ContestDetailPage({
     let tweetsError: any = null;
 
     // Try with all columns first - OPTIMIZED: Only fetch first page
+    // Include all tweets (including rejected) so brands/admins can see and change their status
     const queryWithAll = supabase
       .from("twitter_campaign_tweets")
       .select(
@@ -153,7 +154,7 @@ export default async function ContestDetailPage({
         { count: "exact" }
       )
       .eq("contest_id", contestId)
-      .eq("is_eligible", true)
+      // Don't filter by is_eligible - include all tweets so rejected ones are visible for status changes
       .order("tweet_created_at", { ascending: false })
       .range(0, INITIAL_TWEET_LIMIT - 1); // Only fetch first page
 
@@ -189,7 +190,7 @@ export default async function ContestDetailPage({
           { count: "exact" }
         )
         .eq("contest_id", contestId)
-        .eq("is_eligible", true)
+        // Don't filter by is_eligible - include all tweets so rejected ones are visible for status changes
         .order("tweet_created_at", { ascending: false })
         .range(0, INITIAL_TWEET_LIMIT - 1); // Only fetch first page
 

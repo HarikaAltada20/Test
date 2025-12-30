@@ -53,11 +53,40 @@ export default async function AdminContestsPage() {
       `)
             .order("created_at", { ascending: false });
 
-        // Add advertiser name to contests for admin view
-        const typedContests = (contestsData || []).map(contest => ({
-            ...contest,
-            status: contest.status || 'unknown',
-            advertiser_name: (contest.advertiser_profiles as any)?.company_name || 'Unknown Brand'
+        // Add advertiser name and fetch participant counts for Twitter contests
+        const typedContests = await Promise.all((contestsData || []).map(async (contest) => {
+            let updatedContest = {
+                ...contest,
+                status: contest.status || 'unknown',
+                advertiser_name: (contest.advertiser_profiles as any)?.company_name || 'Unknown Brand'
+            };
+
+            // Check if this is a Twitter text_image contest
+            const isTwitterTextImage =
+                (contest.platform?.toLowerCase() === "twitter" ||
+                    contest.platform?.toLowerCase() === "x") &&
+                contest.contest_format === "text_image";
+
+            // Fetch participant count from twitter_campaign_metrics for Twitter contests
+            if (isTwitterTextImage) {
+                const { data: metrics } = await supabase
+                    .from("twitter_campaign_metrics")
+                    .select("total_participants, max_participants")
+                    .eq("contest_id", contest.id)
+                    .maybeSingle();
+
+                if (metrics) {
+                    updatedContest.twitter_participants_count =
+                        metrics.total_participants || 0;
+                    updatedContest.twitter_max_participants =
+                        metrics.max_participants;
+                } else {
+                    updatedContest.twitter_participants_count = 0;
+                    updatedContest.twitter_max_participants = null;
+                }
+            }
+
+            return updatedContest;
         })) as any[];
 
         return (

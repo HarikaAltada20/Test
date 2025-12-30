@@ -18,11 +18,13 @@ export async function GET(
   try {
     const supabase = await createClient();
 
-    // 1) Fetch raw leaderboard rows
+    // 1) Fetch raw leaderboard rows (exclude rejected creators for opportunities leaderboard)
+    // This matches YouTube/Instagram behavior - rejected entries don't show on public leaderboard
     const { data: leaderboardRows, error, count } = await supabase
       .from("twitter_campaign_leaderboard")
       .select("*", { count: "exact" })
       .eq("contest_id", contestId)
+      .neq("moderation_status", "rejected") // Filter out rejected creators
       .order("current_rank", { ascending: true })
       .range(offset, offset + safeLimit - 1);
 
