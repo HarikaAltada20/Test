@@ -499,7 +499,7 @@ export default function ContestModerationClient({
       <Card
         key={contest.id}
         className={cn(
-          "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full",
+          "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full min-w-0",
           isDark ? "bg-[#06021D] border-slate-700" : "bg-white border-slate-200"
         )}
       >
@@ -524,10 +524,10 @@ export default function ContestModerationClient({
             </div>
           </div>
 
-          <CardContent className="flex-grow p-4 flex flex-col">
-            <div className="mb-3">
+          <CardContent className="flex-grow p-3 sm:p-4 flex flex-col">
+            <div className="mb-2 sm:mb-3">
               <h3
-                className="font-bold text-lg leading-tight line-clamp-2"
+                className="font-bold text-base sm:text-lg leading-tight line-clamp-2"
                 style={{
                   color: isDark ? "white" : "#0f172a",
                   transition: "none",
@@ -538,70 +538,77 @@ export default function ContestModerationClient({
             </div>
 
             <div
-              className="flex items-center gap-2 mb-3 text-sm"
+              className="flex items-center gap-2 mb-2 sm:mb-3 text-xs sm:text-sm"
               style={{
                 color: isDark ? "white" : "#475569",
                 transition: "none",
               }}
             >
-              <Building className="h-4 w-4" />
-              <span>{contest.advertiser_name}</span>
+              <Building className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span className="truncate">{contest.advertiser_name}</span>
             </div>
 
             {/* New Features Indicators */}
-            <div className="flex flex-wrap items-center gap-2 mb-3">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2 sm:mb-3">
               {contest.multiple_submissions_enabled && (
                 <Badge
                   variant="outline"
-                  className="text-xs bg-purple-50 text-purple-700 border-purple-200"
+                  className="text-[10px] sm:text-xs bg-purple-50 text-purple-700 border-purple-200 py-0.5 px-1.5 sm:px-2"
                 >
-                  <CheckCheck className="h-3 w-3 mr-1" />
-                  {(contest.max_submissions_per_creator ?? 1) > 1
-                    ? `${contest.max_submissions_per_creator} Submissions`
-                    : "Multiple Entries"}
+                  <CheckCheck className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
+                  <span className="hidden sm:inline">
+                    {(contest.max_submissions_per_creator ?? 1) > 1
+                      ? `${contest.max_submissions_per_creator} Submissions`
+                      : "Multiple Entries"}
+                  </span>
+                  <span className="sm:hidden">Multi</span>
                 </Badge>
               )}
               {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
                 contest.contest_based_details?.leaderboard_contest
                   ?.flat_fee_bonus) && (
-                  <Badge
-                    variant="outline"
-                    className="text-xs bg-green-50 text-green-700 border-green-200"
-                  >
-                    <Gift className="h-3 w-3 mr-1" />
+                <Badge
+                  variant="outline"
+                  className="text-[10px] sm:text-xs bg-green-50 text-green-700 border-green-200 py-0.5 px-1.5 sm:px-2"
+                >
+                  <Gift className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
+                  <span className="hidden sm:inline">
                     {formatMoney(
                       contest.contest_based_details?.cpm_contest
                         ?.flat_fee_bonus ||
-                      contest.contest_based_details?.leaderboard_contest
-                        ?.flat_fee_bonus ||
-                      0
+                        contest.contest_based_details?.leaderboard_contest
+                          ?.flat_fee_bonus ||
+                        0
                     )}
                     /submission
-                  </Badge>
-                )}
+                  </span>
+                  <span className="sm:hidden">Bonus</span>
+                </Badge>
+              )}
               {contest.content_type && (
                 <Badge
                   variant="outline"
-                  className="text-xs bg-blue-50 text-blue-700 border-blue-200"
+                  className="text-[10px] sm:text-xs bg-blue-50 text-blue-700 border-blue-200 py-0.5 px-1.5 sm:px-2"
                 >
-                  <Tag className="h-3 w-3 mr-1" />
+                  <Tag className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
                   {contest.content_type.toUpperCase()}
                 </Badge>
               )}
               {contest.bonus_details?.description_html && (
                 <Badge
                   variant="outline"
-                  className="text-xs bg-amber-50 text-amber-700 border-amber-200"
+                  className="text-[10px] sm:text-xs bg-amber-50 text-amber-700 border-amber-200 py-0.5 px-1.5 sm:px-2"
                 >
-                  <Star className="h-3 w-3 mr-1" />
-                  Bonus Available
+                  <Star className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
+                  <span className="hidden sm:inline">Bonus Available</span>
+                  <span className="sm:hidden">Bonus</span>
                 </Badge>
               )}
             </div>
 
             {/* Contest Details Section */}
             <div
-              className="space-y-2 text-md mb-4 flex-grow"
+              className="space-y-1.5 sm:space-y-2 text-md mb-3 sm:mb-4 flex-grow"
               style={{
                 color: isDark ? "white" : "#475569",
                 transition: "none",
@@ -609,8 +616,8 @@ export default function ContestModerationClient({
             >
               {contest.start_date && contest.end_date ? (
                 <div className="flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  <span>
+                  <Calendar className="h-3 w-3 flex-shrink-0" />
+                  <span className="break-words">
                     {formatLocalDateTime(contest.start_date)} -{" "}
                     {formatLocalDateTime(contest.end_date)}
                   </span>
@@ -622,13 +629,13 @@ export default function ContestModerationClient({
                     isDark ? "text-amber-400" : "text-amber-600"
                   )}
                 >
-                  <AlertTriangle className="h-3 w-3" />
+                  <AlertTriangle className="h-3 w-3 flex-shrink-0" />
                   <span>Dates not set</span>
                 </div>
               )}
               <div className="flex items-center gap-1">
-                <Trophy className="h-3 w-3" />
-                <span>
+                <Trophy className="h-3 w-3 flex-shrink-0" />
+                <span className="min-w-0">
                   Platform:{" "}
                   <span className="font-medium">
                     {contest.platform || "N/A"}
@@ -636,8 +643,8 @@ export default function ContestModerationClient({
                 </span>
               </div>
               <div className="flex items-center gap-1">
-                <Users className="h-3 w-3" />
-                <span>
+                <Users className="h-3 w-3 flex-shrink-0" />
+                <span className="min-w-0">
                   Contest Type:{" "}
                   <span className="font-medium">
                     {contest.contest_type === "cpm"
@@ -653,8 +660,8 @@ export default function ContestModerationClient({
               </div>
               {(leaderboardPrizeMoney || cpmBudget) && (
                 <div className="flex items-center gap-1">
-                  <DollarSign className="h-3 w-3" />
-                  <span>
+                  <DollarSign className="h-3 w-3 flex-shrink-0" />
+                  <span className="break-words">
                     {contest.contest_type === "leaderboard"
                       ? `Prize: ${formatMoney(leaderboardPrizeMoney)}`
                       : `Budget: ${formatMoney(cpmBudget)}`}
@@ -667,25 +674,25 @@ export default function ContestModerationClient({
             {contest.rejection_reason && (
               <div
                 className={cn(
-                  "mb-3 p-3 rounded-lg border",
+                  "mb-2 sm:mb-3 p-2 sm:p-3 rounded-lg border",
                   contest.moderation_status === "rejected"
                     ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
                     : "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"
                 )}
               >
-                <div className="flex items-start gap-2">
+                <div className="flex items-start gap-1.5 sm:gap-2">
                   <AlertTriangle
                     className={cn(
-                      "h-4 w-4 mt-0.5 flex-shrink-0",
+                      "h-3.5 w-3.5 sm:h-4 sm:w-4 mt-0.5 flex-shrink-0",
                       contest.moderation_status === "rejected"
                         ? "text-red-500"
                         : "text-amber-500"
                     )}
                   />
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <div
                       className={cn(
-                        "text-sm font-medium",
+                        "text-xs sm:text-sm font-medium",
                         contest.moderation_status === "rejected"
                           ? "text-red-800 dark:text-red-200"
                           : "text-amber-800 dark:text-amber-200"
@@ -697,7 +704,7 @@ export default function ContestModerationClient({
                     </div>
                     <div
                       className={cn(
-                        "text-sm mt-1",
+                        "text-xs sm:text-sm mt-0.5 sm:mt-1 break-words",
                         contest.moderation_status === "rejected"
                           ? "text-red-700 dark:text-red-300"
                           : "text-amber-700 dark:text-amber-300"
@@ -710,10 +717,10 @@ export default function ContestModerationClient({
               </div>
             )}
 
-            <div className="flex gap-2 mt-auto pt-3">
+            <div className="flex flex-col sm:flex-row gap-2 mt-auto pt-3">
               <button
                 className={cn(
-                  "flex w-full items-center justify-center gap-2 px-3 py-3 rounded-full",
+                  "flex w-full items-center justify-center gap-2 px-3 py-2.5 sm:py-3 rounded-full text-sm sm:text-base",
                   isDark
                     ? "bg-[#7F39EC] text-white"
                     : "bg-[#D9C0FF61] text-[#7F39EC]"
@@ -725,22 +732,22 @@ export default function ContestModerationClient({
                   )
                 }
               >
-                <Eye className="h-4 w-4" />
-                View Details
+                <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="whitespace-nowrap">View Details</span>
               </button>
 
               {contest.moderation_status === "pending_approval" && (
-                <>
+                <div className="flex gap-2">
                   <Button
                     size="sm"
                     onClick={() => {
                       setSelectedContest(contest);
                       setShowApprovalDialog(true);
                     }}
-                    className="bg-green-600 hover:bg-green-700"
+                    className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-initial text-xs sm:text-sm px-2 sm:px-3"
                   >
-                    <CheckCircle className="h-4 w-4 mr-1" />
-                    Approve
+                    <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
+                    <span className="whitespace-nowrap">Approve</span>
                   </Button>
                   <Button
                     size="sm"
@@ -749,11 +756,12 @@ export default function ContestModerationClient({
                       setSelectedContest(contest);
                       setShowRejectionDialog(true);
                     }}
+                    className="flex-1 sm:flex-initial text-xs sm:text-sm px-2 sm:px-3"
                   >
-                    <XCircle className="h-4 w-4 mr-1" />
-                    Reject
+                    <XCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
+                    <span className="whitespace-nowrap">Reject</span>
                   </Button>
-                </>
+                </div>
               )}
             </div>
           </CardContent>
@@ -763,7 +771,7 @@ export default function ContestModerationClient({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 w-full min-w-0">
       {/* Responsive wrapper for EnhancedTabs */}
       <style
         dangerouslySetInnerHTML={{
@@ -772,13 +780,44 @@ export default function ContestModerationClient({
           min-width: max-content;
         }
         
-        @media (max-width: 640px) {
+        @media (max-width: 360px) {
+          .contest-moderation-tabs-wrapper button {
+            flex: 0 0 auto !important;
+            min-width: fit-content !important;
+            padding: 0.25rem 0.375rem !important;
+            font-size: 0.625rem !important;
+            gap: 0.125rem !important;
+          }
+          .contest-moderation-tabs-wrapper .badge {
+            font-size: 0.625rem !important;
+            padding: 0.125rem 0.25rem !important;
+            margin-left: 0.125rem !important;
+          }
+        }
+
+        /* Small phones in landscape / very small devices */
+        @media (min-width: 360px) and (max-width: 460px) {
           .contest-moderation-tabs-wrapper button {
             flex: 0 0 auto !important;
             min-width: fit-content !important;
             padding: 0.375rem 0.5rem !important;
             font-size: 0.75rem !important;
             gap: 0.25rem !important;
+          }
+        }
+
+        /* Requested: 460px - 640px breakpoint for better tab responsiveness */
+        @media (min-width: 460px) and (max-width: 640px) {
+          .contest-moderation-tabs-wrapper button {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+            padding: 0.5rem 0.75rem !important;
+            font-size: 0.8rem !important;
+            gap: 0.3rem !important;
+          }
+          .contest-moderation-tabs-wrapper .badge {
+            font-size: 0.7rem !important;
+            padding: 0.15rem 0.35rem !important;
           }
         }
         
@@ -791,7 +830,7 @@ export default function ContestModerationClient({
       `,
         }}
       />
-      <div className="contest-moderation-tabs-wrapper overflow-x-auto scrollbar-hide mb-6 sm:mb-8 -mx-4 px-4 sm:mx-0 sm:px-0">
+      <div className="contest-moderation-tabs-wrapper overflow-x-auto scrollbar-hide mb-4 sm:mb-6 md:mb-8 -mx-4 px-4 sm:mx-0 sm:px-0">
         <EnhancedTabs
           tabs={[
             {
@@ -873,7 +912,7 @@ export default function ContestModerationClient({
         />
       </div>
 
-      <div className="mt-4">
+      <div className="mt-2 sm:mt-4 w-full min-w-0">
         {loading || !hasInitialized ? (
           <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
         ) : contests.length === 0 ? (
@@ -885,21 +924,16 @@ export default function ContestModerationClient({
           </div>
         ) : (
           <div className="space-y-4">
-            <div
-              className="grid gap-6"
-              style={{
-                gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))",
-              }}
-            >
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
               {contests
                 .slice((page - 1) * limit, page * limit)
                 .map((contest) => renderContestCard(contest))}
             </div>
 
-            <div className="flex flex-col gap-3 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
-              <div className="flex flex-col items-center sm:flex-row sm:items-center sm:gap-3">
+            <div className="flex flex-col gap-2 sm:gap-3 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
+              <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <div
-                  className="text-sm"
+                  className="text-xs sm:text-sm"
                   style={{
                     color: isDark ? "#cbd5e1" : "#4b5563",
                     transition: "none",
@@ -912,7 +946,7 @@ export default function ContestModerationClient({
                     return `Showing ${startItem}-${endItem} of ${total} contests`;
                   })()}
                 </div>
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
                   <span
                     style={{
                       color: isDark ? "#cbd5e1" : "#4b5563",
@@ -931,7 +965,7 @@ export default function ContestModerationClient({
                   >
                     <SelectTrigger
                       className={cn(
-                        "w-20 h-9",
+                        "w-16 sm:w-20 h-8 sm:h-9 text-xs sm:text-sm",
                         isDark && "border border-gray-600"
                       )}
                     >
@@ -959,6 +993,7 @@ export default function ContestModerationClient({
                     </SelectContent>
                   </Select>
                   <span
+                    className="text-xs sm:text-sm"
                     style={{
                       color: isDark ? "#cbd5e1" : "#4b5563",
                       transition: "none",

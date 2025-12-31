@@ -4076,21 +4076,23 @@ export default function SubmitContentPage({
                                 return (
                                   <Card
                                     key={`youtube-${index}`}
-                                    className={`cursor-pointer transition-all duration-200 ${isVideoAlreadySubmitted(
-                                      video.id.videoId,
-                                      `https://www.youtube.com/watch?v=${video.id.videoId}`
-                                    )
-                                      ? isDark
-                                        ? "border-2 border-red-500 bg-red-900/40 opacity-90"
-                                        : "border-2 border-red-300 bg-red-50 opacity-75"
-                                      : selectedVideoIndices.includes(index)
+                                    className={cn(
+                                      "cursor-pointer transition-all duration-200",
+                                      isVideoAlreadySubmitted(
+                                        video.id.videoId,
+                                        `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                      )
                                         ? isDark
-                                          ? "border-2 border-purple-400 bg-[#2B184A]"
-                                          : "border-2 border-purple-500 bg-purple-50"
-                                        : isDark
-                                          ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
-                                          : "border border-gray-200 hover:border-purple-300 bg-white"
-                                      }`}
+                                          ? "border-2 border-red-500 bg-red-900/40 opacity-90"
+                                          : "border-2 border-red-300 bg-red-50 opacity-75"
+                                        : selectedVideoIndices.includes(index)
+                                          ? isDark
+                                            ? "border-2 border-purple-400 bg-[#2B184A]"
+                                            : "border-2 border-purple-500 bg-purple-50"
+                                          : isDark
+                                            ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
+                                            : "border border-gray-200 hover:border-purple-300 bg-white"
+                                    )}
                                     onClick={() =>
                                       handleVideoSelection(
                                         index,
@@ -4099,21 +4101,47 @@ export default function SubmitContentPage({
                                     }
                                   >
                                     <CardContent className="p-4">
-                                      <div className="flex items-start gap-4">
-                                        <div className="flex-shrink-0">
+                                      <div className="flex flex-col sm:flex-row items-start gap-4">
+                                        {/* Checkbox - First on mobile, right side on desktop */}
+                                        <div className="flex-shrink-0 sm:order-3 sm:ml-2 self-start">
+                                          <Checkbox
+                                            aria-label="Select video"
+                                            checked={selectedVideoIndices.includes(
+                                              index
+                                            )}
+                                            onCheckedChange={(checked) =>
+                                              handleVideoSelection(
+                                                index,
+                                                Boolean(checked)
+                                              )
+                                            }
+                                            onClick={(event) =>
+                                              event.stopPropagation()
+                                            }
+                                            className={cn(
+                                              "h-5 w-5 border-2",
+                                              isDark
+                                                ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                                : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
+                                            )}
+                                          />
+                                        </div>
+                                        {/* Image - Second on mobile, first on desktop */}
+                                        <div className="flex-shrink-0 w-full sm:w-auto sm:order-1">
                                           <Image
                                             src={thumbnailUrl}
                                             alt={video.snippet.title}
                                             width={120}
                                             height={68}
-                                            className="rounded-lg object-cover aspect-video"
+                                            className="rounded-lg object-cover aspect-video w-full sm:w-auto"
                                           />
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-start justify-between">
-                                            <div className="flex-1">
-                                              <div className="flex items-start gap-2 mb-2">
-                                                <h5 className="font-medium text-sm line-clamp-2 flex-1">
+                                        {/* Content - Third on mobile, second on desktop */}
+                                        <div className="flex-1 min-w-0 w-full sm:w-auto sm:order-2">
+                                          <div className="flex flex-col items-start gap-2">
+                                            <div className="flex-1 min-w-0 w-full">
+                                              <div className="flex flex-col sm:flex-row items-start gap-2 mb-2">
+                                                <h5 className="font-medium text-sm line-clamp-2 flex-1 min-w-0">
                                                   {video.snippet.title}
                                                 </h5>
                                                 {isVideoAlreadySubmitted(
@@ -4128,7 +4156,7 @@ export default function SubmitContentPage({
                                               </div>
                                               <div
                                                 className={cn(
-                                                  "flex items-center gap-4 text-xs",
+                                                  "flex flex-wrap items-center gap-2 sm:gap-4 text-xs",
                                                   isDark
                                                     ? "text-gray-300"
                                                     : "text-gray-600"
@@ -4182,29 +4210,6 @@ export default function SubmitContentPage({
                                                   <span>comments</span>
                                                 </div>
                                               </div>
-                                            </div>
-                                            <div className="flex-shrink-0 ml-2">
-                                              <Checkbox
-                                                aria-label="Select video"
-                                                checked={selectedVideoIndices.includes(
-                                                  index
-                                                )}
-                                                onCheckedChange={(checked) =>
-                                                  handleVideoSelection(
-                                                    index,
-                                                    Boolean(checked)
-                                                  )
-                                                }
-                                                onClick={(event) =>
-                                                  event.stopPropagation()
-                                                }
-                                                className={cn(
-                                                  "h-5 w-5 border-2",
-                                                  isDark
-                                                    ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
-                                                )}
-                                              />
                                             </div>
                                           </div>
                                         </div>

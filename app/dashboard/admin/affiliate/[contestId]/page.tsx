@@ -216,7 +216,7 @@ export default function ContestAffiliatePage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-3 sm:px-4 lg:px-8 w-full max-w-full overflow-hidden">
       <Card
         className={cn(
           "shadow-md hover:shadow-lg transition-shadow duration-200",
@@ -224,19 +224,32 @@ export default function ContestAffiliatePage() {
         )}
       >
         <CardHeader>
-          <CardTitle>Contest Affiliate Earnings</CardTitle>
+          <CardTitle className="text-lg sm:text-xl lg:text-2xl">
+            Contest Affiliate Earnings
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4 items-center">
-            <div>Rows: {totals.rows}</div>
-            <div>Pending: {totals.pending}</div>
-            <div>Credited: {totals.credited}</div>
-            <div>
-              Total Pending: ${(totals.totalCommissionCents / 100).toFixed(2)}
+          <div className="flex flex-wrap gap-3 sm:gap-4 items-center text-xs sm:text-sm">
+            <div className="px-3 py-2 rounded-md border bg-background/60">
+              <span className="font-medium">Rows:</span> {totals.rows}
+            </div>
+            <div className="px-3 py-2 rounded-md border bg-background/60">
+              <span className="font-medium">Pending:</span> {totals.pending}
+            </div>
+            <div className="px-3 py-2 rounded-md border bg-background/60">
+              <span className="font-medium">Credited:</span> {totals.credited}
+            </div>
+            <div className="px-3 py-2 rounded-md border bg-background/60">
+              <span className="font-medium">Total Pending:</span> $
+              {(totals.totalCommissionCents / 100).toFixed(2)}
             </div>
             <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
               <DialogTrigger asChild>
-                <Button disabled={loading || selectedItems.length === 0}>
+                <Button
+                  size="sm"
+                  className="ml-auto w-full sm:w-auto"
+                  disabled={loading || selectedItems.length === 0}
+                >
                   Credit Selected
                 </Button>
               </DialogTrigger>
@@ -322,9 +335,9 @@ export default function ContestAffiliatePage() {
           isDark ? "bg-[#170337]" : "bg-white border-gray-200"
         )}
       >
-        <CardContent>
+        <CardContent className="pt-4 sm:pt-6">
           <div className="overflow-x-auto">
-            <Table>
+            <Table className="min-w-full text-xs sm:text-sm">
               <TableHeader>
                 <TableRow>
                   <TableHead>
@@ -339,10 +352,14 @@ export default function ContestAffiliatePage() {
                     />
                   </TableHead>
                   <TableHead>Winner</TableHead>
-                  <TableHead>Referrer</TableHead>
+                  <TableHead className="sm:table-cell">
+                    Referrer
+                  </TableHead>
                   <TableHead>Winnings</TableHead>
-                  <TableHead>Commission (10%)</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead className=" md:table-cell">
+                    Commission (10%)
+                  </TableHead>
+                  <TableHead className=" md:table-cell">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -390,7 +407,10 @@ export default function ContestAffiliatePage() {
                   paginatedItems.map((i) => (
                     <TableRow
                       key={i.submission_id}
-                      className={i.status === "credited" ? "opacity-60" : ""}
+                      className={cn(
+                        "align-top",
+                        i.status === "credited" ? "opacity-60" : ""
+                      )}
                     >
                       <TableCell>
                         {i.status === "pending" ? (
@@ -405,19 +425,21 @@ export default function ContestAffiliatePage() {
                           />
                         ) : null}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="max-w-[140px] sm:max-w-none">
                         @{i.winner_username || i.winner_user_id.slice(0, 6)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="sm:table-cell max-w-[140px] sm:max-w-none">
                         @{i.referrer_username || i.referrer_user_id.slice(0, 6)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         ${(i.winning_amount_cents / 100).toFixed(2)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className=" md:table-cell whitespace-nowrap">
                         ${(i.default_commission_cents / 100).toFixed(2)}
                       </TableCell>
-                      <TableCell>{i.status}</TableCell>
+                      <TableCell className="md:table-cell whitespace-nowrap">
+                        {i.status}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}

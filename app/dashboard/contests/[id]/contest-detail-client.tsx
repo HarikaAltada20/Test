@@ -2428,7 +2428,11 @@ export default function ContestDetailClient({
               </DialogTrigger>
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                  <DialogTitle>Update Contest Status</DialogTitle>
+                  <DialogTitle className={cn(
+                      isDark
+                        ? "text-white"
+                        : "text-gray-900"
+                    )}>Update Contest Status</DialogTitle>
                   <DialogDescription>
                     Change the post-contest status to reflect the current stage
                     of verification and payouts. Current status:{" "}
@@ -2439,7 +2443,12 @@ export default function ContestDetailClient({
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="space-y-2">
-                    <label htmlFor="status" className="text-sm font-medium">
+                    <label htmlFor="status" 
+                     className={cn("text-sm font-medium",
+                      isDark
+                        ? "text-white"
+                        : "text-gray-900"
+                    )}>
                       New Status
                     </label>
                     <Select
@@ -2470,7 +2479,12 @@ export default function ContestDetailClient({
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <label htmlFor="reason" className="text-sm font-medium">
+                    <label htmlFor="reason" 
+                     className={cn("text-sm font-medium",
+                      isDark
+                        ? "text-white"
+                        : "text-gray-900"
+                    )}>
                       Reason (Optional)
                     </label>
                     <Textarea
@@ -2489,7 +2503,7 @@ export default function ContestDetailClient({
                     className={cn(
                       "w-full text-md rounded-full",
                       isDark
-                        ? "bg-[#7F39EC] py-3"
+                        ? "bg-[#7F39EC] py-3 text-white"
                         : " bg-[#D9C0FF61] py-3 text-[#7F39EC] "
                     )}
                   >

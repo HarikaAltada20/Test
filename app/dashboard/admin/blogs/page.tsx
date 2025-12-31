@@ -383,7 +383,7 @@ export default function AdminBlogsPage() {
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
             {filteredPosts.length === 0 ? (
               <div className="col-span-full min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center text-sm sm:text-base">
                 <Inbox className="h-16 w-16 text-gray-400" />
