@@ -280,10 +280,10 @@ export default function HeroContent() {
 
         {/* Buttons */}
 
-        <div className="flex flex-col sm:flex-row gap-4 mt-8 sm:mt-10 relative">
+        <div className="flex flex-col sm:flex-row gap-4 mt-8 sm:mt-10 relative items-center justify-center">
           <Link href="/brands" passHref>
             <button
-              className="rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2"
+              className="rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2 w-full sm:w-auto justify-center"
               style={{
                 background:
                   "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
@@ -296,7 +296,7 @@ export default function HeroContent() {
             </button>
           </Link>
           <Link href="/creators" passHref>
-            <button className="rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2 bg-gradient-to-r from-orange-500 to-orange-700">
+            <button className="rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2 bg-gradient-to-r from-orange-500 to-orange-700 w-full sm:w-auto justify-center">
               <div className="scan-line"></div>
               <Sparkles className="h-5 w-5" />
               I'm a Creator
@@ -327,8 +327,9 @@ export default function HeroContent() {
         >
           <div className="mt-8 sm:mt-14 md:mt-20 lg:mt-40">
             <h2
-              className={`text-white text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold ${animate ? "slide-up" : "opacity-0"
-                }`}
+              className={`text-white text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold ${
+                animate ? "slide-up" : "opacity-0"
+              }`}
             >
               <span className="text-purple-400">Creative</span>{" "}
               <span className="text-orange-400">Showcase</span>
@@ -336,8 +337,9 @@ export default function HeroContent() {
 
             <div className="flex flex-col sm:flex-row items-center justify-center mt-4 gap-3 sm:gap-5 flex-wrap">
               <span
-                className={`text-gray-300 text-sm sm:text-base md:text-lg font-medium ${animate ? "slide-left" : "opacity-0"
-                  }`}
+                className={`text-gray-300 text-sm sm:text-base md:text-lg font-medium ${
+                  animate ? "slide-left" : "opacity-0"
+                }`}
                 style={{ animationDelay: "0.3s" }}
               >
                 Join 50,000+ Active Creators
@@ -345,8 +347,9 @@ export default function HeroContent() {
 
               {/* Avatar Stack */}
               <div
-                className={`flex -space-x-2 sm:-space-x-3 ${animate ? "slide-up" : "opacity-0"
-                  }`}
+                className={`flex -space-x-2 sm:-space-x-3 ${
+                  animate ? "slide-up" : "opacity-0"
+                }`}
                 style={{ animationDelay: "0.6s" }}
               >
                 {[
@@ -457,8 +460,9 @@ export default function HeroContent() {
 
           {/* Title */}
           <h2
-            className={`text-center text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold mb-4 leading-snug ${worksVisible ? "slide-up" : "opacity-0"
-              }`}
+            className={`text-center text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold mb-4 leading-snug ${
+              worksVisible ? "slide-up" : "opacity-0"
+            }`}
           >
             How <span className="text-purple-400">Game</span> of{" "}
             <span className="text-orange-400">Creators</span> Works
@@ -466,8 +470,9 @@ export default function HeroContent() {
 
           {/* Subtitle */}
           <p
-            className={`text-center text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto mb-8 md:mb-12 px-2 ${worksVisible ? "slide-left" : "opacity-0"
-              }`}
+            className={`text-center text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto mb-8 md:mb-12 px-2 ${
+              worksVisible ? "slide-left" : "opacity-0"
+            }`}
           >
             Three simple steps to launch your viral marketing campaign and
             dominate the game
@@ -522,8 +527,6 @@ export default function HeroContent() {
                   {steps[activeIndex].description}
                 </p>
 
-
-
                 <Link
                   href="/dashboard"
                   className="flex items-center gap-2 relative z-10"
@@ -535,11 +538,9 @@ export default function HeroContent() {
                         "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
                     }}
                   >
-
                     <div className="scan-line"></div>
                     Start Now
                     <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
-
                   </button>
                 </Link>
               </div>
@@ -562,8 +563,9 @@ export default function HeroContent() {
                 key={index}
                 onClick={() => setActiveIndex(index)}
                 aria-label={`Go to step ${index + 1}`}
-                className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-colors ${activeIndex === index ? "bg-purple-600" : "bg-gray-600"
-                  }`}
+                className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-colors ${
+                  activeIndex === index ? "bg-purple-600" : "bg-gray-600"
+                }`}
               ></button>
             ))}
           </div>
@@ -591,8 +593,9 @@ export default function HeroContent() {
                 Reasons to Select Us
               </button> */}
             <h2
-              className={`text-2xl sm:text-3xl md:text-5xl font-bold mb-4 leading-snug ${reasonsVisible ? "slide-up" : "opacity-0"
-                }`}
+              className={`text-2xl sm:text-3xl md:text-5xl font-bold mb-4 leading-snug ${
+                reasonsVisible ? "slide-up" : "opacity-0"
+              }`}
             >
               Why Choose{" "}
               <span className="bg-gradient-to-r from-purple-500 to-orange-400 bg-clip-text text-transparent">
@@ -600,8 +603,9 @@ export default function HeroContent() {
               </span>
             </h2>
             <p
-              className={`text-gray-300 text-base sm:text-lg md:text-xl ${reasonsVisible ? "slide-left" : "opacity-0"
-                }`}
+              className={`text-gray-300 text-base sm:text-lg md:text-xl ${
+                reasonsVisible ? "slide-left" : "opacity-0"
+              }`}
             >
               We're not just a platform – we're your competitive advantage in
               the creator economy.

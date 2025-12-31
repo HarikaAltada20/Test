@@ -131,9 +131,9 @@ export default function AboutPage() {
 
           <div className="container mx-auto px-4 text-center relative z-10">
             {/* Premium Badge */}
-            <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-4 py-2 sm:px-6 sm:py-3 mb-8 flex-wrap">
-              <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
-              <span className="text-base sm:text-lg font-semibold bg-white bg-clip-text text-transparent text-center">
+            <div className="inline-flex items-center gap-2 sm:gap-3 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-4 sm:py-2 md:px-6 md:py-3 lg:px-8 lg:py-3.5 mb-6 sm:mb-8 flex-wrap justify-center">
+              <Crown className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 text-white flex-shrink-0" />
+              <span className="text-sm sm:text-base md:text-lg lg:text-xl font-semibold bg-white bg-clip-text text-transparent text-center">
                 #1 Gamified Creator Marketing Platform
               </span>
             </div>
@@ -212,8 +212,9 @@ export default function AboutPage() {
                   Our <span className="text-purple-400">Story</span>
                 </h2>
                 <p
-                  className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${visible ? "slide-left" : ""
-                    }`}
+                  className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${
+                    visible ? "slide-left" : ""
+                  }`}
                   style={{ animationDelay: "1s" }}
                 >
                   Launched in{" "}
@@ -230,8 +231,9 @@ export default function AboutPage() {
 
               {/* Image Section */}
               <div
-                className={`flex-1 h-[350px] flex justify-center relative z-10 ${visible ? "slide-right" : ""
-                  }`}
+                className={`flex-1 h-[350px] flex justify-center relative z-10 ${
+                  visible ? "slide-right" : ""
+                }`}
                 style={{ animationDelay: "1.5s" }}
               >
                 <Image
@@ -248,10 +250,11 @@ export default function AboutPage() {
           <div className="max-w-[1250px] mx-auto px-6">
             <h2
               ref={howItWorksRef}
-              className={`text-center text-3xl md:text-5xl font-bold mb-12 transition-all duration-700 ease-out transform ${showHowItWorks
-                ? "translate-y-0 opacity-100"
-                : "translate-y-10 opacity-0"
-                }`}
+              className={`text-center text-3xl md:text-5xl font-bold mb-12 transition-all duration-700 ease-out transform ${
+                showHowItWorks
+                  ? "translate-y-0 opacity-100"
+                  : "translate-y-10 opacity-0"
+              }`}
             >
               How It{" "}
               <span
@@ -294,10 +297,11 @@ export default function AboutPage() {
           <div className="max-w-[1200px] mx-auto text-center">
             <h2
               ref={valuesRef}
-              className={`text-5xl font-semibold transition-all duration-700 ease-out transform ${showValues
-                ? "translate-y-0 opacity-100"
-                : "translate-y-10 opacity-0"
-                }`}
+              className={`text-5xl font-semibold transition-all duration-700 ease-out transform ${
+                showValues
+                  ? "translate-y-0 opacity-100"
+                  : "translate-y-10 opacity-0"
+              }`}
             >
               Our{" "}
               <span
