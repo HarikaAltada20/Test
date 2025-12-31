@@ -1,6 +1,6 @@
 create view public.contests_with_status as
-select
-  id,
+  select
+id,
   advertiser_id,
   title,
   platform,
@@ -31,15 +31,15 @@ select
   rejection_reason,
   payment_details,
   case
-    when moderation_status <> 'published'::contest_moderation_status_enum then null::text
+    when moderation_status <> 'published'::contest_moderation_status_enum then null:: text
     when start_date is null
-    or end_date is null then 'incomplete'::text
-    when (now() AT TIME ZONE 'UTC'::text) < start_date then 'upcoming'::text
-    when (now() AT TIME ZONE 'UTC'::text) >= start_date
-    and (now() AT TIME ZONE 'UTC'::text) < end_date then 'active'::text
-    when (now() AT TIME ZONE 'UTC'::text) >= end_date then 'ended'::text
-    else 'unknown'::text
-  end as status,
+    or end_date is null then 'incomplete':: text
+when(now() AT TIME ZONE 'UTC':: text) < start_date then 'upcoming':: text
+when(now() AT TIME ZONE 'UTC':: text) >= start_date
+and(now() AT TIME ZONE 'UTC':: text) < end_date then 'active':: text
+when(now() AT TIME ZONE 'UTC':: text) >= end_date then 'ended':: text
+    else 'unknown':: text
+end as status,
   views_locked_at,
   multiple_submissions_enabled,
   max_submissions_per_creator,
@@ -52,4 +52,4 @@ select
   region,
   contest_format
 from
-  contests;
+contests;
