@@ -1,0 +1,139 @@
+create table public.contests (
+  id uuid not null default gen_random_uuid (),
+  advertiser_id uuid null,
+  title text not null,
+  platform text null,
+  start_date timestamp with time zone null,
+  end_date timestamp with time zone null,
+  thumbnail_url text null,
+  resources jsonb null,
+  category text null,
+  inspiration_links jsonb null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  contest_type public.contest_type_enum null,
+  contest_based_details jsonb null,
+  live_submission_count integer null default 0,
+  post_contest_status public.post_contest_status_enum null,
+  brief_html text null,
+  brief_json jsonb null,
+  last_metrics_updated timestamp with time zone null,
+  rules_html text null,
+  rules_json jsonb null,
+  moderation_status public.contest_moderation_status_enum null default 'draft'::contest_moderation_status_enum,
+  submitted_for_approval_at timestamp with time zone null,
+  approved_at timestamp with time zone null,
+  approved_by uuid null,
+  published_at timestamp with time zone null,
+  rejection_reason text null,
+  payment_details jsonb null,
+  subscription_info_of_user jsonb null,
+  views_locked_at timestamp with time zone null,
+  multiple_submissions_enabled boolean null default false,
+  max_submissions_per_creator integer null default 1,
+  content_type text null,
+  bonus_details jsonb null,
+  max_earnings_per_creator integer null,
+  tracking_links jsonb null,
+  categories jsonb null,
+  subcategories jsonb null,
+  interests jsonb null,
+  region jsonb null,
+  contest_format text null default 'video'::text,
+  constraint contests_pkey primary key (id),
+  constraint contests_advertiser_id_fkey foreign KEY (advertiser_id) references advertiser_profiles (id),
+  constraint contests_approved_by_fkey foreign KEY (approved_by) references auth.users (id),
+  constraint contests_content_type_check check (
+    (
+      content_type = any (
+        array[
+          'ugc'::text,
+          'clipping'::text,
+          'other'::text,
+          'raid'::text,
+          'awareness'::text
+        ]
+      )
+    )
+  ),
+  constraint contests_contest_format_check check (
+    (
+      contest_format = any (array['text_image'::text, 'video'::text])
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_active on public.contests using btree (views_locked_at) TABLESPACE pg_default
+where
+  (views_locked_at is null);
+
+create index IF not exists idx_contests_approved_by on public.contests using btree (approved_by) TABLESPACE pg_default
+where
+  (approved_by is not null);
+
+create index IF not exists idx_contests_brief_html on public.contests using gin (to_tsvector('english'::regconfig, brief_html)) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_content_type on public.contests using btree (content_type) TABLESPACE pg_default
+where
+  (content_type is not null);
+
+create index IF not exists idx_contests_last_metrics_updated on public.contests using btree (last_metrics_updated) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_moderation_status on public.contests using btree (moderation_status) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_multiple_submissions on public.contests using btree (multiple_submissions_enabled) TABLESPACE pg_default
+where
+  (multiple_submissions_enabled = true);
+
+create index IF not exists idx_contests_post_contest_status on public.contests using btree (post_contest_status) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_rules_html on public.contests using gin (to_tsvector('english'::regconfig, rules_html)) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_subscription_info_of_user on public.contests using gin (subscription_info_of_user) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_platform_twitter on public.contests using btree (platform) TABLESPACE pg_default
+where
+  (
+    (platform = 'twitter'::text)
+    and (
+      (contest_based_details -> 'twitter_campaign'::text) is not null
+    )
+  );
+
+create index IF not exists idx_contests_twitter_campaign on public.contests using gin (
+  (
+    (contest_based_details -> 'twitter_campaign'::text)
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_twitter_keywords on public.contests using gin (
+  (
+    (
+      (contest_based_details -> 'twitter_campaign'::text) -> 'keywords'::text
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_twitter_mentions on public.contests using gin (
+  (
+    (
+      (contest_based_details -> 'twitter_campaign'::text) -> 'mentions'::text
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_twitter_campaign_type on public.contests using btree (
+  (
+    (
+      (contest_based_details -> 'twitter_campaign'::text) ->> 'campaign_type'::text
+    )
+  )
+) TABLESPACE pg_default
+where
+  (
+    (contest_based_details -> 'twitter_campaign'::text) is not null
+  );
+
+create trigger on_contests_update BEFORE
+update on contests for EACH row
+execute FUNCTION handle_updated_at ();

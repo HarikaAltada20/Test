@@ -168,7 +168,6 @@ export default function ChooseUsernamePage() {
       .replace(/[^a-z0-9_]/g, "")
       .slice(0, 20); // Same as username validation
     setReferralCode(sanitized);
-
     if (sanitized.length > 0) {
       if (sanitized.length < 3) {
         setReferralCodeError(
@@ -190,11 +189,7 @@ export default function ChooseUsernamePage() {
 
   // Auto-fill referral code from URL query (?ref=, ?referral=, ?code=, ?r=)
   useEffect(() => {
-    const urlCode =
-      searchParams.get("ref") ||
-      searchParams.get("referral") ||
-      searchParams.get("code") ||
-      searchParams.get("r");
+    const urlCode = searchParams.get("ref") || searchParams.get("referral");
     if (!referralCode && urlCode) {
       handleReferralCodeChange(urlCode);
     }

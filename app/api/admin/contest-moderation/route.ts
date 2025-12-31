@@ -55,6 +55,7 @@ export async function POST(request: Request) {
     if (action === 'approve') {
       updateData.approved_at = new Date().toISOString();
       updateData.approved_by = adminUser.id;
+      // Keep rejection_reason as history/log, don't clear it
     } else {
       updateData.rejection_reason = reason;
     }

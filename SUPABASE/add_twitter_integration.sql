@@ -281,7 +281,7 @@ For CPM contests:
 For Twitter campaigns (campaign_content_type = "text_image"):
 {
   "twitter_campaign": {
-    "campaign_type": "keyword_hashtag" | "raid",
+    "campaign_type": "raid" | "awareness",
     
     // For keyword/hashtag campaigns:
     "keyword_config": {
@@ -299,7 +299,7 @@ For Twitter campaigns (campaign_content_type = "text_image"):
       "tweet_id": "1234567890",
       "target_engagement": {
         "likes": 1000,
-        "replies": 100,
+        "comments": 100,
         "retweets": 500,
         "quote_reposts": 200
       }

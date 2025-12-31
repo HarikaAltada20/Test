@@ -92,7 +92,7 @@ export async function POST(
 
       console.log('✅ Payment validation passed - proceeding with submission');
 
-      // Update to pending approval
+      // Update to pending approval (keep rejection_reason as history/log)
       const { error } = await supabase
         .from('contests')
         .update({
