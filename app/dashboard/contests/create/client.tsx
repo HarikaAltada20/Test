@@ -324,8 +324,15 @@ export default function CreateContestPage({
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
     useState<number>(1);
   const [contentType, setContentType] = useState<
-    "ugc" | "clipping" | "other" | ""
+    "ugc" | "clipping" | "other" | "" | "raid" | "awareness"
   >("");
+  const [keywords, setKeywords] = useState<string[]>([""]); // For brief step
+  const [mentions, setMentions] = useState<string[]>([""]); // Tracking (@mentions)
+  const [maxParticipants, setMaxParticipants] = useState<number | "">(""); // Max participants for Twitter campaigns
+  const [targetLikes, setTargetLikes] = useState<number | "">("");
+  const [targetReplies, setTargetReplies] = useState<number | "">("");
+  const [targetRetweets, setTargetRetweets] = useState<number | "">("");
+  const [targetQuoteReposts, setTargetQuoteReposts] = useState<number | "">("");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
   const [bonusEnabled, setBonusEnabled] = useState(false);
   const [bonusHtml, setBonusHtml] = useState("");
@@ -369,11 +376,13 @@ export default function CreateContestPage({
         // Ignore localStorage errors
       }
     }
+
     return "light";
   });
+
   const isDark = mode === "dark";
   const [title, setTitle] = useState("");
-  // Categories, subcategories, and interests state
+
   const [contestCategories, setContestCategories] = useState<string[]>([]);
   const [contestSubcategories, setContestSubcategories] = useState<
     Array<{ category: string; subcategory: string }>
@@ -599,8 +608,18 @@ export default function CreateContestPage({
   const [resourceFiles, setResourceFiles] = useState<{ [key: string]: File }>(
     {}
   );
+  const [contestFormat, setContestFormat] = useState<"text_image" | "video">(
+    "video"
+  );
   const [platform, setPlatform] = useState<string>("youtube"); // Default platform
   const [category, setCategory] = useState<string>("technology");
+  const isRaidTwitter = platform === "twitter" && contentType === "raid";
+  const [keywordsRequirementMode, setKeywordsRequirementMode] = useState<
+    "all" | "any"
+  >("all");
+  const [mentionsRequirementMode, setMentionsRequirementMode] = useState<
+    "all" | "any"
+  >("all");
 
   // State for fetched subscription plans
   const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<
@@ -899,21 +918,21 @@ export default function CreateContestPage({
           contest_based_details:
             contestType === "leaderboard"
               ? {
-                  leaderboard_contest: {
-                    prizes: [],
-                    total_prize: 0,
-                    winner_count: 3,
-                  },
-                }
+                leaderboard_contest: {
+                  prizes: [],
+                  total_prize: 0,
+                  winner_count: 3,
+                },
+              }
               : contestType === "cpm"
-              ? {
+                ? {
                   cpm_contest: {
                     cpm_rate_usd: 0,
                     total_budget: 0,
                     terms_conditions: "",
                   },
                 }
-              : null,
+                : null,
           // Categories, subcategories, and interests
           categories: contestCategories.length > 0 ? contestCategories : null,
           subcategories: (() => {
@@ -975,6 +994,7 @@ export default function CreateContestPage({
       categories?: string[] | null;
       subcategories?: Array<{ category: string; subcategory: string }> | null;
       interests?: string[] | null;
+      contest_format?: "text_image" | "video";
     }>
   ) => {
     const currentContestId = contestId || draftId;
@@ -1329,9 +1349,8 @@ export default function CreateContestPage({
       console.error("Error saving draft:", error);
       toast({
         title: "Error",
-        description: `Failed to save draft: ${
-          error.message || "Unknown error"
-        }`,
+        description: `Failed to save draft: ${error.message || "Unknown error"
+          }`,
         variant: "destructive",
       });
       setIsLoading(false);
@@ -1424,16 +1443,15 @@ export default function CreateContestPage({
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-            (1000 * 60 * 60 * 24)
+          (1000 * 60 * 60 * 24)
         );
 
         // CRITICAL: Use exact same logic as getMinDateTime for consistency
         if (daysUntilStart < MIN_DAYS_UNTIL_START) {
           return {
             isValid: false,
-            error: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
-              MIN_DAYS_UNTIL_START - 1
-            } day gap required)`,
+            error: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
+              } day gap required)`,
           };
         }
 
@@ -1476,11 +1494,10 @@ export default function CreateContestPage({
           if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
             return {
               isValid: false,
-              error: `Prize for Winner ${
-                i + 1
-              } must be at least ${formatCurrencyFromCents(
-                MIN_PRIZE_PER_WINNER
-              )}`,
+              error: `Prize for Winner ${i + 1
+                } must be at least ${formatCurrencyFromCents(
+                  MIN_PRIZE_PER_WINNER
+                )}`,
             };
           }
 
@@ -1488,11 +1505,10 @@ export default function CreateContestPage({
           if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
             return {
               isValid: false,
-              error: `Prize for Winner ${
-                i + 1
-              } cannot exceed ${formatCurrencyFromCents(
-                MAX_PRIZE_PER_WINNER
-              )}. Please reduce the prize amount.`,
+              error: `Prize for Winner ${i + 1
+                } cannot exceed ${formatCurrencyFromCents(
+                  MAX_PRIZE_PER_WINNER
+                )}. Please reduce the prize amount.`,
             };
           }
         }
@@ -1702,8 +1718,7 @@ export default function CreateContestPage({
         for (let i = 0; i < winnerCount; i++) {
           if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
             setFormFeedback(
-              `Prize for Winner ${
-                i + 1
+              `Prize for Winner ${i + 1
               } must be at least ${formatCurrencyFromCents(
                 MIN_PRIZE_PER_WINNER
               )}`
@@ -1831,6 +1846,58 @@ export default function CreateContestPage({
             ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
             // tiered_payouts: [] // Future use
           },
+        };
+      }
+
+      // Build Twitter campaign config and merge with contestBasedDetails
+      // This ensures Twitter data is preserved when saving the final contest
+      if (platform === "twitter" && contestFormat === "text_image") {
+        const filteredKeywords = keywords.filter((k) => k.trim() !== "");
+        const filteredMentions = mentions.filter((m) => m.trim() !== "");
+
+        const twitterCampaign: any = {
+          campaign_type: contentType === "raid" ? "raid" : "awareness",
+          allowed_tweet_types: ["tweet", "quote", "retweet", "reply"],
+        };
+
+        if (filteredKeywords.length > 0) {
+          twitterCampaign.keywords = filteredKeywords;
+        }
+        if (filteredMentions.length > 0) {
+          twitterCampaign.mentions = filteredMentions;
+        }
+        if (maxParticipants && typeof maxParticipants === "number" && maxParticipants > 0) {
+          twitterCampaign.max_participants = maxParticipants;
+        }
+
+        if (contentType !== "raid") {
+          if (keywordsRequirementMode) {
+            twitterCampaign.keywords_requirement_mode = keywordsRequirementMode;
+          }
+          if (mentionsRequirementMode) {
+            twitterCampaign.mentions_requirement_mode = mentionsRequirementMode;
+          }
+        }
+
+        if ((contentType === "raid" || contentType === "awareness") && inspirationLinks.length > 0) {
+          twitterCampaign.raid_target = {
+            link: inspirationLinks[0]?.url || null,
+            description: inspirationLinks[0]?.description || null,
+            metrics: {
+              likes: targetLikes === "" ? null : targetLikes,
+              comments: targetReplies === "" ? null : targetReplies,
+              retweets: targetRetweets === "" ? null : targetRetweets,
+              quote_reposts: targetQuoteReposts === "" ? null : targetQuoteReposts,
+            },
+            keywords_requirement_mode: contentType === "raid" ? "" : keywordsRequirementMode,
+            mentions_requirement_mode: contentType === "raid" ? "" : mentionsRequirementMode,
+          };
+        }
+
+        // Merge Twitter campaign with existing contestBasedDetails
+        contestBasedDetails = {
+          ...contestBasedDetails,
+          twitter_campaign: twitterCampaign,
         };
       }
 
@@ -2140,8 +2207,8 @@ export default function CreateContestPage({
         isDraft
           ? "Finalizing draft..."
           : contestId
-          ? "Updating contest..."
-          : "Creating contest..."
+            ? "Updating contest..."
+            : "Creating contest..."
       );
 
       // Helper function to process and group subcategories by category
@@ -2172,13 +2239,19 @@ export default function CreateContestPage({
         title,
         thumbnail_url: thumbnailUrl,
         platform: platform,
+        contest_format: contestFormat,
         category: category || null,
         brief_html: briefHtml,
         brief_json: briefJson,
         rules_html: rulesHtml,
-        rules_json: rulesJson,
+        // Only persist the original rulesJson content
+        rules_json:
+          rulesJson && typeof rulesJson === "object" ? { ...rulesJson } : {},
+        // Twitter data is now stored in contest_based_details.twitter_campaign (JSONB)
         resources,
-        inspiration_links: inspirationLinks,
+        // For Twitter raids, target tweet is stored in contest_based_details.twitter_campaign.raid_target,
+        // so we avoid duplicating it in inspiration_links.
+        inspiration_links: isRaidTwitter ? null : inspirationLinks,
         tracking_links: trackingLinks,
         // Categories, subcategories, and interests as direct columns
         categories: contestCategories.length > 0 ? contestCategories : null,
@@ -2238,13 +2311,13 @@ export default function CreateContestPage({
         bonus_details:
           bonusEnabled && bonusHtml
             ? {
-                description_html: bonusHtml,
-                description_json: bonusJson,
-              }
+              description_html: bonusHtml,
+              description_json: bonusJson,
+            }
             : null,
         max_earnings_per_creator:
           maxEarningsPerCreator &&
-          parseFloat(maxEarningsPerCreator.toString()) > 0
+            parseFloat(maxEarningsPerCreator.toString()) > 0
             ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
             : null,
         // Note: flat_fee_bonus is now stored in contest_based_details (in cents)
@@ -2301,6 +2374,19 @@ export default function CreateContestPage({
           console.log("Setting draftId to:", newContestId);
           setDraftId(newContestId);
         }
+
+        // Sync Twitter campaign metrics if this is a Twitter contest
+        if (platform === "twitter" && contestBasedDetails?.twitter_campaign) {
+          try {
+            await fetch(`/api/contests/${newContestId}/sync-metrics`, {
+              method: "POST",
+            });
+            console.log("Twitter metrics synced for contest:", newContestId);
+          } catch (syncError) {
+            console.error("Error syncing Twitter metrics:", syncError);
+            // Don't fail the request if sync fails
+          }
+        }
       }
 
       if (!isDraft) {
@@ -2334,9 +2420,8 @@ export default function CreateContestPage({
       } else {
         toast({
           title: "Error",
-          description: `Failed to ${
-            isDraft ? "save draft" : "create contest"
-          }: ${err.message || "Unknown error"}`,
+          description: `Failed to ${isDraft ? "save draft" : "create contest"
+            }: ${err.message || "Unknown error"}`,
           variant: "destructive",
         });
       }
@@ -2391,8 +2476,7 @@ export default function CreateContestPage({
             retries > 0
           ) {
             console.warn(
-              `Submission failed (payment pending), retrying in ${
-                delay / 1000
+              `Submission failed (payment pending), retrying in ${delay / 1000
               }s...`
             );
             await new Promise((res) => setTimeout(res, delay));
@@ -2612,19 +2696,17 @@ export default function CreateContestPage({
       if (numValue < MIN_PRIZE_PER_WINNER) {
         toast({
           title: "Prize Amount Too Low",
-          description: `Prize amount for Winner ${
-            index + 1
-          } cannot be less than ${formatCurrencyFromCents(
-            MIN_PRIZE_PER_WINNER
-          )}`,
+          description: `Prize amount for Winner ${index + 1
+            } cannot be less than ${formatCurrencyFromCents(
+              MIN_PRIZE_PER_WINNER
+            )}`,
           variant: "destructive",
         });
       } else if (numValue > MAX_PRIZE_PER_WINNER) {
         toast({
           title: "Prize Amount Too High",
-          description: `Prize amount for Winner ${
-            index + 1
-          } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+          description: `Prize amount for Winner ${index + 1
+            } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
           variant: "destructive",
         });
       }
@@ -2645,9 +2727,8 @@ export default function CreateContestPage({
     if (count > planFeatures.maxWinnersPerContest) {
       toast({
         title: "Plan Limit",
-        description: `Your ${userPlan || "current"} plan is limited to ${
-          planFeatures.maxWinnersPerContest
-        } winners per contest. Upgrade your plan for more.`,
+        description: `Your ${userPlan || "current"} plan is limited to ${planFeatures.maxWinnersPerContest
+          } winners per contest. Upgrade your plan for more.`,
         variant: "destructive",
       });
       return;
@@ -2663,7 +2744,7 @@ export default function CreateContestPage({
         const position = i + 1;
         newAmounts.push(
           DEFAULT_PRIZE_ALLOCATIONS[
-            position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
+          position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
           ] || MIN_PRIZE_PER_WINNER
         );
       }
@@ -2682,8 +2763,13 @@ export default function CreateContestPage({
     if (!title.trim()) return; // Don't save empty titles
     let currentContestId = contestId;
     try {
-      // Prepare basics data
-      const basicsData = {
+      // Filter out empty values
+      const filteredKeywords = keywords.filter((k) => k.trim() !== "");
+      const filteredMentions = mentions.filter((m) => m.trim() !== "");
+
+      // Prepare basics data - only include fields that have actual values
+      // to prevent overwriting existing data with empty values
+      const basicsData: Record<string, any> = {
         advertiser_id: user?.id,
         title,
         platform,
@@ -2691,26 +2777,90 @@ export default function CreateContestPage({
         contest_type: contestType,
         thumbnail_url: thumbnailPreview || null,
         moderation_status: "draft",
-        // Categories, subcategories, and interests
-        categories: contestCategories.length > 0 ? contestCategories : null,
-        subcategories: (() => {
-          if (!contestSubcategories || contestSubcategories.length === 0)
-            return null;
-          // Group by category and remove duplicates
-          const grouped: Record<string, string[]> = {};
-          contestSubcategories.forEach((item) => {
-            if (!grouped[item.category]) {
-              grouped[item.category] = [];
-            }
-            if (!grouped[item.category].includes(item.subcategory)) {
-              grouped[item.category].push(item.subcategory);
-            }
-          });
-          return Object.keys(grouped).length > 0 ? grouped : null;
-        })(),
-        interests:
-          contestInterests.length > 0 ? [...new Set(contestInterests)] : null,
+        contest_format: contestFormat,
       };
+
+      // Only include content_type if it has a value (not empty string)
+      if (contentType) {
+        basicsData.content_type = contentType;
+      }
+
+      // Build Twitter campaign config in contest_based_details
+      // raid: target a specific tweet and do like, comment, retweet, and quote repost around that tweet
+      // awareness: tweet openly with specified keywords/hashtags and mentions
+      if (platform === "twitter" && contestFormat === "text_image") {
+        const twitterCampaign: any = {
+          campaign_type: contentType === "raid" ? "raid" : "awareness", // Only 2 types: raid or awareness
+          // Include all tweet types by default (tweet, quote, retweet, reply) to support reposts and retweets
+          allowed_tweet_types: ["tweet", "quote", "retweet", "reply"],
+        };
+
+        if (filteredKeywords.length > 0) {
+          twitterCampaign.keywords = filteredKeywords;
+        }
+        if (filteredMentions.length > 0) {
+          twitterCampaign.mentions = filteredMentions;
+        }
+        if (maxParticipants && typeof maxParticipants === "number" && maxParticipants > 0) {
+          twitterCampaign.max_participants = maxParticipants;
+        }
+
+        if (contentType !== "raid") {
+          if (keywordsRequirementMode) {
+            twitterCampaign.keywords_requirement_mode = keywordsRequirementMode;
+          }
+          if (mentionsRequirementMode) {
+            twitterCampaign.mentions_requirement_mode = mentionsRequirementMode;
+          }
+        }
+
+        if ((contentType === "raid" || contentType === "awareness") && inspirationLinks.length > 0) {
+          twitterCampaign.raid_target = {
+            link: inspirationLinks[0]?.url || null,
+            description: inspirationLinks[0]?.description || null,
+            metrics: {
+              likes: targetLikes === "" ? null : targetLikes,
+              comments: targetReplies === "" ? null : targetReplies,
+              retweets: targetRetweets === "" ? null : targetRetweets,
+              quote_reposts: targetQuoteReposts === "" ? null : targetQuoteReposts,
+            },
+            keywords_requirement_mode: contentType === "raid" ? "" : keywordsRequirementMode,
+            mentions_requirement_mode: contentType === "raid" ? "" : mentionsRequirementMode,
+          };
+        }
+
+        // Update contest_based_details with twitter_campaign
+        if (!basicsData.contest_based_details) {
+          basicsData.contest_based_details = {};
+        }
+        basicsData.contest_based_details = {
+          ...basicsData.contest_based_details,
+          twitter_campaign: twitterCampaign,
+        };
+      }
+
+      // Categories, subcategories, and interests
+      if (contestCategories.length > 0) {
+        basicsData.categories = contestCategories;
+      }
+      if (contestSubcategories && contestSubcategories.length > 0) {
+        const grouped: Record<string, string[]> = {};
+        contestSubcategories.forEach((item) => {
+          if (!grouped[item.category]) {
+            grouped[item.category] = [];
+          }
+          if (!grouped[item.category].includes(item.subcategory)) {
+            grouped[item.category].push(item.subcategory);
+          }
+        });
+        if (Object.keys(grouped).length > 0) {
+          basicsData.subcategories = grouped;
+        }
+      }
+      if (contestInterests.length > 0) {
+        basicsData.interests = [...new Set(contestInterests)];
+      }
+
       if (!currentContestId) {
         // Create new draft contest
         const { data, error } = await supabase
@@ -2727,6 +2877,22 @@ export default function CreateContestPage({
         return data.id;
       } else {
         // Update existing draft contest
+        // Fetch existing contest_based_details to preserve leaderboard/CPM data
+        const { data: existingContest } = await supabase
+          .from("contests")
+          .select("contest_based_details")
+          .eq("id", currentContestId)
+          .eq("advertiser_id", user?.id)
+          .maybeSingle();
+
+        // Preserve existing contest_based_details when updating
+        if (existingContest?.contest_based_details && basicsData.contest_based_details) {
+          basicsData.contest_based_details = {
+            ...existingContest.contest_based_details,
+            ...basicsData.contest_based_details,
+          };
+        }
+
         const { error } = await supabase
           .from("contests")
           .update(basicsData)
@@ -2801,8 +2967,8 @@ export default function CreateContestPage({
           missingFields.length === 1
             ? `Please fill in the following required field: ${missingFields[0]}`
             : `Please fill in the following required fields: ${missingFields.join(
-                ", "
-              )}`;
+              ", "
+            )}`;
         // Use toast-only error for basics step (no CardFooter alert)
         setToastError(errorMessage);
         return;
@@ -3085,38 +3251,102 @@ export default function CreateContestPage({
   // Helper function to populate form with draft data
   const populateDraftData = (draft: any) => {
     console.log("=== populateDraftData called ===");
+    console.log("Full draft object:", JSON.stringify(draft, null, 2));
     console.log("Draft ID:", draft.id);
     console.log("Draft title:", draft.title);
+    console.log("Draft platform:", draft.platform);
+    console.log("Draft contest_format:", draft.contest_format);
+    console.log("Draft content_type:", draft.content_type);
+    console.log("Draft twitter_campaign:", draft.contest_based_details?.twitter_campaign);
 
+    // Set draft/contest IDs first
+    setDraftId(draft.id);
+    setContestId(draft.id);
+
+    // Basic contest fields
     setTitle(draft.title || "");
-    setPlatform(draft.platform || "youtube"); // Load platform, default if not present
-    setCategory(draft.category || "technology"); // Load category, default to technology if not present
-    // If thumbnail URL is available, show it in the preview
+
+    // Set platform
+    const draftPlatform = draft.platform || "youtube";
+    console.log("Setting platform to:", draftPlatform);
+    setPlatform(draftPlatform);
+
+    setCategory(draft.category || "technology");
+
+    // Set contest format - important for showing Keywords/Mentions sections
+    const draftFormat = draft.contest_format || "video";
+    console.log("Setting contestFormat to:", draftFormat);
+    setContestFormat(draftFormat);
+
+    // Content type - set with setTimeout to ensure platform is applied first
+    // (Content type options depend on platform)
+    if (draft.content_type) {
+      const validTypes = ["ugc", "clipping", "other", "raid", "awareness"];
+      if (validTypes.includes(draft.content_type)) {
+        console.log("Setting contentType to:", draft.content_type);
+        setTimeout(() => {
+          setContentType(draft.content_type);
+        }, 50);
+      } else {
+        console.log("Invalid content_type:", draft.content_type);
+      }
+    }
+
+    // Thumbnail
     if (draft.thumbnail_url) {
       setThumbnailPreview(draft.thumbnail_url);
     }
-    setDraftId(draft.id);
-    // CRITICAL FIX: Also set contestId when loading a draft
-    setContestId(draft.id);
 
-    console.log("Loading draft data:", draft); // For debugging
+    // Keywords and Mentions - set with setTimeout to ensure contestFormat is applied first
+    // (Keywords/Mentions section only renders when contestFormat === "text_image")
+    setTimeout(() => {
+      // Read from contest_based_details.twitter_campaign (single source of truth)
+      const twitterCampaign = draft.contest_based_details?.twitter_campaign;
 
-    // Pre-fill form fields with draft data using rich text format
-    if (draft.brief_html && draft.brief_json) {
+      if (twitterCampaign) {
+        // Keywords from twitter_campaign.keywords
+        if (Array.isArray(twitterCampaign.keywords) && twitterCampaign.keywords.length > 0) {
+          console.log("✅ Setting keywords to:", twitterCampaign.keywords);
+          setKeywords(twitterCampaign.keywords);
+        }
+
+        // Mentions from twitter_campaign.mentions
+        if (Array.isArray(twitterCampaign.mentions) && twitterCampaign.mentions.length > 0) {
+          console.log("✅ Setting mentions to:", twitterCampaign.mentions);
+          setMentions(twitterCampaign.mentions);
+        }
+
+        // Requirement modes
+        if (twitterCampaign.keywords_requirement_mode) {
+          setKeywordsRequirementMode(twitterCampaign.keywords_requirement_mode);
+        }
+        if (twitterCampaign.mentions_requirement_mode) {
+          setMentionsRequirementMode(twitterCampaign.mentions_requirement_mode);
+        }
+        if (twitterCampaign.max_participants) {
+          setMaxParticipants(twitterCampaign.max_participants);
+        }
+      }
+    }, 100);
+
+    // Brief rich text
+    if (draft.brief_html) {
       setBrief(draft.brief_html);
       setBriefHtml(draft.brief_html);
+    }
+    if (draft.brief_json) {
       setBriefJson(draft.brief_json);
-      // Set content in editor if ref is available
       if (richTextEditorRef.current) {
         richTextEditorRef.current.setContent(draft.brief_json);
       }
     }
 
-    // Handle rules rich text content loading
-    if (draft.rules_html && draft.rules_json) {
+    // Rules rich text
+    if (draft.rules_html) {
       setRulesHtml(draft.rules_html);
+    }
+    if (draft.rules_json) {
       setRulesJson(draft.rules_json);
-      // Set content in editor if ref is available
       setTimeout(() => {
         if (rulesRichTextEditorRef.current) {
           rulesRichTextEditorRef.current.setContent(draft.rules_json);
@@ -3124,39 +3354,69 @@ export default function CreateContestPage({
       }, 100);
     }
 
-    // Set resources if available
+    // Target metrics from contest_based_details.twitter_campaign.raid_target
+    const twitterCampaign = draft.contest_based_details?.twitter_campaign;
+    if (twitterCampaign?.raid_target) {
+      const raidTarget = twitterCampaign.raid_target;
+      if (raidTarget.metrics && typeof raidTarget.metrics === "object") {
+        if (raidTarget.metrics.likes !== undefined && raidTarget.metrics.likes !== null) {
+          setTargetLikes(raidTarget.metrics.likes);
+        }
+        if (raidTarget.metrics.comments !== undefined && raidTarget.metrics.comments !== null) {
+          setTargetReplies(raidTarget.metrics.comments);
+        }
+        if (raidTarget.metrics.retweets !== undefined && raidTarget.metrics.retweets !== null) {
+          setTargetRetweets(raidTarget.metrics.retweets);
+        }
+        if (raidTarget.metrics.quote_reposts !== undefined && raidTarget.metrics.quote_reposts !== null) {
+          setTargetQuoteReposts(raidTarget.metrics.quote_reposts);
+        }
+      }
+      if (
+        raidTarget.keywords_requirement_mode === "all" ||
+        raidTarget.keywords_requirement_mode === "any"
+      ) {
+        setKeywordsRequirementMode(raidTarget.keywords_requirement_mode);
+      }
+      if (
+        raidTarget.mentions_requirement_mode === "all" ||
+        raidTarget.mentions_requirement_mode === "any"
+      ) {
+        setMentionsRequirementMode(raidTarget.mentions_requirement_mode);
+      }
+    }
+
+    // Resources
     if (draft.resources && typeof draft.resources === "object") {
       setResources(draft.resources);
     }
 
-    // Set inspiration links if available
+    // Inspiration links
     if (Array.isArray(draft.inspiration_links)) {
       setInspirationLinks(draft.inspiration_links);
-    } else {
-      setInspirationLinks([]);
     }
 
-    // Set tracking links if available
+    // Tracking links
     if (Array.isArray(draft.tracking_links)) {
       setTrackingLinks(draft.tracking_links);
-    } else {
-      setTrackingLinks([]);
     }
 
-    // Set winner count and amounts if available
-    if (draft.winner_count) {
-      setWinnerCount(draft.winner_count);
+    // Winners / prizes from contest_based_details
+    if (draft.contest_based_details?.leaderboard_contest) {
+      const lc = draft.contest_based_details.leaderboard_contest;
+      if (lc.winner_count) {
+        setWinnerCount(lc.winner_count);
+      }
+      if (Array.isArray(lc.prizes)) {
+        const amounts = lc.prizes.map(
+          (prize: { amount?: number }) => prize.amount || 0
+        );
+        setWinnerAmounts(amounts);
+        updateTotalPrizePool(amounts);
+      }
     }
 
-    if (draft.prizes && Array.isArray(draft.prizes)) {
-      const amounts = draft.prizes.map(
-        (prize: { amount?: number; position?: number }) => prize.amount || 0
-      );
-      setWinnerAmounts(amounts);
-      updateTotalPrizePool(amounts);
-    }
-
-    // Convert UTC dates to local timezone for display
+    // Dates (convert from UTC to local)
     if (draft.start_date) {
       const { dateString, timeString } = toLocalDateTimeStrings(
         draft.start_date
@@ -3164,28 +3424,20 @@ export default function CreateContestPage({
       setStartDate(dateString);
       setStartTime(timeString);
     }
-
     if (draft.end_date) {
       const { dateString, timeString } = toLocalDateTimeStrings(draft.end_date);
       setEndDate(dateString);
       setEndTime(timeString);
     }
 
-    // Load categories, subcategories, and interests from direct columns
-    if (draft.categories && Array.isArray(draft.categories)) {
+    // Categories, subcategories, interests
+    if (Array.isArray(draft.categories)) {
       setContestCategories(draft.categories);
     }
-
-    // Handle subcategories - can be grouped object format or flat array format
     if (draft.subcategories) {
       if (Array.isArray(draft.subcategories)) {
-        // Old flat array format: [{category: "beauty", subcategory: "Skincare"}, ...]
         setContestSubcategories(draft.subcategories);
-      } else if (
-        typeof draft.subcategories === "object" &&
-        draft.subcategories !== null
-      ) {
-        // New grouped format: {"beauty": ["Skincare", "Makeup"], ...}
+      } else if (typeof draft.subcategories === "object") {
         const grouped = draft.subcategories as Record<string, string[]>;
         const flatArray: Array<{ category: string; subcategory: string }> = [];
         Object.keys(grouped).forEach((category) => {
@@ -3199,11 +3451,11 @@ export default function CreateContestPage({
         setContestSubcategories(flatArray);
       }
     }
-
-    if (draft.interests && Array.isArray(draft.interests)) {
+    if (Array.isArray(draft.interests)) {
       setContestInterests(draft.interests);
     }
-    // Load regions and countries from region JSONB column
+
+    // Regions / countries
     if (draft.region && typeof draft.region === "object") {
       const { regions, countries } = extractRegionsAndCountries(
         draft.region as Record<string, string[]>
@@ -3211,72 +3463,8 @@ export default function CreateContestPage({
       setSelectedRegions(regions);
       setSelectedCountries(countries);
     }
-    // Fallback: Load from old target_regions and target_countries columns for backward compatibility
-    else {
-      if (draft.target_regions && Array.isArray(draft.target_regions)) {
-        setSelectedRegions(draft.target_regions);
-      }
-      if (draft.target_countries && Array.isArray(draft.target_countries)) {
-        setSelectedCountries(draft.target_countries);
-      }
-    }
-    // Fallback: Also check contest_based_details for backward compatibility
-    if (draft.contest_based_details) {
-      const details = draft.contest_based_details;
-      if (
-        !draft.categories &&
-        details.categories &&
-        Array.isArray(details.categories)
-      ) {
-        setContestCategories(details.categories);
-      }
-      if (!draft.subcategories && details.subcategories) {
-        // Handle both formats in fallback
-        if (Array.isArray(details.subcategories)) {
-          setContestSubcategories(details.subcategories);
-        } else if (
-          typeof details.subcategories === "object" &&
-          details.subcategories !== null
-        ) {
-          const grouped = details.subcategories as Record<string, string[]>;
-          const flatArray: Array<{ category: string; subcategory: string }> =
-            [];
-          Object.keys(grouped).forEach((category) => {
-            const subcats = grouped[category];
-            if (Array.isArray(subcats)) {
-              subcats.forEach((subcat) => {
-                flatArray.push({ category, subcategory: subcat });
-              });
-            }
-          });
-          setContestSubcategories(flatArray);
-        }
-      }
-      if (
-        !draft.interests &&
-        details.interests &&
-        Array.isArray(details.interests)
-      ) {
-        setContestInterests(details.interests);
-      }
-      // Load regions and countries from details if not in draft (backward compatibility)
-      if (!draft.region) {
-        if (details.target_regions && Array.isArray(details.target_regions)) {
-          setSelectedRegions(details.target_regions);
-        }
-        if (
-          details.target_countries &&
-          Array.isArray(details.target_countries)
-        ) {
-          setSelectedCountries(details.target_countries);
-        }
-      }
-    }
 
-    console.log(
-      "Draft loaded successfully, thumbnail preview:",
-      draft.thumbnail_url
-    );
+    console.log("Draft loaded successfully");
   };
 
   // Call this once when component mounts
@@ -3371,28 +3559,23 @@ export default function CreateContestPage({
 
     let startMessage = "";
     if (daysUntilStart > 0) {
-      startMessage = `Your contest will be live in ${daysUntilStart} day${
-        daysUntilStart !== 1 ? "s" : ""
-      }`;
-      if (hoursUntilStart > 0)
-        startMessage += ` and ${hoursUntilStart} hour${
-          hoursUntilStart !== 1 ? "s" : ""
+      startMessage = `Your contest will be live in ${daysUntilStart} day${daysUntilStart !== 1 ? "s" : ""
         }`;
+      if (hoursUntilStart > 0)
+        startMessage += ` and ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
+          }`;
     } else if (hoursUntilStart > 0) {
-      startMessage = `Your contest will be live in ${hoursUntilStart} hour${
-        hoursUntilStart !== 1 ? "s" : ""
-      }`;
+      startMessage = `Your contest will be live in ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
+        }`;
     } else {
       startMessage = "Your contest will be live soon";
     }
 
-    const durationMessage = `and will run for ${durationDays} day${
-      durationDays !== 1 ? "s" : ""
-    }${
-      durationHours > 0
+    const durationMessage = `and will run for ${durationDays} day${durationDays !== 1 ? "s" : ""
+      }${durationHours > 0
         ? ` and ${durationHours} hour${durationHours !== 1 ? "s" : ""}`
         : ""
-    }`;
+      }`;
 
     return `${startMessage} ${durationMessage}`;
   };
@@ -3526,16 +3709,15 @@ export default function CreateContestPage({
       disallowed.length === 1
         ? disallowed[0]
         : disallowed.slice(0, -1).join(", ") +
-          " and " +
-          disallowed[disallowed.length - 1];
+        " and " +
+        disallowed[disallowed.length - 1];
 
     return `For example, if today is ${formatDateWithOrdinal(
       startOfToday
     )}, you can create contests starting from ${formatDateWithOrdinal(
       minStartDate
-    )} (00:00 onwards). ${disallowedText} ${
-      disallowed.length > 1 ? "are" : "is"
-    } not allowed.`;
+    )} (00:00 onwards). ${disallowedText} ${disallowed.length > 1 ? "are" : "is"
+      } not allowed.`;
   };
 
   // High Budget Prompt Modal
@@ -3717,13 +3899,13 @@ export default function CreateContestPage({
                       "rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg",
                       isDark ? "bg-[#180438]" : "bg-white"
                     )}
-                    // className={`backdrop-blur-sm rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg ${
-                    //   currentPlan.price === 0
-                    //     ? "bg-white/90 border-gray-200" // Free plan
-                    //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                    //     ? "bg-white/90 border-gray-200" // Bronze plan
-                    //     : "bg-white/90 border-gray-200" // Higher plans
-                    // }`}
+                  // className={`backdrop-blur-sm rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg ${
+                  //   currentPlan.price === 0
+                  //     ? "bg-white/90 border-gray-200" // Free plan
+                  //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
+                  //     ? "bg-white/90 border-gray-200" // Bronze plan
+                  //     : "bg-white/90 border-gray-200" // Higher plans
+                  // }`}
                   >
                     <div
                       className={cn(
@@ -3739,21 +3921,21 @@ export default function CreateContestPage({
                               ? "bg-[#FFFFFF36] text-white"
                               : "text-[#4A00BE] bg-[#D8C3FF]"
                           )}
-                          // className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                          //   userPlan === subscriptionPlans[0].id
-                          //     ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
-                          //     : userPlan === subscriptionPlans[1].id
-                          //     ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
-                          //     : userPlan === subscriptionPlans[2].id
-                          //     ? "bg-gradient-to-br from-gray-400 to-slate-500 text-white"
-                          //     : userPlan === subscriptionPlans[3].id
-                          //     ? "bg-gradient-to-br from-yellow-400 to-orange-500 text-white"
-                          //     : userPlan === subscriptionPlans[4].id
-                          //     ? "bg-gradient-to-br from-purple-500 to-indigo-600 text-white"
-                          //     : userPlan === subscriptionPlans[5].id
-                          //     ? "bg-gradient-to-br from-blue-500 to-cyan-600 text-white"
-                          //     : "bg-gradient-to-br from-gray-500 to-gray-600 text-white"
-                          // }`}
+                        // className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                        //   userPlan === subscriptionPlans[0].id
+                        //     ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
+                        //     : userPlan === subscriptionPlans[1].id
+                        //     ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
+                        //     : userPlan === subscriptionPlans[2].id
+                        //     ? "bg-gradient-to-br from-gray-400 to-slate-500 text-white"
+                        //     : userPlan === subscriptionPlans[3].id
+                        //     ? "bg-gradient-to-br from-yellow-400 to-orange-500 text-white"
+                        //     : userPlan === subscriptionPlans[4].id
+                        //     ? "bg-gradient-to-br from-purple-500 to-indigo-600 text-white"
+                        //     : userPlan === subscriptionPlans[5].id
+                        //     ? "bg-gradient-to-br from-blue-500 to-cyan-600 text-white"
+                        //     : "bg-gradient-to-br from-gray-500 to-gray-600 text-white"
+                        // }`}
                         >
                           <Trophy className="h-6 w-6 sm:h-8 sm:w-8" />
                         </div>
@@ -3847,11 +4029,11 @@ export default function CreateContestPage({
                               "border rounded-xl p-4 flex flex-col justify-between shadow-sm",
                               isDark ? "border-gray-500" : "border-gray-300"
                             )}
-                            // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                            //   planFeatures.maxWinnersPerContest <= 3
-                            //     ? "bg-orange-50/80 border-orange-200"
-                            //     : "bg-white/80 border-gray-200/50"
-                            // }`}
+                          // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                          //   planFeatures.maxWinnersPerContest <= 3
+                          //     ? "bg-orange-50/80 border-orange-200"
+                          //     : "bg-white/80 border-gray-200/50"
+                          // }`}
                           >
                             <div className="flex items-start gap-4">
                               {/* <div
@@ -3878,7 +4060,7 @@ export default function CreateContestPage({
                                   <div className="flex items-center gap-2">
                                     <span className="text-xl font-bold text-green-600 border border-green-600 rounded-full px-6">
                                       {planFeatures.maxWinnersPerContest ===
-                                      Infinity
+                                        Infinity
                                         ? "∞"
                                         : planFeatures.maxWinnersPerContest}
                                     </span>
@@ -3907,11 +4089,11 @@ export default function CreateContestPage({
                                       ? "border-gray-600"
                                       : "bg-[#F0E7FD] border-purple-500 text-purple-600"
                                   )}
-                                  // className={`mt-3 text-sm font-medium ${
-                                  //   planFeatures.maxWinnersPerContest <= 3
-                                  //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                  //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                  // }`}
+                                // className={`mt-3 text-sm font-medium ${
+                                //   planFeatures.maxWinnersPerContest <= 3
+                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                // }`}
                                 >
                                   {planFeatures.maxWinnersPerContest <= 3
                                     ? "Upgrade for more winner slots!"
@@ -3986,12 +4168,12 @@ export default function CreateContestPage({
                             isDark ? "border-gray-500" : "border-gray-300"
                           )}
 
-                          // className={`backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300 ${
-                          //   planFeatures.minContestBudget >=
-                          //   HIGH_MIN_BUDGET_THRESHOLD
-                          //     ? "bg-white"
-                          //     : "bg-white/80 border-gray-200/50"
-                          // }`}
+                        // className={`backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300 ${
+                        //   planFeatures.minContestBudget >=
+                        //   HIGH_MIN_BUDGET_THRESHOLD
+                        //     ? "bg-white"
+                        //     : "bg-white/80 border-gray-200/50"
+                        // }`}
                         >
                           <div className="flex items-start gap-4">
                             {/* <div
@@ -4018,12 +4200,11 @@ export default function CreateContestPage({
                                 </h5>
                                 <div className="flex items-center gap-2">
                                   <span
-                                    className={`text-xl font-bold ${
-                                      planFeatures.minContestBudget >=
+                                    className={`text-xl font-bold ${planFeatures.minContestBudget >=
                                       HIGH_MIN_BUDGET_THRESHOLD
-                                        ? "text-green-600 border border-green-600 rounded-full px-6"
-                                        : "text-green-600 border border-green-600 rounded-full px-6"
-                                    }`}
+                                      ? "text-green-600 border border-green-600 rounded-full px-6"
+                                      : "text-green-600 border border-green-600 rounded-full px-6"
+                                      }`}
                                   >
                                     {formatCurrencyFromCents(
                                       planFeatures.minContestBudget
@@ -4031,10 +4212,10 @@ export default function CreateContestPage({
                                   </span>
                                   {planFeatures.minContestBudget >=
                                     HIGH_MIN_BUDGET_THRESHOLD && (
-                                    <span className="text-orange-500 text-sm">
-                                      ⚠️
-                                    </span>
-                                  )}
+                                      <span className="text-orange-500 text-sm">
+                                        ⚠️
+                                      </span>
+                                    )}
                                 </div>
                               </div>
                               <p
@@ -4054,15 +4235,15 @@ export default function CreateContestPage({
                                     ? "border-gray-600"
                                     : "bg-[#F0E7FD] border-purple-500 text-purple-600"
                                 )}
-                                // className={`mt-4 text-sm font-medium ${
-                                //   planFeatures.minContestBudget >=
-                                //   HIGH_MIN_BUDGET_THRESHOLD
-                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                // }`}
+                              // className={`mt-4 text-sm font-medium ${
+                              //   planFeatures.minContestBudget >=
+                              //   HIGH_MIN_BUDGET_THRESHOLD
+                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                              //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                              // }`}
                               >
                                 {planFeatures.minContestBudget >=
-                                HIGH_MIN_BUDGET_THRESHOLD
+                                  HIGH_MIN_BUDGET_THRESHOLD
                                   ? "Upgrade for lower minimum budgets!"
                                   : "Tip: Start with smaller budgets to test campaigns"}
                               </div>
@@ -4077,13 +4258,13 @@ export default function CreateContestPage({
                             isDark ? "border-gray-500" : "border-gray-300"
                           )}
 
-                          // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                          //   planFeatures.maxActiveContests <= 1
-                          //     ? "bg-white"
-                          //     : planFeatures.maxActiveContests <= 5
-                          //     ? "bg-orange-50/80 border-orange-200"
-                          //     : "bg-white/80 border-gray-200/50"
-                          // }`}
+                        // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                        //   planFeatures.maxActiveContests <= 1
+                        //     ? "bg-white"
+                        //     : planFeatures.maxActiveContests <= 5
+                        //     ? "bg-orange-50/80 border-orange-200"
+                        //     : "bg-white/80 border-gray-200/50"
+                        // }`}
                         >
                           <div className="flex items-start gap-4">
                             {/* <div
@@ -4111,13 +4292,12 @@ export default function CreateContestPage({
                                 </h5>
                                 <div className="flex items-center gap-2">
                                   <span
-                                    className={`text-xl font-bold ${
-                                      planFeatures.maxActiveContests <= 1
-                                        ? "text-green-600 border border-green-600 rounded-full px-6"
-                                        : planFeatures.maxActiveContests <= 5
+                                    className={`text-xl font-bold ${planFeatures.maxActiveContests <= 1
+                                      ? "text-green-600 border border-green-600 rounded-full px-6"
+                                      : planFeatures.maxActiveContests <= 5
                                         ? "text-green-600 border border-green-600 rounded-full px-6"
                                         : "text-green-600 border border-green-600 rounded-full px-6"
-                                    }`}
+                                      }`}
                                   >
                                     {planFeatures.maxActiveContests === Infinity
                                       ? "∞"
@@ -4125,11 +4305,10 @@ export default function CreateContestPage({
                                   </span>
                                   {planFeatures.maxActiveContests <= 5 && (
                                     <span
-                                      className={`text-sm ${
-                                        planFeatures.maxActiveContests <= 1
-                                          ? "text-red-500"
-                                          : "text-orange-500"
-                                      }`}
+                                      className={`text-sm ${planFeatures.maxActiveContests <= 1
+                                        ? "text-red-500"
+                                        : "text-orange-500"
+                                        }`}
                                     >
                                       ⚠️
                                     </span>
@@ -4153,19 +4332,19 @@ export default function CreateContestPage({
                                     ? "border-gray-600"
                                     : "bg-[#F0E7FD] border-purple-500 text-purple-600"
                                 )}
-                                // className={`mt-4 text-sm font-medium ${
-                                //   planFeatures.maxActiveContests <= 1
-                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                //     : planFeatures.maxActiveContests <= 5
-                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                //     : "mt-4 border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                // }`}
+                              // className={`mt-4 text-sm font-medium ${
+                              //   planFeatures.maxActiveContests <= 1
+                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                              //     : planFeatures.maxActiveContests <= 5
+                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                              //     : "mt-4 border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                              // }`}
                               >
                                 {planFeatures.maxActiveContests <= 1
                                   ? "Only 1 contest allowed - upgrade now!"
                                   : planFeatures.maxActiveContests <= 5
-                                  ? "Upgrade for more simultaneous campaigns!"
-                                  : "Tip: Run parallel campaigns for different products"}
+                                    ? "Upgrade for more simultaneous campaigns!"
+                                    : "Tip: Run parallel campaigns for different products"}
                               </div>
                             </div>
                           </div>
@@ -4178,13 +4357,13 @@ export default function CreateContestPage({
                             isDark ? "border-gray-500" : "border-gray-300"
                           )}
 
-                          // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                          //   planFeatures.commissionPercentage >= 40
-                          //     ? "bg-red-50/80 border-red-200"
-                          //     : planFeatures.commissionPercentage >= 20
-                          //     ? "bg-orange-50/80 border-orange-200"
-                          //     : "bg-white/80 border-gray-200/50"
-                          // }`}
+                        // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                        //   planFeatures.commissionPercentage >= 40
+                        //     ? "bg-red-50/80 border-red-200"
+                        //     : planFeatures.commissionPercentage >= 20
+                        //     ? "bg-orange-50/80 border-orange-200"
+                        //     : "bg-white/80 border-gray-200/50"
+                        // }`}
                         >
                           <div className="flex items-start gap-4">
                             {/* <div
@@ -4212,24 +4391,22 @@ export default function CreateContestPage({
                                 </h5>
                                 <div className="flex items-center gap-2">
                                   <span
-                                    className={`text-xl font-bold ${
-                                      planFeatures.commissionPercentage >= 40
-                                        ? "text-green-600 border border-green-600 rounded-full px-6"
-                                        : planFeatures.commissionPercentage >=
-                                          20
+                                    className={`text-xl font-bold ${planFeatures.commissionPercentage >= 40
+                                      ? "text-green-600 border border-green-600 rounded-full px-6"
+                                      : planFeatures.commissionPercentage >=
+                                        20
                                         ? "text-green-600 border border-green-600 rounded-full px-6"
                                         : "text-green-600 border border-green-600 rounded-full px-6"
-                                    }`}
+                                      }`}
                                   >
                                     {planFeatures.commissionPercentage}%
                                   </span>
                                   {planFeatures.commissionPercentage >= 20 && (
                                     <span
-                                      className={`text-sm ${
-                                        planFeatures.commissionPercentage >= 40
-                                          ? "text-red-500"
-                                          : "text-orange-500"
-                                      }`}
+                                      className={`text-sm ${planFeatures.commissionPercentage >= 40
+                                        ? "text-red-500"
+                                        : "text-orange-500"
+                                        }`}
                                     >
                                       ⚠️
                                     </span>
@@ -4253,19 +4430,19 @@ export default function CreateContestPage({
                                     ? "border-gray-600"
                                     : "bg-[#F0E7FD] border-purple-500 text-purple-600"
                                 )}
-                                // className={`mt-4 text-sm font-medium ${
-                                //   planFeatures.commissionPercentage >= 40
-                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                //     : planFeatures.commissionPercentage >= 20
-                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                // }`}
+                              // className={`mt-4 text-sm font-medium ${
+                              //   planFeatures.commissionPercentage >= 40
+                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                              //     : planFeatures.commissionPercentage >= 20
+                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                              //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                              // }`}
                               >
                                 {planFeatures.maxActiveContests <= 1
                                   ? "Only 1 contest allowed - upgrade now!"
                                   : planFeatures.maxActiveContests <= 5
-                                  ? "Upgrade for more simultaneous campaigns!"
-                                  : "Tip: Run parallel campaigns for different products"}
+                                    ? "Upgrade for more simultaneous campaigns!"
+                                    : "Tip: Run parallel campaigns for different products"}
                               </div>
                             </div>
                           </div>
@@ -4279,13 +4456,13 @@ export default function CreateContestPage({
                       "rounded-xl p-8 text-black shadow-lg relative overflow-hidden",
                       isDark ? "bg-[#180438] text-white" : "bg-white text-black"
                     )}
-                    // className={`rounded-xl p-8 text-black shadow-lg relative overflow-hidden ${
-                    //   currentPlan.price === 0
-                    //     ? "bg-white" // Free plan - modern slate
-                    //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                    //     ? "bg-white" // Bronze plan - warm
-                    //     : "bg-white" // Higher plans - premium
-                    // }`}
+                  // className={`rounded-xl p-8 text-black shadow-lg relative overflow-hidden ${
+                  //   currentPlan.price === 0
+                  //     ? "bg-white" // Free plan - modern slate
+                  //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
+                  //     ? "bg-white" // Bronze plan - warm
+                  //     : "bg-white" // Higher plans - premium
+                  // }`}
                   >
                     {/* Background Pattern */}
                     {/* <div className="absolute inset-0 opacity-10">
@@ -4403,33 +4580,33 @@ export default function CreateContestPage({
                       {/* Enhanced Upgrade CTA for lower tier plans */}
                       {(currentPlan.price === 0 ||
                         planFeatures.commissionPercentage >= 20) && (
-                        <div className="rounded-2xl py-6 px-4 mt-4 border border-gray-300">
-                          <div className="flex items-start justify-between gap-6">
-                            <div className="flex-1 min-w-0">
-                              <h5 className="text-base font-bold">
-                                {currentPlan.price === 0
-                                  ? "Ready to unlock more potential?"
-                                  : "Want better rates and more features?"}
-                              </h5>
-                              <p className="text-sm opacity-90 leading-relaxed pr-4">
-                                {currentPlan.price === 0
-                                  ? "Upgrade to reduce commission and get more winners"
-                                  : "Higher plans offer lower commission rates and more flexibility"}
-                              </p>
-                            </div>
-                            {userPlan !== PRODUCT_IDS.CHAMPION && (
-                              <div className="flex-shrink-0">
-                                <button
-                                  className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white"
-                                  onClick={() => setShowUpgradeModal(true)}
-                                >
-                                  Upgrade Plan
-                                </button>
+                          <div className="rounded-2xl py-6 px-4 mt-4 border border-gray-300">
+                            <div className="flex items-start justify-between gap-6">
+                              <div className="flex-1 min-w-0">
+                                <h5 className="text-base font-bold">
+                                  {currentPlan.price === 0
+                                    ? "Ready to unlock more potential?"
+                                    : "Want better rates and more features?"}
+                                </h5>
+                                <p className="text-sm opacity-90 leading-relaxed pr-4">
+                                  {currentPlan.price === 0
+                                    ? "Upgrade to reduce commission and get more winners"
+                                    : "Higher plans offer lower commission rates and more flexibility"}
+                                </p>
                               </div>
-                            )}
+                              {userPlan !== PRODUCT_IDS.CHAMPION && (
+                                <div className="flex-shrink-0">
+                                  <button
+                                    className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white"
+                                    onClick={() => setShowUpgradeModal(true)}
+                                  >
+                                    Upgrade Plan
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
                     </div>
                   </div>
                 </div>
@@ -4946,11 +5123,10 @@ export default function CreateContestPage({
 
               {/* Flat Fee Bonus */}
               <div
-                className={`space-y-3 p-4 border rounded-lg ${
-                  isDark
-                    ? "bg-green-950/40 border-green-800"
-                    : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
-                }`}
+                className={`space-y-3 p-4 border rounded-lg ${isDark
+                  ? "bg-green-950/40 border-green-800"
+                  : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">🎁</span>
@@ -5255,22 +5431,21 @@ export default function CreateContestPage({
                   "w-full sm:w-auto",
                   !(formFeedback && formFeedbackType === "error")
                     ? cn(
-                        "sm:mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
-                        isDark
-                          ? "text-white bg-[#170337] border-gray-400"
-                          : "border-[#4A00BE] bg-white text-[#4A00BE]"
-                      )
+                      "sm:mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
+                      isDark
+                        ? "text-white bg-[#170337] border-gray-400"
+                        : "border-[#4A00BE] bg-white text-[#4A00BE]"
+                    )
                     : ""
                 )}
               >
                 Back
               </Button>
               <div
-                className={`flex flex-col sm:flex-row gap-3 w-full sm:w-auto ${
-                  formFeedback && formFeedbackType === "error"
-                    ? "sm:ml-4"
-                    : "sm:ml-auto"
-                }`}
+                className={`flex flex-col sm:flex-row gap-3 w-full sm:w-auto ${formFeedback && formFeedbackType === "error"
+                  ? "sm:ml-4"
+                  : "sm:ml-auto"
+                  }`}
               >
                 <button
                   className={cn(
@@ -5283,8 +5458,8 @@ export default function CreateContestPage({
                   disabled={isLoading || !title.trim()}
                 >
                   {isLoading &&
-                  uploadProgress &&
-                  uploadProgress.includes("draft") ? (
+                    uploadProgress &&
+                    uploadProgress.includes("draft") ? (
                     <div className="flex items-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                       <span>{uploadProgress}</span>
@@ -5313,8 +5488,8 @@ export default function CreateContestPage({
                   )}
                 >
                   {isLoading &&
-                  uploadProgress &&
-                  !uploadProgress.includes("draft") ? (
+                    uploadProgress &&
+                    !uploadProgress.includes("draft") ? (
                     <div className="flex items-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                       <span>{uploadProgress}</span>
@@ -5323,16 +5498,16 @@ export default function CreateContestPage({
                           uploadProgress.includes("Preparing")
                             ? 15
                             : uploadProgress.includes("Validating")
-                            ? 25
-                            : uploadProgress.includes("1/2")
-                            ? 40
-                            : uploadProgress.includes("2/2")
-                            ? 60
-                            : uploadProgress.includes("Creating")
-                            ? 80
-                            : uploadProgress.includes("submitted")
-                            ? 100
-                            : 10
+                              ? 25
+                              : uploadProgress.includes("1/2")
+                                ? 40
+                                : uploadProgress.includes("2/2")
+                                  ? 60
+                                  : uploadProgress.includes("Creating")
+                                    ? 80
+                                    : uploadProgress.includes("submitted")
+                                      ? 100
+                                      : 10
                         }
                         className="w-10 h-2"
                       />
@@ -5424,6 +5599,10 @@ export default function CreateContestPage({
 
   const addInspiration = () => {
     setInspirationError(null);
+    // For Twitter raid campaigns, allow only a single campaign tweet
+    if (isRaidTwitter && inspirationLinks.length >= 1) {
+      return;
+    }
     if (!newInspirationUrl.trim()) {
       setInspirationError("URL cannot be empty.");
       toast({
@@ -5976,10 +6155,10 @@ export default function CreateContestPage({
                       step === "basics"
                         ? "8%"
                         : step === "brief"
-                        ? "35%"
-                        : step === "resources"
-                        ? "70%"
-                        : "100%",
+                          ? "35%"
+                          : step === "resources"
+                            ? "70%"
+                            : "100%",
                     // background:
                     //   "linear-gradient(270deg, #E9E9E9 60%, #7F39EC 100%)",
                   }}
@@ -6038,15 +6217,14 @@ export default function CreateContestPage({
                         )}
 
                         <div
-                          className={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 transition-all duration-500 ${
-                            isActive
-                              ? "bg-[#7F39EC] border-[#7F39EC] text-white"
-                              : isCompleted
+                          className={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 transition-all duration-500 ${isActive
+                            ? "bg-[#7F39EC] border-[#7F39EC] text-white"
+                            : isCompleted
                               ? "bg-[#7F39EC] border-[#7F39EC] text-white"
                               : isDark
-                              ? "bg-white border-white text-slate-500 shadow-md"
-                              : "bg-white border-slate-200 text-slate-400 shadow-md"
-                          }`}
+                                ? "bg-white border-white text-slate-500 shadow-md"
+                                : "bg-white border-slate-200 text-slate-400 shadow-md"
+                            }`}
                         >
                           {isCompleted ? (
                             <svg
@@ -6073,36 +6251,34 @@ export default function CreateContestPage({
                       {/* Step Content */}
                       <div className="mt-4 text-center max-w-32">
                         <h3
-                          className={`text-[14px] font-semibold transition-colors duration-300 ${
-                            isActive
-                              ? isDark
-                                ? "text-white"
-                                : "text-black"
-                              : isCompleted
+                          className={`text-[14px] font-semibold transition-colors duration-300 ${isActive
+                            ? isDark
+                              ? "text-white"
+                              : "text-black"
+                            : isCompleted
                               ? isDark
                                 ? "text-white"
                                 : "text-black"
                               : isDark
-                              ? "text-slate-400 text-md"
-                              : "text-slate-500 text-md"
-                          }`}
+                                ? "text-slate-400 text-md"
+                                : "text-slate-500 text-md"
+                            }`}
                         >
                           {stepItem.title}
                         </h3>
                         <p
-                          className={`text-[12px] mt-1 transition-colors duration-300 ${
-                            isActive
-                              ? isDark
-                                ? "text-white"
-                                : "text-black"
-                              : isCompleted
+                          className={`text-[12px] mt-1 transition-colors duration-300 ${isActive
+                            ? isDark
+                              ? "text-white"
+                              : "text-black"
+                            : isCompleted
                               ? isDark
                                 ? "text-white"
                                 : "text-black"
                               : isDark
-                              ? "text-slate-400"
-                              : "text-slate-400"
-                          }`}
+                                ? "text-slate-400"
+                                : "text-slate-400"
+                            }`}
                         >
                           {stepItem.description}
                         </p>
@@ -6130,30 +6306,30 @@ export default function CreateContestPage({
                     {step === "basics"
                       ? "1"
                       : step === "brief"
-                      ? "2"
-                      : step === "resources"
-                      ? "3"
-                      : "4"}
+                        ? "2"
+                        : step === "resources"
+                          ? "3"
+                          : "4"}
                   </div>
                   <div>
                     <h3 className="font-semibold text-foreground">
                       {step === "basics"
                         ? "Get Started"
                         : step === "brief"
-                        ? "Create Brief"
-                        : step === "resources"
-                        ? "Resources"
-                        : "Prize"}
+                          ? "Create Brief"
+                          : step === "resources"
+                            ? "Resources"
+                            : "Prize"}
                     </h3>
                     <p className="text-xs text-muted-foreground">
                       Step{" "}
                       {step === "basics"
                         ? "1"
                         : step === "brief"
-                        ? "2"
-                        : step === "resources"
-                        ? "3"
-                        : "4"}{" "}
+                          ? "2"
+                          : step === "resources"
+                            ? "3"
+                            : "4"}{" "}
                       of 4
                     </p>
                   </div>
@@ -6211,11 +6387,60 @@ export default function CreateContestPage({
             >
               {/* Removed general validationError Alert from CardContent */}
 
+              {/* Contest Format Toggle */}
+              <div className="space-y-2 ">
+                <Label className="text-xl font-semibold">Contest Format</Label>
+                <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant={
+                      contestFormat === "text_image" ? "default" : "outline"
+                    }
+                    className={cn(
+                      "flex-1 justify-center",
+                      contestFormat === "text_image" &&
+                      "bg-[#7F39EC] text-white"
+                    )}
+                    onClick={() => {
+                      setContestFormat("text_image");
+                      // Text/Image contests should use Leaderboard type and Twitter platform
+                      if (contestType === "cpm") {
+                        setContestType("leaderboard");
+                      }
+                      if (platform !== "twitter") {
+                        setPlatform("twitter");
+                      }
+                      // Instantly persist contest_format change
+                      updateContestInDB({ contest_format: "text_image" });
+                    }}
+                  >
+                    Text / Image Contest
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={contestFormat === "video" ? "default" : "outline"}
+                    className={cn(
+                      "flex-1 justify-center",
+                      contestFormat === "video" && "bg-[#7F39EC] text-white"
+                    )}
+                    onClick={() => {
+                      setContestFormat("video");
+                      // Default to YouTube when switching back to video if currently on Twitter
+                      if (platform === "twitter") {
+                        setPlatform("youtube");
+                      }
+                      // Instantly persist contest_format change
+                      updateContestInDB({ contest_format: "video" });
+                    }}
+                  >
+                    Video Contest
+                  </Button>
+                </div>
+              </div>
+
               {/* Contest Type Selection */}
               <div className="space-y-2 ">
-                <Label className="text-base text-xl font-semibold">
-                  Contest Type
-                </Label>
+                <Label className="text-xl font-semibold">Contest Type</Label>
                 <RadioGroup
                   value={contestType}
                   onValueChange={(value: "leaderboard" | "cpm") => {
@@ -6224,8 +6449,11 @@ export default function CreateContestPage({
                       planFeatures.contestTypes &&
                       planFeatures.contestTypes.includes("cpm");
 
-                    // Only allow CPM selection if user has access
-                    if (value === "cpm" && !hasCpmAccess) {
+                    // Block CPM selection if not available for current format or plan
+                    if (
+                      value === "cpm" &&
+                      (!hasCpmAccess || contestFormat === "text_image")
+                    ) {
                       return; // Don't change the value
                     }
                     setContestType(value);
@@ -6233,13 +6461,11 @@ export default function CreateContestPage({
                   className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 pt-2"
                 >
                   <div
-                    className={`flex items-center space-x-2 p-4 border ${
-                      isDark ? "border-gray-600" : "border-gray-300"
-                    } rounded-lg cursor-pointer flex-1 
+                    className={`flex items-center space-x-2 p-4 border ${isDark ? "border-gray-600" : "border-gray-300"
+                      } rounded-lg cursor-pointer flex-1 
         hover:bg-[#D9C0FF26] 
-        ${
-          contestType === "leaderboard" ? "bg-[#D9C0FF26] border-[#7F39EC]" : ""
-        }`}
+        ${contestType === "leaderboard" ? "bg-[#D9C0FF26] border-[#7F39EC]" : ""
+                      }`}
                   >
                     <RadioGroupItem value="leaderboard" id="leaderboard" />
                     <Label htmlFor="leaderboard" className="cursor-pointer">
@@ -6262,34 +6488,32 @@ export default function CreateContestPage({
                     );
                     const isFreePlan = !currentPlan || currentPlan.price === 0;
 
+                    const isDisabledForFormat = contestFormat === "text_image";
+                    const isDisabled = !hasCpmAccess || isDisabledForFormat;
+
                     return (
                       <div
-                        className={`flex items-center space-x-2 p-4 border ${
-                          isDark ? "border-gray-600" : "border-gray-300"
-                        } rounded-lg flex-1 relative 
-                        ${
-                          !hasCpmAccess
+                        className={`flex items-center space-x-2 p-4 border ${isDark ? "border-gray-600" : "border-gray-300"
+                          } rounded-lg flex-1 relative 
+                        ${isDisabled
                             ? isDark
                               ? "opacity-50 cursor-not-allowed bg-slate-800"
                               : "opacity-50 cursor-not-allowed bg-gray-50"
-                            : `cursor-pointer hover:bg-[#D9C0FF26] ${
-                                contestType === "cpm"
-                                  ? "bg-[#D9C0FF26] border-[#7F39EC]"
-                                  : ""
-                              }`
-                        }`}
+                            : `cursor-pointer hover:bg-[#D9C0FF26] ${contestType === "cpm"
+                              ? "bg-[#D9C0FF26] border-[#7F39EC]"
+                              : ""
+                            }`
+                          }`}
                       >
                         <RadioGroupItem
                           value="cpm"
                           id="cpm"
-                          disabled={!hasCpmAccess}
+                          disabled={isDisabled}
                         />
                         <Label
                           htmlFor="cpm"
                           className={
-                            hasCpmAccess
-                              ? "cursor-pointer"
-                              : "cursor-not-allowed"
+                            isDisabled ? "cursor-not-allowed" : "cursor-pointer"
                           }
                         >
                           <span className="font-semibold text-lg">
@@ -6299,7 +6523,27 @@ export default function CreateContestPage({
                             Creators are paid based on the number of views their
                             content receives, at a pre-defined CPM rate.
                           </p>
-                          {!hasCpmAccess && (
+                          {isDisabledForFormat && (
+                            <div className="mt-2 flex items-center gap-2">
+                              <button
+                                className={cn(
+                                  "text-white text-md px-3 rounded-full py-1 h-8",
+                                  isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
+                                )}
+                              >
+                                Coming Soon
+                              </button>
+                              <p
+                                className={cn(
+                                  "text-sm font-medium",
+                                  isDark ? "text-white" : "text-black"
+                                )}
+                              >
+                                Not available for text/image contests
+                              </p>
+                            </div>
+                          )}
+                          {!hasCpmAccess && !isDisabledForFormat && (
                             <div className="mt-2 flex items-center gap-2">
                               {isFreePlan && (
                                 <button
@@ -6360,7 +6604,16 @@ export default function CreateContestPage({
 
               <div>
                 <Label htmlFor="platform">Platform</Label>
-                <Select value={platform} onValueChange={setPlatform}>
+                <Select
+                  value={platform}
+                  onValueChange={(value) => {
+                    setPlatform(value);
+                    if (value === "twitter") {
+                      // Default Twitter content type to Raid campaign
+                      setContentType("raid");
+                    }
+                  }}
+                >
                   <SelectTrigger
                     id="platform"
                     className={cn(
@@ -6372,12 +6625,20 @@ export default function CreateContestPage({
                     <SelectValue placeholder="Select contest platform" />
                   </SelectTrigger>
                   <SelectContent isDark={isDark}>
-                    <SelectItem isDark={isDark} value="youtube">
-                      YouTube
-                    </SelectItem>
-                    <SelectItem isDark={isDark} value="instagram">
-                      Instagram
-                    </SelectItem>
+                    {contestFormat === "text_image" ? (
+                      <SelectItem isDark={isDark} value="twitter">
+                        Twitter
+                      </SelectItem>
+                    ) : (
+                      <>
+                        <SelectItem isDark={isDark} value="youtube">
+                          YouTube
+                        </SelectItem>
+                        <SelectItem isDark={isDark} value="instagram">
+                          Instagram
+                        </SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -6401,15 +6662,28 @@ export default function CreateContestPage({
                     <SelectValue placeholder="Select content type (optional)" />
                   </SelectTrigger>
                   <SelectContent isDark={isDark}>
-                    <SelectItem value="ugc" isDark={isDark}>
-                      📹 UGC (User Generated Content)
-                    </SelectItem>
-                    <SelectItem value="clipping" isDark={isDark}>
-                      ✂️ Clipping (Short clips/repurposed content)
-                    </SelectItem>
-                    <SelectItem value="other" isDark={isDark}>
-                      📋 Other (Check Rules for details)
-                    </SelectItem>
+                    {platform === "twitter" ? (
+                      <>
+                        <SelectItem value="raid" isDark={isDark}>
+                          ⚔️ Raid (creators like/comment your tweet)
+                        </SelectItem>
+                        <SelectItem value="awareness" isDark={isDark}>
+                          📣 Awareness (creators post their own tweet)
+                        </SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="ugc" isDark={isDark}>
+                          📹 UGC (User Generated Content)
+                        </SelectItem>
+                        <SelectItem value="clipping" isDark={isDark}>
+                          ✂️ Clipping (Short clips/repurposed content)
+                        </SelectItem>
+                        <SelectItem value="other" isDark={isDark}>
+                          📋 Other (Check Rules for details)
+                        </SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -6921,9 +7195,9 @@ export default function CreateContestPage({
                                                       (item) =>
                                                         !(
                                                           item.category ===
-                                                            category.id &&
+                                                          category.id &&
                                                           item.subcategory ===
-                                                            subcategory
+                                                          subcategory
                                                         )
                                                     )
                                                   );
@@ -7198,17 +7472,6 @@ export default function CreateContestPage({
                         </div>
                       </div>
                       <CollapsibleContent className="px-4 pb-4 space-y-4">
-                        {/* <p
-                          className={cn(
-                            "text-sm mb-3",
-                            isDark ? "text-gray-400" : "text-gray-600"
-                          )}
-                        >
-                          Select regions and countries where creators can see
-                          and participate in this contest. Only creators from
-                          selected regions will see this opportunity in their
-                          dashboard.
-                        </p> */}
                         <div className="space-y-4">
                           {Object.keys(REGIONS_AND_COUNTRIES).map((region) => {
                             const regionKey =
@@ -7230,7 +7493,7 @@ export default function CreateContestPage({
                             const isPartiallySelected =
                               selectedCountriesInRegion.length > 0 &&
                               selectedCountriesInRegion.length <
-                                countriesArray.length;
+                              countriesArray.length;
                             const hasAnySelected =
                               selectedCountriesInRegion.length > 0;
 
@@ -7350,14 +7613,6 @@ export default function CreateContestPage({
                         </div>
                         {selectedCountries.length > 0 && (
                           <div className="flex items-center justify-end mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                            {/* <p
-                              className={cn(
-                                "text-xs",
-                                isDark ? "text-gray-400" : "text-gray-500"
-                              )}
-                            >
-                              {selectedCountries.length} countries selected
-                            </p> */}
                             <Button
                               type="button"
                               variant="outline"
@@ -7388,13 +7643,12 @@ export default function CreateContestPage({
               <div className="space-y-2">
                 <Label>Thumbnail</Label>
                 <div
-                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
-                    isDragActive
-                      ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
-                      : isDark
+                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive
+                    ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
+                    : isDark
                       ? "border-slate-600 bg-[#170337]"
                       : "border-gray-300 bg-white"
-                  }`}
+                    }`}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -7431,8 +7685,8 @@ export default function CreateContestPage({
                             : thumbnail?.name || "Saved thumbnail"}
                           {thumbnail?.size
                             ? ` · ${(thumbnail.size / (1024 * 1024)).toFixed(
-                                2
-                              )}MB`
+                              2
+                            )}MB`
                             : ""}
                         </p>
                         <Button
@@ -7504,13 +7758,12 @@ export default function CreateContestPage({
                     </div>
                   )}
                 <div
-                  className={`flex gap-2 ${
-                    formFeedback &&
+                  className={`flex gap-2 ${formFeedback &&
                     formFeedbackType === "error" &&
                     step !== "basics"
-                      ? "ml-auto"
-                      : "ml-auto"
-                  }`}
+                    ? "ml-auto"
+                    : "ml-auto"
+                    }`}
                 >
                   <button
                     className={cn(
@@ -7523,8 +7776,8 @@ export default function CreateContestPage({
                     disabled={isLoading || !title.trim()}
                   >
                     {isLoading &&
-                    uploadProgress &&
-                    uploadProgress.includes("draft") ? (
+                      uploadProgress &&
+                      uploadProgress.includes("draft") ? (
                       <div className="flex items-center gap-2">
                         <span>{uploadProgress}</span>
                         <Progress
@@ -7558,11 +7811,6 @@ export default function CreateContestPage({
 
         {step === "brief" && (
           <>
-            {/* <CardHeader>
-              <CardTitle>Project Overview</CardTitle>
-              
-            </CardHeader> */}
-
             <div
               className={cn(
                 "p-6 border-b rounded-t-xl shadow-xl space-y-6",
@@ -7617,9 +7865,9 @@ export default function CreateContestPage({
                     isDark ? "text-white" : "text-gray-600 dark:text-gray-400"
                   )}
                 >
-                  Provide a detailed description of your project, what you want
-                  creators to do, key messages, target audience, and specific
-                  requirements.
+                  {platform === "twitter"
+                    ? "Provide a detailed description of your project, what you want creators to post on X (Twitter), key messages, target audience, and specific requirements. If you want creators to mention specific accounts or hashtags, write them exactly as they should appear in the post (for example: @brandname, @creator, #BrandCampaign)."
+                    : "Provide a detailed description of your project, what you want creators to do, key messages, target audience, and specific requirements."}
                 </p>
 
                 {showBriefPreview ? (
@@ -7677,8 +7925,275 @@ export default function CreateContestPage({
                   </div>
                 )}
               </div>
+              {contestFormat === "text_image" && !isRaidTwitter && (
+                <>
+                  {/* Keywords section */}
+                  <div className="space-y-3 mt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-medium">Keywords</h3>
+                        {/* <span className="text-red-500 font-bold text-lg">*</span> */}
+                      </div>
+                      <p
+                        className={cn(
+                          "text-xs",
+                          isDark ? "text-gray-300" : "text-gray-500"
+                        )}
+                      >
+                        Add search keywords and hashtags (e.g. product name,
+                        theme, #BrandCampaign). For hashtags, start with #.
+                      </p>
+                    </div>
 
-              <div className="space-y-4">
+                    <div className="space-y-2">
+                      {keywords.map((kw, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <Input
+                            value={kw}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              // Disallow spaces in keywords; strip all whitespace
+                              const sanitized = raw.replace(/\s+/g, "");
+                              const next = [...keywords];
+                              next[index] = sanitized;
+                              setKeywords(next);
+                            }}
+                            placeholder="Add keyword"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                          {keywords.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                const next = keywords.filter(
+                                  (_, i) => i !== index
+                                );
+                                setKeywords(next.length ? next : [""]);
+                              }}
+                            >
+                              <Trash className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "mt-1 border-dashed",
+                        isDark
+                          ? "border-gray-500 text-gray-200"
+                          : "border-gray-400 text-gray-700"
+                      )}
+                      onClick={() => setKeywords([...keywords, ""])}
+                    >
+                      + Add keyword
+                    </Button>
+
+                    {/* Keyword requirement (for keywords section) */}
+                    <div className="mt-4 space-y-2">
+                      <p
+                        className={cn(
+                          "text-xs font-medium",
+                          isDark ? "text-gray-200" : "text-gray-700"
+                        )}
+                      >
+                        How strict should keywords be?
+                      </p>
+                      <RadioGroup
+                        value={keywordsRequirementMode}
+                        onValueChange={(val: "all" | "any") =>
+                          setKeywordsRequirementMode(val)
+                        }
+                        className="flex flex-col gap-1 sm:flex-row sm:gap-4"
+                      >
+                        <label className="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
+                          <RadioGroupItem value="all" id="req-all-keywords" />
+                          <span
+                            className={cn(
+                              "leading-snug",
+                              isDark ? "text-gray-200" : "text-gray-700"
+                            )}
+                          >
+                            All are mandatory
+                          </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
+                          <RadioGroupItem value="any" id="req-any-keywords" />
+                          <span
+                            className={cn(
+                              "leading-snug",
+                              isDark ? "text-gray-200" : "text-gray-700"
+                            )}
+                          >
+                            Any is acceptable
+                          </span>
+                        </label>
+                      </RadioGroup>
+                    </div>
+                  </div>
+
+                  {/* Mentions section */}
+                  <div className="space-y-3 mt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-medium">Mentions</h3>
+                      </div>
+                      <p
+                        className={cn(
+                          "text-xs",
+                          isDark ? "text-gray-300" : "text-gray-500"
+                        )}
+                      >
+                        Add up to 3 @mentions to track (e.g. @brandname,
+                        @partner)
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      {mentions.map((mention, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <Input
+                            value={mention}
+                            onChange={(e) => {
+                              const next = [...mentions];
+                              next[index] = e.target.value;
+                              setMentions(next);
+                            }}
+                            placeholder="@username"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                          {mentions.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                const next = mentions.filter(
+                                  (_, i) => i !== index
+                                );
+                                setMentions(next.length ? next : [""]);
+                              }}
+                            >
+                              <Trash className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "mt-1 border-dashed",
+                        mentions.length >= 3 && "opacity-50 cursor-not-allowed",
+                        isDark
+                          ? "border-gray-500 text-gray-200"
+                          : "border-gray-400 text-gray-700"
+                      )}
+                      disabled={mentions.length >= 3}
+                      onClick={() => {
+                        if (mentions.length < 3) {
+                          setMentions([...mentions, ""]);
+                        }
+                      }}
+                    >
+                      + Add mention
+                    </Button>
+
+                    {/* Mention requirement (for mentions section) */}
+                    <div className="mt-4 space-y-2">
+                      <p
+                        className={cn(
+                          "text-xs font-medium",
+                          isDark ? "text-gray-200" : "text-gray-700"
+                        )}
+                      >
+                        How strict should mentions be?
+                      </p>
+                      <RadioGroup
+                        value={mentionsRequirementMode}
+                        onValueChange={(val: "all" | "any") =>
+                          setMentionsRequirementMode(val)
+                        }
+                        className="flex flex-col gap-1 sm:flex-row sm:gap-4"
+                      >
+                        <label className="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
+                          <RadioGroupItem value="all" id="req-all-mentions" />
+                          <span
+                            className={cn(
+                              "leading-snug",
+                              isDark ? "text-gray-200" : "text-gray-700"
+                            )}
+                          >
+                            All are mandatory
+                          </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
+                          <RadioGroupItem value="any" id="req-any-mentions" />
+                          <span
+                            className={cn(
+                              "leading-snug",
+                              isDark ? "text-gray-200" : "text-gray-700"
+                            )}
+                          >
+                            Any is acceptable
+                          </span>
+                        </label>
+                      </RadioGroup>
+                    </div>
+                  </div>
+
+                  {/* Max Participants section */}
+                  <div className="space-y-3 mt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-medium">Max Participants</h3>
+                      </div>
+                      <p
+                        className={cn(
+                          "text-xs",
+                          isDark ? "text-gray-300" : "text-gray-500"
+                        )}
+                      >
+                        Optional: Limit the maximum number of participants for this campaign
+                      </p>
+                    </div>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={maxParticipants}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setMaxParticipants(value === "" ? "" : parseInt(value, 10));
+                      }}
+                      placeholder="No limit (leave empty)"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="space-y-4 mt-8">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <h3 className="text-lg font-medium">Set rules</h3>
@@ -7787,19 +8302,18 @@ export default function CreateContestPage({
                   className={cn(
                     "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
                     !(formFeedback && formFeedbackType === "error") &&
-                      (isDark
-                        ? "border-gray-300 text-gray-300"
-                        : "border-[#4A00BE] text-[#4A00BE]")
+                    (isDark
+                      ? "border-gray-300 text-gray-300"
+                      : "border-[#4A00BE] text-[#4A00BE]")
                   )}
                 >
                   Back
                 </button>
                 <div
-                  className={`flex gap-2 ${
-                    formFeedback && formFeedbackType === "error"
-                      ? "ml-4"
-                      : "ml-auto"
-                  }`}
+                  className={`flex gap-2 ${formFeedback && formFeedbackType === "error"
+                    ? "ml-4"
+                    : "ml-auto"
+                    }`}
                 >
                   <button
                     className={cn(
@@ -7812,8 +8326,8 @@ export default function CreateContestPage({
                     disabled={isLoading || !title.trim()}
                   >
                     {isLoading &&
-                    uploadProgress &&
-                    uploadProgress.includes("draft") ? (
+                      uploadProgress &&
+                      uploadProgress.includes("draft") ? (
                       <div className="flex items-center gap-2">
                         <span>{uploadProgress}</span>
                         <Progress
@@ -7890,13 +8404,12 @@ export default function CreateContestPage({
                   {/* Asset Upload */}
                   <div className="flex flex-col gap-6">
                     <div
-                      className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
-                        isDragActive
-                          ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
-                          : isDark
+                      className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive
+                        ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
+                        : isDark
                           ? "border-slate-600 bg-[#170337]"
                           : "border-gray-300 bg-white"
-                      }`}
+                        }`}
                       onClick={() => resourceFileRef.current?.click()}
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
@@ -7908,15 +8421,15 @@ export default function CreateContestPage({
                       {resourceFile ? (
                         <div className="relative flex items-center gap-3">
                           {resourceFile.type.startsWith("image/") &&
-                          resourceFilePreview ? (
+                            resourceFilePreview ? (
                             <img
                               src={resourceFilePreview}
                               alt="Preview"
                               className="w-16 h-16 object-cover rounded mr-3"
                             />
                           ) : resourceFile.name
-                              .toLowerCase()
-                              .endsWith(".pdf") ? (
+                            .toLowerCase()
+                            .endsWith(".pdf") ? (
                             <span className="inline-block mr-2 align-middle">
                               <svg
                                 width="40"
@@ -7949,8 +8462,8 @@ export default function CreateContestPage({
                               </svg>
                             </span>
                           ) : /\.(mp4|mov|avi|webm)$/i.test(
-                              resourceFile.name
-                            ) ? (
+                            resourceFile.name
+                          ) ? (
                             <span className="inline-block mr-2 align-middle">
                               <svg
                                 width="40"
@@ -8050,8 +8563,8 @@ export default function CreateContestPage({
                             <div className="text-xs text-gray-500">
                               {resourceFile.size >= 1024 * 1024
                                 ? (resourceFile.size / (1024 * 1024)).toFixed(
-                                    2
-                                  ) + " MB"
+                                  2
+                                ) + " MB"
                                 : (resourceFile.size / 1024).toFixed(2) + " KB"}
                             </div>
                             {resourceDescription && (
@@ -8467,221 +8980,162 @@ export default function CreateContestPage({
                   </div>
                 </CardContent>
                 <div>
-                  {/* Inspiration Content Section */}
+                  {/* Inspiration / Target Tweet Section */}
                   <div>
                     <CardTitle className="px-6 pb-2">
-                      Inspiration Content{" "}
+                      {isRaidTwitter ? "Target Tweet" : "Inspiration Content"}{" "}
                       <span className="text-red-500">*</span>
                     </CardTitle>
                     <CardDescription className="text-[14px] px-6 pb-4">
-                      Help creators understand your vision by adding at least
-                      one inspiration link (Instagram, YouTube, TikTok, etc.)
-                      with a description.
+                      {isRaidTwitter
+                        ? "Add the link to the tweet creators should engage with, plus a short description."
+                        : "Help creators understand your vision by adding at least one inspiration link (Instagram, YouTube, TikTok,Twitter etc.) with a description."}
                     </CardDescription>
                   </div>
                   <CardContent className="space-y-4">
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="inspirationUrlInput" className="mb-[2px]">
-                        Inspiration Link <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        id="inspirationUrlInput"
-                        type="url"
-                        placeholder="https://instagram.com/example"
-                        value={newInspirationUrl}
-                        className={cn(
-                          "mb-3",
-                          isDark
-                            ? "bg-[#180438] border border-gray-600"
-                            : "bg-white"
-                        )}
-                        onChange={(e) => setNewInspirationUrl(e.target.value)}
-                      />
-                      <Label
-                        htmlFor="inspirationDescriptionInput"
-                        className="mb-[2px]"
-                      >
-                        Inspiration Description{" "}
-                        <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        id="inspirationDescriptionInput"
-                        placeholder="Add description here*"
-                        value={newInspirationDescription}
-                        className={cn(
-                          "mb-4",
-                          isDark
-                            ? "bg-[#180438] border border-gray-600"
-                            : "bg-white"
-                        )}
-                        onChange={(e) =>
-                          setNewInspirationDescription(e.target.value)
-                        }
-                      />
-                      <Button
-                        type="button"
-                        className="w-full py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
-                        onClick={addInspiration}
-                        disabled={
-                          !newInspirationUrl || !newInspirationDescription
-                        }
-                      >
-                        Add Inspiration
-                      </Button>
-                      {inspirationError && (
-                        <div className="text-red-500 text-sm mt-1">
-                          {inspirationError}
-                        </div>
-                      )}
-                    </div>
-                    {/* Inspiration List */}
-                    {inspirationLinks.length > 0 && (
-                      <ul className="space-y-3 mt-6">
-                        {inspirationLinks.map((item, index) => (
-                          <li
-                            key={index}
+                    {isRaidTwitter ? (
+                      // Simplified UI for Raid: Direct inputs, no add button or list
+                      <div className="flex flex-col gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="raidTweetLink" className="mb-[2px]">
+                            Tweet Link <span className="text-red-500">*</span>
+                          </Label>
+                          <Input
+                            id="raidTweetLink"
+                            type="url"
+                            placeholder="https://x.com/yourbrand/status/1234567890"
+                            value={inspirationLinks[0]?.url || ""}
                             className={cn(
-                              "flex items-center gap-3 border rounded-lg p-4",
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
-                                : " bg-white border-gray-300"
+                                : "bg-white"
                             )}
-                          >
-                            <div
-                              className={cn(
-                                "rounded-full flex items-center justify-center w-12 h-12",
-                                isDark
-                                  ? "bg-[#FFFFFF36] text-white"
-                                  : "text-[#4A00BE] bg-[#D8C3FF]"
-                              )}
-                            >
-                              <ExternalLink className="w-6= h-6" />
-                            </div>
-
-                            <div className="flex-1">
-                              <a
-                                href={item.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={cn(
-                                  "font-medium hover:underline break-all",
-                                  isDark ? "text-purple-400" : "text-blue-600"
-                                )}
-                              >
-                                {item.url}
-                              </a>
-                              <div className="text-xs text-gray-500 mt-1">
-                                {item.description}
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => removeInspirationLink(index)}
-                              className={cn(
-                                "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
-                                isDark
-                                  ? "bg-[#FFFFFF36] text-white"
-                                  : "text-[#4A00BE] bg-[#D8C3FF]"
-                              )}
-                            >
-                              <Trash className="h-4 w-4" />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </CardContent>
-                  {/* Tracking Links (Collapsible) */}
-                  <div className="px-6">
-                    <div className="my-6 border-t border-gray-300"></div>
-                    <Collapsible
-                      open={trackingLinksOpen}
-                      onOpenChange={setTrackingLinksOpen}
-                    >
-                      <CollapsibleTrigger
-                        className={cn(
-                          "w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold transition",
-                          isDark
-                            ? "border-gray-500"
-                            : "border-gray-400 hover:bg-accent/50"
-                        )}
-                      >
-                        <span>Tracking Links</span>
-                        <span
-                          className={cn(
-                            "text-sm font-normal",
-                            isDark ? "text-gray-300" : "text-gray-600"
-                          )}
-                        >
-                          {trackingLinksOpen ? "Hide" : "Show"}
-                        </span>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="mt-4 space-y-3">
-                        {trackingError && (
-                          <div className="text-red-500 text-sm">
-                            {trackingError}
+                            onChange={(e) => {
+                              const url = e.target.value;
+                              if (inspirationLinks.length > 0) {
+                                setInspirationLinks([
+                                  { ...inspirationLinks[0], url },
+                                ]);
+                              } else {
+                                setInspirationLinks([
+                                  { url, description: "" },
+                                ]);
+                              }
+                              setInspirationError(null);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="raidTweetDescription" className="mb-[2px]">
+                            Tweet Description <span className="text-red-500">*</span>
+                          </Label>
+                          <Input
+                            id="raidTweetDescription"
+                            placeholder="Explain what this tweet is about (for creators)"
+                            value={inspirationLinks[0]?.description || ""}
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                            onChange={(e) => {
+                              const description = e.target.value;
+                              if (inspirationLinks.length > 0) {
+                                setInspirationLinks([
+                                  { ...inspirationLinks[0], description },
+                                ]);
+                              } else {
+                                setInspirationLinks([
+                                  { url: "", description },
+                                ]);
+                              }
+                              setInspirationError(null);
+                            }}
+                          />
+                        </div>
+                        {inspirationError && (
+                          <div className="text-red-500 text-sm mt-1">
+                            {inspirationError}
                           </div>
                         )}
-                        <div className="space-y-2">
-                          <Label htmlFor="trackingUrlInput">
-                            External Link
+                      </div>
+                    ) : (
+                      // Full UI for Awareness: Add button and list
+                      <>
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="inspirationUrlInput" className="mb-[2px]">
+                            Inspiration Link <span className="text-red-500">*</span>
                           </Label>
                           <Input
-                            id="trackingUrlInput"
+                            id="inspirationUrlInput"
                             type="url"
-                            placeholder="https://example.com/tracking-link"
-                            value={newTrackingUrl}
-                            onChange={(e) => setNewTrackingUrl(e.target.value)}
+                            placeholder="https://instagram.com/example"
+                            value={newInspirationUrl}
                             className={cn(
+                              "mb-3",
                               isDark
-                                ? "bg-[#180438] border border-gray-600 text-white"
-                                : "bg-white text-black"
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
                             )}
+                            onChange={(e) => setNewInspirationUrl(e.target.value)}
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="trackingDescriptionInput">
-                            Description
+                          <Label
+                            htmlFor="inspirationDescriptionInput"
+                            className="mb-[2px]"
+                          >
+                            Inspiration Description{" "}
+                            <span className="text-red-500">*</span>
                           </Label>
                           <Input
-                            id="trackingDescriptionInput"
-                            placeholder="Describe this link"
-                            value={newTrackingDescription}
-                            onChange={(e) =>
-                              setNewTrackingDescription(e.target.value)
-                            }
+                            id="inspirationDescriptionInput"
+                            placeholder="Add description here*"
+                            value={newInspirationDescription}
                             className={cn(
+                              "mb-4",
                               isDark
-                                ? "bg-[#180438] border border-gray-600 text-white"
-                                : "bg-white text-black"
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
                             )}
+                            onChange={(e) =>
+                              setNewInspirationDescription(e.target.value)
+                            }
                           />
-                        </div>
-                        <Button
-                          type="button"
-                          onClick={addTrackingLink}
-                          disabled={!newTrackingUrl || !newTrackingDescription}
-                          className={cn(
-                            "w-full py-6 text-md",
-                            isDark
-                              ? "bg-[#6C43D0] hover:bg-[#6C43D0]"
-                              : "bg-[#4A00BE] hover:bg-[#4A00BE]"
+                          <Button
+                            type="button"
+                            className={cn(
+                              "w-full py-6 text-md",
+                              isDark
+                                ? "bg-[#6C43D0] hover:bg-[#6C43D0]"
+                                : "bg-[#4A00BE] hover:bg-[#4A00BE]"
+                            )}
+                            onClick={addInspiration}
+                            disabled={
+                              !newInspirationUrl || !newInspirationDescription
+                            }
+                          >
+                            Add Inspiration
+                          </Button>
+                          {inspirationError && (
+                            <div className="text-red-500 text-sm mt-1">
+                              {inspirationError}
+                            </div>
                           )}
-                        >
-                          Add Tracking Link
-                        </Button>
-                        {trackingLinks.length > 0 && (
-                          <ul className="space-y-3 mt-2">
-                            {trackingLinks.map((item, index) => (
+                        </div>
+                        {inspirationLinks.length > 0 && (
+                          <ul className="space-y-3 mt-6">
+                            {inspirationLinks.map((item, index) => (
                               <li
                                 key={index}
                                 className={cn(
-                                  "flex items-center gap-3 rounded-lg p-4 border shadow-sm",
-                                  isDark ? "border-gray-600" : "border-gray-300"
+                                  "flex items-center gap-3 border rounded-lg p-4",
+                                  isDark
+                                    ? "bg-[#180438] border border-gray-600"
+                                    : " bg-white border-gray-300"
                                 )}
                               >
                                 <div
                                   className={cn(
-                                    "rounded-full flex items-center justify-center w-12 h-12 mr-2",
+                                    "rounded-full flex items-center justify-center w-12 h-12",
                                     isDark
                                       ? "bg-[#FFFFFF36] text-white"
                                       : "text-[#4A00BE] bg-[#D8C3FF]"
@@ -8689,45 +9143,25 @@ export default function CreateContestPage({
                                 >
                                   <ExternalLink className="w-6 h-6" />
                                 </div>
+
                                 <div className="flex-1">
                                   <a
-                                    href={
-                                      item.url.includes("[creator]")
-                                        ? item.url.replace(
-                                            /\[creator\]/gi,
-                                            encodeURIComponent(
-                                              currentUserFirstName
-                                            )
-                                          )
-                                        : item.url
-                                    }
+                                    href={item.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className={cn(
                                       "font-medium hover:underline break-all",
-                                      isDark
-                                        ? "text-purple-400"
-                                        : "text-blue-600"
+                                      isDark ? "text-purple-400" : "text-blue-600"
                                     )}
                                   >
-                                    {item.url.includes("[creator]")
-                                      ? item.url.replace(
-                                          /\[creator\]/gi,
-                                          currentUserFirstName
-                                        )
-                                      : item.url}
+                                    {item.url}
                                   </a>
-                                  <div
-                                    className={cn(
-                                      "text-xs mt-1",
-                                      isDark ? "text-white" : "text-gray-600"
-                                    )}
-                                  >
+                                  <div className="text-xs text-gray-500 mt-1">
                                     {item.description}
                                   </div>
                                 </div>
                                 <button
-                                  onClick={() => removeTrackingLink(index)}
+                                  onClick={() => removeInspirationLink(index)}
                                   className={cn(
                                     "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
                                     isDark
@@ -8741,24 +9175,293 @@ export default function CreateContestPage({
                             ))}
                           </ul>
                         )}
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </div>
-
-                  <CardFooter className="py-6 px-6">
-                    <button
-                      className={cn(
-                        "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
-                        isDark
-                          ? "text-white border-gray-400"
-                          : "border-[#4A00BE] text-[#4A00BE]"
-                      )}
-                      type="button"
-                      onClick={prevStep}
-                      disabled={isLoading}
-                    >
-                      Back
-                    </button>
+                      </>
+                    )}
+                  </CardContent>
+                  {/* Raid-only Target Metrics */}
+                  {isRaidTwitter && (
+                    <CardContent className="space-y-3 pt-0">
+                      <h4 className="px-0 text-md font-medium">
+                        Target metrics (optional)
+                      </h4>
+                      <p
+                        className={cn(
+                          "text-sm",
+                          isDark ? "text-gray-300" : "text-gray-500"
+                        )}
+                      >
+                        Set soft targets for engagement on the target tweet.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="targetLikes">Target likes</Label>
+                          <Input
+                            id="targetLikes"
+                            type="number"
+                            min={0}
+                            value={targetLikes}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setTargetLikes(
+                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                              );
+                            }}
+                            placeholder="e.g. 500"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="targetReplies">Target comments</Label>
+                          <Input
+                            id="targetReplies"
+                            type="number"
+                            min={0}
+                            value={targetReplies}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setTargetReplies(
+                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                              );
+                            }}
+                            placeholder="e.g. 100"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="targetRetweets">Target reposts/retweets</Label>
+                          <Input
+                            id="targetRetweets"
+                            type="number"
+                            min={0}
+                            value={targetRetweets}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setTargetRetweets(
+                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                              );
+                            }}
+                            placeholder="e.g. 200"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="targetQuoteReposts">Target quote reposts</Label>
+                          <Input
+                            id="targetQuoteReposts"
+                            type="number"
+                            min={0}
+                            value={targetQuoteReposts}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setTargetQuoteReposts(
+                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                              );
+                            }}
+                            placeholder="e.g. 50"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  )}
+                  {/* Tracking Links (Collapsible) */}
+                  {!isRaidTwitter && (
+                    <div className="px-6">
+                      <div className="my-6 border-t border-gray-300"></div>
+                      <Collapsible
+                        open={trackingLinksOpen}
+                        onOpenChange={setTrackingLinksOpen}
+                      >
+                        <CollapsibleTrigger
+                          className={cn(
+                            "w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold transition",
+                            isDark
+                              ? "border-gray-500"
+                              : "border-gray-400 hover:bg-accent/50"
+                          )}
+                        >
+                          <span>Tracking Links</span>
+                          <span
+                            className={cn(
+                              "text-sm font-normal",
+                              isDark ? "text-gray-300" : "text-gray-600"
+                            )}
+                          >
+                            {trackingLinksOpen ? "Hide" : "Show"}
+                          </span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="mt-4 space-y-3">
+                          {trackingError && (
+                            <div className="text-red-500 text-sm">
+                              {trackingError}
+                            </div>
+                          )}
+                          <div className="space-y-2">
+                            <Label htmlFor="trackingUrlInput">
+                              External Link
+                            </Label>
+                            <Input
+                              id="trackingUrlInput"
+                              type="url"
+                              placeholder="https://example.com/tracking-link"
+                              value={newTrackingUrl}
+                              onChange={(e) =>
+                                setNewTrackingUrl(e.target.value)
+                              }
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white text-black"
+                              )}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="trackingDescriptionInput">
+                              Description
+                            </Label>
+                            <Input
+                              id="trackingDescriptionInput"
+                              placeholder="Describe this link"
+                              value={newTrackingDescription}
+                              onChange={(e) =>
+                                setNewTrackingDescription(e.target.value)
+                              }
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white text-black"
+                              )}
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={addTrackingLink}
+                            disabled={
+                              !newTrackingUrl || !newTrackingDescription
+                            }
+                            className={cn(
+                              "w-full py-6 text-md",
+                              isDark
+                                ? "bg-[#6C43D0] hover:bg-[#6C43D0]"
+                                : "bg-[#4A00BE] hover:bg-[#4A00BE]"
+                            )}
+                          >
+                            Add Tracking Link
+                          </Button>
+                          {trackingLinks.length > 0 && (
+                            <ul className="space-y-3 mt-2">
+                              {trackingLinks.map((item, index) => (
+                                <li
+                                  key={index}
+                                  className={cn(
+                                    "flex items-center gap-3 rounded-lg p-4 border shadow-sm",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-300"
+                                  )}
+                                >
+                                  <div
+                                    className={cn(
+                                      "rounded-full flex items-center justify-center w-12 h-12 mr-2",
+                                      isDark
+                                        ? "bg-[#FFFFFF36] text-white"
+                                        : "text-[#4A00BE] bg-[#D8C3FF]"
+                                    )}
+                                  >
+                                    <ExternalLink className="w-6 h-6" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <a
+                                      href={
+                                        item.url.includes("[creator]")
+                                          ? item.url.replace(
+                                            /\[creator\]/gi,
+                                            encodeURIComponent(
+                                              currentUserFirstName
+                                            )
+                                          )
+                                          : item.url
+                                      }
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={cn(
+                                        "font-medium hover:underline break-all",
+                                        isDark
+                                          ? "text-purple-400"
+                                          : "text-blue-600"
+                                      )}
+                                    >
+                                      {item.url.includes("[creator]")
+                                        ? item.url.replace(
+                                          /\[creator\]/gi,
+                                          currentUserFirstName
+                                        )
+                                        : item.url}
+                                    </a>
+                                    <div
+                                      className={cn(
+                                        "text-xs mt-1",
+                                        isDark ? "text-white" : "text-gray-600"
+                                      )}
+                                    >
+                                      {item.description}
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => removeTrackingLink(index)}
+                                    className={cn(
+                                      "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
+                                      isDark
+                                        ? "bg-[#FFFFFF36] text-white"
+                                        : "text-[#4A00BE] bg-[#D8C3FF]"
+                                    )}
+                                  >
+                                    <Trash className="h-4 w-4" />
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </div>
+                  )}
+                </div>
+                <CardFooter className="py-6 px-6">
+                  <button
+                    className={cn(
+                      "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
+                      isDark
+                        ? "text-white border-gray-400"
+                        : "border-[#4A00BE] text-[#4A00BE]"
+                    )}
+                    type="button"
+                    onClick={prevStep}
+                    disabled={isLoading}
+                  >
+                    Back
+                  </button>
+                  <div className="flex gap-2 ml-auto">
                     <div className="flex gap-2 ml-auto">
                       <button
                         className={cn(
@@ -8771,8 +9474,8 @@ export default function CreateContestPage({
                         disabled={isLoading || !title.trim()}
                       >
                         {isLoading &&
-                        uploadProgress &&
-                        uploadProgress.includes("draft") ? (
+                          uploadProgress &&
+                          uploadProgress.includes("draft") ? (
                           <div className="flex items-center gap-2">
                             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                             <span>Saving...</span>
@@ -8799,8 +9502,8 @@ export default function CreateContestPage({
                         Next
                       </button>
                     </div>
-                  </CardFooter>
-                </div>
+                  </div>
+                </CardFooter>
               </div>
             </div>
           </>

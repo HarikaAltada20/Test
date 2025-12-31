@@ -6,15 +6,17 @@
  * Cooldown periods for metrics refresh functionality
  * Different cooldowns for different user types to balance UX and security
  */
-export const METRICS_REFRESH_COOLDOWN_MINUTES_OPPORTUNITIES = 60; // For creators viewing opportunities
-export const METRICS_REFRESH_COOLDOWN_MINUTES_OWNER = 3; // For brands/advertisers and admins
+export const METRICS_REFRESH_COOLDOWN_MINUTES_OPPORTUNITIES = 60; // For creators viewing opportunities (1 hour)
+export const METRICS_REFRESH_COOLDOWN_MINUTES_BRAND = 3; // For brands/advertisers (3 minutes)
+export const METRICS_REFRESH_COOLDOWN_MINUTES_ADMIN = 1; // For admins (1 minute)
 
 /**
  * Cooldown period in milliseconds (derived from minutes)
  * Used by client-side components for timing calculations
  */
 export const METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES = METRICS_REFRESH_COOLDOWN_MINUTES_OPPORTUNITIES * 60 * 1000;
-export const METRICS_REFRESH_COOLDOWN_MS_OWNER = METRICS_REFRESH_COOLDOWN_MINUTES_OWNER * 60 * 1000;
+export const METRICS_REFRESH_COOLDOWN_MS_BRAND = METRICS_REFRESH_COOLDOWN_MINUTES_BRAND * 60 * 1000;
+export const METRICS_REFRESH_COOLDOWN_MS_ADMIN = METRICS_REFRESH_COOLDOWN_MINUTES_ADMIN * 60 * 1000;
 
 /**
  * Helper function to get remaining cooldown time for opportunities (creators)
@@ -38,11 +40,11 @@ export function getMetricsRefreshCooldownInfoOpportunities(lastUpdateTimestamp: 
 }
 
 /**
- * Helper function to get remaining cooldown time for owners (brands/admins)
+ * Helper function to get remaining cooldown time for brands (brands/advertisers)
  * @param lastUpdateTimestamp - The last_metrics_updated timestamp
  * @returns Object with canRefresh boolean and remainingMs number
  */
-export function getMetricsRefreshCooldownInfoOwner(lastUpdateTimestamp: string | null | undefined) {
+export function getMetricsRefreshCooldownInfoBrand(lastUpdateTimestamp: string | null | undefined) {
   if (!lastUpdateTimestamp) {
     return { canRefresh: true, remainingMs: 0, remainingMinutes: 0 };
   }
@@ -51,8 +53,29 @@ export function getMetricsRefreshCooldownInfoOwner(lastUpdateTimestamp: string |
   const now = new Date();
   const timeSinceUpdate = now.getTime() - lastUpdate.getTime();
   
-  const canRefresh = timeSinceUpdate >= METRICS_REFRESH_COOLDOWN_MS_OWNER;
-  const remainingMs = Math.max(0, METRICS_REFRESH_COOLDOWN_MS_OWNER - timeSinceUpdate);
+  const canRefresh = timeSinceUpdate >= METRICS_REFRESH_COOLDOWN_MS_BRAND;
+  const remainingMs = Math.max(0, METRICS_REFRESH_COOLDOWN_MS_BRAND - timeSinceUpdate);
+  const remainingMinutes = Math.ceil(remainingMs / 1000 / 60);
+
+  return { canRefresh, remainingMs, remainingMinutes };
+}
+
+/**
+ * Helper function to get remaining cooldown time for admins
+ * @param lastUpdateTimestamp - The last_metrics_updated timestamp
+ * @returns Object with canRefresh boolean and remainingMs number
+ */
+export function getMetricsRefreshCooldownInfoAdmin(lastUpdateTimestamp: string | null | undefined) {
+  if (!lastUpdateTimestamp) {
+    return { canRefresh: true, remainingMs: 0, remainingMinutes: 0 };
+  }
+
+  const lastUpdate = new Date(lastUpdateTimestamp);
+  const now = new Date();
+  const timeSinceUpdate = now.getTime() - lastUpdate.getTime();
+  
+  const canRefresh = timeSinceUpdate >= METRICS_REFRESH_COOLDOWN_MS_ADMIN;
+  const remainingMs = Math.max(0, METRICS_REFRESH_COOLDOWN_MS_ADMIN - timeSinceUpdate);
   const remainingMinutes = Math.ceil(remainingMs / 1000 / 60);
 
   return { canRefresh, remainingMs, remainingMinutes };
@@ -84,10 +107,10 @@ export function formatRemainingTime(remainingMs: number): string {
 
 /**
  * Backward compatibility function - redirects to opportunities cooldown
- * @deprecated Use getMetricsRefreshCooldownInfoOpportunities or getMetricsRefreshCooldownInfoOwner instead
+ * @deprecated Use getMetricsRefreshCooldownInfoOpportunities or getMetricsRefreshCooldownInfoBrand instead
  */
 export function getMetricsRefreshCooldownInfo(lastUpdateTimestamp: string | null | undefined) {
-  console.warn('getMetricsRefreshCooldownInfo is deprecated. Use getMetricsRefreshCooldownInfoOpportunities or getMetricsRefreshCooldownInfoOwner instead.');
+  console.warn('getMetricsRefreshCooldownInfo is deprecated. Use getMetricsRefreshCooldownInfoOpportunities or getMetricsRefreshCooldownInfoBrand instead.');
   return getMetricsRefreshCooldownInfoOpportunities(lastUpdateTimestamp);
 }
 

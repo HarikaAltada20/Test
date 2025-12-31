@@ -46,6 +46,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useEffect, useState, useCallback } from "react";
+import { FaXTwitter } from "react-icons/fa6";
 import { SiInstagram, SiYoutube } from "react-icons/si";
 import dayjs from "dayjs";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -142,10 +143,14 @@ export default function SettingsPage({
   );
   const [instagramAccount, setInstagramAccount] =
     useState<SocialAccount | null>(null);
+  const [twitterAccount, setTwitterAccount] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingYouTube, setIsLoadingYouTube] = useState(false);
   const [isLoadingYouTubeDisconnect, setIsLoadingYouTubeDisconnect] =
     useState(false);
+  const [isLoadingTwitterDisconnect, setIsLoadingTwitterDisconnect] =
+    useState(false);
+  const [isRefreshingTwitter, setIsRefreshingTwitter] = useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [instagramConnected, setInstagramConnected] = useState(false);
   const [mode, setMode] = useState<"light" | "dark">("light");
@@ -166,6 +171,40 @@ export default function SettingsPage({
   const { logout } = useClientAuth();
   const [showProfileNotification, setShowProfileNotification] = useState(true);
   const [creatorProfileData, setCreatorProfileData] = useState<any>(null);
+  const [twitterConnected, setTwitterConnected] = useState(false);
+  const highlightUsernameInBio = (bio: string) => {
+    if (!username) return bio;
+
+    const lowerBio = bio.toLowerCase();
+    const lowerUsername = username.toLowerCase();
+    const index = lowerBio.indexOf(lowerUsername);
+
+    if (index === -1) return bio;
+
+    const before = bio.slice(0, index);
+    const match = bio.slice(index, index + username.length);
+    const after = bio.slice(index + username.length);
+
+    return (
+      <>
+        {before}
+        <span className="text-[#7F39EC] font-semibold">{match}</span>
+        {after}
+      </>
+    );
+  };
+  const isUsernameInBio = (bio?: string | null) => {
+    if (!bio || !username) return false;
+
+    return bio.toLowerCase().includes(username.toLowerCase());
+  };
+  const [isTwitterModalOpen, setIsTwitterModalOpen] = useState(false);
+  const [twitterUsername, setTwitterUsername] = useState("");
+  const [twitterFetchState, setTwitterFetchState] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+  const [twitterProfile, setTwitterProfile] = useState<any | null>(null);
+  const [isSavingTwitter, setIsSavingTwitter] = useState(false);
 
   // Clear password fields when modal closes
   useEffect(() => {
@@ -461,6 +500,55 @@ export default function SettingsPage({
     }
   }, [profile, userType]);
 
+  // Load or refresh connected Twitter (X) account details
+  const loadTwitterAccount = async () => {
+    try {
+      const response = await fetch("/api/twitter-apis/get-profile", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        console.error("Failed to load Twitter account", response.statusText);
+        toast({
+          title: "Error",
+          description: "Failed to refresh Twitter (X) account details.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const result = await response.json();
+      setTwitterAccount(result.twitterAccount || null);
+      setTwitterConnected(!!result.twitterAccount);
+
+      // Only show success toast when user explicitly refreshes
+      if (isRefreshingTwitter) {
+        toast({
+          title: "Twitter (X) updated",
+          description: "Latest Twitter (X) profile details have been fetched.",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to load Twitter account", error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh Twitter (X) account details.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshingTwitter(false);
+    }
+  };
+
+  useEffect(() => {
+    if (userType === "creator") {
+      loadTwitterAccount();
+    }
+  }, [userType]);
+
   useEffect(() => {
     const load = async () => {
       if (!user?.id) return;
@@ -724,6 +812,53 @@ export default function SettingsPage({
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleTwitterDisconnect = async () => {
+    if (!user) return;
+    setIsLoadingTwitterDisconnect(true);
+    try {
+      const timeoutId = setTimeout(() => {
+        setIsLoadingTwitterDisconnect(false);
+        toast({
+          title: "Error",
+          description: "Disconnection timed out. Please try again.",
+          variant: "destructive",
+        });
+      }, API_TIMEOUT_SHORT);
+
+      const response = await fetch("/api/twitter-apis/disconnect", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(
+          result?.error || "Failed to disconnect Twitter account."
+        );
+      }
+
+      setTwitterAccount(null);
+      setTwitterConnected(false);
+      toast({
+        title: "Success",
+        description: "Twitter (X) account disconnected successfully.",
+        variant: "default",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err?.message || "Failed to disconnect Twitter account.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingTwitterDisconnect(false);
     }
   };
 
@@ -1603,6 +1738,109 @@ export default function SettingsPage({
                   </AlertDescription>
                 </Alert>
               )}
+
+              {/* Twitter Connection */}
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <FaXTwitter className="text-2xl text-black" />
+                  <div>
+                    <h3 className="font-medium">Twitter (X)</h3>
+                    {twitterConnected && twitterAccount ? (
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-muted-foreground">
+                          Connected as{" "}
+                          {twitterAccount.name ||
+                            twitterAccount.username ||
+                            "your X account"}
+                          <span className="ml-2 text-green-600 text-xs">
+                            ✓ Active
+                          </span>
+                        </p>
+                        {/* <button
+                          type="button"
+                          onClick={async () => {
+                            setIsRefreshingTwitter(true);
+                            await loadTwitterAccount();
+                          }}
+                          disabled={isRefreshingTwitter}
+                          className="p-1 rounded-full border border-transparent hover:border-gray-300 text-gray-500 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white transition-colors"
+                          aria-label="Refresh Twitter (X) profile details"
+                        >
+                          <RefreshCw
+                            className={cn(
+                              "h-4 w-4",
+                              isRefreshingTwitter && "animate-spin"
+                            )}
+                          />
+                        </button> */}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Not connected
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {/* onClick={handleTwitterConnect} */}
+                {twitterConnected ? (
+                  <Button
+                    className="bg-[#C90808] text-white"
+                    onClick={handleTwitterDisconnect}
+                    disabled={isLoadingTwitterDisconnect}
+                  >
+                    {isLoadingTwitterDisconnect && (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Disconnect
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => {
+                      setIsTwitterModalOpen(true);
+                      setTwitterFetchState("idle");
+                    }}
+                  >
+                    {/* {isLoading && (
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  )} */}
+                    Connect Twitter
+                  </Button>
+                )}
+              </div>
+              {/* Twitter Connection Information - Display for guidance */}
+              {!twitterConnected && (
+                <Alert
+                  variant="default"
+                  className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]"
+                >
+                  <Bell className="h-4 w-4" />
+                  <AlertDescription className="text-sm leading-relaxed">
+                    To participate in Twitter (X) campaigns, you will need to
+                    connect your X account. This will allow
+                    Game Of Creators to view basic public profile and post
+                    information for eligibility and performance insights.
+                    <br />
+                    <br />
+                    <strong className="font-semibold">Important Steps:</strong>
+                    <ul className="list-disc list-inside mt-1 space-y-0.5">
+                      <li>
+                        Make sure your X profile is&nbsp;
+                        <strong className="font-semibold">public</strong> so
+                        your posts and metrics are visible for campaign
+                        evaluation.
+                      </li>
+                      <li>
+                        Add your&nbsp;
+                        <strong className="font-semibold">
+                          Game Of Creators username{" "}
+                          {username ? `(${username})` : ""}
+                        </strong>
+                        &nbsp;in your X bio to verify your profile quickly.
+                      </li>
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
             </CardContent>
           </div>
         </div>
@@ -2031,7 +2269,422 @@ export default function SettingsPage({
             }
             return null;
           })}
+        {/* Connect Twitter Modal */}
+        <Dialog
+          open={isTwitterModalOpen}
+          onOpenChange={(open) => {
+            setIsTwitterModalOpen(open);
+            if (!open) {
+              setTwitterFetchState("idle");
+            }
+          }}
+          isdark={isDark}
+        >
+          <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle
+                className={cn(isDark ? "text-white" : "text-gray-900")}
+              >
+                Connect Twitter (X)
+              </DialogTitle>
+              <DialogDescription
+                className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+              >
+                Enter your Twitter (X) username. Make sure your Game Of Creators
+                username is added in your X bio before fetching.
+              </DialogDescription>
+            </DialogHeader>
 
+            <div className="space-y-4 mt-2">
+              <Alert className="bg-[#D9C0FF26] border-[#7F39EC]">
+                <AlertDescription
+                  className={cn(isDark ? "text-gray-200" : "text-gray-700")}
+                >
+                  Before fetching your X profile, please add your{" "}
+                  <strong className="font-semibold">
+                    Game Of Creators username {username ? `(${username})` : ""}
+                  </strong>
+                  &nbsp;to your X bio.
+                </AlertDescription>
+              </Alert>
+
+              {twitterFetchState !== "success" && (
+                <>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="twitter-username"
+                      className={cn(isDark ? "text-white" : "text-gray-900")}
+                    >
+                      X Username
+                    </Label>
+                    <Input
+                      id="twitter-username"
+                      placeholder="Enter your X username (without @)"
+                      value={twitterUsername}
+                      onChange={(e) => setTwitterUsername(e.target.value)}
+                      className={cn(
+                        isDark
+                          ? "bg-[#06021d] border border-gray-600 text-white"
+                          : "bg-white text-gray-900"
+                      )}
+                    />
+                  </div>
+
+                  <div className="flex flex-col items-stretch gap-2 pt-1">
+                    <Button
+                      type="button"
+                      className="w-full bg-[#6C43D0] text-white"
+                      disabled={
+                        !twitterUsername.trim() ||
+                        twitterFetchState === "loading"
+                      }
+                      onClick={async () => {
+                        if (!twitterUsername.trim()) return;
+                        try {
+                          setTwitterFetchState("loading");
+                          setTwitterProfile(null);
+
+                          const response = await fetch(
+                            "/api/twitter-apis/fetch-profile",
+                            {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                              },
+                              body: JSON.stringify({
+                                screenname: twitterUsername.trim(),
+                              }),
+                            }
+                          );
+
+                          const data = await response.json();
+
+                          if (
+                            !response.ok ||
+                            !data ||
+                            data.status !== "active"
+                          ) {
+                            throw new Error(
+                              data?.error || "Unable to fetch active X profile."
+                            );
+                          }
+
+                          setTwitterProfile(data);
+                          setTwitterFetchState("success");
+                          toast({
+                            title: "Profile fetched",
+                            description:
+                              "We have fetched your public X profile details.",
+                          });
+                        } catch (error: any) {
+                          setTwitterFetchState("error");
+                          toast({
+                            title: "Error",
+                            description:
+                              error?.message ||
+                              "Failed to fetch your X profile. Please try again.",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                    >
+                      {twitterFetchState === "loading" ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          <span>Fetching...</span>
+                        </div>
+                      ) : (
+                        "Fetch"
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {twitterFetchState === "success" && (
+                <div className="mt-2 space-y-3">
+                  <p
+                    className={cn(
+                      "text-xs text-green-600",
+                      isDark && "text-green-400"
+                    )}
+                  >
+                    Profile fetched successfully.
+                  </p>
+                  {twitterProfile && (
+                    <div
+                      className={cn(
+                        "flex items-start gap-3 rounded-lg border p-3",
+                        isDark
+                          ? "border-gray-700 bg-[#06021d]"
+                          : "border-gray-200 bg-white"
+                      )}
+                    >
+                      {twitterProfile.avatar && (
+                        <img
+                          src={twitterProfile.avatar}
+                          alt={twitterProfile.name || twitterProfile.profile}
+                          className="h-10 w-10 rounded-full object-cover"
+                        />
+                      )}
+                      <div className="space-y-1 text-xs">
+                        <div className="font-semibold">
+                          {twitterProfile.name || "Unnamed"}
+                          {twitterProfile.profile && (
+                            <span className="ml-1 text-gray-500">
+                              @{twitterProfile.profile}
+                            </span>
+                          )}
+                        </div>
+                        {twitterProfile.desc && (
+                          <p className="text-[11px] text-gray-600 dark:text-gray-300">
+                            {highlightUsernameInBio(twitterProfile.desc)}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-3 mt-1">
+                          <span className="text-[11px] text-gray-500">
+                            Following:{" "}
+                            <strong>{twitterProfile.friends || 0}</strong>
+                          </span>
+                          <span className="text-[11px] text-gray-500">
+                            Followers:{" "}
+                            <strong>{twitterProfile.sub_count || 0}</strong>
+                          </span>
+                          <span className="text-[11px] text-gray-500">
+                            Tweets:{" "}
+                            <strong>
+                              {twitterProfile.statuses_count || 0}
+                            </strong>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {twitterProfile && (
+                    <div className="flex flex-col items-end mt-3 space-y-2">
+                      <div className="flex flex-row items-center gap-2">
+                        {!isUsernameInBio(twitterProfile.desc) && (
+                          <Button
+                            type="button"
+                            className="bg-[#4A00BE] text-white"
+                            onClick={async () => {
+                              if (!twitterUsername.trim()) return;
+                              try {
+                                setTwitterFetchState("loading");
+                                setTwitterProfile(null);
+
+                                const response = await fetch(
+                                  "/api/twitter-apis/fetch-profile",
+                                  {
+                                    method: "POST",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                    },
+                                    body: JSON.stringify({
+                                      screenname: twitterUsername.trim(),
+                                    }),
+                                  }
+                                );
+
+                                const data = await response.json();
+
+                                if (
+                                  !response.ok ||
+                                  !data ||
+                                  data.status !== "active"
+                                ) {
+                                  throw new Error(
+                                    data?.error ||
+                                      "Unable to fetch active X profile."
+                                  );
+                                }
+
+                                setTwitterProfile(data);
+                                setTwitterFetchState("success");
+                                toast({
+                                  title: "Profile fetched",
+                                  description:
+                                    "We have fetched your public X profile details.",
+                                });
+                              } catch (error: any) {
+                                console.error("Error refreshing X profile", error);
+                                setTwitterFetchState("error");
+                                toast({
+                                  title: "Error",
+                                  description:
+                                    error?.message ||
+                                    "Unable to refresh your X profile. Please try again.",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                          >
+                            Refresh profile
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          className="bg-[#4A00BE] text-white"
+                          disabled={
+                            !isUsernameInBio(twitterProfile.desc) ||
+                            isSavingTwitter
+                          }
+                          onClick={async () => {
+                            if (!isUsernameInBio(twitterProfile.desc)) return;
+                            try {
+                              setIsSavingTwitter(true);
+                              const response = await fetch(
+                                "/api/twitter-apis/save-profile",
+                                {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify({
+                                    twitterProfile,
+                                  }),
+                                }
+                              );
+
+                              const result = await response.json();
+
+                              if (!response.ok || !result?.success) {
+                                throw new Error(
+                                  result?.error ||
+                                    "Failed to save Twitter profile. Please try again."
+                                );
+                              }
+
+                              toast({
+                                title: "Saved & Connected",
+                                description:
+                                  "Twitter (X) profile has been linked. You can now use it for campaigns.",
+                              });
+
+                              // Refresh connected state and close dialog so UI updates in real time
+                              try {
+                                const checkResponse = await fetch(
+                                  "/api/twitter-apis/get-profile",
+                                  {
+                                    method: "GET",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                    },
+                                  }
+                                );
+
+                                if (checkResponse.ok) {
+                                  const checkResult = await checkResponse.json();
+                                  setTwitterAccount(
+                                    checkResult.twitterAccount || null
+                                  );
+                                  setTwitterConnected(
+                                    !!checkResult.twitterAccount
+                                  );
+                                }
+                              } catch (e) {
+                                console.error(
+                                  "Failed to refresh Twitter account after save",
+                                  e
+                                );
+                              }
+
+                              setIsTwitterModalOpen(false);
+                            } catch (error: any) {
+                              toast({
+                                title: "Error",
+                                description:
+                                  error?.message ||
+                                  "Failed to save Twitter profile. Please try again.",
+                                variant: "destructive",
+                              });
+                            } finally {
+                              setIsSavingTwitter(false);
+                            }
+                          }}
+                        >
+                          {isSavingTwitter ? "Saving..." : "Save & Connect"}
+                        </Button>
+                      </div>
+                      {!isUsernameInBio(twitterProfile.desc) && (
+                        <p className="text-[11px] text-red-600 text-right dark:text-red-400">
+                          You have not added your Game Of Creators username in
+                          your X bio yet. Until then, you cannot connect
+                          Twitter.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              {twitterFetchState === "error" && (
+                <div className="mt-2 space-y-2">
+                  <p
+                    className={cn(
+                      "text-xs",
+                      isDark ? "text-red-400" : "text-red-600"
+                    )}
+                  >
+                    Something went wrong while fetching your profile. If this
+                    continues, please try again after some time.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-7 px-3 text-[11px]"
+                    onClick={async () => {
+                      if (!twitterUsername.trim()) return;
+                      try {
+                        setTwitterFetchState("loading");
+                        setTwitterProfile(null);
+
+                        const response = await fetch(
+                          "/api/twitter-apis/fetch-profile",
+                          {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                              screenname: twitterUsername.trim(),
+                            }),
+                          }
+                        );
+
+                        const data = await response.json();
+
+                        if (!response.ok || !data || data.status !== "active") {
+                          throw new Error(
+                            data?.error || "Unable to fetch active X profile."
+                          );
+                        }
+
+                        setTwitterProfile(data);
+                        setTwitterFetchState("success");
+                        toast({
+                          title: "Profile fetched",
+                          description:
+                            "We have fetched your public X profile details.",
+                        });
+                      } catch (error: any) {
+                        setTwitterFetchState("error");
+                        toast({
+                          title: "Error",
+                          description:
+                            error?.message ||
+                            "Failed to fetch your X profile. Please try again.",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    Try again
+                  </Button>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
         {/* Change Password Modal */}
         <Dialog
           open={isPasswordModalOpen}

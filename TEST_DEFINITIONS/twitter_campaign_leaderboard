@@ -1,0 +1,19 @@
+create table public.twitter_campaign_leaderboard (
+  contest_id uuid not null,
+  creator_id uuid not null,
+  total_points integer not null default 0,
+  total_eligible_tweets integer not null default 0,
+  total_likes integer not null default 0,
+  total_replies integer not null default 0,
+  total_retweets integer not null default 0,
+  total_quote_reposts integer not null default 0,
+  total_impressions bigint not null default 0,
+  current_rank integer not null default 0,
+  last_refreshed_at timestamp with time zone not null default now(),
+  next_refresh_available_at timestamp with time zone null,
+  constraint twitter_campaign_leaderboard_pkey primary key (contest_id, creator_id)
+) TABLESPACE pg_default;
+
+create index IF not exists twitter_campaign_leaderboard_contest_rank_idx on public.twitter_campaign_leaderboard using btree (contest_id, total_points desc) TABLESPACE pg_default;
+
+create index IF not exists twitter_campaign_leaderboard_contest_rank_current_idx on public.twitter_campaign_leaderboard using btree (contest_id, current_rank) TABLESPACE pg_default;

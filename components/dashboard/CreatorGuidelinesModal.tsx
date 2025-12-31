@@ -51,9 +51,9 @@ const steps = [
     cards: [
       {
         icon: <Clock className="w-6 h-6" />,
-        title: "2 Hours Rule",
+        title: "2 Days Rule",
         description:
-          "All content must be submitted to a contest within 2 hours of being published on YouTube or Instagram. Submissions made after this window will not be eligible.",
+          "All content must be submitted to a contest within 2 Days of being published on YouTube or Instagram. Submissions made after this window will not be eligible.",
       },
       {
         icon: <Ban className="w-6 h-6" />,
@@ -164,11 +164,10 @@ export default function CreatorGuidelinesModal({
                 <div className="flex items-center justify-center gap-2 max-w-md mx-auto">
                   {/* Circle 1 */}
                   <div
-                    className={`w-12 h-12 text-md rounded-full flex items-center justify-center font-semibold transition-all duration-300 ${
-                      step >= 1
+                    className={`w-12 h-12 text-md rounded-full flex items-center justify-center font-semibold transition-all duration-300 ${step >= 1
                         ? "bg-[#7F39EC] text-white"
                         : "bg-muted text-muted-foreground"
-                    }`}
+                      }`}
                   >
                     {step > 1 ? <CheckCircle className="w-5 h-5" /> : "1"}
                   </div>
@@ -183,14 +182,13 @@ export default function CreatorGuidelinesModal({
 
                   {/* Circle 2 */}
                   <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center font-semibold text-md transition-all duration-300 ${
-                      step >= 2
+                    className={`w-12 h-12 rounded-full flex items-center justify-center font-semibold text-md transition-all duration-300 ${step >= 2
                         ? "bg-[#7F39EC] text-white"
                         : cn(
-                            "bg-muted",
-                            isDark ? "text-gray-300" : "text-gray-800"
-                          )
-                    }`}
+                          "bg-muted",
+                          isDark ? "text-gray-300" : "text-gray-800"
+                        )
+                      }`}
                   >
                     {step >= 2 ? <CheckCircle className="w-5 h-5" /> : "2"}
                   </div>
@@ -224,9 +222,8 @@ export default function CreatorGuidelinesModal({
               </div>
             )}
             <div
-              className={`w-full flex-1 min-h-0 flex flex-col items-center ${
-                isIntro ? "pt-8 pb-4" : ""
-              }`}
+              className={`w-full flex-1 min-h-0 flex flex-col items-center ${isIntro ? "pt-8 pb-4" : ""
+                }`}
               style={{ height: isIntro ? "auto" : "100%", maxHeight: "100%" }}
             >
               {isIntro ? (
@@ -303,57 +300,56 @@ export default function CreatorGuidelinesModal({
                     <div className="flex flex-row gap-3 items-stretch flex-wrap justify-center">
                       {Array.isArray(steps[step].cards)
                         ? steps[step].cards.map((card, idx) => {
-                            const cardCount = steps[step].cards?.length || 0;
-                            const isThreeCards = cardCount === 3;
-                            return (
+                          const cardCount = steps[step].cards?.length || 0;
+                          const isThreeCards = cardCount === 3;
+                          return (
+                            <div
+                              key={idx}
+                              className={cn(
+                                "bg-white rounded-2xl p-5 shadow-lg flex-1",
+                                isDark ? "bg-[#170337]" : "bg-white"
+                              )}
+                            >
                               <div
-                                key={idx}
-                                className={cn(
-                                  "bg-white rounded-2xl p-5 shadow-lg flex-1",
-                                  isDark ? "bg-[#170337]" : "bg-white"
-                                )}
-                              >
-                                <div
-                                  className={`flex flex-col items-center text-center ${
-                                    isThreeCards ? "gap-3" : "gap-4"
+                                className={`flex flex-col items-center text-center ${isThreeCards ? "gap-3" : "gap-4"
                                   }`}
-                                >
-                                  <div className="w-12 h-12 bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
-                                    <span className="text-[#4A00BE] font-bold">
-                                      {card.icon}
-                                    </span>
-                                  </div>
-                                  {/* <div className="flex-shrink-0">
+                              >
+                                <div className="w-12 h-12 bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
+                                  <span className="text-[#4A00BE] font-bold">
+                                    {card.icon}
+                                  </span>
+                                </div>
+                                {/* <div className="flex-shrink-0">
                                     {card.icon}
                                   </div> */}
-                                  <div>
-                                    <h3
-                                      className={cn(
-                                        "font-bold mb-2",
-                                        isThreeCards ? "text-base" : "text-lg",
-                                        isDark ? "text-white" : "text-gray-800"
-                                      )}
-                                    >
-                                      {card.title}
-                                    </h3>
-                                    <p
-                                      className={cn(
-                                        "leading-relaxed",
-                                        isThreeCards
-                                          ? "text-[14px]"
-                                          : "text-md",
-                                        isDark
-                                          ? "text-gray-300"
-                                          : "text-gray-700"
-                                      )}
-                                    >
-                                      {card.description}
-                                    </p>
-                                  </div>
+                                <div>
+                                  <h3
+                                    className={cn(
+                                      "font-bold mb-2",
+                                      isThreeCards ? "text-base" : "text-lg",
+                                      isDark ? "text-white" : "text-gray-800"
+                                    )}
+                                  >
+                                    {card.title}
+                                  </h3>
+                                  <p
+                                    className={cn(
+                                      "leading-relaxed",
+                                      isThreeCards
+                                        ? "text-[14px]"
+                                        : "text-md",
+                                      isDark
+                                        ? "text-gray-300"
+                                        : "text-gray-700"
+                                    )}
+                                  >
+                                    {card.description}
+                                  </p>
                                 </div>
                               </div>
-                            );
-                          })
+                            </div>
+                          );
+                        })
                         : null}
                     </div>
                   </div>

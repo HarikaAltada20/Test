@@ -86,6 +86,26 @@ type Contest = {
       max_views?: number;
       flat_fee_bonus?: number;
     };
+    twitter_campaign?: {
+      campaign_type?: "raid" | "awareness";
+      keywords?: string[];
+      mentions?: string[];
+      keywords_requirement_mode?: "all" | "any" | "";
+      mentions_requirement_mode?: "all" | "any" | "";
+      allowed_tweet_types?: string[];
+      max_participants?: number;
+      raid_target?: {
+        link?: string | null;
+        description?: string | null;
+        metrics?: {
+          likes?: number | string | null;
+          comments?: number | string | null;
+          retweets?: number | string | null;
+          quote_reposts?: number | string | null;
+        };
+        keywords_requirement_mode?: string;
+      };
+    };
   } | null;
   thumbnail_url: string | null;
   advertiser_name?: string;
@@ -96,6 +116,11 @@ type Contest = {
   max_submissions_per_creator?: number;
   content_type?: string;
   bonus_details?: any;
+  // Text/image vs video contest format (for display filtering)
+  contest_format?: string | null;
+  // Twitter participants data (should be populated from twitter_campaign_metrics)
+  twitter_participants_count?: number | null;
+  twitter_max_participants?: number | null;
 };
 
 interface ContestListClientProps {
@@ -200,6 +225,10 @@ export function ContestListClient({
   const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [contestStatusFilter, setContestStatusFilter] = useState<string>("all"); // New contest status filter
   const [contestTypeFilter, setContestTypeFilter] = useState<string>("all"); // New contest type filter
+  // New: contest format filter (all / text-image / video)
+  const [contestFormatFilter, setContestFormatFilter] = useState<
+    "all" | "text_image" | "video"
+  >("video");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [filteredAndSortedContests, setFilteredAndSortedContests] = useState<
     Contest[]
@@ -381,7 +410,9 @@ export function ContestListClient({
 
   // useEffect for filtering and sorting - copied from opportunities
   useEffect(() => {
-    let contestsToDisplay = [...initialContests];
+    const baseContests =
+      contestsByStatus[selectedTab as keyof typeof contestsByStatus] || [];
+    let contestsToDisplay = [...baseContests];
 
     // Search Filter - filter by title (case-insensitive)
     if (searchQuery.trim() !== "") {
@@ -427,6 +458,25 @@ export function ContestListClient({
       contestsToDisplay = contestsToDisplay.filter(
         (contest) => contest.contest_type === contestTypeFilter
       );
+    }
+
+    // Apply contest format filter (text/image vs video)
+    if (contestFormatFilter !== "all") {
+      contestsToDisplay = contestsToDisplay.filter((contest) => {
+        const fmt = contest.contest_format?.toLowerCase() || "";
+        if (contestFormatFilter === "text_image") {
+          // Treat missing/unknown format as text/image by default
+          return (
+            fmt === "text_image" ||
+            fmt === "text-image" ||
+            fmt === "text" ||
+            fmt === "image" ||
+            fmt === ""
+          );
+        }
+        // video filter
+        return fmt === "video";
+      });
     }
 
     // Sorting - exact copy from opportunities
@@ -497,12 +547,12 @@ export function ContestListClient({
         case "cpm_rate_asc":
           const rateA =
             a.contest_type === "cpm" &&
-            a.contest_based_details?.cpm_contest?.cpm_rate_usd
+              a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           const rateB =
             b.contest_type === "cpm" &&
-            b.contest_based_details?.cpm_contest?.cpm_rate_usd
+              b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           if (rateA === -1 && rateB === -1) return 0;
@@ -526,10 +576,12 @@ export function ContestListClient({
 
     setFilteredAndSortedContests(contestsToDisplay);
   }, [
-    initialContests,
+    contestsByStatus,
+    selectedTab,
     contestStatusFilter,
     platformFilter,
     contestTypeFilter,
+    contestFormatFilter,
     sortOption,
     searchQuery,
   ]);
@@ -537,14 +589,14 @@ export function ContestListClient({
   const getModerationStatusBadge = (moderationStatus: string) => {
     const config =
       moderationStatusConfig[
-        moderationStatus as keyof typeof moderationStatusConfig
+      moderationStatus as keyof typeof moderationStatusConfig
       ];
     if (!config) return null;
 
     const Icon = config.icon;
     return (
       <Badge
-        className={`${config.color} text-white px=3 py-1 text-sm bg-[#7F39EC] text-white border-0`}
+        className={`${config.color} text-white px=3 py-1 text-sm bg-[#7F39EC] border-0`}
       >
         {/* <Icon className="w-3 h-3 mr-1" /> */}
         {config.label}
@@ -681,59 +733,107 @@ export function ContestListClient({
             </CardTitle>
             {/* New Features Indicators */}
             <div className="flex flex-wrap items-center gap-2 mt-3">
-              {contest.multiple_submissions_enabled && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[12px]",
-                    isDark
-                      ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                      : "bg-purple-50 text-purple-700 border-purple-200"
-                  )}
-                >
-                  <CheckCheck className="h-3 w-3 mr-1" />
-                  {(contest.max_submissions_per_creator ?? 1) > 1
-                    ? `${contest.max_submissions_per_creator} Submissions`
-                    : "Multiple Entries"}
-                </Badge>
-              )}
+              {/* Show campaign type badge (RAID/AWARENESS) for Twitter text_image contests */}
+              {(() => {
+                const isTwitterTextImage =
+                  (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                  contest.contest_format === "text_image";
+
+                if (isTwitterTextImage) {
+                  const campaignType = contest.contest_based_details?.twitter_campaign?.campaign_type;
+                  if (campaignType === "raid" || campaignType === "awareness") {
+                    return (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[12px]",
+                          isDark
+                            ? campaignType === "raid"
+                              ? "bg-red-900/30 text-red-300 border-red-700/50"
+                              : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
+                            : campaignType === "raid"
+                              ? "bg-red-50 text-red-700 border-red-200"
+                              : "bg-cyan-50 text-cyan-700 border-cyan-200"
+                        )}
+                      >
+                        {campaignType.toUpperCase()}
+                      </Badge>
+                    );
+                  }
+                  return null;
+                }
+
+                if (contest.multiple_submissions_enabled) {
+                  return (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[12px]",
+                        isDark
+                          ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                          : "bg-purple-50 text-purple-700 border-purple-200"
+                      )}
+                    >
+                      <CheckCheck className="h-3 w-3 mr-1" />
+                      {(contest.max_submissions_per_creator ?? 1) > 1
+                        ? `${contest.max_submissions_per_creator} Submissions`
+                        : "Multiple Entries"}
+                    </Badge>
+                  );
+                }
+                return null;
+              })()}
               {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
                 contest.contest_based_details?.leaderboard_contest
                   ?.flat_fee_bonus) && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[12px]",
-                    isDark
-                      ? "bg-green-900/30 text-green-300 border-green-700/50"
-                      : "bg-green-50 text-green-700 border-green-200"
-                  )}
-                >
-                  <Gift className="h-3 w-3 mr-1" />
-                  {formatMoney(
-                    contest.contest_based_details?.cpm_contest
-                      ?.flat_fee_bonus ||
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[12px]",
+                      isDark
+                        ? "bg-green-900/30 text-green-300 border-green-700/50"
+                        : "bg-green-50 text-green-700 border-green-200"
+                    )}
+                  >
+                    <Gift className="h-3 w-3 mr-1" />
+                    {formatMoney(
+                      contest.contest_based_details?.cpm_contest
+                        ?.flat_fee_bonus ||
                       contest.contest_based_details?.leaderboard_contest
                         ?.flat_fee_bonus ||
                       0
-                  )}
-                  /submission
-                </Badge>
-              )}
-              {contest.content_type && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[12px]",
-                    isDark
-                      ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
-                      : "bg-blue-50 text-blue-700 border-blue-200"
-                  )}
-                >
-                  <Tag className="h-3 w-3 mr-1" />
-                  {contest.content_type.toUpperCase()}
-                </Badge>
-              )}
+                    )}
+                    /submission
+                  </Badge>
+                )}
+              {/* Don't show content_type badge for Twitter text_image contests (we show campaign_type badge instead) */}
+              {(() => {
+                const isTwitterTextImage =
+                  (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                  contest.contest_format === "text_image";
+
+                if (isTwitterTextImage) {
+                  return null;
+                }
+
+                if (contest.content_type) {
+                  return (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[12px]",
+                        isDark
+                          ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
+                          : "bg-blue-50 text-blue-700 border-blue-200"
+                      )}
+                    >
+                      <Tag className="h-3 w-3 mr-1" />
+                      {contest.content_type.toUpperCase()}
+                    </Badge>
+                  );
+                }
+                return null;
+              })()}
               {contest.bonus_details?.description_html && (
                 <Badge
                   variant="outline"
@@ -801,18 +901,50 @@ export function ContestListClient({
                   </span>
                 </div>
               )}
-              {contest.live_submission_count !== null &&
-                contest.live_submission_count !== undefined && (
-                  <div className="flex items-center">
-                    <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span>
-                      Submissions:{" "}
-                      <span className="font-medium ">
-                        {contest.live_submission_count}
+              {/* For Twitter text_image contests, show participants instead of submissions */}
+              {(() => {
+                const isTwitterTextImage =
+                  (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                  contest.contest_format === "text_image";
+
+                if (isTwitterTextImage) {
+                  // For Twitter contests, show participants count if available
+                  const participantsCount = contest.twitter_participants_count ?? 0;
+                  const maxParticipants = contest.twitter_max_participants;
+                  const displayValue = maxParticipants
+                    ? `${participantsCount} / ${maxParticipants}`
+                    : participantsCount;
+
+                  return (
+                    <div className="flex items-center">
+                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span>
+                        Participants:{" "}
+                        <span className="font-medium ">
+                          {displayValue}
+                        </span>
                       </span>
-                    </span>
-                  </div>
-                )}
+                    </div>
+                  );
+                }
+
+                // For non-Twitter contests, show submissions count
+                if (contest.live_submission_count !== null &&
+                  contest.live_submission_count !== undefined) {
+                  return (
+                    <div className="flex items-center">
+                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span>
+                        Submissions:{" "}
+                        <span className="font-medium ">
+                          {contest.live_submission_count}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               <div className="flex items-center">
                 <Info className="h-4 w-4 mr-2 flex-shrink-0" />
                 <span>
@@ -821,17 +953,17 @@ export function ContestListClient({
                     {contest.contest_type === "cpm"
                       ? "CPM Based"
                       : contest.contest_type === "leaderboard"
-                      ? "Leaderboard"
-                      : contest.contest_type
-                      ? contest.contest_type.charAt(0).toUpperCase() +
-                        contest.contest_type.slice(1)
-                      : "N/A"}
+                        ? "Leaderboard"
+                        : contest.contest_type
+                          ? contest.contest_type.charAt(0).toUpperCase() +
+                          contest.contest_type.slice(1)
+                          : "N/A"}
                   </span>
                 </span>
               </div>
               {contest.contest_type === "cpm" &&
                 contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
-                  null && (
+                null && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                     <span>
@@ -848,7 +980,7 @@ export function ContestListClient({
                 )}
               {contest.contest_type === "cpm" &&
                 contest.contest_based_details?.cpm_contest?.total_budget !=
-                  null &&
+                null &&
                 contest.contest_based_details.cpm_contest.total_budget > 0 && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
@@ -866,7 +998,7 @@ export function ContestListClient({
                 contest.contest_based_details?.leaderboard_contest
                   ?.total_prize != null &&
                 contest.contest_based_details.leaderboard_contest.total_prize >
-                  0 && (
+                0 && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                     <span>
@@ -884,7 +1016,7 @@ export function ContestListClient({
                 contest.contest_based_details?.leaderboard_contest
                   ?.total_budget != null &&
                 contest.contest_based_details.leaderboard_contest.total_budget >
-                  0 && (
+                0 && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
                     <span>
@@ -903,7 +1035,7 @@ export function ContestListClient({
             {/* Budget Spent Progress Bar for CPM contests */}
             {contest.contest_type === "cpm" &&
               contest.contest_based_details?.cpm_contest?.total_budget !=
-                null &&
+              null &&
               contest.contest_based_details.cpm_contest.total_budget > 0 &&
               (() => {
                 const totalBudget =
@@ -959,7 +1091,7 @@ export function ContestListClient({
               contest.contest_based_details?.leaderboard_contest
                 ?.total_budget != null &&
               contest.contest_based_details.leaderboard_contest.total_budget >
-                0 &&
+              0 &&
               (() => {
                 const totalBudget =
                   contest.contest_based_details.leaderboard_contest
@@ -1025,8 +1157,8 @@ export function ContestListClient({
                   : `/dashboard/contests/${contest.id}`;
                 router.push(href);
               }}
-              // size="sm"
-              // variant="outline"
+            // size="sm"
+            // variant="outline"
             >
               <Eye className="h-4 w-4 mr-1" />
               View Details
@@ -1165,22 +1297,23 @@ export function ContestListClient({
                   <span>
                     {contest.contest_type === "leaderboard"
                       ? `Prize: ${formatMoney(
-                          contest.contest_based_details.leaderboard_contest
-                            ?.total_prize || 0
-                        )}`
+                        contest.contest_based_details.leaderboard_contest
+                          ?.total_prize || 0
+                      )}`
                       : `Budget: ${formatMoney(
-                          contest.contest_based_details.cpm_contest
-                            ?.total_budget || 0
-                        )}`}
+                        contest.contest_based_details.cpm_contest
+                          ?.total_budget || 0
+                      )}`}
                   </span>
                 </div>
               )}
-              {contest.rejection_reason && (
-                <div className="flex items-start gap-1 text-red-600 dark:text-red-400">
-                  <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                  <span className="text-xs">{contest.rejection_reason}</span>
-                </div>
-              )}
+              {contest.moderation_status === "rejected" &&
+                contest.rejection_reason && (
+                  <div className="flex items-start gap-1 text-red-600 dark:text-red-400">
+                    <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                    <span className="text-xs">{contest.rejection_reason}</span>
+                  </div>
+                )}
             </div>
 
             <div className="flex gap-2 items-center">
@@ -1313,25 +1446,25 @@ export function ContestListClient({
           {(contest.status === "active" ||
             contest.status === "upcoming" ||
             contest.status === "ended") && (
-            <div className="absolute top-3 right-3 z-10">
-              <Badge
-                className={cn(
-                  "capitalize text-sm px-3 py-1 font-medium border",
-                  contest.status === "active" && "bg-[#7F39EC] text-white",
-                  contest.status === "upcoming" && "bg-[#7F39EC] text-white",
-                  contest.status === "ended" && "bg-[#7F39EC] text-white"
-                )}
-              >
-                {contest.status === "active"
-                  ? "Live"
-                  : contest.status === "upcoming"
-                  ? "Upcoming"
-                  : contest.status === "ended"
-                  ? "Ended"
-                  : contest.status || "Unknown"}
-              </Badge>
-            </div>
-          )}
+              <div className="absolute top-3 right-3 z-10">
+                <Badge
+                  className={cn(
+                    "capitalize text-sm px-3 py-1 font-medium border",
+                    contest.status === "active" && "bg-[#7F39EC] text-white",
+                    contest.status === "upcoming" && "bg-[#7F39EC] text-white",
+                    contest.status === "ended" && "bg-[#7F39EC] text-white"
+                  )}
+                >
+                  {contest.status === "active"
+                    ? "Live"
+                    : contest.status === "upcoming"
+                      ? "Upcoming"
+                      : contest.status === "ended"
+                        ? "Ended"
+                        : contest.status || "Unknown"}
+                </Badge>
+              </div>
+            )}
           {/* Thumbnail */}
           <div className="w-full sm:w-64 md:w-80 lg:w-72 xl:w-96 sm:h-[200px] md:h-[220px] lg:h-[250px] min-h-[12rem] flex-shrink-0 flex items-center justify-center overflow-hidden relative">
             {contest.thumbnail_url ? (
@@ -1359,62 +1492,108 @@ export function ContestListClient({
               </CardTitle>
               {/* Badges */}
               <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                {/* Submissions Badge */}
-                {contest.multiple_submissions_enabled && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-sm px-3 py-1 font-medium",
-                      isDark
-                        ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                        : "bg-purple-50 text-purple-700 border-purple-200"
-                    )}
-                  >
-                    <CheckCheck className="h-3 w-3 mr-1" />
-                    {(contest.max_submissions_per_creator ?? 1) > 1
-                      ? `${contest.max_submissions_per_creator} Submissions`
-                      : "Multiple Entries"}
-                  </Badge>
-                )}
-                {/* Content Type Badge (UGC, Clipping, etc.) */}
-                {contest.content_type && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-sm px-3 py-1 font-medium",
-                      isDark
-                        ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
-                        : "bg-blue-50 text-blue-700 border-blue-200"
-                    )}
-                  >
-                    <Tag className="h-3 w-3 mr-1" />
-                    {contest.content_type.toUpperCase()}
-                  </Badge>
-                )}
+                {/* Show campaign type badge (RAID/AWARENESS) for Twitter text_image contests */}
+                {(() => {
+                  const isTwitterTextImage =
+                    (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                    contest.contest_format === "text_image";
+
+                  if (isTwitterTextImage) {
+                    const campaignType = contest.contest_based_details?.twitter_campaign?.campaign_type;
+                    if (campaignType === "raid" || campaignType === "awareness") {
+                      return (
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-sm px-3 py-1 font-medium",
+                            isDark
+                              ? campaignType === "raid"
+                                ? "bg-red-900/30 text-red-300 border-red-700/50"
+                                : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
+                              : campaignType === "raid"
+                                ? "bg-red-50 text-red-700 border-red-200"
+                                : "bg-cyan-50 text-cyan-700 border-cyan-200"
+                          )}
+                        >
+                          {campaignType.toUpperCase()}
+                        </Badge>
+                      );
+                    }
+                    return null;
+                  }
+
+                  if (contest.multiple_submissions_enabled) {
+                    return (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-sm px-3 py-1 font-medium",
+                          isDark
+                            ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                            : "bg-purple-50 text-purple-700 border-purple-200"
+                        )}
+                      >
+                        <CheckCheck className="h-3 w-3 mr-1" />
+                        {(contest.max_submissions_per_creator ?? 1) > 1
+                          ? `${contest.max_submissions_per_creator} Submissions`
+                          : "Multiple Entries"}
+                      </Badge>
+                    );
+                  }
+                  return null;
+                })()}
+                {/* Content Type Badge (UGC, Clipping, etc.) - Don't show for Twitter text_image contests (we show campaign_type badge instead) */}
+                {(() => {
+                  const isTwitterTextImage =
+                    (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                    contest.contest_format === "text_image";
+
+                  if (isTwitterTextImage) {
+                    return null;
+                  }
+
+                  if (contest.content_type) {
+                    return (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-sm px-3 py-1 font-medium",
+                          isDark
+                            ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
+                            : "bg-blue-50 text-blue-700 border-blue-200"
+                        )}
+                      >
+                        <Tag className="h-3 w-3 mr-1" />
+                        {contest.content_type.toUpperCase()}
+                      </Badge>
+                    );
+                  }
+                  return null;
+                })()}
                 {/* Flat Fee Bonus Badge */}
                 {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
                   contest.contest_based_details?.leaderboard_contest
                     ?.flat_fee_bonus) && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-sm px-3 py-1 font-medium",
-                      isDark
-                        ? "bg-green-900/30 text-green-300 border-green-700/50"
-                        : "bg-green-50 text-green-700 border-green-200"
-                    )}
-                  >
-                    <Gift className="h-3 w-3 mr-1" />
-                    {formatMoney(
-                      contest.contest_based_details?.cpm_contest
-                        ?.flat_fee_bonus ||
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-sm px-3 py-1 font-medium",
+                        isDark
+                          ? "bg-green-900/30 text-green-300 border-green-700/50"
+                          : "bg-green-50 text-green-700 border-green-200"
+                      )}
+                    >
+                      <Gift className="h-3 w-3 mr-1" />
+                      {formatMoney(
+                        contest.contest_based_details?.cpm_contest
+                          ?.flat_fee_bonus ||
                         contest.contest_based_details?.leaderboard_contest
                           ?.flat_fee_bonus ||
                         0
-                    )}
-                    /submission
-                  </Badge>
-                )}
+                      )}
+                      /submission
+                    </Badge>
+                  )}
                 {/* Bonus Available Badge */}
                 {contest.bonus_details?.description_html && (
                   <Badge
@@ -1492,23 +1671,60 @@ export function ContestListClient({
                     </span>
                   </div>
                 )}
-                {contest.live_submission_count !== null &&
-                  contest.live_submission_count !== undefined && (
-                    <div className="flex items-center">
-                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span
-                        style={{
-                          color: isDark ? "white" : "#475569",
-                          transition: "none",
-                        }}
-                      >
-                        Submissions:{" "}
-                        <span className="font-medium">
-                          {contest.live_submission_count}
+                {/* For Twitter text_image contests, show participants instead of submissions */}
+                {(() => {
+                  const isTwitterTextImage =
+                    (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                    contest.contest_format === "text_image";
+
+                  if (isTwitterTextImage) {
+                    // For Twitter contests, show participants count if available
+                    const participantsCount = contest.twitter_participants_count ?? 0;
+                    const maxParticipants = contest.twitter_max_participants;
+                    const displayValue = maxParticipants
+                      ? `${participantsCount} / ${maxParticipants}`
+                      : participantsCount;
+
+                    return (
+                      <div className="flex items-center">
+                        <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                        <span
+                          style={{
+                            color: isDark ? "white" : "#475569",
+                            transition: "none",
+                          }}
+                        >
+                          Participants:{" "}
+                          <span className="font-medium">
+                            {displayValue}
+                          </span>
                         </span>
-                      </span>
-                    </div>
-                  )}
+                      </div>
+                    );
+                  }
+
+                  // For non-Twitter contests, show submissions count
+                  if (contest.live_submission_count !== null &&
+                    contest.live_submission_count !== undefined) {
+                    return (
+                      <div className="flex items-center">
+                        <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                        <span
+                          style={{
+                            color: isDark ? "white" : "#475569",
+                            transition: "none",
+                          }}
+                        >
+                          Submissions:{" "}
+                          <span className="font-medium">
+                            {contest.live_submission_count}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
                 <div className="flex items-center">
                   <Info className="h-4 w-4 mr-2 flex-shrink-0" />
                   <span
@@ -1522,17 +1738,17 @@ export function ContestListClient({
                       {contest.contest_type === "cpm"
                         ? "CPM Based"
                         : contest.contest_type === "leaderboard"
-                        ? "Leaderboard"
-                        : contest.contest_type
-                        ? contest.contest_type.charAt(0).toUpperCase() +
-                          contest.contest_type.slice(1)
-                        : "N/A"}
+                          ? "Leaderboard"
+                          : contest.contest_type
+                            ? contest.contest_type.charAt(0).toUpperCase() +
+                            contest.contest_type.slice(1)
+                            : "N/A"}
                     </span>
                   </span>
                 </div>
                 {contest.contest_type === "cpm" &&
                   contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
-                    null && (
+                  null && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span
@@ -1554,9 +1770,9 @@ export function ContestListClient({
                   )}
                 {contest.contest_type === "cpm" &&
                   contest.contest_based_details?.cpm_contest?.total_budget !=
-                    null &&
+                  null &&
                   contest.contest_based_details.cpm_contest.total_budget >
-                    0 && (
+                  0 && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span
@@ -1603,7 +1819,7 @@ export function ContestListClient({
               {/* Budget Spent Progress Bar for CPM contests */}
               {contest.contest_type === "cpm" &&
                 contest.contest_based_details?.cpm_contest?.total_budget !=
-                  null &&
+                null &&
                 contest.contest_based_details.cpm_contest.total_budget > 0 &&
                 (() => {
                   const totalBudget =
@@ -1658,7 +1874,7 @@ export function ContestListClient({
                 contest.contest_based_details?.leaderboard_contest
                   ?.total_budget != null &&
                 contest.contest_based_details.leaderboard_contest.total_budget >
-                  0 &&
+                0 &&
                 (() => {
                   const totalBudget =
                     contest.contest_based_details.leaderboard_contest
@@ -1863,13 +2079,13 @@ export function ContestListClient({
                 <span>
                   {contest.contest_type === "leaderboard"
                     ? `Prize: ${formatMoney(
-                        contest.contest_based_details.leaderboard_contest
-                          ?.total_prize || 0
-                      )}`
+                      contest.contest_based_details.leaderboard_contest
+                        ?.total_prize || 0
+                    )}`
                     : `Budget: ${formatMoney(
-                        contest.contest_based_details.cpm_contest
-                          ?.total_budget || 0
-                      )}`}
+                      contest.contest_based_details.cpm_contest
+                        ?.total_budget || 0
+                    )}`}
                 </span>
               </div>
             )}
@@ -2004,6 +2220,7 @@ export function ContestListClient({
       contestStatusFilter !== "all" ||
       platformFilter !== "all" ||
       contestTypeFilter !== "all" ||
+      contestFormatFilter !== "all" ||
       searchQuery.trim() !== ""
     ) {
       return filteredAndSortedContests; // Use filtered and sorted results
@@ -2078,12 +2295,12 @@ export function ContestListClient({
         case "cpm_rate_asc":
           const rateA =
             a.contest_type === "cpm" &&
-            a.contest_based_details?.cpm_contest?.cpm_rate_usd
+              a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           const rateB =
             b.contest_type === "cpm" &&
-            b.contest_based_details?.cpm_contest?.cpm_rate_usd
+              b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           if (rateA === -1 && rateB === -1) return 0;
@@ -2127,6 +2344,7 @@ export function ContestListClient({
     contestStatusFilter,
     platformFilter,
     contestTypeFilter,
+    contestFormatFilter,
     sortOption,
     searchQuery,
   ]);
@@ -2173,42 +2391,84 @@ export function ContestListClient({
               )}
             />
           </div>
-          {/* View Toggle Buttons */}
-          <div className="hidden min-[650px]:flex items-center gap-1 border border-gray-400 rounded-md p-1">
-            <button
-              onClick={() => setViewMode("grid")}
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                viewMode === "grid"
-                  ? isDark
-                    ? "bg-[#7F39EC] text-white"
-                    : "bg-[#7F39EC] text-white"
-                  : isDark
-                  ? "text-gray-300 hover:text-white"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              )}
-              title="Grid View"
-            >
-              <LayoutGrid className="h-4 w-4" />
-              <span className="hidden sm:inline">Grid View</span>
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                viewMode === "list"
-                  ? isDark
-                    ? "bg-[#7F39EC] text-white"
-                    : "bg-[#7F39EC] text-white"
-                  : isDark
-                  ? "text-gray-300 hover:text-white"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              )}
-              title="List View"
-            >
-              <List className="h-4 w-4" />
-              <span className="hidden sm:inline">List View</span>
-            </button>
+          <div className="flex gap-2">
+            {/* Format Toggle: Text/Image contests vs Video contests */}
+            <div className="flex items-center gap-1 border border-gray-400 rounded-md p-1">
+              <button
+                type="button"
+                onClick={() => setContestFormatFilter("text_image")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                  contestFormatFilter === "text_image"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="Text/Image contests"
+              >
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Text/Image contests</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setContestFormatFilter("video")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                  contestFormatFilter === "video"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="Video contests"
+              >
+                <PlayCircle className="h-4 w-4" />
+                <span className="hidden sm:inline">Video contests</span>
+              </button>
+            </div>
+
+            {/* View Toggle Buttons */}
+            <div className="hidden min-[650px]:flex items-center gap-1 border border-gray-400 rounded-md p-1">
+              <button
+                onClick={() => setViewMode("grid")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                  viewMode === "grid"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="Grid View"
+              >
+                <LayoutGrid className="h-4 w-4" />
+                <span className="hidden sm:inline">Grid View</span>
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                  viewMode === "list"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="List View"
+              >
+                <List className="h-4 w-4" />
+                <span className="hidden sm:inline">List View</span>
+              </button>
+            </div>
           </div>
         </div>
         {/* Filters - Wraps to next row when overflow */}
@@ -2498,14 +2758,14 @@ export function ContestListClient({
                         }}
                       >
                         {platformFilter !== "all" ||
-                        contestStatusFilter !== "all" ||
-                        contestTypeFilter !== "all"
+                          contestStatusFilter !== "all" ||
+                          contestTypeFilter !== "all"
                           ? `No contests match the current filters for ${tabValue
-                              .split("_")
-                              .join(" ")} status.`
+                            .split("_")
+                            .join(" ")} status.`
                           : `No contests found for ${tabValue
-                              .split("_")
-                              .join(" ")} status.`}
+                            .split("_")
+                            .join(" ")} status.`}
                       </p>
                     </div>
                   )}
@@ -2535,14 +2795,14 @@ export function ContestListClient({
                         }}
                       >
                         {platformFilter !== "all" ||
-                        contestStatusFilter !== "all" ||
-                        contestTypeFilter !== "all"
+                          contestStatusFilter !== "all" ||
+                          contestTypeFilter !== "all"
                           ? `No contests match the current filters for ${tabValue
-                              .split("_")
-                              .join(" ")} status.`
+                            .split("_")
+                            .join(" ")} status.`
                           : `No contests found for ${tabValue
-                              .split("_")
-                              .join(" ")} status.`}
+                            .split("_")
+                            .join(" ")} status.`}
                       </p>
                     </div>
                   )}
@@ -2604,7 +2864,7 @@ export function ContestListClient({
                               value={size.toString()}
                               className={cn(
                                 isDark &&
-                                  "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
+                                "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
                               )}
                             >
                               {size}

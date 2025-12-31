@@ -33,6 +33,8 @@ import {
   ArrowUpDown,
   Download,
   Loader2,
+  ThumbsUp,
+  MessageCircle,
 } from "lucide-react";
 import {
   Select,
@@ -68,6 +70,12 @@ interface Submission {
   created_at: string;
   platform: string | null;
   other_stats: any;
+  // Twitter-specific fields
+  is_twitter_tweet?: boolean;
+  moderation_status?: "pending" | "approved" | "rejected";
+  manual_points_adjustment?: number;
+  manual_points_reason?: string | null;
+  tweet_id?: string;
 }
 
 interface CreatorSubmissionsModalProps {
@@ -326,8 +334,7 @@ export function CreatorSubmissionsModal({
       } catch (error) {
         console.error("Bulk payment error:", error);
         alert(
-          `Bulk payment failed:\n${
-            error instanceof Error ? error.message : "Unknown error"
+          `Bulk payment failed:\n${error instanceof Error ? error.message : "Unknown error"
           }`
         );
       }
@@ -363,13 +370,26 @@ export function CreatorSubmissionsModal({
     setSelectAll(false);
   };
 
-  const getStatusBadge = (status: string, paid: boolean) => {
+  const getStatusBadge = (status: string, paid: boolean, isTwitterTweet?: boolean) => {
     const statusLower = status.toLowerCase();
 
-    if (paid) {
+    if (paid && !isTwitterTweet) {
       return <Badge className="bg-green-600 text-white">Paid</Badge>;
     }
 
+    // Handle Twitter moderation_status mapping
+    if (isTwitterTweet) {
+      if (statusLower === "approved") {
+        return <Badge className="bg-green-500 text-white">Approved</Badge>;
+      }
+      if (statusLower === "rejected") {
+        return <Badge className="bg-red-500 text-white">Rejected</Badge>;
+      }
+      // pending
+      return <Badge className="bg-yellow-500 text-white">Pending</Badge>;
+    }
+
+    // Regular submission status
     switch (statusLower) {
       case "verified":
         return <Badge className="bg-green-500 text-white">Verified</Badge>;
@@ -417,15 +437,35 @@ export function CreatorSubmissionsModal({
   const flatFeeBonus = getFlatFeeBonus();
   const hasBonus = flatFeeBonus > 0;
 
+  // Check if this is a Twitter text_image contest
+  const isTwitterTextImageContest =
+    (contest?.platform?.toLowerCase() === "twitter" ||
+      contest?.platform?.toLowerCase() === "x") &&
+    contest?.contest_format === "text_image";
+
   // Filter submissions based on status
+  // For Twitter tweets, use moderation_status; for others, use status
   const filteredSubmissions = submissions.filter((sub) => {
+    const isTwitterTweet = sub.is_twitter_tweet === true;
+    const statusToCheck = isTwitterTweet
+      ? (sub.moderation_status || sub.status)
+      : sub.status;
+
+    // Map Twitter moderation_status to submission status for filtering
+    let mappedStatus = statusToCheck;
+    if (isTwitterTweet) {
+      if (statusToCheck === "approved") mappedStatus = "verified";
+      else if (statusToCheck === "rejected") mappedStatus = "rejected";
+      else mappedStatus = "pending";
+    }
+
     if (statusFilter === "all") return true;
     if (statusFilter === "verified_or_paid")
-      return sub.status === "verified" || sub.status === "paid";
-    if (statusFilter === "paid") return sub.status === "paid";
-    if (statusFilter === "verified") return sub.status === "verified";
-    if (statusFilter === "pending") return sub.status === "pending";
-    if (statusFilter === "rejected") return sub.status === "rejected";
+      return mappedStatus === "verified" || mappedStatus === "paid";
+    if (statusFilter === "paid") return mappedStatus === "paid";
+    if (statusFilter === "verified") return mappedStatus === "verified";
+    if (statusFilter === "pending") return mappedStatus === "pending";
+    if (statusFilter === "rejected") return mappedStatus === "rejected";
     return true;
   });
 
@@ -535,15 +575,37 @@ export function CreatorSubmissionsModal({
     });
   }
 
-  // Count submissions by status
+  // Count submissions by status (handle Twitter tweets with moderation_status)
   const statusCounts = {
     all: submissions.length,
-    verifiedOrPaid: submissions.filter(
-      (s) => s.status === "verified" || s.status === "paid"
-    ).length,
-    pending: submissions.filter((s) => s.status === "pending").length,
-    verified: submissions.filter((s) => s.status === "verified").length,
-    rejected: submissions.filter((s) => s.status === "rejected").length,
+    verifiedOrPaid: submissions.filter((s) => {
+      const isTwitterTweet = s.is_twitter_tweet === true;
+      const status = isTwitterTweet
+        ? (s.moderation_status === "approved" ? "verified" : s.status)
+        : s.status;
+      return status === "verified" || status === "paid";
+    }).length,
+    pending: submissions.filter((s) => {
+      const isTwitterTweet = s.is_twitter_tweet === true;
+      if (isTwitterTweet) {
+        return (s.moderation_status || s.status) === "pending";
+      }
+      return s.status === "pending";
+    }).length,
+    verified: submissions.filter((s) => {
+      const isTwitterTweet = s.is_twitter_tweet === true;
+      if (isTwitterTweet) {
+        return s.moderation_status === "approved";
+      }
+      return s.status === "verified";
+    }).length,
+    rejected: submissions.filter((s) => {
+      const isTwitterTweet = s.is_twitter_tweet === true;
+      if (isTwitterTweet) {
+        return s.moderation_status === "rejected";
+      }
+      return s.status === "rejected";
+    }).length,
     paid: submissions.filter((s) => s.status === "paid").length,
   };
   const isDark = mode === "dark";
@@ -626,8 +688,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "all"
-                    ? "text-white"
-                    : "text-gray-600"
+                      ? "text-white"
+                      : "text-gray-600"
                 )}
               >
                 All{" "}
@@ -648,8 +710,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "verified_or_paid"
-                    ? "text-white"
-                    : "text-gray-600"
+                      ? "text-white"
+                      : "text-gray-600"
                 )}
               >
                 Verified + Paid{" "}
@@ -668,8 +730,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "pending"
-                    ? "text-white"
-                    : "text-gray-600"
+                      ? "text-white"
+                      : "text-gray-600"
                 )}
               >
                 Pending{" "}
@@ -688,8 +750,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "verified"
-                    ? "text-white"
-                    : "text-gray-600"
+                      ? "text-white"
+                      : "text-gray-600"
                 )}
               >
                 Verified{" "}
@@ -708,8 +770,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "rejected"
-                    ? "text-white"
-                    : "text-gray-600"
+                      ? "text-white"
+                      : "text-gray-600"
                 )}
               >
                 Rejected{" "}
@@ -728,8 +790,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "paid"
-                    ? "text-white"
-                    : "text-gray-600"
+                      ? "text-white"
+                      : "text-gray-600"
                 )}
               >
                 Paid{" "}
@@ -953,55 +1015,153 @@ export function CreatorSubmissionsModal({
                   >
                     #
                   </TableHead>
-                  <TableHead
-                    className={cn(
-                      "min-w-[200px]",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
-                    )}
-                  >
-                    Content
-                  </TableHead>
-                  <TableHead
-                    className={cn(
-                      "text-center",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
-                    )}
-                  >
-                    Views
-                  </TableHead>
-                  <TableHead
-                    className={cn(
-                      "text-center",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
-                    )}
-                  >
-                    Likes
-                  </TableHead>
-                  <TableHead
-                    className={cn(
-                      "text-center",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
-                    )}
-                  >
-                    Comments
-                  </TableHead>
-                  <TableHead
-                    className={cn(
-                      "text-center",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
-                    )}
-                  >
-                    Expected Reward
-                  </TableHead>
-                  <TableHead
-                    className={cn(
-                      "text-center",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
-                    )}
-                  >
-                    Reward Granted
-                  </TableHead>
-                  {hasBonus && (
+                  {/* For Twitter text_image contests, show Tweet column; for others, show Content */}
+                  {isTwitterTextImageContest ? (
+                    <TableHead
+                      className={cn(
+                        "min-w-[200px]",
+                        isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                      )}
+                    >
+                      Tweet
+                    </TableHead>
+                  ) : (
+                    <TableHead
+                      className={cn(
+                        "min-w-[200px]",
+                        isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                      )}
+                    >
+                      Content
+                    </TableHead>
+                  )}
+                  {/* For Twitter text_image contests, show detailed metrics; for others, show simplified */}
+                  {isTwitterTextImageContest ? (
+                    <>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Total Points
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Base Points
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Manual Points
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Likes
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Replies
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Retweets
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Quote Reposts
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Impressions
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Manual Points Reason
+                      </TableHead>
+                    </>
+                  ) : (
+                    <>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Views
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Likes
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Comments
+                      </TableHead>
+                    </>
+                  )}
+                  {/* Hide reward columns for Twitter text_image contests */}
+                  {!isTwitterTextImageContest && (
+                    <>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Expected Reward
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Reward Granted
+                      </TableHead>
+                    </>
+                  )}
+                  {/* Bonus columns only for non-Twitter contests */}
+                  {hasBonus && !isTwitterTextImageContest && (
                     <>
                       <TableHead
                         className={cn(
@@ -1051,7 +1211,13 @@ export function CreatorSubmissionsModal({
                 {sortedSubmissions.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={hasBonus ? 13 : 11}
+                      colSpan={
+                        isTwitterTextImageContest
+                          ? 15 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Manual Points Reason, Status, Submitted, Actions
+                          : hasBonus
+                            ? 13 // Checkbox, #, Content, Views, Likes, Comments, Expected Reward, Reward Granted, Bonus Expected, Bonus Granted, Status, Submitted, Actions
+                            : 11 // Checkbox, #, Content, Views, Likes, Comments, Expected Reward, Reward Granted, Status, Submitted, Actions
+                      }
                       className={cn(
                         "text-center py-8",
                         isDark ? "text-gray-400" : "text-gray-600"
@@ -1062,33 +1228,54 @@ export function CreatorSubmissionsModal({
                   </TableRow>
                 ) : (
                   sortedSubmissions.map((submission, index) => {
-                    const likes =
-                      submission.other_stats?.youtube?.likes ||
+                    const isTwitterTweet = submission.is_twitter_tweet === true;
+
+                    // For Twitter tweets, use Twitter metrics; for others, use platform-specific
+                    const likes = isTwitterTweet
+                      ? submission.other_stats?.likes || 0
+                      : submission.other_stats?.youtube?.likes ||
                       submission.other_stats?.instagram?.likes ||
                       0;
-                    const comments =
-                      submission.other_stats?.youtube?.comments ||
+                    const comments = isTwitterTweet
+                      ? submission.other_stats?.replies || 0
+                      : submission.other_stats?.youtube?.comments ||
                       submission.other_stats?.instagram?.comments ||
                       0;
 
+                    // Twitter-specific metrics
+                    const retweets = submission.other_stats?.retweets || 0;
+                    const quoteReposts = submission.other_stats?.quote_reposts || 0;
+                    const impressions = submission.other_stats?.impressions || 0;
+                    const basePoints = submission.other_stats?.base_points || submission.other_stats?.points || 0;
+                    const manualPointsAdjustment = submission.manual_points_adjustment || 0;
+                    const totalPoints = basePoints + manualPointsAdjustment;
+
                     // Get pre-calculated expected reward (with cap applied in submission time order)
+                    // Note: Twitter tweets don't have rewards, so expectedReward will be 0
                     const expectedReward =
                       expectedRewardsMap.get(submission.id) || 0;
 
                     // Use ACTUAL earnings from database for granted reward (respects cap)
+                    // Note: Twitter tweets don't have earnings/rewards
                     const grantedReward = submission.paid
                       ? submission.earnings || 0
                       : 0;
                     const expectedBonus =
                       (submission.status === "verified" ||
                         submission.status === "paid") &&
-                      hasBonus
+                        hasBonus &&
+                        !isTwitterTweet // Twitter tweets don't have bonuses
                         ? flatFeeBonus
                         : 0;
                     // Use actual bonus_amount from database if available
-                    const grantedBonus = submission.bonus_paid
+                    const grantedBonus = submission.bonus_paid && !isTwitterTweet
                       ? (submission as any).bonus_amount || flatFeeBonus
                       : 0;
+
+                    // For Twitter tweets, use moderation_status for status badge
+                    const statusToUse = isTwitterTweet
+                      ? (submission.moderation_status || submission.status)
+                      : submission.status;
 
                     return (
                       <TableRow
@@ -1115,86 +1302,371 @@ export function CreatorSubmissionsModal({
                         >
                           {index + 1}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            {submission.video_thumbnail_url && (
-                              <img
-                                src={submission.video_thumbnail_url}
-                                alt={
-                                  submission.video_title || "Video thumbnail"
-                                }
-                                className="w-16 h-9 object-cover rounded"
-                              />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium truncate max-w-xs">
-                                {submission.video_title || "Untitled"}
-                              </p>
-                              {submission.content_link && (
+                        {/* For Twitter text_image contests, show Tweet column; for others, show Content */}
+                        {isTwitterTextImageContest && isTwitterTweet ? (
+                          <>
+                            {/* Tweet Column */}
+                            <TableCell className="min-w-[200px] max-w-[300px]">
+                              <div className="flex flex-col gap-2">
+                                {/* Tweet type badge */}
                                 <div className="flex items-center gap-2">
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      "text-xs px-2 py-0.5",
+                                      (submission.other_stats?.tweet_type === "reply" ||
+                                        submission.other_stats?.tweet_type === "quote" ||
+                                        submission.other_stats?.tweet_type === "retweet")
+                                        ? "bg-purple-100 text-purple-700 border-purple-300"
+                                        : "bg-blue-100 text-blue-700 border-blue-300"
+                                    )}
+                                  >
+                                    {submission.other_stats?.tweet_type === "reply"
+                                      ? "REPLY"
+                                      : submission.other_stats?.tweet_type === "quote"
+                                        ? "QUOTE"
+                                        : submission.other_stats?.tweet_type === "retweet"
+                                          ? "RETWEET"
+                                          : "TWEET"}
+                                  </Badge>
+                                  <span
+                                    className={cn(
+                                      "text-xs",
+                                      isDark ? "text-gray-400" : "text-gray-500"
+                                    )}
+                                  >
+                                    from @{creator.username}
+                                  </span>
+                                </div>
+                                {/* Tweet text */}
+                                <p
+                                  className={cn(
+                                    "text-sm line-clamp-3",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                  title={submission.other_stats?.tweet_text || submission.video_title || ""}
+                                >
+                                  {submission.other_stats?.tweet_text || submission.video_title || "No content"}
+                                </p>
+                                {/* View tweet link */}
+                                {submission.content_link && (
                                   <a
                                     href={submission.content_link}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                    className={cn(
+                                      "text-xs flex items-center gap-1 hover:underline w-fit",
+                                      isDark ? "text-purple-400" : "text-purple-600"
+                                    )}
                                   >
-                                    View Content
+                                    Click to view tweet
                                     <ExternalLink className="h-3 w-3" />
                                   </a>
-                                  {isAdminView && (
-                                    <button
-                                      onClick={() =>
-                                        handleDownloadReel(submission.id)
-                                      }
-                                      disabled={
-                                        downloadingSubmissionId ===
-                                        submission.id
-                                      }
-                                      className={cn(
-                                        "text-xs text-blue-600 hover:underline flex items-center gap-1",
-                                        downloadingSubmissionId ===
-                                          submission.id &&
-                                          "opacity-50 cursor-not-allowed"
+                                )}
+                              </div>
+                            </TableCell>
+                            {/* Total Points */}
+                            <TableCell className="text-center">
+                              <div className="flex flex-col items-center">
+                                <span
+                                  className={cn(
+                                    "font-bold text-sm",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {totalPoints}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "text-xs",
+                                    isDark ? "text-gray-400" : "text-gray-500"
+                                  )}
+                                >
+                                  total
+                                </span>
+                              </div>
+                            </TableCell>
+                            {/* Base Points */}
+                            <TableCell className="text-center">
+                              <div className="flex flex-col items-center">
+                                <span
+                                  className={cn(
+                                    "font-bold text-sm",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {basePoints}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "text-xs",
+                                    isDark ? "text-gray-400" : "text-gray-500"
+                                  )}
+                                >
+                                  base
+                                </span>
+                              </div>
+                            </TableCell>
+                            {/* Manual Points */}
+                            <TableCell className="text-center">
+                              <div className="flex flex-col items-center">
+                                <span
+                                  className={cn(
+                                    "font-bold text-sm",
+                                    manualPointsAdjustment > 0
+                                      ? "text-green-600"
+                                      : manualPointsAdjustment < 0
+                                        ? "text-red-600"
+                                        : isDark
+                                          ? "text-white"
+                                          : "text-gray-900"
+                                  )}
+                                >
+                                  {manualPointsAdjustment > 0 ? "+" : ""}
+                                  {manualPointsAdjustment}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "text-xs",
+                                    isDark ? "text-gray-400" : "text-gray-500"
+                                  )}
+                                >
+                                  manual
+                                </span>
+                              </div>
+                            </TableCell>
+                            {/* Likes */}
+                            <TableCell className="text-center">
+                              <div className="flex flex-col items-center">
+                                <div className="flex items-center gap-1">
+                                  <ThumbsUp className="h-3 w-3 text-purple-400" />
+                                  <span
+                                    className={cn(
+                                      "font-bold text-sm",
+                                      isDark ? "text-white" : "text-gray-900"
+                                    )}
+                                  >
+                                    {likes.toLocaleString()}
+                                  </span>
+                                </div>
+                                <span
+                                  className={cn(
+                                    "text-xs",
+                                    isDark ? "text-gray-400" : "text-gray-500"
+                                  )}
+                                >
+                                  likes
+                                </span>
+                              </div>
+                            </TableCell>
+                            {/* Replies */}
+                            <TableCell className="text-center">
+                              <div className="flex flex-col items-center">
+                                <div className="flex items-center gap-1">
+                                  <MessageCircle className="h-3 w-3 text-purple-400" />
+                                  <span
+                                    className={cn(
+                                      "font-bold text-sm",
+                                      isDark ? "text-white" : "text-gray-900"
+                                    )}
+                                  >
+                                    {comments.toLocaleString()}
+                                  </span>
+                                </div>
+                                <span
+                                  className={cn(
+                                    "text-xs",
+                                    isDark ? "text-gray-400" : "text-gray-500"
+                                  )}
+                                >
+                                  replies
+                                </span>
+                              </div>
+                            </TableCell>
+                            {/* Retweets */}
+                            <TableCell className="text-center">
+                              <div className="flex flex-col items-center">
+                                <span
+                                  className={cn(
+                                    "font-bold text-sm",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {retweets.toLocaleString()}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "text-xs",
+                                    isDark ? "text-gray-400" : "text-gray-500"
+                                  )}
+                                >
+                                  retweets
+                                </span>
+                              </div>
+                            </TableCell>
+                            {/* Quote Reposts */}
+                            <TableCell className="text-center">
+                              <div className="flex flex-col items-center">
+                                <span
+                                  className={cn(
+                                    "font-bold text-sm",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {quoteReposts.toLocaleString()}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "text-xs",
+                                    isDark ? "text-gray-400" : "text-gray-500"
+                                  )}
+                                >
+                                  quote reposts
+                                </span>
+                              </div>
+                            </TableCell>
+                            {/* Impressions */}
+                            <TableCell className="text-center">
+                              <div className="flex flex-col items-center">
+                                <div className="flex items-center gap-1">
+                                  <Eye className="h-3 w-3 text-purple-400" />
+                                  <span
+                                    className={cn(
+                                      "font-bold text-sm",
+                                      isDark ? "text-white" : "text-gray-900"
+                                    )}
+                                  >
+                                    {impressions.toLocaleString()}
+                                  </span>
+                                </div>
+                                <span
+                                  className={cn(
+                                    "text-xs",
+                                    isDark ? "text-gray-400" : "text-gray-500"
+                                  )}
+                                >
+                                  impressions
+                                </span>
+                              </div>
+                            </TableCell>
+                            {/* Manual Points Reason */}
+                            <TableCell className="text-center">
+                              {submission.manual_points_reason ? (
+                                <span
+                                  className={cn(
+                                    "text-xs italic truncate max-w-[150px] block",
+                                    isDark ? "text-gray-400" : "text-gray-600"
+                                  )}
+                                  title={submission.manual_points_reason}
+                                >
+                                  {submission.manual_points_reason.length > 20
+                                    ? submission.manual_points_reason.substring(0, 20) + "..."
+                                    : submission.manual_points_reason}
+                                </span>
+                              ) : (
+                                <span
+                                  className={cn(
+                                    "text-xs",
+                                    isDark ? "text-gray-500" : "text-gray-400"
+                                  )}
+                                >
+                                  —
+                                </span>
+                              )}
+                            </TableCell>
+                          </>
+                        ) : (
+                          <>
+                            {/* Content Column for non-Twitter submissions */}
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                {submission.video_thumbnail_url && (
+                                  <img
+                                    src={submission.video_thumbnail_url}
+                                    alt={
+                                      submission.video_title || "Video thumbnail"
+                                    }
+                                    className="w-16 h-9 object-cover rounded"
+                                  />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium truncate max-w-xs">
+                                    {submission.video_title || "Untitled"}
+                                  </p>
+                                  {submission.content_link && (
+                                    <div className="flex items-center gap-2">
+                                      <a
+                                        href={submission.content_link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                      >
+                                        View Content
+                                        <ExternalLink className="h-3 w-3" />
+                                      </a>
+                                      {isAdminView && (
+                                        <button
+                                          onClick={() =>
+                                            handleDownloadReel(submission.id)
+                                          }
+                                          disabled={
+                                            downloadingSubmissionId ===
+                                            submission.id
+                                          }
+                                          className={cn(
+                                            "text-xs text-blue-600 hover:underline flex items-center gap-1",
+                                            downloadingSubmissionId ===
+                                            submission.id &&
+                                            "opacity-50 cursor-not-allowed"
+                                          )}
+                                          title="Download Reel/Short"
+                                        >
+                                          {downloadingSubmissionId ===
+                                            submission.id ? (
+                                            <>
+                                              <Loader2 className="h-3 w-3 animate-spin" />
+                                              Downloading...
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Download className="h-3 w-3" />
+                                              Download
+                                            </>
+                                          )}
+                                        </button>
                                       )}
-                                      title="Download Reel/Short"
-                                    >
-                                      {downloadingSubmissionId ===
-                                      submission.id ? (
-                                        <>
-                                          <Loader2 className="h-3 w-3 animate-spin" />
-                                          Downloading...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Download className="h-3 w-3" />
-                                          Download
-                                        </>
-                                      )}
-                                    </button>
+                                    </div>
                                   )}
                                 </div>
-                              )}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center font-mono">
-                          {submission.views?.toLocaleString() || 0}
-                        </TableCell>
-                        <TableCell className="text-center font-mono">
-                          {likes.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-center font-mono">
-                          {comments.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-center font-medium">
-                          {formatCurrency(expectedReward)}
-                        </TableCell>
-                        <TableCell className="text-center font-medium text-green-600">
-                          {grantedReward > 0
-                            ? formatCurrency(grantedReward)
-                            : "-"}
-                        </TableCell>
-                        {hasBonus && (
+                              </div>
+                            </TableCell>
+                            {/* Views, Likes, Comments for non-Twitter submissions */}
+                            <TableCell className="text-center font-mono">
+                              {submission.views?.toLocaleString() || 0}
+                            </TableCell>
+                            <TableCell className="text-center font-mono">
+                              {likes.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-center font-mono">
+                              {comments.toLocaleString()}
+                            </TableCell>
+                            {/* Expected Reward and Reward Granted (only for non-Twitter) */}
+                            {!isTwitterTextImageContest && (
+                              <>
+                                <TableCell className="text-center font-medium">
+                                  {formatCurrency(expectedReward)}
+                                </TableCell>
+                                <TableCell className="text-center font-medium text-green-600">
+                                  {grantedReward > 0
+                                    ? formatCurrency(grantedReward)
+                                    : "-"}
+                                </TableCell>
+                              </>
+                            )}
+                          </>
+                        )}
+                        {/* Bonus columns only for non-Twitter submissions */}
+                        {hasBonus && !isTwitterTextImageContest && (
                           <>
                             <TableCell className="text-center font-medium">
                               {expectedBonus > 0
@@ -1214,7 +1686,7 @@ export function CreatorSubmissionsModal({
                           </>
                         )}
                         <TableCell>
-                          {getStatusBadge(submission.status, submission.paid)}
+                          {getStatusBadge(statusToUse, submission.paid, isTwitterTweet)}
                         </TableCell>
                         <TableCell
                           className={cn(
@@ -1235,43 +1707,52 @@ export function CreatorSubmissionsModal({
                               {contest?.post_contest_status !==
                                 "verification_complete" &&
                                 contest?.post_contest_status !==
-                                  "payments_processed" && (
+                                "payments_processed" && (
                                   <>
-                                    {submission.status !== "verified" && (
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          onVerify([submission.id])
-                                        }
-                                      >
-                                        <CheckCircle className="h-4 w-4 mr-2" />
-                                        Verify
-                                      </DropdownMenuItem>
-                                    )}
-                                    {submission.status !== "rejected" && (
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          onReject([submission.id])
-                                        }
-                                      >
-                                        <XCircle className="h-4 w-4 mr-2" />
-                                        Reject
-                                      </DropdownMenuItem>
-                                    )}
-                                    {submission.status !== "pending" && (
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          onSetPending([submission.id])
-                                        }
-                                      >
-                                        <Clock className="h-4 w-4 mr-2" />
-                                        Set Pending
-                                      </DropdownMenuItem>
-                                    )}
+                                    {/* For Twitter tweets, check moderation_status; for others, check status */}
+                                    {(isTwitterTweet
+                                      ? submission.moderation_status !== "approved"
+                                      : submission.status !== "verified") && (
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            onVerify([submission.id])
+                                          }
+                                        >
+                                          <CheckCircle className="h-4 w-4 mr-2" />
+                                          {isTwitterTweet ? "Approve" : "Verify"}
+                                        </DropdownMenuItem>
+                                      )}
+                                    {(isTwitterTweet
+                                      ? submission.moderation_status !== "rejected"
+                                      : submission.status !== "rejected") && (
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            onReject([submission.id])
+                                          }
+                                        >
+                                          <XCircle className="h-4 w-4 mr-2" />
+                                          Reject
+                                        </DropdownMenuItem>
+                                      )}
+                                    {(isTwitterTweet
+                                      ? submission.moderation_status !== "pending"
+                                      : submission.status !== "pending") && (
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            onSetPending([submission.id])
+                                          }
+                                        >
+                                          <Clock className="h-4 w-4 mr-2" />
+                                          Set Pending
+                                        </DropdownMenuItem>
+                                      )}
                                   </>
                                 )}
 
+                              {/* Payment options only for non-Twitter submissions */}
                               {contest?.post_contest_status ===
                                 "verification_complete" &&
+                                !isTwitterTweet &&
                                 submission.status === "verified" &&
                                 !submission.paid &&
                                 isAdminView && (
@@ -1323,7 +1804,7 @@ export function CreatorSubmissionsModal({
                               {contest?.post_contest_status ===
                                 "verification_complete" &&
                                 contest?.post_contest_status !==
-                                  "payments_processed" &&
+                                "payments_processed" &&
                                 isAdminView && (
                                   <>
                                     <DropdownMenuSeparator />
@@ -1362,13 +1843,13 @@ export function CreatorSubmissionsModal({
                                       }
                                       className={
                                         downloadingSubmissionId ===
-                                        submission.id
+                                          submission.id
                                           ? "opacity-50 cursor-not-allowed"
                                           : ""
                                       }
                                     >
                                       {downloadingSubmissionId ===
-                                      submission.id ? (
+                                        submission.id ? (
                                         <>
                                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                           Downloading...
