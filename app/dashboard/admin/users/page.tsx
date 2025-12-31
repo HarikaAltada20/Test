@@ -2036,35 +2036,33 @@ export default function AdminUsersPage() {
     load();
   }, []);
 
- // Watch for theme changes from parent layout
- useEffect(() => {
-  const checkTheme = () => {
-    const modeElement = document.querySelector("[data-mode]");
-    if (modeElement) {
-      const currentMode = modeElement.getAttribute("data-mode");
-      const newIsDark = currentMode === "dark";
-      if (newIsDark !== isDark) {
-        setIsDark(newIsDark);
+  // Watch for theme changes from parent layout
+  useEffect(() => {
+    const checkTheme = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode");
+        const newIsDark = currentMode === "dark";
+        if (newIsDark !== isDark) {
+          setIsDark(newIsDark);
+        }
       }
+    };
+
+    checkTheme();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkTheme);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
     }
-  };
 
-  checkTheme();
-
-  // Watch for changes in the data attribute
-  const observer = new MutationObserver(checkTheme);
-  const targetNode = document.querySelector("[data-mode]");
-  if (targetNode) {
-    observer.observe(targetNode, {
-      attributes: true,
-      attributeFilter: ["data-mode"],
-    });
-  }
-
-  return () => observer.disconnect();
-}, [isDark]);
-
-
+    return () => observer.disconnect();
+  }, [isDark]);
 
   return (
     <div className="space-y-6">
@@ -4174,13 +4172,16 @@ export default function AdminUsersPage() {
       >
         <DialogContent
           className={cn(
-            "max-w-4xl max-h-[80vh] overflow-y-auto",
+            "w-[calc(100%-1rem)] max-w-[calc(100vw-1rem)] sm:max-w-md md:max-w-2xl lg:max-w-4xl max-h-[90vh] sm:max-h-[80vh] overflow-y-auto p-4 sm:p-6",
             isDark ? "text-white" : "text-gray-900"
           )}
         >
           <DialogHeader>
             <DialogTitle
-              className={cn(isDark ? "text-white" : "text-gray-900")}
+              className={cn(
+                "text-lg sm:text-xl",
+                isDark ? "text-white" : "text-gray-900"
+              )}
             >
               Filter{" "}
               {activeTab === "all"
@@ -4190,23 +4191,26 @@ export default function AdminUsersPage() {
                 : "Creators"}
             </DialogTitle>
             <DialogDescription
-              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+              className={cn(
+                "text-xs sm:text-sm",
+                isDark ? "text-gray-300" : "text-gray-600"
+              )}
             >
               Add filters to search and filter the table data. You can add
               multiple filters for different columns.
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-4 space-y-4">
+          <div className="mt-3 sm:mt-4 space-y-3 sm:space-y-4">
             {filters.length === 0 ? (
               <div
                 className={cn(
-                  "flex items-center gap-3 p-4 rounded-lg border",
+                  "flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-lg border",
                   isDark
                     ? "bg-[#1a102b] border-gray-700"
                     : "bg-gray-50 border-gray-200"
                 )}
               >
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <Select
                     value={
                       emptyFilterColumn ||
@@ -4247,7 +4251,7 @@ export default function AdminUsersPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   {(() => {
                     const selectedColumnId =
                       emptyFilterColumn ||
@@ -4396,12 +4400,15 @@ export default function AdminUsersPage() {
                     // For earnings and integer fields, show operator dropdown + input
                     if (supportsOperators) {
                       return (
-                        <div className="flex gap-2">
+                        <div className="flex flex-col sm:flex-row gap-2">
                           <Select
                             value={emptyFilterOperator}
                             onValueChange={setEmptyFilterOperator}
                           >
-                            <SelectTrigger isDark={isDark} className="w-24">
+                            <SelectTrigger
+                              isDark={isDark}
+                              className="w-full sm:w-20 min-[360px]:w-24"
+                            >
                               <SelectValue>
                                 {operatorMap[emptyFilterOperator]?.symbol ||
                                   emptyFilterOperator}
@@ -4435,10 +4442,10 @@ export default function AdminUsersPage() {
                             </SelectContent>
                           </Select>
                           {isEarningsField || isMoneyField ? (
-                            <div className="flex flex-1">
+                            <div className="flex flex-1 min-w-0">
                               <span
                                 className={cn(
-                                  "inline-flex items-center justify-center px-2 text-xs border border-r-0 rounded-l-md",
+                                  "inline-flex items-center justify-center px-1.5 sm:px-2 text-xs border border-r-0 rounded-l-md flex-shrink-0",
                                   isDark
                                     ? "bg-[#07031D] border-gray-700 text-white"
                                     : "bg-gray-50 text-gray-700 border-gray-300"
@@ -4476,7 +4483,7 @@ export default function AdminUsersPage() {
                                 }}
                                 placeholder="Enter amount..."
                                 className={cn(
-                                  "rounded-l-none border-l-0 flex-1",
+                                  "rounded-l-none border-l-0 flex-1 min-w-0 text-sm",
                                   isDark
                                     ? "bg-[#07031D] border-gray-700 text-white"
                                     : "bg-white border-gray-300"
@@ -4514,7 +4521,7 @@ export default function AdminUsersPage() {
                               }}
                               placeholder="Select date..."
                               className={cn(
-                                "flex-1",
+                                "flex-1 min-w-0 text-sm",
                                 isDark
                                   ? "bg-[#07031D] border-gray-700 text-white"
                                   : "bg-white border-gray-300"
@@ -4551,7 +4558,7 @@ export default function AdminUsersPage() {
                               }}
                               placeholder="Enter value..."
                               className={cn(
-                                "flex-1",
+                                "flex-1 min-w-0 text-sm",
                                 isDark
                                   ? "bg-[#07031D] border-gray-700 text-white"
                                   : "bg-white border-gray-300"
@@ -4594,6 +4601,7 @@ export default function AdminUsersPage() {
                             : "Enter filter value..."
                         }
                         className={cn(
+                          "text-sm",
                           isDark
                             ? "bg-[#07031D] border-gray-700 text-white"
                             : "bg-white"
@@ -4606,7 +4614,7 @@ export default function AdminUsersPage() {
                   variant="ghost"
                   size="icon"
                   disabled
-                  className="text-gray-400 cursor-not-allowed"
+                  className="text-gray-400 cursor-not-allowed flex-shrink-0"
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
@@ -4616,13 +4624,13 @@ export default function AdminUsersPage() {
                 <div
                   key={filter.id}
                   className={cn(
-                    "flex items-center gap-3 p-4 rounded-lg border",
+                    "flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-lg border",
                     isDark
                       ? "bg-[#1a102b] border-gray-700"
                       : "bg-gray-50 border-gray-200"
                   )}
                 >
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <Select
                       value={filter.column}
                       onValueChange={(value) => {
@@ -4660,7 +4668,7 @@ export default function AdminUsersPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     {filter.column === "user_type" ? (
                       <Select
                         value={filter.value}
@@ -4809,7 +4817,7 @@ export default function AdminUsersPage() {
 
                         if (isEarningsField || isMoneyField) {
                           return (
-                            <div className="flex gap-2">
+                            <div className="flex flex-col sm:flex-row gap-2">
                               {supportsOperators && (
                                 <Select
                                   value={filter.operator || "="}
@@ -4825,7 +4833,7 @@ export default function AdminUsersPage() {
                                 >
                                   <SelectTrigger
                                     isDark={isDark}
-                                    className="w-24"
+                                    className="w-full sm:w-20 min-[360px]:w-24"
                                   >
                                     <SelectValue>
                                       {operatorMap[filter.operator || "="]
@@ -4862,10 +4870,10 @@ export default function AdminUsersPage() {
                                   </SelectContent>
                                 </Select>
                               )}
-                              <div className="flex flex-1">
+                              <div className="flex flex-1 min-w-0">
                                 <span
                                   className={cn(
-                                    "inline-flex items-center justify-center px-2 text-xs border border-r-0 rounded-l-md",
+                                    "inline-flex items-center justify-center px-1.5 sm:px-2 text-xs border border-r-0 rounded-l-md flex-shrink-0",
                                     isDark
                                       ? "bg-[#07031D] border-gray-700 text-white"
                                       : "bg-gray-50 text-gray-700 border-gray-300"
@@ -4887,7 +4895,7 @@ export default function AdminUsersPage() {
                                   }}
                                   placeholder="Enter amount..."
                                   className={cn(
-                                    "rounded-l-none border-l-0 flex-1",
+                                    "rounded-l-none border-l-0 flex-1 min-w-0 text-sm",
                                     isDark
                                       ? "bg-[#07031D] border-gray-700 text-white"
                                       : "bg-white border-gray-300"
@@ -4900,7 +4908,7 @@ export default function AdminUsersPage() {
 
                         if (isIntegerField) {
                           return (
-                            <div className="flex gap-2">
+                            <div className="flex flex-col sm:flex-row gap-2">
                               <Select
                                 value={filter.operator || "="}
                                 onValueChange={(value) => {
@@ -4913,7 +4921,10 @@ export default function AdminUsersPage() {
                                   );
                                 }}
                               >
-                                <SelectTrigger isDark={isDark} className="w-24">
+                                <SelectTrigger
+                                  isDark={isDark}
+                                  className="w-full sm:w-20 min-[360px]:w-24"
+                                >
                                   <SelectValue>
                                     {operatorMap[filter.operator || "="]
                                       ?.symbol ||
@@ -4962,7 +4973,7 @@ export default function AdminUsersPage() {
                                 }}
                                 placeholder="Enter value..."
                                 className={cn(
-                                  "flex-1",
+                                  "flex-1 min-w-0 text-sm",
                                   isDark
                                     ? "bg-[#07031D] border-gray-700 text-white"
                                     : "bg-white border-gray-300"
@@ -4974,7 +4985,7 @@ export default function AdminUsersPage() {
 
                         if (isDateField) {
                           return (
-                            <div className="flex gap-2">
+                            <div className="flex flex-col sm:flex-row gap-2">
                               <Select
                                 value={filter.operator || "="}
                                 onValueChange={(value) => {
@@ -4987,7 +4998,10 @@ export default function AdminUsersPage() {
                                   );
                                 }}
                               >
-                                <SelectTrigger isDark={isDark} className="w-24">
+                                <SelectTrigger
+                                  isDark={isDark}
+                                  className="w-full sm:w-20 min-[360px]:w-24"
+                                >
                                   <SelectValue>
                                     {operatorMap[filter.operator || "="]
                                       ?.symbol ||
@@ -5036,7 +5050,7 @@ export default function AdminUsersPage() {
                                 }}
                                 placeholder="Select date..."
                                 className={cn(
-                                  "flex-1",
+                                  "flex-1 min-w-0 text-sm",
                                   isDark
                                     ? "bg-[#07031D] border-gray-700 text-white"
                                     : "bg-white border-gray-300"
@@ -5073,6 +5087,7 @@ export default function AdminUsersPage() {
                                 : "Enter filter value..."
                             }
                             className={cn(
+                              "text-sm",
                               isDark
                                 ? "bg-[#07031D] border-gray-700 text-white"
                                 : "bg-white"
@@ -5088,7 +5103,7 @@ export default function AdminUsersPage() {
                     onClick={() => {
                       setFilters(filters.filter((f) => f.id !== filter.id));
                     }}
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0 self-start sm:self-center"
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -5111,7 +5126,7 @@ export default function AdminUsersPage() {
                 ]);
               }}
               className={cn(
-                "w-full",
+                "w-full text-sm sm:text-base",
                 isDark
                   ? "border-gray-700 text-white hover:bg-gray-800"
                   : "border-gray-300"
@@ -5121,13 +5136,14 @@ export default function AdminUsersPage() {
               Add Filter
             </Button>
             {filters.length > 0 && (
-              <div className="flex gap-2 justify-end pt-2">
+              <div className="flex flex-col sm:flex-row gap-2 justify-end pt-2">
                 <Button
                   variant="outline"
                   onClick={() => {
                     setFilters([]);
                   }}
                   className={cn(
+                    "w-full sm:w-auto text-sm sm:text-base",
                     isDark ? "border-gray-700 text-white hover:bg-gray-800" : ""
                   )}
                 >
@@ -5138,7 +5154,7 @@ export default function AdminUsersPage() {
                     setShowFilterModal(false);
                   }}
                   className={cn(
-                    "bg-purple-600 text-white hover:bg-purple-700",
+                    "w-full sm:w-auto text-sm sm:text-base bg-purple-600 text-white hover:bg-purple-700",
                     isDark && "bg-purple-600 hover:bg-purple-700"
                   )}
                 >
