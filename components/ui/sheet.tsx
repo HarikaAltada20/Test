@@ -7,6 +7,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
+import { VisuallyHidden } from "./visually-hidden";
 
 const Sheet = SheetPrimitive.Root;
 
@@ -50,15 +51,49 @@ const sheetVariants = cva(
   }
 );
 
+const SheetTitle = React.forwardRef<
+  React.ElementRef<typeof SheetPrimitive.Title>,
+  React.ComponentPropsWithoutRef<typeof SheetPrimitive.Title>
+>(({ className, ...props }, ref) => (
+  <SheetPrimitive.Title
+    ref={ref}
+    className={cn("text-lg font-semibold text-foreground", className)}
+    {...props}
+  />
+));
+SheetTitle.displayName = SheetPrimitive.Title.displayName;
+
 interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
     VariantProps<typeof sheetVariants> {}
+
+// Helper function to recursively check for SheetTitle in children
+const hasSheetTitleInChildren = (children: React.ReactNode): boolean => {
+  return React.Children.toArray(children).some((child) => {
+    if (!React.isValidElement(child)) {
+      return false;
+    }
+    if (child.type === SheetTitle) {
+      return true;
+    }
+    // Recursively check nested children
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const childrenProp = (child.props as any)?.children;
+    if (childrenProp) {
+      return hasSheetTitleInChildren(childrenProp);
+    }
+    return false;
+  });
+};
 
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
 >(({ side = "right", className, children, ...props }, ref) => {
   const { isDark } = useAnalyticsDarkMode();
+
+  // Check if children contains a SheetTitle (recursively)
+  const hasSheetTitle = hasSheetTitleInChildren(children);
 
   return (
     <SheetPortal>
@@ -68,6 +103,11 @@ const SheetContent = React.forwardRef<
         className={cn(sheetVariants({ side }), className)}
         {...props}
       >
+        {!hasSheetTitle && (
+          <VisuallyHidden>
+            <SheetPrimitive.Title>Sheet</SheetPrimitive.Title>
+          </VisuallyHidden>
+        )}
         {children}
         <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
           <X
@@ -108,18 +148,6 @@ const SheetFooter = ({
   />
 );
 SheetFooter.displayName = "SheetFooter";
-
-const SheetTitle = React.forwardRef<
-  React.ElementRef<typeof SheetPrimitive.Title>,
-  React.ComponentPropsWithoutRef<typeof SheetPrimitive.Title>
->(({ className, ...props }, ref) => (
-  <SheetPrimitive.Title
-    ref={ref}
-    className={cn("text-lg font-semibold text-foreground", className)}
-    {...props}
-  />
-));
-SheetTitle.displayName = SheetPrimitive.Title.displayName;
 
 const SheetDescription = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Description>,

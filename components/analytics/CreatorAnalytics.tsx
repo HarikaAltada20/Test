@@ -69,7 +69,7 @@ interface CreatorData {
 }
 
 const PlatformIcon = ({ platform }: { platform: string }) => {
-  const iconClass = "w-5 h-5";
+  const iconClass = "w-3 h-3 sm:w-5 sm:h-5";
 
   switch (platform?.toLowerCase()) {
     case "youtube":
@@ -496,37 +496,37 @@ export default function CreatorAnalytics({
                 <div
                   key={creator.creator.id}
                   className={cn(
-                    "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 rounded-lg",
+                    "flex flex-row items-center justify-between gap-2 p-2 sm:p-4 rounded-lg",
                     isDark
                       ? "bg-[#170337] border border-gray-600"
                       : "bg-gray-50"
                   )}
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                      <span className="text-sm font-semibold text-purple-600">
+                  <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+                    <div className="w-6 h-6 sm:w-8 sm:h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs sm:text-sm font-semibold text-purple-600">
                         {index + 1}
                       </span>
                     </div>
-                    <div>
-                      <h3 className="font-semibold">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-sm sm:text-base truncate">
                         @{creator.creator.username}
                       </h3>
-                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <div className="flex items-center gap-1 sm:gap-2 mt-0.5 sm:mt-1">
                         {creator.platforms.map((platform: string) => (
                           <PlatformIcon key={platform} platform={platform} />
                         ))}
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
                           {creator.totalSubmissions} submissions
                         </span>
                       </div>
                     </div>
                   </div>
-                  <div className="text-left sm:text-right w-full sm:w-auto">
-                    <div className="text-lg font-bold">
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-sm sm:text-lg font-bold whitespace-nowrap">
                       {getLeaderboardMetric(creator)}
                     </div>
-                    <div className="text-sm text-muted-foreground">
+                    <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
                       {creator.avgViewsPerSubmission.toFixed(0)} avg
                       views/submission
                     </div>

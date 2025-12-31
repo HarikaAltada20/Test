@@ -798,7 +798,7 @@ export default function CreatorsClient({
                   </h2>
                 </div>
 
-                <div className="flex gap-3 sm:gap-4 overflow-x-auto min-[1000px]:flex-wrap min-[1000px]:overflow-x-visible py-4 px-2 sm:px-4 justify-start md:justify-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                <div className="flex gap-3 sm:gap-4 overflow-x-auto min-[760px]:flex-wrap min-[760px]:overflow-x-visible py-4 px-2 sm:px-4 justify-start md:justify-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                   {finalMostPopularContests.map(renderContestCard)}
 
                   {/* Total Budget Card */}

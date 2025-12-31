@@ -2366,7 +2366,7 @@ function DashboardContent({
 
           {/* Main Content */}
           <main className="flex-1 dashboard-main-content">
-            <div className="p-6 md:p-8">
+            <div className="p-3 sm:p-6 md:p-8">
               <Suspense fallback={<LoadingPlaceholder />}>
                 <div
                   data-mode={currentMode}
