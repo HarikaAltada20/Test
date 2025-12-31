@@ -45,6 +45,7 @@ import {
   Video,
   ThumbsUp,
   MessageCircle,
+  BarChart3,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { cn, formatLocalDateTime, formatTimeAgo } from "@/lib/utils";
@@ -68,6 +69,11 @@ import type { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
+import {
+  EnhancedTabs as Tabs,
+  EnhancedTabsList as TabsList,
+  EnhancedTabsTrigger as TabsTrigger,
+} from "@/components/ui/enhanced-tabs";
 import { useTabState } from "@/components/ui/tab-utils";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
@@ -95,6 +101,7 @@ const getTabs = (platform?: string | null): TabConfig[] => {
     return [
       ...baseTabs,
       { id: "twitter-feed", label: "Twitter Feed" },
+      { id: "analytics", label: "Analytics" },
     ];
   }
 
@@ -242,6 +249,11 @@ export function ContestClientPage({
     defaultTab: "details",
   });
 
+  // Analytics tab filter state
+  const [activeAnalyticsTab, setActiveAnalyticsTab] = useState<
+    "all" | "verified" | "paid" | "pending" | "rejected" | "verified_or_paid"
+  >("all");
+
   // Pagination state for leaderboard
   const [leaderboardCurrentPage, setLeaderboardCurrentPage] = useState(1);
   const [leaderboardItemsPerPage, setLeaderboardItemsPerPage] = useState(25); // Or your preferred default
@@ -279,6 +291,10 @@ export function ContestClientPage({
   // Twitter campaign metrics state
   const [twitterMetrics, setTwitterMetrics] = useState<any>(null);
   const [loadingMetrics, setLoadingMetrics] = useState(false);
+
+  // Analytics: State for fetching actual tweet data for metrics calculation
+  const [analyticsTweets, setAnalyticsTweets] = useState<any[]>([]);
+  const [loadingAnalyticsTweets, setLoadingAnalyticsTweets] = useState(false);
 
   // Post-contest status state for creator transparency
   const [postContestStatus, setPostContestStatus] = useState<string | null>(
@@ -541,10 +557,11 @@ export function ContestClientPage({
       // Refresh BOTH the leaderboard AND the user's own submission data
       const isTwitterContest = contest.platform === "twitter";
       if (isTwitterContest) {
-        // For Twitter, refresh both leaderboard and my rank
+        // For Twitter, refresh both leaderboard, my rank, and metrics
         await Promise.all([
           fetchTwitterLeaderboard(),
           fetchMyTwitterRank(),
+          fetchTwitterMetrics(),
         ]);
       } else {
         // For other platforms, refresh leaderboard and submission data
@@ -852,6 +869,85 @@ export function ContestClientPage({
     }
   };
 
+  // Fetch Twitter tweets for analytics (all tweets, not just eligible ones)
+  const fetchAnalyticsTweets = async () => {
+    if (!isMounted || !contestId || contest?.platform?.toLowerCase() !== "twitter") return;
+
+    setLoadingAnalyticsTweets(true);
+
+    try {
+      // Fetch all tweets from database (including rejected ones for analytics)
+      const { data: tweetsData, error } = await supabase
+        .from("twitter_campaign_tweets")
+        .select(`
+          id,
+          tweet_id,
+          tweet_url,
+          tweet_text,
+          tweet_created_at,
+          tweet_type,
+          twitter_username,
+          creator_id,
+          likes,
+          replies,
+          retweets,
+          quote_reposts,
+          impressions,
+          points,
+          is_eligible,
+          moderation_status,
+          manual_points_adjustment,
+          manual_points_reason
+        `)
+        .eq("contest_id", contestId)
+        .order("tweet_created_at", { ascending: false });
+
+      if (error) {
+        throw new Error(error.message || "Failed to fetch tweets");
+      }
+
+      if (isMounted) {
+        // Transform tweets to submission-like format for analytics
+        const transformedTweets = (tweetsData || []).map((tweet: any) => ({
+          id: tweet.id,
+          created_at: tweet.tweet_created_at,
+          content_link: tweet.tweet_url,
+          status: tweet.moderation_status === "approved" ? "verified" : tweet.moderation_status === "rejected" ? "rejected" : "pending",
+          views: tweet.impressions || 0,
+          earnings: null,
+          other_stats: {
+            likes: tweet.likes || 0,
+            replies: tweet.replies || 0,
+            retweets: tweet.retweets || 0,
+            quote_reposts: tweet.quote_reposts || 0,
+            impressions: tweet.impressions || 0,
+            points: (tweet.points || 0) + (tweet.manual_points_adjustment || 0),
+            base_points: tweet.points || 0,
+            manual_points_adjustment: tweet.manual_points_adjustment || 0,
+            manual_points_reason: tweet.manual_points_reason,
+            tweet_type: tweet.tweet_type,
+            tweet_text: tweet.tweet_text,
+          },
+          platform: "twitter",
+          video_thumbnail_url: null,
+          video_title: tweet.tweet_text?.substring(0, 100) || null,
+          creator_id: tweet.creator_id,
+          is_twitter_tweet: true,
+          tweet_id: tweet.tweet_id,
+          moderation_status: tweet.moderation_status || "pending",
+          manual_points_adjustment: tweet.manual_points_adjustment || 0,
+          manual_points_reason: tweet.manual_points_reason,
+        }));
+        setAnalyticsTweets(transformedTweets);
+      }
+    } catch (err: any) {
+      console.error("Error fetching analytics tweets:", err);
+      if (isMounted) setAnalyticsTweets([]);
+    } finally {
+      if (isMounted) setLoadingAnalyticsTweets(false);
+    }
+  };
+
   const fetchPostContestStatus = async () => {
     if (!isMounted || !contestId) return;
 
@@ -878,6 +974,18 @@ export function ContestClientPage({
   // REMOVED: Automatic Twitter API calls on page load
   // Twitter API calls are ONLY made when refresh buttons are clicked
   // This saves API calls - data is only fetched when explicitly requested
+
+  // Fetch analytics tweets and metrics when Analytics tab is active for Twitter campaigns
+  useEffect(() => {
+    if (activeTab === "analytics" && contest?.platform?.toLowerCase() === "twitter" && contestId && isMounted) {
+      fetchAnalyticsTweets();
+      // Also fetch Twitter metrics for target metrics display (especially for raid campaigns)
+      if (!twitterMetrics) {
+        fetchTwitterMetrics();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, contest?.platform, contestId]);
 
   // Clean up URL parameters on component mount
   useEffect(() => {
@@ -1461,6 +1569,24 @@ export function ContestClientPage({
                           : "Competition Based"}
                       </Badge>
                     )}
+                    {/* Campaign Type Badge for Twitter campaigns */}
+                    {(() => {
+                      const isTwitterTextImage =
+                        (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                        contest.contest_format === "text_image";
+
+                      if (isTwitterTextImage) {
+                        const campaignType = contest.contest_based_details?.twitter_campaign?.campaign_type;
+                        if (campaignType === "raid" || campaignType === "awareness") {
+                          return (
+                            <Badge className="capitalize text-sm px-6 py-3 font-bold rounded-full shadow-xl backdrop-blur-md border-2 border-white/40 text-white hover:scale-105 transition-all duration-300 bg-white/25">
+                              {campaignType === "raid" ? "Raid Campaign" : "Awareness Campaign"}
+                            </Badge>
+                          );
+                        }
+                      }
+                      return null;
+                    })()}
                     {/* Post-contest status badge for ended contests */}
                     {contest.status === "ended" &&
                       postContestStatus &&
@@ -2182,848 +2308,6 @@ export function ContestClientPage({
           </Card> */}
         </div>
 
-        {/* Live Twitter Campaign Metrics */}
-        {contest?.platform?.toLowerCase() === "twitter" && (
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2
-                className={cn(
-                  "text-xl font-bold",
-                  isDark ? "text-white" : "text-slate-900"
-                )}
-              >
-                Live Campaign Metrics
-              </h2>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={fetchTwitterMetrics}
-                disabled={loadingMetrics}
-                className={cn(
-                  "flex items-center gap-2",
-                  isDark
-                    ? "border-slate-700 text-slate-300 hover:bg-slate-800"
-                    : "border-slate-300 text-slate-700 hover:bg-slate-50"
-                )}
-              >
-                <RefreshCw
-                  className={cn("h-4 w-4", loadingMetrics && "animate-spin")}
-                />
-                Refresh
-              </Button>
-            </div>
-            {loadingMetrics ? (
-              <div className="flex items-center justify-center py-12">
-                <RefreshCw className="h-6 w-6 animate-spin text-blue-600" />
-              </div>
-            ) : twitterMetrics ? (
-              <div className="space-y-6">
-                {/* For Raid Campaigns: Show Target Tweet, Target Metrics, and Current Achieved */}
-                {(() => {
-                  const isRaid = (contest as any).content_type === "raid" && contest?.contest_format === "text_image";
-
-                  if (!isRaid) return null;
-
-                  // Get raid target data from contest_based_details (source of truth) or twitterMetrics (synced)
-                  const raidTarget = (contest as any)?.contest_based_details?.twitter_campaign?.raid_target;
-                  const targetTweetUrl = twitterMetrics?.target_tweet_url || raidTarget?.link || null;
-                  const targetMetrics = raidTarget?.metrics || {};
-
-                  // Get target values - prefer twitterMetrics (synced) but fallback to contest data
-                  const targetLikes = twitterMetrics?.target_likes ?? (targetMetrics.likes ? parseInt(String(targetMetrics.likes), 10) : null);
-                  const targetComments = twitterMetrics?.target_comments ?? (targetMetrics.comments ? parseInt(String(targetMetrics.comments), 10) : null);
-                  const targetRetweets = twitterMetrics?.target_retweets ?? (targetMetrics.retweets ? parseInt(String(targetMetrics.retweets), 10) : null);
-                  const targetQuoteReposts = twitterMetrics?.target_quote_reposts ?? (targetMetrics.quote_reposts ? parseInt(String(targetMetrics.quote_reposts), 10) : null);
-
-                  // Debug: Log values to help troubleshoot
-                  if (contest?.platform?.toLowerCase() === "twitter") {
-                    console.log("[Raid Debug Opportunities] content_type:", (contest as any).content_type);
-                    console.log("[Raid Debug Opportunities] contest_format:", contest?.contest_format);
-                    console.log("[Raid Debug Opportunities] isRaid:", isRaid);
-                    console.log("[Raid Debug Opportunities] raidTarget from contest:", raidTarget);
-                    console.log("[Raid Debug Opportunities] targetTweetUrl:", targetTweetUrl);
-                    console.log("[Raid Debug Opportunities] targetMetrics:", targetMetrics);
-                  }
-
-                  return (
-                    <>
-                      {/* Target Tweet Section - Show first */}
-                      {targetTweetUrl && (
-                        <div className="mb-6">
-                          <h3
-                            className={cn(
-                              "text-lg font-semibold mb-4 flex items-center gap-2",
-                              isDark ? "text-white" : "text-slate-900"
-                            )}
-                          >
-                            <Share2 className="h-5 w-5 text-sky-500" />
-                            Target Tweet
-                          </h3>
-                          <div
-                            className={cn(
-                              "rounded-xl p-6 border",
-                              isDark
-                                ? "bg-slate-900/40 border-slate-700"
-                                : "bg-slate-50 border-slate-200"
-                            )}
-                          >
-                            <a
-                              href={targetTweetUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={cn(
-                                "inline-flex items-center gap-2 text-sm font-medium break-all hover:underline",
-                                isDark
-                                  ? "text-sky-300 hover:text-sky-200"
-                                  : "text-sky-600 hover:text-sky-700"
-                              )}
-                            >
-                              {targetTweetUrl}
-                              <ExternalLink className="h-4 w-4 flex-shrink-0" />
-                            </a>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Target Metrics Section - Only show metrics that are set (not null, not 0) */}
-                      {(() => {
-                        const hasTargetMetrics =
-                          (targetLikes !== null && targetLikes > 0) ||
-                          (targetComments !== null && targetComments > 0) ||
-                          (targetRetweets !== null && targetRetweets > 0) ||
-                          (targetQuoteReposts !== null && targetQuoteReposts > 0);
-
-                        return hasTargetMetrics ? (
-                          <div className="mb-6">
-                            <h3
-                              className={cn(
-                                "text-lg font-semibold mb-4",
-                                isDark ? "text-white" : "text-slate-900"
-                              )}
-                            >
-                              Target Metrics
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                              {targetLikes !== null && targetLikes > 0 && (
-                                <div
-                                  className={cn(
-                                    "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                    isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                                  )}
-                                >
-                                  <CardContent className="p-6 flex justify-between items-center">
-                                    <div
-                                      className={cn(
-                                        "flex-1 space-y-2",
-                                        isDark ? "text-white" : "text-slate-800"
-                                      )}
-                                    >
-                                      <p
-                                        className={cn(
-                                          "text-sm font-semibold uppercase tracking-wide",
-                                          isDark ? "text-slate-200" : "text-slate-600"
-                                        )}
-                                      >
-                                        Target Likes
-                                      </p>
-                                      <p
-                                        className={cn(
-                                          "text-2xl font-black",
-                                          isDark ? "text-white" : "text-slate-800"
-                                        )}
-                                      >
-                                        {targetLikes.toLocaleString()}
-                                      </p>
-                                    </div>
-                                    <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                      <ThumbsUp className="h-7 w-7" />
-                                    </div>
-                                  </CardContent>
-                                </div>
-                              )}
-                              {targetComments !== null && targetComments > 0 && (
-                                <div
-                                  className={cn(
-                                    "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                    isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                                  )}
-                                >
-                                  <CardContent className="p-6 flex justify-between items-center">
-                                    <div
-                                      className={cn(
-                                        "flex-1 space-y-2",
-                                        isDark ? "text-white" : "text-slate-800"
-                                      )}
-                                    >
-                                      <p
-                                        className={cn(
-                                          "text-sm font-semibold uppercase tracking-wide",
-                                          isDark ? "text-slate-200" : "text-slate-600"
-                                        )}
-                                      >
-                                        Target Comments
-                                      </p>
-                                      <p
-                                        className={cn(
-                                          "text-2xl font-black",
-                                          isDark ? "text-white" : "text-slate-800"
-                                        )}
-                                      >
-                                        {targetComments.toLocaleString()}
-                                      </p>
-                                    </div>
-                                    <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                      <MessageCircle className="h-7 w-7" />
-                                    </div>
-                                  </CardContent>
-                                </div>
-                              )}
-                              {targetRetweets !== null && targetRetweets > 0 && (
-                                <div
-                                  className={cn(
-                                    "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                    isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                                  )}
-                                >
-                                  <CardContent className="p-6 flex justify-between items-center">
-                                    <div
-                                      className={cn(
-                                        "flex-1 space-y-2",
-                                        isDark ? "text-white" : "text-slate-800"
-                                      )}
-                                    >
-                                      <p
-                                        className={cn(
-                                          "text-sm font-semibold uppercase tracking-wide",
-                                          isDark ? "text-slate-200" : "text-slate-600"
-                                        )}
-                                      >
-                                        Target Retweets
-                                      </p>
-                                      <p
-                                        className={cn(
-                                          "text-2xl font-black",
-                                          isDark ? "text-white" : "text-slate-800"
-                                        )}
-                                      >
-                                        {targetRetweets.toLocaleString()}
-                                      </p>
-                                    </div>
-                                    <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                      <Share2 className="h-7 w-7" />
-                                    </div>
-                                  </CardContent>
-                                </div>
-                              )}
-                              {targetQuoteReposts !== null && targetQuoteReposts > 0 && (
-                                <div
-                                  className={cn(
-                                    "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                    isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                                  )}
-                                >
-                                  <CardContent className="p-6 flex justify-between items-center">
-                                    <div
-                                      className={cn(
-                                        "flex-1 space-y-2",
-                                        isDark ? "text-white" : "text-slate-800"
-                                      )}
-                                    >
-                                      <p
-                                        className={cn(
-                                          "text-sm font-semibold uppercase tracking-wide",
-                                          isDark ? "text-slate-200" : "text-slate-600"
-                                        )}
-                                      >
-                                        Target Quote Reposts
-                                      </p>
-                                      <p
-                                        className={cn(
-                                          "text-2xl font-black",
-                                          isDark ? "text-white" : "text-slate-800"
-                                        )}
-                                      >
-                                        {targetQuoteReposts.toLocaleString()}
-                                      </p>
-                                    </div>
-                                    <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                      <RefreshCw className="h-7 w-7" />
-                                    </div>
-                                  </CardContent>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ) : null;
-                      })()}
-
-                      {/* Current Metrics Achieved Section (from target_current_*) */}
-                      {(() => {
-                        const hasCurrentMetrics =
-                          twitterMetrics.target_current_likes !== null ||
-                          twitterMetrics.target_current_comments !== null ||
-                          twitterMetrics.target_current_retweets !== null ||
-                          twitterMetrics.target_current_quote_reposts !== null ||
-                          twitterMetrics.target_current_views !== null ||
-                          twitterMetrics.targets_reached !== null;
-
-                        return hasCurrentMetrics ? (
-                          <div className="mb-6">
-                            <h3
-                              className={cn(
-                                "text-lg font-semibold mb-4",
-                                isDark ? "text-white" : "text-slate-900"
-                              )}
-                            >
-                              Current Metrics Achieved
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
-                              {twitterMetrics.target_current_likes !== null && (
-                                <div
-                                  className={cn(
-                                    "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                    isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                                  )}
-                                >
-                                  <CardContent className="p-6 flex justify-between items-center">
-                                    <div
-                                      className={cn(
-                                        "flex-1 space-y-2",
-                                        isDark ? "text-white" : "text-slate-800"
-                                      )}
-                                    >
-                                      <p
-                                        className={cn(
-                                          "text-sm font-semibold uppercase tracking-wide",
-                                          isDark ? "text-slate-200" : "text-slate-600"
-                                        )}
-                                      >
-                                        Current Likes
-                                      </p>
-                                      <p
-                                        className={cn(
-                                          "text-2xl font-black",
-                                          isDark ? "text-white" : "text-slate-800"
-                                        )}
-                                      >
-                                        {(twitterMetrics.target_current_likes || 0).toLocaleString()}
-                                      </p>
-                                    </div>
-                                    <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                      <ThumbsUp className="h-7 w-7" />
-                                    </div>
-                                  </CardContent>
-                                </div>
-                              )}
-                              {twitterMetrics.target_current_comments !== null && (
-                                <div
-                                  className={cn(
-                                    "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                    isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                                  )}
-                                >
-                                  <CardContent className="p-6 flex justify-between items-center">
-                                    <div
-                                      className={cn(
-                                        "flex-1 space-y-2",
-                                        isDark ? "text-white" : "text-slate-800"
-                                      )}
-                                    >
-                                      <p
-                                        className={cn(
-                                          "text-sm font-semibold uppercase tracking-wide",
-                                          isDark ? "text-slate-200" : "text-slate-600"
-                                        )}
-                                      >
-                                        Current Comments
-                                      </p>
-                                      <p
-                                        className={cn(
-                                          "text-2xl font-black",
-                                          isDark ? "text-white" : "text-slate-800"
-                                        )}
-                                      >
-                                        {(twitterMetrics.target_current_comments || 0).toLocaleString()}
-                                      </p>
-                                    </div>
-                                    <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                      <MessageCircle className="h-7 w-7" />
-                                    </div>
-                                  </CardContent>
-                                </div>
-                              )}
-                              {twitterMetrics.target_current_retweets !== null && (
-                                <div
-                                  className={cn(
-                                    "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                    isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                                  )}
-                                >
-                                  <CardContent className="p-6 flex justify-between items-center">
-                                    <div
-                                      className={cn(
-                                        "flex-1 space-y-2",
-                                        isDark ? "text-white" : "text-slate-800"
-                                      )}
-                                    >
-                                      <p
-                                        className={cn(
-                                          "text-sm font-semibold uppercase tracking-wide",
-                                          isDark ? "text-slate-200" : "text-slate-600"
-                                        )}
-                                      >
-                                        Current Retweets
-                                      </p>
-                                      <p
-                                        className={cn(
-                                          "text-2xl font-black",
-                                          isDark ? "text-white" : "text-slate-800"
-                                        )}
-                                      >
-                                        {(twitterMetrics.target_current_retweets || 0).toLocaleString()}
-                                      </p>
-                                    </div>
-                                    <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                      <Share2 className="h-7 w-7" />
-                                    </div>
-                                  </CardContent>
-                                </div>
-                              )}
-                              {twitterMetrics.target_current_quote_reposts !== null && (
-                                <div
-                                  className={cn(
-                                    "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                    isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                                  )}
-                                >
-                                  <CardContent className="p-6 flex justify-between items-center">
-                                    <div
-                                      className={cn(
-                                        "flex-1 space-y-2",
-                                        isDark ? "text-white" : "text-slate-800"
-                                      )}
-                                    >
-                                      <p
-                                        className={cn(
-                                          "text-sm font-semibold uppercase tracking-wide",
-                                          isDark ? "text-slate-200" : "text-slate-600"
-                                        )}
-                                      >
-                                        Current Quote Reposts
-                                      </p>
-                                      <p
-                                        className={cn(
-                                          "text-2xl font-black",
-                                          isDark ? "text-white" : "text-slate-800"
-                                        )}
-                                      >
-                                        {(twitterMetrics.target_current_quote_reposts || 0).toLocaleString()}
-                                      </p>
-                                    </div>
-                                    <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                      <RefreshCw className="h-7 w-7" />
-                                    </div>
-                                  </CardContent>
-                                </div>
-                              )}
-                              {twitterMetrics.target_current_views !== null && (
-                                <div
-                                  className={cn(
-                                    "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                    isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                                  )}
-                                >
-                                  <CardContent className="p-6 flex justify-between items-center">
-                                    <div
-                                      className={cn(
-                                        "flex-1 space-y-2",
-                                        isDark ? "text-white" : "text-slate-800"
-                                      )}
-                                    >
-                                      <p
-                                        className={cn(
-                                          "text-sm font-semibold uppercase tracking-wide",
-                                          isDark ? "text-slate-200" : "text-slate-600"
-                                        )}
-                                      >
-                                        Current Views
-                                      </p>
-                                      <p
-                                        className={cn(
-                                          "text-2xl font-black",
-                                          isDark ? "text-white" : "text-slate-800"
-                                        )}
-                                      >
-                                        {(twitterMetrics.target_current_views || 0).toLocaleString()}
-                                      </p>
-                                    </div>
-                                    <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                      <Eye className="h-7 w-7" />
-                                    </div>
-                                  </CardContent>
-                                </div>
-                              )}
-                            </div>
-                            {/* Targets Reached Status */}
-                            {twitterMetrics.targets_reached !== null && (
-                              <div
-                                className={cn(
-                                  "rounded-xl p-4 border flex items-center gap-3",
-                                  twitterMetrics.targets_reached
-                                    ? isDark
-                                      ? "bg-green-900/30 border-green-700"
-                                      : "bg-green-50 border-green-200"
-                                    : isDark
-                                      ? "bg-yellow-900/30 border-yellow-700"
-                                      : "bg-yellow-50 border-yellow-200"
-                                )}
-                              >
-                                {twitterMetrics.targets_reached ? (
-                                  <CheckCircle2
-                                    className={cn(
-                                      "h-6 w-6 flex-shrink-0",
-                                      isDark ? "text-green-400" : "text-green-600"
-                                    )}
-                                  />
-                                ) : (
-                                  <Clock
-                                    className={cn(
-                                      "h-6 w-6 flex-shrink-0",
-                                      isDark ? "text-yellow-400" : "text-yellow-600"
-                                    )}
-                                  />
-                                )}
-                                <div>
-                                  <p
-                                    className={cn(
-                                      "text-sm font-semibold",
-                                      twitterMetrics.targets_reached
-                                        ? isDark
-                                          ? "text-green-300"
-                                          : "text-green-800"
-                                        : isDark
-                                          ? "text-yellow-300"
-                                          : "text-yellow-800"
-                                    )}
-                                  >
-                                    {twitterMetrics.targets_reached
-                                      ? "Targets Reached"
-                                      : "Targets Not Yet Reached"}
-                                  </p>
-                                  <p
-                                    className={cn(
-                                      "text-xs mt-1",
-                                      twitterMetrics.targets_reached
-                                        ? isDark
-                                          ? "text-green-400"
-                                          : "text-green-700"
-                                        : isDark
-                                          ? "text-yellow-400"
-                                          : "text-yellow-700"
-                                    )}
-                                  >
-                                    {twitterMetrics.targets_reached
-                                      ? "All target metrics have been achieved. Contest will end when targets are reached."
-                                      : "Keep engaging with the target tweet to reach the goals!"}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ) : null;
-                      })()}
-                    </>
-                  );
-                })()}
-
-                {/* General Campaign Metrics Section (for both raid and awareness) */}
-                <div>
-                  <h3
-                    className={cn(
-                      "text-lg font-semibold mb-4",
-                      isDark ? "text-white" : "text-slate-900"
-                    )}
-                  >
-                    Campaign Metrics
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {/* Total Tweets Card */}
-                    <div
-                      className={cn(
-                        "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                        isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                      )}
-                    >
-                      <CardContent className="p-6 flex justify-between items-center">
-                        <div
-                          className={cn(
-                            "flex-1 space-y-2",
-                            isDark ? "text-white" : "text-slate-800"
-                          )}
-                        >
-                          <p
-                            className={cn(
-                              "text-sm font-semibold uppercase tracking-wide",
-                              isDark ? "text-slate-200" : "text-slate-600"
-                            )}
-                          >
-                            Total Tweets
-                          </p>
-                          <p
-                            className={cn(
-                              "text-2xl font-black",
-                              isDark ? "text-white" : "text-slate-800"
-                            )}
-                          >
-                            {(twitterMetrics.total_filtered_tweets || 0).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                          <FileText className="h-7 w-7" />
-                        </div>
-                      </CardContent>
-                    </div>
-
-                    {/* Participants card removed - already shown in summary cards above */}
-
-                    {/* Total Likes Card */}
-                    <div
-                      className={cn(
-                        "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                        isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                      )}
-                    >
-                      <CardContent className="p-6 flex justify-between items-center">
-                        <div
-                          className={cn(
-                            "flex-1 space-y-2",
-                            isDark ? "text-white" : "text-slate-800"
-                          )}
-                        >
-                          <p
-                            className={cn(
-                              "text-sm font-semibold uppercase tracking-wide",
-                              isDark ? "text-slate-200" : "text-slate-600"
-                            )}
-                          >
-                            Total Likes
-                          </p>
-                          <p
-                            className={cn(
-                              "text-2xl font-black",
-                              isDark ? "text-white" : "text-slate-800"
-                            )}
-                          >
-                            {(twitterMetrics.total_likes || 0).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                          <ThumbsUp className="h-7 w-7" />
-                        </div>
-                      </CardContent>
-                    </div>
-
-                    {/* Total Impressions Card */}
-                    <div
-                      className={cn(
-                        "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                        isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                      )}
-                    >
-                      <CardContent className="p-6 flex justify-between items-center">
-                        <div
-                          className={cn(
-                            "flex-1 space-y-2",
-                            isDark ? "text-white" : "text-slate-800"
-                          )}
-                        >
-                          <p
-                            className={cn(
-                              "text-sm font-semibold uppercase tracking-wide",
-                              isDark ? "text-slate-200" : "text-slate-600"
-                            )}
-                          >
-                            Total Impressions
-                          </p>
-                          <p
-                            className={cn(
-                              "text-2xl font-black",
-                              isDark ? "text-white" : "text-slate-800"
-                            )}
-                          >
-                            {(twitterMetrics.total_impressions || 0).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                          <Eye className="h-7 w-7" />
-                        </div>
-                      </CardContent>
-                    </div>
-
-                    {/* Total Replies Card */}
-                    <div
-                      className={cn(
-                        "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                        isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                      )}
-                    >
-                      <CardContent className="p-6 flex justify-between items-center">
-                        <div
-                          className={cn(
-                            "flex-1 space-y-2",
-                            isDark ? "text-white" : "text-slate-800"
-                          )}
-                        >
-                          <p
-                            className={cn(
-                              "text-sm font-semibold uppercase tracking-wide",
-                              isDark ? "text-slate-200" : "text-slate-600"
-                            )}
-                          >
-                            Total Replies
-                          </p>
-                          <p
-                            className={cn(
-                              "text-2xl font-black",
-                              isDark ? "text-white" : "text-slate-800"
-                            )}
-                          >
-                            {(twitterMetrics.total_replies || 0).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                          <MessageCircle className="h-7 w-7" />
-                        </div>
-                      </CardContent>
-                    </div>
-
-                    {/* Total Retweets Card */}
-                    <div
-                      className={cn(
-                        "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                        isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                      )}
-                    >
-                      <CardContent className="p-6 flex justify-between items-center">
-                        <div
-                          className={cn(
-                            "flex-1 space-y-2",
-                            isDark ? "text-white" : "text-slate-800"
-                          )}
-                        >
-                          <p
-                            className={cn(
-                              "text-sm font-semibold uppercase tracking-wide",
-                              isDark ? "text-slate-200" : "text-slate-600"
-                            )}
-                          >
-                            Total Retweets
-                          </p>
-                          <p
-                            className={cn(
-                              "text-2xl font-black",
-                              isDark ? "text-white" : "text-slate-800"
-                            )}
-                          >
-                            {(twitterMetrics.total_retweets || 0).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                          <Share2 className="h-7 w-7" />
-                        </div>
-                      </CardContent>
-                    </div>
-
-                    {/* Total Quote Reposts Card */}
-                    <div
-                      className={cn(
-                        "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                        isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                      )}
-                    >
-                      <CardContent className="p-6 flex justify-between items-center">
-                        <div
-                          className={cn(
-                            "flex-1 space-y-2",
-                            isDark ? "text-white" : "text-slate-800"
-                          )}
-                        >
-                          <p
-                            className={cn(
-                              "text-sm font-semibold uppercase tracking-wide",
-                              isDark ? "text-slate-200" : "text-slate-600"
-                            )}
-                          >
-                            Total Quote Reposts
-                          </p>
-                          <p
-                            className={cn(
-                              "text-2xl font-black",
-                              isDark ? "text-white" : "text-slate-800"
-                            )}
-                          >
-                            {(twitterMetrics.total_quote_reposts || 0).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                          <RefreshCw className="h-7 w-7" />
-                        </div>
-                      </CardContent>
-                    </div>
-
-                    {/* Total Points Card */}
-                    <div
-                      className={cn(
-                        "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                        isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
-                      )}
-                    >
-                      <CardContent className="p-6 flex justify-between items-center">
-                        <div
-                          className={cn(
-                            "flex-1 space-y-2",
-                            isDark ? "text-white" : "text-slate-800"
-                          )}
-                        >
-                          <p
-                            className={cn(
-                              "text-sm font-semibold uppercase tracking-wide",
-                              isDark ? "text-slate-200" : "text-slate-600"
-                            )}
-                          >
-                            Total Points
-                          </p>
-                          <p
-                            className={cn(
-                              "text-2xl font-black",
-                              isDark ? "text-white" : "text-slate-800"
-                            )}
-                          >
-                            {(twitterMetrics.total_points || 0).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-yellow-500 to-orange-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                          <TrendingUp className="h-7 w-7" />
-                        </div>
-                      </CardContent>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div
-                className={cn(
-                  "rounded-2xl p-8 text-center border",
-                  isDark
-                    ? "bg-[#170337] border-slate-700 text-slate-400"
-                    : "bg-white border-slate-200 text-slate-600"
-                )}
-              >
-                <p>No metrics available yet. Metrics will appear after the first refresh.</p>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Post-Contest Status Section for Ended Contests */}
         {contest.status === "ended" && postContestStatus && (
@@ -4443,6 +3727,81 @@ export function ContestClientPage({
                         </div>
                       </div>
                     </div>
+
+                    {/* Campaign Type Card - Only for Twitter campaigns */}
+                    {(() => {
+                      const isTwitterTextImage =
+                        (contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x") &&
+                        contest.contest_format === "text_image";
+
+                      if (isTwitterTextImage) {
+                        const campaignType = contest.contest_based_details?.twitter_campaign?.campaign_type;
+                        if (campaignType === "raid" || campaignType === "awareness") {
+                          return (
+                            <div
+                              className={cn(
+                                "rounded-xl p-4 border shadow-sm",
+                                isDark
+                                  ? campaignType === "raid"
+                                    ? "border-red-400/50 bg-red-900/20"
+                                    : "border-cyan-400/50 bg-cyan-900/20"
+                                  : campaignType === "raid"
+                                    ? "bg-white border-red-200"
+                                    : "bg-white border-cyan-200"
+                              )}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={cn(
+                                    "p-3 rounded-full",
+                                    isDark
+                                      ? campaignType === "raid"
+                                        ? "bg-red-500/30 text-red-400"
+                                        : "bg-cyan-500/30 text-cyan-400"
+                                      : campaignType === "raid"
+                                        ? "bg-red-100 text-red-600"
+                                        : "bg-cyan-100 text-cyan-600"
+                                  )}
+                                >
+                                  <Tag className="h-5 w-5" />
+                                </div>
+                                <div className="flex-1">
+                                  <p
+                                    className={cn(
+                                      "text-xs font-medium uppercase tracking-wide",
+                                      isDark
+                                        ? campaignType === "raid"
+                                          ? "text-red-300"
+                                          : "text-cyan-300"
+                                        : campaignType === "raid"
+                                          ? "text-red-600"
+                                          : "text-cyan-600"
+                                    )}
+                                  >
+                                    Campaign Type
+                                  </p>
+                                  <p
+                                    className={cn(
+                                      "text-lg font-bold",
+                                      isDark
+                                        ? campaignType === "raid"
+                                          ? "text-red-100"
+                                          : "text-cyan-100"
+                                        : campaignType === "raid"
+                                          ? "text-red-900"
+                                          : "text-cyan-900"
+                                    )}
+                                  >
+                                    {campaignType === "raid" ? "Raid Campaign" : "Awareness Campaign"}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                      }
+                      return null;
+                    })()}
                   </div>
 
                   {/* Categories Section */}
@@ -8045,6 +7404,1160 @@ export function ContestClientPage({
                 )}
               </div>
             )}
+          </TabPanel>
+
+          {/* Analytics Tab */}
+          <TabPanel value="analytics" activeTab={activeTab}>
+            {(() => {
+              // For Twitter campaigns, use analyticsTweets; for others, use leaderboard
+              const allSubmissionsForAnalytics = contest?.platform?.toLowerCase() === "twitter"
+                ? analyticsTweets
+                : leaderboard;
+
+              // Filter submissions for analytics based on active analytics tab
+              // For Twitter tweets, use moderation_status; for regular submissions, use status
+              const filteredAnalyticsSubmissions = allSubmissionsForAnalytics.filter((submission: any) => {
+                const isTwitterTweet = submission.is_twitter_tweet === true;
+                const statusToCheck = isTwitterTweet
+                  ? (submission.moderation_status || "pending")
+                  : submission.status;
+
+                // Map Twitter moderation_status to submission status for filtering
+                let mappedStatus = statusToCheck;
+                if (isTwitterTweet) {
+                  if (statusToCheck === "approved") mappedStatus = "verified";
+                  else if (statusToCheck === "rejected") mappedStatus = "rejected";
+                  else mappedStatus = "pending"; // pending or null
+                }
+
+                if (activeAnalyticsTab === "all") return true;
+                if (activeAnalyticsTab === "verified_or_paid") {
+                  return mappedStatus === "verified" || mappedStatus === "paid";
+                }
+                return mappedStatus === activeAnalyticsTab;
+              });
+
+              // Calculate Twitter campaign metrics from filtered submissions
+              const calculateTwitterMetrics = () => {
+                const metrics = {
+                  total_tweets: 0,
+                  total_likes: 0,
+                  total_replies: 0,
+                  total_retweets: 0,
+                  total_quote_reposts: 0,
+                  total_impressions: 0,
+                  total_points: 0,
+                };
+
+                filteredAnalyticsSubmissions.forEach((sub: any) => {
+                  if (sub.is_twitter_tweet && sub.other_stats) {
+                    metrics.total_tweets += 1;
+                    metrics.total_likes += sub.other_stats.likes || 0;
+                    metrics.total_replies += sub.other_stats.replies || 0;
+                    metrics.total_retweets += sub.other_stats.retweets || 0;
+                    metrics.total_quote_reposts += sub.other_stats.quote_reposts || 0;
+                    metrics.total_impressions += sub.views || 0;
+                    metrics.total_points += sub.other_stats.points || 0;
+                  }
+                });
+
+                return metrics;
+              };
+
+              // Calculate metrics from filtered submissions (for display in Campaign Metrics)
+              const calculatedMetrics = contest?.platform?.toLowerCase() === "twitter"
+                ? calculateTwitterMetrics()
+                : null;
+
+              // Use the API twitterMetrics state for target metrics (raid campaigns), 
+              // but use calculatedMetrics for the general campaign metrics display
+              const metricsForDisplay = calculatedMetrics || twitterMetrics;
+
+              return (
+                <div
+                  className={cn(
+                    "rounded-xl shadow-md p-2",
+                    isDark ? "bg-[#180438]" : "bg-white"
+                  )}
+                >
+                  <CardHeader>
+                    <CardTitle>Contest Analytics</CardTitle>
+                    {/* Analytics Filter Tabs */}
+                    <div className="mt-4">
+                      <Tabs
+                        value={activeAnalyticsTab}
+                        onValueChange={(value) =>
+                          setActiveAnalyticsTab(value as any)
+                        }
+                        className="w-full"
+                      >
+                        <TabsList className="grid w-full grid-cols-6">
+                          <TabsTrigger
+                            value="all"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "text-white border border-gray-500"
+                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                            )}
+                          >
+                            All ({allSubmissionsForAnalytics?.length || 0})
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="verified"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "text-white border border-gray-500"
+                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                            )}
+                          >
+                            Verified (
+                            {allSubmissionsForAnalytics?.filter((s: any) => {
+                              const isTwitter = s.is_twitter_tweet;
+                              if (isTwitter) return s.moderation_status === "approved";
+                              return s.status === "verified";
+                            }).length || 0}
+                            )
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="paid"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "text-white border border-gray-500"
+                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                            )}
+                          >
+                            Paid (
+                            {allSubmissionsForAnalytics?.filter((s: any) => s.status === "paid")
+                              .length || 0}
+                            )
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="pending"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "text-white border border-gray-500"
+                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                            )}
+                          >
+                            Pending (
+                            {allSubmissionsForAnalytics?.filter((s: any) => {
+                              const isTwitter = s.is_twitter_tweet;
+                              if (isTwitter) return (s.moderation_status || "pending") === "pending";
+                              return s.status === "pending";
+                            }).length || 0}
+                            )
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="rejected"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "text-white border border-gray-500"
+                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                            )}
+                          >
+                            Rejected (
+                            {allSubmissionsForAnalytics?.filter((s: any) => {
+                              const isTwitter = s.is_twitter_tweet;
+                              if (isTwitter) return s.moderation_status === "rejected";
+                              return s.status === "rejected";
+                            }).length || 0}
+                            )
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="verified_or_paid"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "text-white border border-gray-500"
+                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                            )}
+                          >
+                            Verified/Paid (
+                            {allSubmissionsForAnalytics?.filter((s: any) => {
+                              const isTwitter = s.is_twitter_tweet;
+                              if (isTwitter) return s.moderation_status === "approved";
+                              return s.status === "verified" || s.status === "paid";
+                            }).length || 0}
+                            )
+                          </TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {/* Loading state for analytics tweets */}
+                    {loadingAnalyticsTweets && contest?.platform?.toLowerCase() === "twitter" && (
+                      <div className="flex items-center justify-center py-12">
+                        <RefreshCw className="h-6 w-6 animate-spin text-blue-600" />
+                      </div>
+                    )}
+
+                    {/* Campaign Metrics for Twitter Campaigns */}
+                    {!loadingAnalyticsTweets && contest?.platform?.toLowerCase() === "twitter" && !twitterMetrics && !calculatedMetrics && (
+                      <div className="text-center py-8 text-gray-500">
+                        <p>No analytics data available yet. Data will appear once tweets are submitted.</p>
+                      </div>
+                    )}
+                    {!loadingAnalyticsTweets && contest?.platform?.toLowerCase() === "twitter" && (twitterMetrics || calculatedMetrics) && (
+                      <div className="space-y-8">
+                        {/* For Raid Campaigns: Show Target Tweet, Target Metrics, and Current Achieved */}
+                        {(() => {
+                          const isRaid = (contest as any).content_type === "raid" && contest?.contest_format === "text_image";
+
+                          if (!isRaid) return null;
+
+                          // Get raid target data from contest_based_details (source of truth) or twitterMetrics (synced)
+                          const raidTarget = (contest as any)?.contest_based_details?.twitter_campaign?.raid_target;
+                          const targetTweetUrl = twitterMetrics?.target_tweet_url || raidTarget?.link || null;
+                          const targetMetrics = raidTarget?.metrics || {};
+
+                          // Get target values - prefer twitterMetrics (synced) but fallback to contest data
+                          const targetLikes = twitterMetrics?.target_likes ?? (targetMetrics.likes ? parseInt(String(targetMetrics.likes), 10) : null);
+                          const targetComments = twitterMetrics?.target_comments ?? (targetMetrics.comments ? parseInt(String(targetMetrics.comments), 10) : null);
+                          const targetRetweets = twitterMetrics?.target_retweets ?? (targetMetrics.retweets ? parseInt(String(targetMetrics.retweets), 10) : null);
+                          const targetQuoteReposts = twitterMetrics?.target_quote_reposts ?? (targetMetrics.quote_reposts ? parseInt(String(targetMetrics.quote_reposts), 10) : null);
+
+                          return (
+                            <>
+                              {/* Target Tweet Section - Show first */}
+                              {targetTweetUrl && (
+                                <div className="mb-6">
+                                  <h3
+                                    className={cn(
+                                      "text-lg font-semibold mb-4 flex items-center gap-2",
+                                      isDark ? "text-white" : "text-slate-900"
+                                    )}
+                                  >
+                                    <Share2 className="h-5 w-5 text-sky-500" />
+                                    Target Tweet
+                                  </h3>
+                                  <div
+                                    className={cn(
+                                      "rounded-xl p-6 border",
+                                      isDark
+                                        ? "bg-slate-900/40 border-slate-700"
+                                        : "bg-slate-50 border-slate-200"
+                                    )}
+                                  >
+                                    <a
+                                      href={targetTweetUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={cn(
+                                        "inline-flex items-center gap-2 text-sm font-medium break-all hover:underline",
+                                        isDark
+                                          ? "text-sky-300 hover:text-sky-200"
+                                          : "text-sky-600 hover:text-sky-700"
+                                      )}
+                                    >
+                                      {targetTweetUrl}
+                                      <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                                    </a>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Target Metrics Section - Only show metrics that are set (not null, not 0) */}
+                              {(() => {
+                                const hasTargetMetrics =
+                                  (targetLikes !== null && targetLikes > 0) ||
+                                  (targetComments !== null && targetComments > 0) ||
+                                  (targetRetweets !== null && targetRetweets > 0) ||
+                                  (targetQuoteReposts !== null && targetQuoteReposts > 0);
+
+                                return hasTargetMetrics ? (
+                                  <div className="mb-6">
+                                    <h3
+                                      className={cn(
+                                        "text-lg font-semibold mb-4",
+                                        isDark ? "text-white" : "text-slate-900"
+                                      )}
+                                    >
+                                      Target Metrics
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                      {targetLikes !== null && targetLikes > 0 && (
+                                        <div
+                                          className={cn(
+                                            "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                            isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
+                                          )}
+                                        >
+                                          <CardContent className="p-6 flex justify-between items-center">
+                                            <div
+                                              className={cn(
+                                                "flex-1 space-y-2",
+                                                isDark ? "text-white" : "text-slate-800"
+                                              )}
+                                            >
+                                              <p
+                                                className={cn(
+                                                  "text-sm font-semibold uppercase tracking-wide",
+                                                  isDark ? "text-slate-200" : "text-slate-600"
+                                                )}
+                                              >
+                                                Target Likes
+                                              </p>
+                                              <p
+                                                className={cn(
+                                                  "text-2xl font-black",
+                                                  isDark ? "text-white" : "text-slate-800"
+                                                )}
+                                              >
+                                                {targetLikes.toLocaleString()}
+                                              </p>
+                                            </div>
+                                            <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
+                                              <ThumbsUp className="h-7 w-7" />
+                                            </div>
+                                          </CardContent>
+                                        </div>
+                                      )}
+                                      {targetComments !== null && targetComments > 0 && (
+                                        <div
+                                          className={cn(
+                                            "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                            isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
+                                          )}
+                                        >
+                                          <CardContent className="p-6 flex justify-between items-center">
+                                            <div
+                                              className={cn(
+                                                "flex-1 space-y-2",
+                                                isDark ? "text-white" : "text-slate-800"
+                                              )}
+                                            >
+                                              <p
+                                                className={cn(
+                                                  "text-sm font-semibold uppercase tracking-wide",
+                                                  isDark ? "text-slate-200" : "text-slate-600"
+                                                )}
+                                              >
+                                                Target Comments
+                                              </p>
+                                              <p
+                                                className={cn(
+                                                  "text-2xl font-black",
+                                                  isDark ? "text-white" : "text-slate-800"
+                                                )}
+                                              >
+                                                {targetComments.toLocaleString()}
+                                              </p>
+                                            </div>
+                                            <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
+                                              <MessageCircle className="h-7 w-7" />
+                                            </div>
+                                          </CardContent>
+                                        </div>
+                                      )}
+                                      {targetRetweets !== null && targetRetweets > 0 && (
+                                        <div
+                                          className={cn(
+                                            "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                            isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
+                                          )}
+                                        >
+                                          <CardContent className="p-6 flex justify-between items-center">
+                                            <div
+                                              className={cn(
+                                                "flex-1 space-y-2",
+                                                isDark ? "text-white" : "text-slate-800"
+                                              )}
+                                            >
+                                              <p
+                                                className={cn(
+                                                  "text-sm font-semibold uppercase tracking-wide",
+                                                  isDark ? "text-slate-200" : "text-slate-600"
+                                                )}
+                                              >
+                                                Target Retweets
+                                              </p>
+                                              <p
+                                                className={cn(
+                                                  "text-2xl font-black",
+                                                  isDark ? "text-white" : "text-slate-800"
+                                                )}
+                                              >
+                                                {targetRetweets.toLocaleString()}
+                                              </p>
+                                            </div>
+                                            <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
+                                              <Share2 className="h-7 w-7" />
+                                            </div>
+                                          </CardContent>
+                                        </div>
+                                      )}
+                                      {targetQuoteReposts !== null && targetQuoteReposts > 0 && (
+                                        <div
+                                          className={cn(
+                                            "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                            isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
+                                          )}
+                                        >
+                                          <CardContent className="p-6 flex justify-between items-center">
+                                            <div
+                                              className={cn(
+                                                "flex-1 space-y-2",
+                                                isDark ? "text-white" : "text-slate-800"
+                                              )}
+                                            >
+                                              <p
+                                                className={cn(
+                                                  "text-sm font-semibold uppercase tracking-wide",
+                                                  isDark ? "text-slate-200" : "text-slate-600"
+                                                )}
+                                              >
+                                                Target Quote Reposts
+                                              </p>
+                                              <p
+                                                className={cn(
+                                                  "text-2xl font-black",
+                                                  isDark ? "text-white" : "text-slate-800"
+                                                )}
+                                              >
+                                                {targetQuoteReposts.toLocaleString()}
+                                              </p>
+                                            </div>
+                                            <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
+                                              <RefreshCw className="h-7 w-7" />
+                                            </div>
+                                          </CardContent>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : null;
+                              })()}
+
+                              {/* Current Metrics Achieved Section (from target_current_*) */}
+                              {(() => {
+                                if (!twitterMetrics) return null;
+
+                                const hasCurrentMetrics =
+                                  twitterMetrics.target_current_likes !== null ||
+                                  twitterMetrics.target_current_comments !== null ||
+                                  twitterMetrics.target_current_retweets !== null ||
+                                  twitterMetrics.target_current_quote_reposts !== null ||
+                                  twitterMetrics.target_current_views !== null ||
+                                  twitterMetrics.targets_reached !== null;
+
+                                return hasCurrentMetrics ? (
+                                  <div className="mb-6">
+                                    <h3
+                                      className={cn(
+                                        "text-lg font-semibold mb-4",
+                                        isDark ? "text-white" : "text-slate-900"
+                                      )}
+                                    >
+                                      Current Metrics Achieved
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+                                      {twitterMetrics.target_current_likes !== null && (
+                                        <div
+                                          className={cn(
+                                            "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                            isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
+                                          )}
+                                        >
+                                          <CardContent className="p-6 flex justify-between items-center">
+                                            <div
+                                              className={cn(
+                                                "flex-1 space-y-2",
+                                                isDark ? "text-white" : "text-slate-800"
+                                              )}
+                                            >
+                                              <p
+                                                className={cn(
+                                                  "text-sm font-semibold uppercase tracking-wide",
+                                                  isDark ? "text-slate-200" : "text-slate-600"
+                                                )}
+                                              >
+                                                Current Likes
+                                              </p>
+                                              <p
+                                                className={cn(
+                                                  "text-2xl font-black",
+                                                  isDark ? "text-white" : "text-slate-800"
+                                                )}
+                                              >
+                                                {(twitterMetrics.target_current_likes || 0).toLocaleString()}
+                                              </p>
+                                            </div>
+                                            <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
+                                              <ThumbsUp className="h-7 w-7" />
+                                            </div>
+                                          </CardContent>
+                                        </div>
+                                      )}
+                                      {twitterMetrics.target_current_comments !== null && (
+                                        <div
+                                          className={cn(
+                                            "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                            isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
+                                          )}
+                                        >
+                                          <CardContent className="p-6 flex justify-between items-center">
+                                            <div
+                                              className={cn(
+                                                "flex-1 space-y-2",
+                                                isDark ? "text-white" : "text-slate-800"
+                                              )}
+                                            >
+                                              <p
+                                                className={cn(
+                                                  "text-sm font-semibold uppercase tracking-wide",
+                                                  isDark ? "text-slate-200" : "text-slate-600"
+                                                )}
+                                              >
+                                                Current Comments
+                                              </p>
+                                              <p
+                                                className={cn(
+                                                  "text-2xl font-black",
+                                                  isDark ? "text-white" : "text-slate-800"
+                                                )}
+                                              >
+                                                {(twitterMetrics.target_current_comments || 0).toLocaleString()}
+                                              </p>
+                                            </div>
+                                            <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
+                                              <MessageCircle className="h-7 w-7" />
+                                            </div>
+                                          </CardContent>
+                                        </div>
+                                      )}
+                                      {twitterMetrics.target_current_retweets !== null && (
+                                        <div
+                                          className={cn(
+                                            "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                            isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
+                                          )}
+                                        >
+                                          <CardContent className="p-6 flex justify-between items-center">
+                                            <div
+                                              className={cn(
+                                                "flex-1 space-y-2",
+                                                isDark ? "text-white" : "text-slate-800"
+                                              )}
+                                            >
+                                              <p
+                                                className={cn(
+                                                  "text-sm font-semibold uppercase tracking-wide",
+                                                  isDark ? "text-slate-200" : "text-slate-600"
+                                                )}
+                                              >
+                                                Current Retweets
+                                              </p>
+                                              <p
+                                                className={cn(
+                                                  "text-2xl font-black",
+                                                  isDark ? "text-white" : "text-slate-800"
+                                                )}
+                                              >
+                                                {(twitterMetrics.target_current_retweets || 0).toLocaleString()}
+                                              </p>
+                                            </div>
+                                            <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
+                                              <Share2 className="h-7 w-7" />
+                                            </div>
+                                          </CardContent>
+                                        </div>
+                                      )}
+                                      {twitterMetrics.target_current_quote_reposts !== null && (
+                                        <div
+                                          className={cn(
+                                            "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                            isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
+                                          )}
+                                        >
+                                          <CardContent className="p-6 flex justify-between items-center">
+                                            <div
+                                              className={cn(
+                                                "flex-1 space-y-2",
+                                                isDark ? "text-white" : "text-slate-800"
+                                              )}
+                                            >
+                                              <p
+                                                className={cn(
+                                                  "text-sm font-semibold uppercase tracking-wide",
+                                                  isDark ? "text-slate-200" : "text-slate-600"
+                                                )}
+                                              >
+                                                Current Quote Reposts
+                                              </p>
+                                              <p
+                                                className={cn(
+                                                  "text-2xl font-black",
+                                                  isDark ? "text-white" : "text-slate-800"
+                                                )}
+                                              >
+                                                {(twitterMetrics.target_current_quote_reposts || 0).toLocaleString()}
+                                              </p>
+                                            </div>
+                                            <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
+                                              <RefreshCw className="h-7 w-7" />
+                                            </div>
+                                          </CardContent>
+                                        </div>
+                                      )}
+                                      {twitterMetrics.target_current_views !== null && (
+                                        <div
+                                          className={cn(
+                                            "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                            isDark ? "bg-[#170337]" : "bg-white border border-slate-200"
+                                          )}
+                                        >
+                                          <CardContent className="p-6 flex justify-between items-center">
+                                            <div
+                                              className={cn(
+                                                "flex-1 space-y-2",
+                                                isDark ? "text-white" : "text-slate-800"
+                                              )}
+                                            >
+                                              <p
+                                                className={cn(
+                                                  "text-sm font-semibold uppercase tracking-wide",
+                                                  isDark ? "text-slate-200" : "text-slate-600"
+                                                )}
+                                              >
+                                                Current Views
+                                              </p>
+                                              <p
+                                                className={cn(
+                                                  "text-2xl font-black",
+                                                  isDark ? "text-white" : "text-slate-800"
+                                                )}
+                                              >
+                                                {(twitterMetrics.target_current_views || 0).toLocaleString()}
+                                              </p>
+                                            </div>
+                                            <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
+                                              <Eye className="h-7 w-7" />
+                                            </div>
+                                          </CardContent>
+                                        </div>
+                                      )}
+                                    </div>
+                                    {/* Targets Reached Status */}
+                                    {twitterMetrics.targets_reached !== null && (
+                                      <div
+                                        className={cn(
+                                          "rounded-xl p-4 border flex items-center gap-3",
+                                          twitterMetrics.targets_reached
+                                            ? isDark
+                                              ? "bg-green-900/30 border-green-700"
+                                              : "bg-green-50 border-green-200"
+                                            : isDark
+                                              ? "bg-yellow-900/30 border-yellow-700"
+                                              : "bg-yellow-50 border-yellow-200"
+                                        )}
+                                      >
+                                        {twitterMetrics.targets_reached ? (
+                                          <CheckCircle2
+                                            className={cn(
+                                              "h-6 w-6 flex-shrink-0",
+                                              isDark ? "text-green-400" : "text-green-600"
+                                            )}
+                                          />
+                                        ) : (
+                                          <Clock
+                                            className={cn(
+                                              "h-6 w-6 flex-shrink-0",
+                                              isDark ? "text-yellow-400" : "text-yellow-600"
+                                            )}
+                                          />
+                                        )}
+                                        <div>
+                                          <p
+                                            className={cn(
+                                              "text-sm font-semibold",
+                                              twitterMetrics.targets_reached
+                                                ? isDark
+                                                  ? "text-green-300"
+                                                  : "text-green-800"
+                                                : isDark
+                                                  ? "text-yellow-300"
+                                                  : "text-yellow-800"
+                                            )}
+                                          >
+                                            {twitterMetrics.targets_reached
+                                              ? "Targets Reached"
+                                              : "Targets Not Yet Reached"}
+                                          </p>
+                                          <p
+                                            className={cn(
+                                              "text-xs mt-1",
+                                              twitterMetrics.targets_reached
+                                                ? isDark
+                                                  ? "text-green-400"
+                                                  : "text-green-700"
+                                                : isDark
+                                                  ? "text-yellow-400"
+                                                  : "text-yellow-700"
+                                            )}
+                                          >
+                                            {twitterMetrics.targets_reached
+                                              ? "All target metrics have been achieved. Contest will end when targets are reached."
+                                              : "Keep engaging with the target tweet to reach the goals!"}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : null;
+                              })()}
+                            </>
+                          );
+                        })()}
+
+                        {/* General Campaign Metrics Section (for both raid and awareness) */}
+                        <div>
+                          <h3
+                            className={cn(
+                              "text-lg font-semibold mb-4",
+                              isDark ? "text-white" : "text-slate-900"
+                            )}
+                          >
+                            Campaign Metrics
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                            {/* Helper function for metric cards */}
+                            {(() => {
+                              const renderMetricCard = (
+                                icon: React.ReactNode,
+                                label: string,
+                                value: string | number,
+                                iconBgClass: string,
+                                barGradientClass: string
+                              ) => (
+                                <div
+                                  className={cn(
+                                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                                    isDark
+                                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
+                                      : "bg-gradient-to-br from-white to-blue-50 border border-blue-100"
+                                  )}
+                                >
+                                  <div className="p-6 relative z-10">
+                                    <div className="flex items-center justify-between mb-4">
+                                      <div
+                                        className={cn(
+                                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                                          iconBgClass
+                                        )}
+                                      >
+                                        {icon}
+                                      </div>
+                                      <div className="text-right">
+                                        <p
+                                          className={cn(
+                                            "text-sm font-medium uppercase tracking-wide",
+                                            isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                                          )}
+                                        >
+                                          {label}
+                                        </p>
+                                        <p
+                                          className={cn(
+                                            "text-2xl font-bold mt-1",
+                                            isDark
+                                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
+                                              : "text-gray-900"
+                                          )}
+                                        >
+                                          {typeof value === "number" ? value.toLocaleString() : value}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div
+                                      className={cn(
+                                        "h-1 w-full rounded-full",
+                                        barGradientClass
+                                      )}
+                                    ></div>
+                                  </div>
+                                </div>
+                              );
+
+                              return (
+                                <>
+                                  {renderMetricCard(
+                                    <FileText className="h-6 w-6 text-white" />,
+                                    "Total Tweets",
+                                    metricsForDisplay?.total_tweets || 0,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-blue-500 to-blue-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400 shadow-lg shadow-blue-400/70 animate-pulse" : "bg-gradient-to-r from-blue-200 to-blue-300"
+                                  )}
+                                  {renderMetricCard(
+                                    <ThumbsUp className="h-6 w-6 text-white" />,
+                                    "Total Likes",
+                                    metricsForDisplay?.total_likes || 0,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-pink-500 to-pink-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-pink-400 via-rose-400 to-red-400 shadow-lg shadow-pink-400/70 animate-pulse" : "bg-gradient-to-r from-pink-200 to-pink-300"
+                                  )}
+                                  {renderMetricCard(
+                                    <MessageCircle className="h-6 w-6 text-white" />,
+                                    "Total Replies",
+                                    metricsForDisplay?.total_replies || 0,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-orange-500 to-orange-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-400 shadow-lg shadow-orange-400/70 animate-pulse" : "bg-gradient-to-r from-orange-200 to-orange-300"
+                                  )}
+                                  {renderMetricCard(
+                                    <Share2 className="h-6 w-6 text-white" />,
+                                    "Total Retweets",
+                                    metricsForDisplay?.total_retweets || 0,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-cyan-500 to-cyan-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-cyan-400 via-teal-400 to-green-400 shadow-lg shadow-cyan-400/70 animate-pulse" : "bg-gradient-to-r from-cyan-200 to-cyan-300"
+                                  )}
+                                  {renderMetricCard(
+                                    <RefreshCw className="h-6 w-6 text-white" />,
+                                    "Total Quote Reposts",
+                                    metricsForDisplay?.total_quote_reposts || 0,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 shadow-lg shadow-indigo-400/70 animate-pulse" : "bg-gradient-to-r from-indigo-200 to-indigo-300"
+                                  )}
+                                  {renderMetricCard(
+                                    <Eye className="h-6 w-6 text-white" />,
+                                    "Total Impressions",
+                                    metricsForDisplay?.total_impressions || 0,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-green-500 to-green-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400 shadow-lg shadow-green-400/70 animate-pulse" : "bg-gradient-to-r from-green-200 to-green-300"
+                                  )}
+                                  {renderMetricCard(
+                                    <TrendingUp className="h-6 w-6 text-white" />,
+                                    "Total Points",
+                                    metricsForDisplay?.total_points || 0,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 shadow-lg shadow-yellow-400/70 animate-pulse" : "bg-gradient-to-r from-yellow-200 to-yellow-300"
+                                  )}
+                                  {renderMetricCard(
+                                    <Users className="h-6 w-6 text-white" />,
+                                    "Submissions",
+                                    filteredAnalyticsSubmissions.length,
+                                    isDark ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20" : "bg-gradient-to-br from-purple-500 to-purple-600 text-white",
+                                    isDark ? "bg-gradient-to-r from-purple-400 via-indigo-400 to-violet-400 shadow-lg shadow-purple-400/70 animate-pulse" : "bg-gradient-to-r from-purple-200 to-purple-300"
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* General Analytics Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                      <div
+                        className={cn(
+                          "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                          isDark
+                            ? "bg-[#170337] border border-[#D1B7F9]"
+                            : "bg-white"
+                        )}
+                      >
+                        <CardContent className="p-4 flex justify-between">
+                          <div
+                            className={cn(
+                              "flex-1 space-y-3",
+                              isDark ? "text-white" : "text-black"
+                            )}
+                          >
+                            <p className="text-lg font-medium">Total Submissions</p>
+                            <p className="text-xl font-bold">
+                              {filteredAnalyticsSubmissions.length}
+                            </p>
+                          </div>
+                          <div
+                            className={cn(
+                              "w-10 h-10 flex items-center justify-center rounded-full",
+                              isDark
+                                ? "bg-[#FFFFFF42] text-white"
+                                : "bg-purple-100 text-[#4A00BE]"
+                            )}
+                          >
+                            <Users className="h-5 w-5" />
+                          </div>
+                        </CardContent>
+                      </div>
+
+                      <div
+                        className={cn(
+                          "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                          isDark
+                            ? "bg-[#170337] border border-[#D1B7F9]"
+                            : "bg-white"
+                        )}
+                      >
+                        <CardContent className="p-4 flex justify-between">
+                          <div
+                            className={cn(
+                              "flex-1 space-y-3",
+                              isDark ? "text-white" : "text-black"
+                            )}
+                          >
+                            <p className="text-lg font-medium">Approved Content</p>
+                            <p className="text-xl font-bold">
+                              {filteredAnalyticsSubmissions.filter((s: any) => {
+                                const isTwitter = s.is_twitter_tweet;
+                                if (isTwitter) return s.moderation_status === "approved";
+                                return s.status === "verified" || s.status === "paid";
+                              }).length}
+                            </p>
+                          </div>
+                          <div
+                            className={cn(
+                              "w-10 h-10 flex items-center justify-center rounded-full",
+                              isDark
+                                ? "bg-[#FFFFFF42] text-white"
+                                : "bg-purple-100 text-[#4A00BE]"
+                            )}
+                          >
+                            <Trophy className="h-4 w-4" />
+                          </div>
+                        </CardContent>
+                      </div>
+
+                      <div
+                        className={cn(
+                          "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                          isDark
+                            ? "bg-[#170337] border border-[#D1B7F9]"
+                            : "bg-white"
+                        )}
+                      >
+                        <CardContent className="p-4 flex justify-between">
+                          <div
+                            className={cn(
+                              "flex-1 space-y-3",
+                              isDark ? "text-white" : "text-black"
+                            )}
+                          >
+                            <p className="text-lg font-medium">Contest Duration</p>
+                            <p className="text-xl font-bold">
+                              {contest?.start_date && contest?.end_date
+                                ? (() => {
+                                  const start = new Date(contest.start_date);
+                                  const end = new Date(contest.end_date);
+                                  const diffTime = Math.abs(end.getTime() - start.getTime());
+                                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                  return `${diffDays} days`;
+                                })()
+                                : "N/A"}
+                            </p>
+                          </div>
+                          <div
+                            className={cn(
+                              "w-10 h-10 flex items-center justify-center rounded-full",
+                              isDark
+                                ? "bg-[#FFFFFF42] text-white"
+                                : "bg-purple-100 text-[#4A00BE]"
+                            )}
+                          >
+                            <Calendar className="h-4 w-4" />
+                          </div>
+                        </CardContent>
+                      </div>
+                    </div>
+
+                    {/* Views Statistics */}
+                    <div className="space-y-6">
+                      <div>
+                        <h3 className={cn("font-medium mb-4", isDark ? "text-white" : "text-gray-900")}>
+                          Views Statistics
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                          {/* Total Views */}
+                          <div
+                            className={cn(
+                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              isDark
+                                ? "bg-[#170337] border border-[#D1B7F9]"
+                                : "bg-white"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-600"
+                                  )}
+                                >
+                                  Total Views
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-2xl font-bold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {filteredAnalyticsSubmissions
+                                    ?.reduce((sum: number, s: any) => sum + (s.views || 0), 0)
+                                    .toLocaleString() || 0}
+                                </p>
+                              </div>
+                              <div
+                                className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark
+                                    ? "bg-blue-900/50 text-blue-300"
+                                    : "bg-blue-100 text-blue-600"
+                                )}
+                              >
+                                <Eye className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Average Views */}
+                          <div
+                            className={cn(
+                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              isDark
+                                ? "bg-[#170337] border border-[#D1B7F9]"
+                                : "bg-white"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-600"
+                                  )}
+                                >
+                                  Avg Views
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-2xl font-bold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {filteredAnalyticsSubmissions?.length > 0
+                                    ? Math.round(
+                                      filteredAnalyticsSubmissions.reduce(
+                                        (sum: number, s: any) => sum + (s.views || 0),
+                                        0
+                                      ) / filteredAnalyticsSubmissions.length
+                                    ).toLocaleString()
+                                    : 0}
+                                </p>
+                              </div>
+                              <div
+                                className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark
+                                    ? "bg-green-900/50 text-green-400"
+                                    : "bg-green-100 text-green-600"
+                                )}
+                              >
+                                <BarChart3 className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Highest Views */}
+                          <div
+                            className={cn(
+                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              isDark
+                                ? "bg-[#170337] border border-[#D1B7F9]"
+                                : "bg-white"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-600"
+                                  )}
+                                >
+                                  Highest Views
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-2xl font-bold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {filteredAnalyticsSubmissions?.length > 0
+                                    ? Math.max(
+                                      ...filteredAnalyticsSubmissions.map(
+                                        (s: any) => s.views || 0
+                                      )
+                                    ).toLocaleString()
+                                    : 0}
+                                </p>
+                              </div>
+                              <div
+                                className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark
+                                    ? "bg-yellow-900/50 text-yellow-400"
+                                    : "bg-yellow-100 text-yellow-600"
+                                )}
+                              >
+                                <TrendingUp className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Filtered Views */}
+                          <div
+                            className={cn(
+                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              isDark
+                                ? "bg-[#170337] border border-[#D1B7F9]"
+                                : "bg-white"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-600"
+                                  )}
+                                >
+                                  Filtered Views
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-2xl font-bold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {filteredAnalyticsSubmissions
+                                    ?.reduce((sum: number, s: any) => sum + (s.views || 0), 0)
+                                    .toLocaleString() || 0}
+                                </p>
+                              </div>
+                              <div
+                                className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark
+                                    ? "bg-purple-900/50 text-purple-300"
+                                    : "bg-purple-100 text-purple-600"
+                                )}
+                              >
+                                <CheckCircle2 className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </div>
+              );
+            })()}
           </TabPanel>
         </TabContent>
       </div>

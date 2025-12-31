@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { getMetricsRefreshCooldownInfoOpportunities, formatRemainingTime } from "@/lib/constants";
+import { getMetricsRefreshCooldownInfoOpportunities, getMetricsRefreshCooldownInfoBrand, getMetricsRefreshCooldownInfoAdmin, formatRemainingTime } from "@/lib/constants";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 
 export interface TwitterFeedProps {
@@ -25,6 +25,7 @@ export interface TwitterFeedProps {
     showHeader?: boolean;
     className?: string;
     lastMetricsUpdated?: string | null;
+    cooldownType?: "opportunities" | "brand" | "admin"; // "opportunities" for creators (1 hour), "brand" for brands (3 minutes), "admin" for admins (1 minute)
 }
 
 export interface TwitterTweet {
@@ -67,6 +68,7 @@ export function TwitterFeed({
     showHeader = true,
     className,
     lastMetricsUpdated,
+    cooldownType = "opportunities", // Default to opportunities (creators) - 1 hour cooldown
 }: TwitterFeedProps) {
     const { toast } = useToast();
     const [tweets, setTweets] = useState<TwitterTweet[]>([]);
@@ -176,8 +178,13 @@ export function TwitterFeed({
     const handleRefreshFeed = async () => {
         if (isRefreshingFeed) return;
 
-        // Check cooldown before making request
-        const cooldownInfo = getMetricsRefreshCooldownInfoOpportunities(currentLastMetricsUpdated);
+        // Check cooldown before making request - use appropriate cooldown based on context
+        const cooldownInfo = cooldownType === "admin"
+            ? getMetricsRefreshCooldownInfoAdmin(currentLastMetricsUpdated)
+            : cooldownType === "brand"
+                ? getMetricsRefreshCooldownInfoBrand(currentLastMetricsUpdated)
+                : getMetricsRefreshCooldownInfoOpportunities(currentLastMetricsUpdated);
+
         if (!cooldownInfo.canRefresh) {
             toast({
                 title: "Please Wait",
@@ -298,7 +305,12 @@ export function TwitterFeed({
                     </div>
                     <div className="flex items-center gap-2">
                         {(() => {
-                            const cooldownInfo = getMetricsRefreshCooldownInfoOpportunities(currentLastMetricsUpdated);
+                            // Use appropriate cooldown based on cooldownType prop
+                            const cooldownInfo = cooldownType === "admin"
+                                ? getMetricsRefreshCooldownInfoAdmin(currentLastMetricsUpdated)
+                                : cooldownType === "brand"
+                                    ? getMetricsRefreshCooldownInfoBrand(currentLastMetricsUpdated)
+                                    : getMetricsRefreshCooldownInfoOpportunities(currentLastMetricsUpdated);
                             return (
                                 <Button
                                     variant="ghost"

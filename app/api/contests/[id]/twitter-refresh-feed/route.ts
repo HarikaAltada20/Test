@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES } from '@/lib/constants';
+import { METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES, METRICS_REFRESH_COOLDOWN_MS_BRAND, METRICS_REFRESH_COOLDOWN_MS_ADMIN } from '@/lib/constants';
+import { verifyAdminAccess } from '@/utils/admin-auth';
 
 export const dynamic = "force-dynamic";
 
@@ -22,10 +23,13 @@ export async function POST(
     const { id: contestId } = await params;
     const now = new Date();
 
-    // Get contest details including last metrics update time
+    // Check if user is admin
+    const { isAdmin } = await verifyAdminAccess();
+
+    // Get contest details including last metrics update time and advertiser_id
     const { data: contest, error: contestError } = await supabase
       .from('contests')
-      .select('id, title, platform, last_metrics_updated')
+      .select('id, title, platform, last_metrics_updated, advertiser_id')
       .eq('id', contestId)
       .single();
 
@@ -33,8 +37,16 @@ export async function POST(
       return NextResponse.json({ error: 'Contest not found' }, { status: 404 });
     }
 
-    // Check cooldown period (1 hour for feed refresh)
-    const cooldownMs = METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES; // 60 minutes
+    // Check if user is the contest owner (brand/advertiser)
+    const isOwner = contest.advertiser_id === user.id;
+
+    // Determine cooldown period based on user type
+    // This endpoint is used by TwitterFeed component from opportunities (creators), brand, and admin pages
+    const cooldownMs = isAdmin 
+      ? METRICS_REFRESH_COOLDOWN_MS_ADMIN        // 1 minute for admins
+      : isOwner
+      ? METRICS_REFRESH_COOLDOWN_MS_BRAND        // 3 minutes for brands/advertisers
+      : METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES; // 60 minutes (1 hour) for creators (default)
 
     if (contest.last_metrics_updated) {
       const lastUpdate = new Date(contest.last_metrics_updated);

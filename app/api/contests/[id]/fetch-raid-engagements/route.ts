@@ -561,7 +561,7 @@ export async function POST(
     };
 
     // Get target values from metrics table (they're synced from contests)
-    // If not in metrics table, fall back to contest data
+    // If not in metrics table OR if values are null, fall back to contest data
     let targetLikes: number | null = null;
     let targetComments: number | null = null;
     let targetRetweets: number | null = null;
@@ -573,14 +573,45 @@ export async function POST(
       .eq("contest_id", contestId)
       .maybeSingle();
 
+    // Get targets from metrics table if they exist and are not null
+    // Otherwise, fall back to contest data (source of truth)
+    const raidTargetMetrics = raidTarget?.metrics || {};
+    
     if (existingMetrics) {
-      targetLikes = existingMetrics.target_likes;
-      targetComments = existingMetrics.target_comments;
-      targetRetweets = existingMetrics.target_retweets;
-      targetQuoteReposts = existingMetrics.target_quote_reposts;
+      // Use metrics table values if they're not null, otherwise fall back to contest data
+      targetLikes = existingMetrics.target_likes !== null && existingMetrics.target_likes !== undefined
+        ? existingMetrics.target_likes
+        : (typeof raidTargetMetrics.likes === "number" 
+            ? raidTargetMetrics.likes 
+            : typeof raidTargetMetrics.likes === "string" 
+              ? parseInt(raidTargetMetrics.likes, 10) 
+              : null);
+      
+      targetComments = existingMetrics.target_comments !== null && existingMetrics.target_comments !== undefined
+        ? existingMetrics.target_comments
+        : (typeof raidTargetMetrics.comments === "number" 
+            ? raidTargetMetrics.comments 
+            : typeof raidTargetMetrics.comments === "string" 
+              ? parseInt(raidTargetMetrics.comments, 10) 
+              : null);
+      
+      targetRetweets = existingMetrics.target_retweets !== null && existingMetrics.target_retweets !== undefined
+        ? existingMetrics.target_retweets
+        : (typeof raidTargetMetrics.retweets === "number" 
+            ? raidTargetMetrics.retweets 
+            : typeof raidTargetMetrics.retweets === "string" 
+              ? parseInt(raidTargetMetrics.retweets, 10) 
+              : null);
+      
+      targetQuoteReposts = existingMetrics.target_quote_reposts !== null && existingMetrics.target_quote_reposts !== undefined
+        ? existingMetrics.target_quote_reposts
+        : (typeof raidTargetMetrics.quote_reposts === "number" 
+            ? raidTargetMetrics.quote_reposts 
+            : typeof raidTargetMetrics.quote_reposts === "string" 
+              ? parseInt(raidTargetMetrics.quote_reposts, 10) 
+              : null);
     } else {
       // Fallback: Get targets from contest data if metrics row doesn't exist
-      const raidTargetMetrics = raidTarget?.metrics || {};
       targetLikes = typeof raidTargetMetrics.likes === "number" 
         ? raidTargetMetrics.likes 
         : typeof raidTargetMetrics.likes === "string" 
@@ -601,6 +632,26 @@ export async function POST(
         : typeof raidTargetMetrics.quote_reposts === "string" 
           ? parseInt(raidTargetMetrics.quote_reposts, 10) 
           : null;
+    }
+    
+    // Also sync these values back to metrics table if they're different (to keep them in sync)
+    // This ensures the metrics table has the correct values for future reads
+    if (existingMetrics && (
+      existingMetrics.target_likes !== targetLikes ||
+      existingMetrics.target_comments !== targetComments ||
+      existingMetrics.target_retweets !== targetRetweets ||
+      existingMetrics.target_quote_reposts !== targetQuoteReposts
+    )) {
+      console.log(`[fetch-raid-engagements] Syncing target values from contest data to metrics table...`);
+      await supabaseAdmin
+        .from("twitter_campaign_metrics")
+        .update({
+          target_likes: targetLikes,
+          target_comments: targetComments,
+          target_retweets: targetRetweets,
+          target_quote_reposts: targetQuoteReposts,
+        })
+        .eq("contest_id", contestId);
     }
 
     // Check if targets are reached

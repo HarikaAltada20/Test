@@ -108,6 +108,7 @@ export default async function AdminContestDetailPage({
       let tweetsError: any = null;
 
       // Try with all columns first - OPTIMIZED: Only fetch first page
+      // Include all tweets (including rejected) so admins can see and change their status
       const queryWithAll = supabase
         .from("twitter_campaign_tweets")
         .select(
@@ -136,7 +137,7 @@ export default async function AdminContestDetailPage({
           { count: "exact" }
         )
         .eq("contest_id", contestId)
-        .eq("is_eligible", true)
+        // Don't filter by is_eligible - include all tweets so rejected ones are visible for status changes
         .order("tweet_created_at", { ascending: false })
         .range(0, INITIAL_TWEET_LIMIT - 1); // Only fetch first page
 
@@ -172,7 +173,7 @@ export default async function AdminContestDetailPage({
             { count: "exact" }
           )
           .eq("contest_id", contestId)
-          .eq("is_eligible", true)
+          // Don't filter by is_eligible - include all tweets so rejected ones are visible for status changes
           .order("tweet_created_at", { ascending: false })
           .range(0, INITIAL_TWEET_LIMIT - 1); // Only fetch first page
 
@@ -206,8 +207,8 @@ export default async function AdminContestDetailPage({
     }
 
     // For Twitter campaigns, fetch creator-level leaderboard data from twitter_campaign_leaderboard
-    let creatorModerationData: Record<string, { 
-      moderation_status?: string; 
+    let creatorModerationData: Record<string, {
+      moderation_status?: string;
       rejection_reason?: string | null;
       manual_points_adjustment?: number;
       manual_points_reason?: string | null;
@@ -386,209 +387,209 @@ export default async function AdminContestDetailPage({
     // Transform Twitter tweets into submission-like format for display
     const twitterSubmissions = twitterTweetsData
       ? twitterTweetsData.map((tweet: any) => {
-          let creatorDisplayName: string | null = null;
-          let creatorUsername: string | null = null;
-          let creatorAvatarUrl: string | null = null;
-          const actualCreatorProfileId: string | null = tweet.creator_id;
+        let creatorDisplayName: string | null = null;
+        let creatorUsername: string | null = null;
+        let creatorAvatarUrl: string | null = null;
+        const actualCreatorProfileId: string | null = tweet.creator_id;
 
-          // Find the creator profile and user for this tweet
-          const creatorProfile = creatorProfilesData.find(
-            (profile) => profile.id === tweet.creator_id
-          );
-          const user = usersData.find((u) => u.id === tweet.creator_id);
+        // Find the creator profile and user for this tweet
+        const creatorProfile = creatorProfilesData.find(
+          (profile) => profile.id === tweet.creator_id
+        );
+        const user = usersData.find((u) => u.id === tweet.creator_id);
 
-          // Try to get Twitter account info
-          if (creatorProfile?.twitter_account) {
-            try {
-              const twitterAccount =
-                typeof creatorProfile.twitter_account === "string"
-                  ? JSON.parse(creatorProfile.twitter_account)
-                  : creatorProfile.twitter_account;
-              creatorDisplayName = twitterAccount?.name || twitterAccount?.username;
-              creatorUsername = twitterAccount?.username || tweet.twitter_username;
-              creatorAvatarUrl = twitterAccount?.profile_picture_url;
-            } catch (e) {
-              console.error("[Admin page.tsx] Error parsing Twitter account JSON:", e);
-            }
+        // Try to get Twitter account info
+        if (creatorProfile?.twitter_account) {
+          try {
+            const twitterAccount =
+              typeof creatorProfile.twitter_account === "string"
+                ? JSON.parse(creatorProfile.twitter_account)
+                : creatorProfile.twitter_account;
+            creatorDisplayName = twitterAccount?.name || twitterAccount?.username;
+            creatorUsername = twitterAccount?.username || tweet.twitter_username;
+            creatorAvatarUrl = twitterAccount?.profile_picture_url;
+          } catch (e) {
+            console.error("[Admin page.tsx] Error parsing Twitter account JSON:", e);
           }
+        }
 
-          // Fallback to tweet data
-          if (!creatorUsername) {
-            creatorUsername = tweet.twitter_username || "Unknown User";
-          }
+        // Fallback to tweet data
+        if (!creatorUsername) {
+          creatorUsername = tweet.twitter_username || "Unknown User";
+        }
 
-          // Fallback to user data
-          if (!creatorDisplayName && user?.full_name) {
-            creatorDisplayName = user.full_name;
-          }
-          if (!creatorUsername && user?.username) {
-            creatorUsername = user.username;
-          }
-          if (!creatorAvatarUrl && user?.profile_picture_url) {
-            creatorAvatarUrl = user.profile_picture_url;
-          }
+        // Fallback to user data
+        if (!creatorDisplayName && user?.full_name) {
+          creatorDisplayName = user.full_name;
+        }
+        if (!creatorUsername && user?.username) {
+          creatorUsername = user.username;
+        }
+        if (!creatorAvatarUrl && user?.profile_picture_url) {
+          creatorAvatarUrl = user.profile_picture_url;
+        }
 
-          // Final fallbacks
-          if (!creatorDisplayName) {
-            creatorDisplayName = user?.full_name || user?.username || "Unknown Creator";
-          }
-          if (!creatorUsername) {
-            creatorUsername = user?.username || tweet.twitter_username || "Unknown User";
-          }
+        // Final fallbacks
+        if (!creatorDisplayName) {
+          creatorDisplayName = user?.full_name || user?.username || "Unknown Creator";
+        }
+        if (!creatorUsername) {
+          creatorUsername = user?.username || tweet.twitter_username || "Unknown User";
+        }
 
-          // Calculate total points (base + manual adjustment)
-          const basePoints = tweet.points || 0;
-          const manualAdjustment = tweet.manual_points_adjustment || 0;
-          const totalPoints = basePoints + manualAdjustment;
+        // Calculate total points (base + manual adjustment)
+        const basePoints = tweet.points || 0;
+        const manualAdjustment = tweet.manual_points_adjustment || 0;
+        const totalPoints = basePoints + manualAdjustment;
 
-          // Get moderation_status (default to "pending" if column doesn't exist)
-          const moderationStatus = (tweet as any).moderation_status || "pending";
+        // Get moderation_status (default to "pending" if column doesn't exist)
+        const moderationStatus = (tweet as any).moderation_status || "pending";
 
-          return {
-            id: tweet.id,
-            created_at: tweet.tweet_created_at || tweet.created_at,
-            content_link: tweet.tweet_url,
-            status: moderationStatus, // Use moderation_status as status
-            views: tweet.impressions || 0,
-            earnings: null, // Twitter campaigns don't use earnings
-            other_stats: {
-              likes: tweet.likes || 0,
-              replies: tweet.replies || 0,
-              retweets: tweet.retweets || 0,
-              quote_reposts: tweet.quote_reposts || 0,
-              impressions: tweet.impressions || 0,
-              points: totalPoints,
-              base_points: basePoints,
-              manual_points_adjustment: manualAdjustment,
-              manual_points_reason: tweet.manual_points_reason,
-              tweet_type: tweet.tweet_type,
-              tweet_text: tweet.tweet_text,
-            },
-            platform: "twitter",
-            video_thumbnail_url: null,
-            video_title: tweet.tweet_text?.substring(0, 100) || null,
-            paid: false,
-            paid_at: null,
-            bonus_paid: false,
-            bonus_paid_at: null,
-            creator_display_name: creatorDisplayName,
-            creator_username: creatorUsername,
-            creator_avatar_url: creatorAvatarUrl,
-            creator_id: actualCreatorProfileId,
-            // Mark as Twitter tweet for UI handling
-            is_twitter_tweet: true,
-            tweet_id: tweet.tweet_id,
-            moderation_status: moderationStatus, // Default to "pending" if column doesn't exist
+        return {
+          id: tweet.id,
+          created_at: tweet.tweet_created_at || tweet.created_at,
+          content_link: tweet.tweet_url,
+          status: moderationStatus, // Use moderation_status as status
+          views: tweet.impressions || 0,
+          earnings: null, // Twitter campaigns don't use earnings
+          other_stats: {
+            likes: tweet.likes || 0,
+            replies: tweet.replies || 0,
+            retweets: tweet.retweets || 0,
+            quote_reposts: tweet.quote_reposts || 0,
+            impressions: tweet.impressions || 0,
+            points: totalPoints,
+            base_points: basePoints,
             manual_points_adjustment: manualAdjustment,
             manual_points_reason: tweet.manual_points_reason,
-            // Add nested creator object for compatibility
-            creator: {
-              id: actualCreatorProfileId,
-              username: creatorUsername,
-              profile_picture_url: creatorAvatarUrl,
-              full_name: creatorDisplayName,
-            },
-          };
-        })
+            tweet_type: tweet.tweet_type,
+            tweet_text: tweet.tweet_text,
+          },
+          platform: "twitter",
+          video_thumbnail_url: null,
+          video_title: tweet.tweet_text?.substring(0, 100) || null,
+          paid: false,
+          paid_at: null,
+          bonus_paid: false,
+          bonus_paid_at: null,
+          creator_display_name: creatorDisplayName,
+          creator_username: creatorUsername,
+          creator_avatar_url: creatorAvatarUrl,
+          creator_id: actualCreatorProfileId,
+          // Mark as Twitter tweet for UI handling
+          is_twitter_tweet: true,
+          tweet_id: tweet.tweet_id,
+          moderation_status: moderationStatus, // Default to "pending" if column doesn't exist
+          manual_points_adjustment: manualAdjustment,
+          manual_points_reason: tweet.manual_points_reason,
+          // Add nested creator object for compatibility
+          creator: {
+            id: actualCreatorProfileId,
+            username: creatorUsername,
+            profile_picture_url: creatorAvatarUrl,
+            full_name: creatorDisplayName,
+          },
+        };
+      })
       : [];
 
     // Prepare regular submissions data
     const submissions = submissionsData
       ? submissionsData.map((sub: any) => {
-          let creatorDisplayName: string | null = null;
-          let creatorUsername: string | null = null;
-          let creatorAvatarUrl: string | null = null;
-          const actualCreatorProfileId: string | null = sub.creator_id;
+        let creatorDisplayName: string | null = null;
+        let creatorUsername: string | null = null;
+        let creatorAvatarUrl: string | null = null;
+        const actualCreatorProfileId: string | null = sub.creator_id;
 
-          // Find the creator profile and user for this submission
-          const creatorProfile = creatorProfilesData.find(
-            (profile) => profile.id === sub.creator_id
-          );
-          const user = usersData.find((u) => u.id === sub.creator_id);
+        // Find the creator profile and user for this submission
+        const creatorProfile = creatorProfilesData.find(
+          (profile) => profile.id === sub.creator_id
+        );
+        const user = usersData.find((u) => u.id === sub.creator_id);
 
-          if (creatorProfile) {
-            const platform = sub.platform?.toLowerCase();
+        if (creatorProfile) {
+          const platform = sub.platform?.toLowerCase();
 
-            try {
-              if (
-                platform?.includes("youtube") &&
-                creatorProfile.youtube_account
-              ) {
-                const ytAccount =
-                  typeof creatorProfile.youtube_account === "string"
-                    ? JSON.parse(creatorProfile.youtube_account)
-                    : creatorProfile.youtube_account;
-                creatorDisplayName = ytAccount?.channel_title;
-                creatorUsername =
-                  ytAccount?.channel_custom_url || ytAccount?.channel_id;
-                creatorAvatarUrl = ytAccount?.channel_thumbnail;
-              } else if (
-                platform?.includes("instagram") &&
-                creatorProfile.instagram_account
-              ) {
-                const igAccount =
-                  typeof creatorProfile.instagram_account === "string"
-                    ? JSON.parse(creatorProfile.instagram_account)
-                    : creatorProfile.instagram_account;
-                // Mirror the working contests page mapping exactly
-                creatorDisplayName =
-                  igAccount?.name_of_account ||
-                  igAccount?.full_name ||
-                  igAccount?.display_name;
-                creatorUsername = igAccount?.username;
-                creatorAvatarUrl = igAccount?.profile_picture_url;
-              }
-            } catch (e) {
-              console.error("Admin: Error parsing social account JSON:", e);
-              // Keep username/avatar as null if parsing fails
+          try {
+            if (
+              platform?.includes("youtube") &&
+              creatorProfile.youtube_account
+            ) {
+              const ytAccount =
+                typeof creatorProfile.youtube_account === "string"
+                  ? JSON.parse(creatorProfile.youtube_account)
+                  : creatorProfile.youtube_account;
+              creatorDisplayName = ytAccount?.channel_title;
+              creatorUsername =
+                ytAccount?.channel_custom_url || ytAccount?.channel_id;
+              creatorAvatarUrl = ytAccount?.channel_thumbnail;
+            } else if (
+              platform?.includes("instagram") &&
+              creatorProfile.instagram_account
+            ) {
+              const igAccount =
+                typeof creatorProfile.instagram_account === "string"
+                  ? JSON.parse(creatorProfile.instagram_account)
+                  : creatorProfile.instagram_account;
+              // Mirror the working contests page mapping exactly
+              creatorDisplayName =
+                igAccount?.name_of_account ||
+                igAccount?.full_name ||
+                igAccount?.display_name;
+              creatorUsername = igAccount?.username;
+              creatorAvatarUrl = igAccount?.profile_picture_url;
             }
-
-            // Fallbacks from user record
-            if (!creatorDisplayName && user?.full_name)
-              creatorDisplayName = user.full_name;
-            if (!creatorUsername && user?.username)
-              creatorUsername = user.username;
-            if (!creatorAvatarUrl && user?.profile_picture_url)
-              creatorAvatarUrl = user.profile_picture_url;
-
-            // Final defaults
-            if (!creatorDisplayName) creatorDisplayName = "Unknown Creator";
-            if (!creatorUsername) creatorUsername = "unknown";
-          } else {
-            creatorDisplayName =
-              user?.full_name || user?.username || "Unknown Creator";
-            creatorUsername = user?.username || "unknown";
-            creatorAvatarUrl = user?.profile_picture_url || null;
+          } catch (e) {
+            console.error("Admin: Error parsing social account JSON:", e);
+            // Keep username/avatar as null if parsing fails
           }
 
-          return {
-            id: sub.id,
-            created_at: sub.created_at,
-            content_link: sub.content_link,
-            status: sub.status,
-            views: sub.views,
-            earnings: sub.earnings,
-            other_stats: sub.other_stats,
-            platform: sub.platform,
-            video_thumbnail_url: sub.video_thumbnail_url,
-            video_title: sub.video_title,
-            creator_display_name: creatorDisplayName,
-            creator_username: creatorUsername,
-            creator_avatar_url: creatorAvatarUrl,
-            creator_id: actualCreatorProfileId,
-            paid: sub.paid,
-            paid_at: sub.paid_at,
-            bonus_paid: sub.bonus_paid,
-            bonus_paid_at: sub.bonus_paid_at,
-            // Add nested creator object for creator-wise grouping compatibility
-            creator: {
-              id: actualCreatorProfileId,
-              username: creatorUsername,
-              profile_picture_url: creatorAvatarUrl,
-              full_name: creatorDisplayName,
-            },
-          };
-        })
+          // Fallbacks from user record
+          if (!creatorDisplayName && user?.full_name)
+            creatorDisplayName = user.full_name;
+          if (!creatorUsername && user?.username)
+            creatorUsername = user.username;
+          if (!creatorAvatarUrl && user?.profile_picture_url)
+            creatorAvatarUrl = user.profile_picture_url;
+
+          // Final defaults
+          if (!creatorDisplayName) creatorDisplayName = "Unknown Creator";
+          if (!creatorUsername) creatorUsername = "unknown";
+        } else {
+          creatorDisplayName =
+            user?.full_name || user?.username || "Unknown Creator";
+          creatorUsername = user?.username || "unknown";
+          creatorAvatarUrl = user?.profile_picture_url || null;
+        }
+
+        return {
+          id: sub.id,
+          created_at: sub.created_at,
+          content_link: sub.content_link,
+          status: sub.status,
+          views: sub.views,
+          earnings: sub.earnings,
+          other_stats: sub.other_stats,
+          platform: sub.platform,
+          video_thumbnail_url: sub.video_thumbnail_url,
+          video_title: sub.video_title,
+          creator_display_name: creatorDisplayName,
+          creator_username: creatorUsername,
+          creator_avatar_url: creatorAvatarUrl,
+          creator_id: actualCreatorProfileId,
+          paid: sub.paid,
+          paid_at: sub.paid_at,
+          bonus_paid: sub.bonus_paid,
+          bonus_paid_at: sub.bonus_paid_at,
+          // Add nested creator object for creator-wise grouping compatibility
+          creator: {
+            id: actualCreatorProfileId,
+            username: creatorUsername,
+            profile_picture_url: creatorAvatarUrl,
+            full_name: creatorDisplayName,
+          },
+        };
+      })
       : [];
 
     // Combine regular submissions and Twitter tweets

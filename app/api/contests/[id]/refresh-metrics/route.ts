@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createAdminSupabaseClient } from '@supabase/supabase-js';
-import { METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES, METRICS_REFRESH_COOLDOWN_MS_OWNER } from '@/lib/constants';
+import { METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES, METRICS_REFRESH_COOLDOWN_MS_BRAND, METRICS_REFRESH_COOLDOWN_MS_ADMIN } from '@/lib/constants';
 import { verifyAdminAccess } from '@/utils/admin-auth';
 
 export async function POST(
@@ -54,8 +54,10 @@ export async function POST(
 
     // Determine cooldown period based on user type
     const cooldownMs = isOpportunitiesRefresh 
-      ? METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES  // 60 minutes for creators
-      : METRICS_REFRESH_COOLDOWN_MS_OWNER;         // 3 minutes for brands/admins/owners
+      ? METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES  // 60 minutes (1 hour) for creators
+      : isAdmin 
+        ? METRICS_REFRESH_COOLDOWN_MS_ADMIN        // 1 minute for admins
+        : METRICS_REFRESH_COOLDOWN_MS_BRAND;       // 3 minutes for brands/advertisers
 
     // Database-based rate limiting using last_metrics_updated
     if (contest.last_metrics_updated) {
