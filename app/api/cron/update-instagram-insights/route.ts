@@ -44,8 +44,8 @@ interface TokenUpdate {
 
 // 🔧 Constants
 const TOKEN_REFRESH_THRESHOLD_DAYS = 10;
-const METRICS = 'reach,likes,comments,shares,saved,total_interactions,views';
-const DEFAULT_STATS = { reach: 0, likes: 0, comments: 0, shares: 0, saved: 0, total_interactions: 0, views: 0 };
+const METRICS = 'reach,likes,comments,shares,saved,total_interactions,views,ig_reels_avg_watch_time,ig_reels_video_view_total_time';
+const DEFAULT_STATS = { reach: 0, likes: 0, comments: 0, shares: 0, saved: 0, total_interactions: 0, views: 0, avg_watch_time_ms: 0, total_watch_time_ms: 0 };
 
 // 🛠️ Utilities
 const isTokenExpiring = (tokenExpiry: string): boolean =>
@@ -98,8 +98,19 @@ async function fetchInsights(submission: Submission, accessToken: string): Promi
 
     data.data.forEach(metric => {
       const value = metric.values[0]?.value || 0;
-      (stats as any)[metric.name] = value;
-      if (metric.name === 'views') primaryViews = value;
+      
+      // Map Quality of Attention metrics to readable keys
+      if (metric.name === 'ig_reels_avg_watch_time') {
+        stats.avg_watch_time_ms = value;
+      } else if (metric.name === 'ig_reels_video_view_total_time') {
+        stats.total_watch_time_ms = value;
+      } else if (metric.name === 'views') {
+        stats.views = value;
+        primaryViews = value;
+      } else {
+        // Direct mapping for standard metrics
+        (stats as any)[metric.name] = value;
+      }
     });
 
     // Fallback to reach if views is 0
