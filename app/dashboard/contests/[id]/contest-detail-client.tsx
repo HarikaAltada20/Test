@@ -642,6 +642,8 @@ export default function ContestDetailClient({
             saves: 0,
             reach: 0,
             interactions: 0,
+            avg_watch_time_ms: 0,
+            total_watch_time_ms: 0,
             // Twitter-specific metrics
             retweets: 0,
             quote_reposts: 0,
@@ -721,7 +723,15 @@ export default function ContestDetailClient({
         group.metrics.saves += submission.other_stats?.instagram?.saves || 0;
         group.metrics.reach += submission.other_stats?.instagram?.reach || 0;
         group.metrics.interactions +=
-          submission.other_stats?.instagram?.interactions || 0;
+          submission.other_stats?.instagram?.total_interactions || 0;
+        // Aggregate watch time metrics for Instagram
+        const instagramStats = submission.other_stats?.instagram || {};
+        const avgWatchTime = instagramStats.avg_watch_time_ms || 0;
+        const totalWatchTime = instagramStats.total_watch_time_ms || 0;
+        // Sum average watch times (we'll calculate the mean average when displaying)
+        group.metrics.avg_watch_time_ms += avgWatchTime;
+        // Sum total watch times (this is cumulative across all submissions)
+        group.metrics.total_watch_time_ms += totalWatchTime;
       }
 
       // Calculate earnings and bonus
@@ -2019,6 +2029,8 @@ export default function ContestDetailClient({
         impressions: igStats.impressions || 0,
         engagement_rate: igStats.engagement_rate || 0,
         total_interactions: igStats.total_interactions || 0,
+        avg_watch_time_ms: igStats.avg_watch_time_ms || 0,
+        total_watch_time_ms: igStats.total_watch_time_ms || 0,
       };
     } else if (platform?.includes("twitter")) {
       const twitterStats = stats.twitter || stats;
@@ -2052,6 +2064,24 @@ export default function ContestDetailClient({
       return value.toLocaleString();
     }
     return String(value);
+  };
+
+  const formatWatchTime = (milliseconds: number): string => {
+    if (!milliseconds || milliseconds === 0) return "0s";
+
+    const seconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) {
+      const remainingMinutes = minutes % 60;
+      return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+    } else if (minutes > 0) {
+      const remainingSeconds = seconds % 60;
+      return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+    } else {
+      return `${seconds}s`;
+    }
   };
 
   const handleShare = async () => {
@@ -2429,10 +2459,10 @@ export default function ContestDetailClient({
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                   <DialogTitle className={cn(
-                      isDark
-                        ? "text-white"
-                        : "text-gray-900"
-                    )}>Update Contest Status</DialogTitle>
+                    isDark
+                      ? "text-white"
+                      : "text-gray-900"
+                  )}>Update Contest Status</DialogTitle>
                   <DialogDescription>
                     Change the post-contest status to reflect the current stage
                     of verification and payouts. Current status:{" "}
@@ -2443,12 +2473,12 @@ export default function ContestDetailClient({
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="space-y-2">
-                    <label htmlFor="status" 
-                     className={cn("text-sm font-medium",
-                      isDark
-                        ? "text-white"
-                        : "text-gray-900"
-                    )}>
+                    <label htmlFor="status"
+                      className={cn("text-sm font-medium",
+                        isDark
+                          ? "text-white"
+                          : "text-gray-900"
+                      )}>
                       New Status
                     </label>
                     <Select
@@ -2479,12 +2509,12 @@ export default function ContestDetailClient({
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <label htmlFor="reason" 
-                     className={cn("text-sm font-medium",
-                      isDark
-                        ? "text-white"
-                        : "text-gray-900"
-                    )}>
+                    <label htmlFor="reason"
+                      className={cn("text-sm font-medium",
+                        isDark
+                          ? "text-white"
+                          : "text-gray-900"
+                      )}>
                       Reason (Optional)
                     </label>
                     <Textarea
@@ -5925,6 +5955,12 @@ export default function ContestDetailClient({
                                     <TableHead className="text-center">
                                       Interactions
                                     </TableHead>
+                                    <TableHead className="text-center">
+                                      Avg Watch Time
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      Total Watch Time
+                                    </TableHead>
                                     {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
                                   </>
                                 )}
@@ -6720,6 +6756,26 @@ export default function ContestDetailClient({
                                             (metrics as any).total_interactions
                                           )}
                                         </TableCell>
+                                        <TableCell className="text-center font-mono text-sm">
+                                          <div className="flex flex-col items-center">
+                                            <span className="font-bold">
+                                              {formatWatchTime((metrics as any).avg_watch_time_ms)}
+                                            </span>
+                                            <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                              avg
+                                            </span>
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-center font-mono text-sm">
+                                          <div className="flex flex-col items-center">
+                                            <span className="font-bold">
+                                              {formatWatchTime((metrics as any).total_watch_time_ms)}
+                                            </span>
+                                            <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                              total
+                                            </span>
+                                          </div>
+                                        </TableCell>
                                         {/* <TableCell className="text-center font-mono text-sm">
                                                                             {formatMetricValue(metrics.engagement_rate, true)}
                                                                         </TableCell> */}
@@ -7297,6 +7353,31 @@ export default function ContestDetailClient({
                                       <TableHead className="text-center">
                                         Comments
                                       </TableHead>
+                                      {/* Instagram-specific metrics */}
+                                      {currentContest.platform
+                                        ?.toLowerCase()
+                                        .includes("instagram") && (
+                                          <>
+                                            <TableHead className="text-center">
+                                              Shares
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                              Saves
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                              Reach
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                              Interactions
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                              Avg Watch Time
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                              Total Watch Time
+                                            </TableHead>
+                                          </>
+                                        )}
                                     </>
                                   )}
                                   {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
@@ -7555,6 +7636,52 @@ export default function ContestDetailClient({
                                               <TableCell className="text-center">
                                                 {group.metrics.comments.toLocaleString()}
                                               </TableCell>
+                                              {/* Instagram-specific metrics */}
+                                              {currentContest.platform
+                                                ?.toLowerCase()
+                                                .includes("instagram") && (
+                                                  <>
+                                                    <TableCell className="text-center font-mono text-sm">
+                                                      <div className="flex items-center justify-center gap-1">
+                                                        <Share2 className="h-3 w-3 text-purple-500" />
+                                                        {formatMetricValue(group.metrics.shares || 0)}
+                                                      </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-mono text-sm">
+                                                      {formatMetricValue(group.metrics.saves || 0)}
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-mono text-sm">
+                                                      {formatMetricValue(group.metrics.reach || 0)}
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-mono text-sm">
+                                                      {formatMetricValue(group.metrics.interactions || 0)}
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-mono text-sm">
+                                                      <div className="flex flex-col items-center">
+                                                        <span className="font-bold">
+                                                          {formatWatchTime(
+                                                            group.totalCount > 0 && group.metrics.avg_watch_time_ms > 0
+                                                              ? Math.round((group.metrics.avg_watch_time_ms || 0) / group.totalCount)
+                                                              : 0
+                                                          )}
+                                                        </span>
+                                                        <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                                          avg
+                                                        </span>
+                                                      </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-mono text-sm">
+                                                      <div className="flex flex-col items-center">
+                                                        <span className="font-bold">
+                                                          {formatWatchTime(group.metrics.total_watch_time_ms || 0)}
+                                                        </span>
+                                                        <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                                          total
+                                                        </span>
+                                                      </div>
+                                                    </TableCell>
+                                                  </>
+                                                )}
                                             </>
                                           )}
                                           {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
