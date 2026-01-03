@@ -20,7 +20,7 @@ import {
   Check,
   Info,
 } from "lucide-react";
-import { FaDiscord } from "react-icons/fa";
+import { FaDiscord, FaWhatsapp } from "react-icons/fa";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { useState, useEffect } from "react";
@@ -44,8 +44,8 @@ export default function GettingStartedClient({
   const searchParams = useSearchParams();
 
 
-   // Read mode from data attribute
-   useEffect(() => {
+  // Read mode from data attribute
+  useEffect(() => {
     const checkMode = () => {
       const modeElement = document.querySelector("[data-mode]");
       if (modeElement) {
@@ -107,13 +107,13 @@ export default function GettingStartedClient({
         url.searchParams.delete("welcome");
         window.history.replaceState({}, "", url.toString());
       }
-    } catch {}
+    } catch { }
   }, [userType, searchParams]);
 
   if (!userType) {
     return (
-    <div className="flex items-center justify-center h-[76vh]">
-    <PageLoadingSpinner mode="light" />
+      <div className="flex items-center justify-center h-[76vh]">
+        <PageLoadingSpinner mode="light" />
       </div>
     )
   }
@@ -124,15 +124,15 @@ export default function GettingStartedClient({
     <div className="container mx-auto px-2 py-3 md:px-4 md:py-8 max-w-[1100px]">
       {/* Header Section */}
       <div className="mb-8 text-center">
-        <h1 
-         className={cn(
-          "text-2xl md:text-4xl font-bold mb-2",
-          isDark ? "text-white" : "text-gray-900"
-        )}
+        <h1
+          className={cn(
+            "text-2xl md:text-4xl font-bold mb-2",
+            isDark ? "text-white" : "text-gray-900"
+          )}
         >
           Getting Started with Game Of Creators
         </h1>
-        <p 
+        <p
           className={cn(
             "text-lg",
             isDark ? "text-white" : "text-gray-900"
@@ -169,11 +169,11 @@ export default function GettingStartedClient({
         // BRAND/ADVERTISER CONTENT
 
         <div>
-          <div 
-           className={cn(
-            "border-b text-center shadow-xl px-6 rounded-tl-xl rounded-tr-xl pt-6 pb-4",
-            isDark ? "bg-[#170337] border-gray-600" : "bg-white border-gray-300"
-          )}>
+          <div
+            className={cn(
+              "border-b text-center shadow-xl px-6 rounded-tl-xl rounded-tr-xl pt-6 pb-4",
+              isDark ? "bg-[#170337] border-gray-600" : "bg-white border-gray-300"
+            )}>
             <div className="flex justify-start space-x-3">
               {/* <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                                     <Star className="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -187,28 +187,28 @@ export default function GettingStartedClient({
             </div>
           </div>
 
-          <div 
-          className={cn(
-            "space-y-8 min-h-screen shadow-xl px-2 py-6",
-            isDark ? "bg-[#170337]" : "bg-white"
-          )}>
+          <div
+            className={cn(
+              "space-y-8 min-h-screen shadow-xl px-2 py-6",
+              isDark ? "bg-[#170337]" : "bg-white"
+            )}>
             {/* Platform Overview Section */}
             <div>
               <CardContent className="space-y-6">
                 <div className="text-start mb-6">
-                  <p 
-                   className={cn(
-                    "text-lg mb-4",
-                    isDark ? "text-white" : "text-black"
-                  )}>
+                  <p
+                    className={cn(
+                      "text-lg mb-4",
+                      isDark ? "text-white" : "text-black"
+                    )}>
                     <strong>Game Of Creators</strong> connects brands with
                     talented content creators through engaging video contests.
                   </p>
-                  <p 
-                   className={cn(
-                    "text-lg",
-                    isDark ? "text-white" : "text-black"
-                  )}>
+                  <p
+                    className={cn(
+                      "text-lg",
+                      isDark ? "text-white" : "text-black"
+                    )}>
                     Launch campaigns, get viral content, and reach new
                     audiences. Simple and effective.
                   </p>
@@ -217,46 +217,46 @@ export default function GettingStartedClient({
                 {/* Platform Benefits */}
                 <div className="grid md:grid-cols-3 gap-6">
                   <div
-                   className={cn(
-                    "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
-                    isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
-                  )}>
+                    className={cn(
+                      "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
+                      isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
+                    )}>
                     <div className="w-12 h-12 bg-[#D8C3FF]  rounded-full flex items-center justify-center mx-auto mb-3">
                       <TrendingUp className="w-6 h-6 text-[#4A00BE]" />
                     </div>
                     <h3 className="font-semibold text-xl mb-2">
                       Viral Content
                     </h3>
-                    <p 
-                     className={cn(
-                      "text-md",
-                      isDark ? "text-white" : "text-gray-600"
-                    )}>
+                    <p
+                      className={cn(
+                        "text-md",
+                        isDark ? "text-white" : "text-gray-600"
+                      )}>
                       Get authentic, engaging videos that resonate with your
                       target audience
                     </p>
                   </div>
                   <div
-                   className={cn(
-                    "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
-                    isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
-                  )}>
+                    className={cn(
+                      "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
+                      isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
+                    )}>
                     <div className="w-12 h-12 bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
                       <Users className="w-6 h-6 text-[#4A00BE]" />
                     </div>
                     <h3 className="font-semibold text-xl mb-2">
                       Reach New Audiences
                     </h3>
-                    <p 
-                     className={cn(
-                      "text-md",
-                      isDark ? "text-white" : "text-gray-600"
-                    )}>
+                    <p
+                      className={cn(
+                        "text-md",
+                        isDark ? "text-white" : "text-gray-600"
+                      )}>
                       Tap into creators' existing audiences and expand your
                       brand reach
                     </p>
                   </div>
-                  <div  className={cn(
+                  <div className={cn(
                     "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
                     isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
                   )}>
@@ -266,11 +266,11 @@ export default function GettingStartedClient({
                     <h3 className="font-semibold text-xl mb-2">
                       Cost Effective
                     </h3>
-                    <p 
-                     className={cn(
-                      "text-md",
-                      isDark ? "text-white" : "text-gray-600"
-                    )}>
+                    <p
+                      className={cn(
+                        "text-md",
+                        isDark ? "text-white" : "text-gray-600"
+                      )}>
                       Pay only for performance with flexible budget options
                     </p>
                   </div>
@@ -285,11 +285,11 @@ export default function GettingStartedClient({
                   {/* <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
                                     <Play className="w-6 h-6 text-green-600 dark:text-green-400" />
                                 </div> */}
-                  <h2 
-                   className={cn(
-                    "text-2xl font-bold",
-                    isDark ? "text-white" : "text-gray-900"
-                  )}>
+                  <h2
+                    className={cn(
+                      "text-2xl font-bold",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}>
                     How It Works
                   </h2>
                 </div>
@@ -374,11 +374,11 @@ export default function GettingStartedClient({
                       <h3 className="font-semibold text-lg sm:text-xl mb-2">
                         {item.title}
                       </h3>
-                      <p 
-                      className={cn(
-                        "text-md",
-                        isDark ? "text-gray-300" : "text-gray-600"
-                      )}>
+                      <p
+                        className={cn(
+                          "text-md",
+                          isDark ? "text-gray-300" : "text-gray-600"
+                        )}>
                         {item.desc}
                       </p>
                     </div>
@@ -387,11 +387,11 @@ export default function GettingStartedClient({
 
                 <div className="text-center pt-4">
                   <Link href="/dashboard/contests/create">
-                    <Button 
-                    className={cn(
-                      "text-md text-white",
-                      isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
-                    )}>
+                    <Button
+                      className={cn(
+                        "text-md text-white",
+                        isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                      )}>
                       {/* <Play className="w-4 h-4 mr-2" /> */}
                       Create Your First Contest
                     </Button>
@@ -403,11 +403,11 @@ export default function GettingStartedClient({
             {/* Contest Types Section */}
             <div>
               <div className="text-center pb-4">
-                <h2 
-                 className={cn(
-                  "text-2xl font-bold",
-                  isDark ? "text-white" : "text-gray-900"
-                )}>
+                <h2
+                  className={cn(
+                    "text-2xl font-bold",
+                    isDark ? "text-white" : "text-gray-900"
+                  )}>
                   Choose Your Contest Type
                 </h2>
               </div>
@@ -415,7 +415,7 @@ export default function GettingStartedClient({
               <div className="p-2 md:px-6 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Leaderboard Contest Section */}
-                  <div 
+                  <div
                     className={cn(
                       "p-6 border border-[#7F39EC] rounded-lg",
                       isDark ? "bg-[#170337] text-white" : "bg-[#D9C0FF26]"
@@ -436,22 +436,22 @@ export default function GettingStartedClient({
                       </Badge>
                     </div>
 
-                    <p 
-                     className={cn(
-                      "text-md mb-4",
-                      isDark ? "text-gray-300" : "text-gray-600"
-                    )}>
+                    <p
+                      className={cn(
+                        "text-md mb-4",
+                        isDark ? "text-gray-300" : "text-gray-600"
+                      )}>
                       Set a fixed prize pool and let creators compete for the
                       top spots.
                     </p>
 
                     {/* Visual Process */}
                     <div className="text-center mb-4">
-                      <div 
-                       className={cn(
-                        "inline-block p-4 border rounded-lg bg-[#D9C0FF26]  border-[#7F39EC]",
-                        isDark ? "text-gray-300" : "text-black"
-                      )}>
+                      <div
+                        className={cn(
+                          "inline-block p-4 border rounded-lg bg-[#D9C0FF26]  border-[#7F39EC]",
+                          isDark ? "text-gray-300" : "text-black"
+                        )}>
                         <div className="text-lg font-bold mb-1">
                           Set Prize Pool → Creators Compete → Winners Get Paid
                         </div>
@@ -464,26 +464,26 @@ export default function GettingStartedClient({
                     {/* Benefits */}
                     <div className="space-y-4">
                       <div className="flex items-start space-x-2">
-                        <Check 
-                         className={cn(
-                          "w-5 h-5 mt-0.5 flex-shrink-0",
-                          isDark ? "text-purple-400" : "text-[#4A00BE]"
-                        )}/>
-                        <span 
-                         className={cn(
-                          "text-md",
-                          isDark ? "text-gray-400" : "text-gray-700"
-                        )}>
+                        <Check
+                          className={cn(
+                            "w-5 h-5 mt-0.5 flex-shrink-0",
+                            isDark ? "text-purple-400" : "text-[#4A00BE]"
+                          )} />
+                        <span
+                          className={cn(
+                            "text-md",
+                            isDark ? "text-gray-400" : "text-gray-700"
+                          )}>
                           Fixed budget - know your total cost upfront
                         </span>
                       </div>
                       <div className="flex items-start space-x-2">
-                        <Check 
-                         className={cn(
-                          "w-5 h-5 mt-0.5 flex-shrink-0",
-                          isDark ? "text-purple-400" : "text-[#4A00BE]"
-                        )} />
-                        <span  className={cn(
+                        <Check
+                          className={cn(
+                            "w-5 h-5 mt-0.5 flex-shrink-0",
+                            isDark ? "text-purple-400" : "text-[#4A00BE]"
+                          )} />
+                        <span className={cn(
                           "text-md",
                           isDark ? "text-gray-400" : "text-gray-700"
                         )}>
@@ -491,7 +491,7 @@ export default function GettingStartedClient({
                         </span>
                       </div>
                       <div className="flex items-start space-x-2">
-                        <Check  className={cn(
+                        <Check className={cn(
                           "w-5 h-5 mt-0.5 flex-shrink-0",
                           isDark ? "text-purple-400" : "text-[#4A00BE]"
                         )} />
@@ -518,11 +518,11 @@ export default function GettingStartedClient({
 
                     <div className="text-center pt-4">
                       <Link href="/dashboard/contests/create">
-                        <Button 
-                        className={cn(
-                          "text-md text-white w-full",
-                          isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
-                        )}>
+                        <Button
+                          className={cn(
+                            "text-md text-white w-full",
+                            isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                          )}>
                           <Trophy className="w-4 h-4" />
                           Create Leaderboard Contest
                         </Button>
@@ -531,11 +531,11 @@ export default function GettingStartedClient({
                   </div>
 
                   {/* CPM Contest Section */}
-                  <div  className={cn(
-                      "p-6 border border-[#7F39EC] rounded-lg",
-                      isDark ? "bg-[#170337] text-white" : "bg-[#D9C0FF26]"
-                    )}>
-                  <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <div className={cn(
+                    "p-6 border border-[#7F39EC] rounded-lg",
+                    isDark ? "bg-[#170337] text-white" : "bg-[#D9C0FF26]"
+                  )}>
+                    <div className="flex flex-wrap items-center gap-3 mb-4">
                       <div className="p-2 bg-[#D8C3FF]  rounded-full">
                         <DollarSign className="w-5 h-5 text-[#4A00BE]" />
                       </div>
@@ -559,22 +559,22 @@ export default function GettingStartedClient({
                       </Badge>
                     </div>
 
-                    <p 
-                    className={cn(
-                      "text-md  mb-4",
-                      isDark ? "text-gray-300" : "text-gray-600"
-                    )}>
+                    <p
+                      className={cn(
+                        "text-md  mb-4",
+                        isDark ? "text-gray-300" : "text-gray-600"
+                      )}>
                       Pay only for actual views. More views = more marketing
                       reach for your brand.
                     </p>
 
                     {/* Visual Process */}
                     <div className="text-center mb-4">
-                      <div 
-                      className={cn(
-                        "inline-block p-4 border rounded-lg bg-[#D9C0FF26]  border-[#7F39EC]",
-                        isDark ? "text-gray-300" : "text-black"
-                      )}>
+                      <div
+                        className={cn(
+                          "inline-block p-4 border rounded-lg bg-[#D9C0FF26]  border-[#7F39EC]",
+                          isDark ? "text-gray-300" : "text-black"
+                        )}>
                         <div className="text-lg font-bold mb-2">
                           Set CPM Rate → Creators Post → Pay Per Views
                         </div>
@@ -591,7 +591,7 @@ export default function GettingStartedClient({
                           "w-5 h-5 mt-0.5 flex-shrink-0",
                           isDark ? "text-purple-400" : "text-[#4A00BE]"
                         )} />
-                        <span  className={cn(
+                        <span className={cn(
                           "text-md",
                           isDark ? "text-gray-400" : "text-gray-700"
                         )}>
@@ -603,7 +603,7 @@ export default function GettingStartedClient({
                           "w-5 h-5 mt-0.5 flex-shrink-0",
                           isDark ? "text-purple-400" : "text-[#4A00BE]"
                         )} />
-                        <span  className={cn(
+                        <span className={cn(
                           "text-md",
                           isDark ? "text-gray-400" : "text-gray-700"
                         )}>
@@ -615,7 +615,7 @@ export default function GettingStartedClient({
                           "w-5 h-5 mt-0.5 flex-shrink-0",
                           isDark ? "text-purple-400" : "text-[#4A00BE]"
                         )} />
-                        <span  className={cn(
+                        <span className={cn(
                           "text-md",
                           isDark ? "text-gray-400" : "text-gray-700"
                         )}>
@@ -626,8 +626,8 @@ export default function GettingStartedClient({
                         <Check className={cn(
                           "w-5 h-5 mt-0.5 flex-shrink-0",
                           isDark ? "text-purple-400" : "text-[#4A00BE]"
-                        )}/>
-                        <span  className={cn(
+                        )} />
+                        <span className={cn(
                           "text-md",
                           isDark ? "text-gray-400" : "text-gray-700"
                         )}>
@@ -638,11 +638,11 @@ export default function GettingStartedClient({
 
                     <div className="text-center pt-4">
                       <Link href="/dashboard/contests/create">
-                        <Button 
-                        className={cn(
-                          "text-md text-white w-full",
-                          isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
-                        )}>
+                        <Button
+                          className={cn(
+                            "text-md text-white w-full",
+                            isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                          )}>
                           <DollarSign className="w-4 h-4" />
                           Create CPM Contest
                         </Button>
@@ -660,11 +660,11 @@ export default function GettingStartedClient({
                   {/* <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                                     <Shield className="w-6 h-6 text-orange-600 dark:text-orange-400" />
                                 </div> */}
-                  <h2 
-                   className={cn(
-                    "text-2xl font-bold",
-                    isDark ? "text-white" : "text-gray-900"
-                  )}>
+                  <h2
+                    className={cn(
+                      "text-2xl font-bold",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}>
                     Content Quality & Safety
                   </h2>
                 </div>
@@ -672,30 +672,30 @@ export default function GettingStartedClient({
 
               <CardContent className="space-y-6">
                 <div className="text-center mb-6">
-                  <p 
-                   className={cn(
-                    "text-lg",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}>
+                  <p
+                    className={cn(
+                      "text-lg",
+                      isDark ? "text-white" : "text-gray-600"
+                    )}>
                     We ensure all content meets high quality standards and brand
                     safety requirements.
                   </p>
                 </div>
 
                 <div className="grid md:grid-cols-3 gap-6">
-                  <div 
-                  className={cn(
-                    "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
-                    isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
-                  )}>
+                  <div
+                    className={cn(
+                      "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
+                      isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
+                    )}>
                     <h3 className="font-semibold text-xl mb-3">
                       Quality Review:
                     </h3>
-                    <ul 
-                     className={cn(
-                      "space-y-3 text-[13px]",
-                      isDark ? "text-white" : "text-gray-700"
-                    )}>
+                    <ul
+                      className={cn(
+                        "space-y-3 text-[13px]",
+                        isDark ? "text-white" : "text-gray-700"
+                      )}>
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                         <span>Content follows your brief and guidelines</span>
@@ -711,19 +711,19 @@ export default function GettingStartedClient({
                     </ul>
                   </div>
 
-                  <div 
-                  className={cn(
-                    "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
-                    isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
-                  )}>
+                  <div
+                    className={cn(
+                      "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
+                      isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
+                    )}>
                     <h3 className="font-semibold text-xl mb-3">
                       What You Get:
                     </h3>
-                    <ul 
-                     className={cn(
-                      "space-y-3 text-[14px]",
-                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
-                    )}>
+                    <ul
+                      className={cn(
+                        "space-y-3 text-[14px]",
+                        isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                      )}>
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                         <span>Verified, high-quality content</span>
@@ -773,19 +773,19 @@ export default function GettingStartedClient({
                                         <MessageCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                                     </div> */}
                     <div>
-                      <h4 
-                      className={cn(
-                        "font-semibold text-lg mb-2",
-                        isDark ? "text-white" : "text-black"
-                      )}
+                      <h4
+                        className={cn(
+                          "font-semibold text-lg mb-2",
+                          isDark ? "text-white" : "text-black"
+                        )}
                       >
                         Pro Tip:
                       </h4>
-                      <p 
-                      className={cn(
-                        "text-md",
-                        isDark ? "text-white" : "text-black"
-                      )}>
+                      <p
+                        className={cn(
+                          "text-md",
+                          isDark ? "text-white" : "text-black"
+                        )}>
                         <strong>Create clear, detailed briefs</strong> to get
                         the best content. Include your brand guidelines, target
                         audience, and specific requirements for better results.
@@ -802,10 +802,10 @@ export default function GettingStartedClient({
         <div>
           {/* Platform Overview Section */}
           <div
-           className={cn(
-            "border-b text-center shadow-xl px-6 rounded-tl-xl rounded-tr-xl pt-6 pb-4",
-            isDark ? "bg-[#170337] border-gray-600" : "bg-white border-gray-300"
-          )}>
+            className={cn(
+              "border-b text-center shadow-xl px-6 rounded-tl-xl rounded-tr-xl pt-6 pb-4",
+              isDark ? "bg-[#170337] border-gray-600" : "bg-white border-gray-300"
+            )}>
             <div className="flex justify-start space-x-3">
               {/* <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                                     <Star className="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -818,27 +818,27 @@ export default function GettingStartedClient({
               </h2>
             </div>
           </div>
-          <div 
-           className={cn(
-            "shadow-xl px-6 pt-6 pb-4",
-            isDark ? "bg-[#170337]" : "bg-white"
-          )}>
+          <div
+            className={cn(
+              "shadow-xl px-6 pt-6 pb-4",
+              isDark ? "bg-[#170337]" : "bg-white"
+            )}>
             <div className="md:px-2">
               <div className="space-y-6">
                 <div className="text-start mb-6">
-                  <p 
-                   className={cn(
-                    "text-lg mb-4",
-                    isDark ? "text-white" : "text-gray-700"
-                  )}>
+                  <p
+                    className={cn(
+                      "text-lg mb-4",
+                      isDark ? "text-white" : "text-gray-700"
+                    )}>
                     <strong>Game Of Creators</strong> connects content creators
                     with brands through video contests.
                   </p>
-                  <p 
-                   className={cn(
-                    "text-gray-600 dark:text-gray-400",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}>
+                  <p
+                    className={cn(
+                      "text-gray-600 dark:text-gray-400",
+                      isDark ? "text-white" : "text-gray-600"
+                    )}>
                     Create videos, compete for prizes, or get paid per view.
                     Simple as that.
                   </p>
@@ -846,11 +846,11 @@ export default function GettingStartedClient({
 
                 {/* Platform Benefits */}
                 <div className="grid md:grid-cols-3 gap-6">
-                  <div 
-                   className={cn(
-                    "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
-                    isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
-                  )}>
+                  <div
+                    className={cn(
+                      "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
+                      isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
+                    )}>
                     <div className="w-12 h-12 bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
                       <DollarSign className="w-6 h-6 text-[#4A00BE]" />
                     </div>
@@ -1073,11 +1073,11 @@ export default function GettingStartedClient({
 
                 <div className="text-center pt-3">
                   <Link href="/dashboard/opportunities">
-                    <Button 
-                    className={cn(
-                      "text-md text-white",
-                      isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
-                    )}>
+                    <Button
+                      className={cn(
+                        "text-md text-white",
+                        isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                      )}>
                       <Video className="w-4 h-4" />
                       Browse Contests
                     </Button>
@@ -1100,11 +1100,11 @@ export default function GettingStartedClient({
               <div className="p-0 md:px-4 ">
                 <div className="grid md:grid-cols-2 gap-6">
                   {/* Leaderboard for Creators */}
-                  <div 
-                   className={cn(
-                    "w-full border border-[#7F39EC] rounded-xl p-6 flex flex-col justify-between",
-                    isDark ? "bg-[#170337] text-white" : "bg-[#D9C0FF26]"
-                  )}
+                  <div
+                    className={cn(
+                      "w-full border border-[#7F39EC] rounded-xl p-6 flex flex-col justify-between",
+                      isDark ? "bg-[#170337] text-white" : "bg-[#D9C0FF26]"
+                    )}
                   >
                     <div>
                       <div className="flex items-center space-x-3 mb-4">
@@ -1220,11 +1220,11 @@ export default function GettingStartedClient({
 
                     {/* Visual Rate Display */}
                     <div className="text-center mb-4">
-                      <div 
-                      className={cn(
-                        "inline-block px-4 py-2 rounded-xl",
-                        isDark ? "border border-[#7F39EC] bg-[#D9C0FF26]" : "bg-[#4A00BE]"
-                      )}>
+                      <div
+                        className={cn(
+                          "inline-block px-4 py-2 rounded-xl",
+                          isDark ? "border border-[#7F39EC] bg-[#D9C0FF26]" : "bg-[#4A00BE]"
+                        )}>
                         <div className="text-xl font-bold text-white">
                           $5.00
                         </div>
@@ -1239,11 +1239,11 @@ export default function GettingStartedClient({
                       <div className="flex items-center justify-between p-3 rounded-lg border border-gray-400">
                         <div className="flex items-center space-x-3">
                           <div className="w-9 h-9 border border-gray-500 rounded-full flex items-center justify-center">
-                            <Video 
-                            className={cn(
-                              "w-5 h-5",
-                              isDark ? "text-white" : "text-black"
-                            )}/>
+                            <Video
+                              className={cn(
+                                "w-5 h-5",
+                                isDark ? "text-white" : "text-black"
+                              )} />
                           </div>
                           <span className="font-medium">10K views</span>
                         </div>
@@ -1257,11 +1257,11 @@ export default function GettingStartedClient({
                       <div className="flex items-center justify-between p-3 rounded-lg border border-gray-400">
                         <div className="flex items-center space-x-3">
                           <div className="w-9 h-9 border border-gray-500 rounded-full flex items-center justify-center">
-                            <Video 
-                            className={cn(
-                              "w-5 h-5",
-                              isDark ? "text-white" : "text-black"
-                            )}/>
+                            <Video
+                              className={cn(
+                                "w-5 h-5",
+                                isDark ? "text-white" : "text-black"
+                              )} />
                           </div>
                           <span className="font-medium">50K views</span>
                         </div>
@@ -1275,11 +1275,11 @@ export default function GettingStartedClient({
                       <div className="flex items-center justify-between p-3 rounded-lg border border-gray-400">
                         <div className="flex items-center space-x-3">
                           <div className="w-9 h-9 border border-gray-500 rounded-full flex items-center justify-center">
-                            <Video 
-                            className={cn(
-                              "w-5 h-5",
-                              isDark ? "text-white" : "text-black"
-                            )}/>
+                            <Video
+                              className={cn(
+                                "w-5 h-5",
+                                isDark ? "text-white" : "text-black"
+                              )} />
                           </div>
                           <span className="font-medium">100K views</span>
                         </div>
@@ -1338,10 +1338,10 @@ export default function GettingStartedClient({
               <div className="space-y-6 md:px-2 mb-6">
                 <div className="grid md:grid-cols-3 gap-6">
                   <div
-                  className={cn(
-                    "text-center text-start p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
-                    isDark ? "bg-[#1F0944] border border-[#D1B7F9]" : "bg-white"
-                  )}>
+                    className={cn(
+                      "text-center text-start p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
+                      isDark ? "bg-[#1F0944] border border-[#D1B7F9]" : "bg-white"
+                    )}>
                     <h3 className={cn(
                       "font-semibold text-center text-xl mb-3",
                       isDark ? "text-white" : "text-black"
@@ -1557,40 +1557,40 @@ export default function GettingStartedClient({
       {userType === "advertiser" ? (
         // BRAND/ADVERTISER READY TO START
         <div
-        className={cn(
-          "space-y-8 rounded-bl-xl rounded-br-xl shadow-lg px-6 pb-6",
-          isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-        )}
+          className={cn(
+            "space-y-8 rounded-bl-xl rounded-br-xl shadow-lg px-6 pb-6",
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+          )}
         >
-          <CardContent 
+          <CardContent
             className={cn(
               "p-6 border border-[#7F39EC] rounded-2xl",
               isDark ? "bg-[#170337] text-white" : "bg-[#D9C0FF26]"
             )}
           >
             <div className="text-center mb-6">
-              <h3 
-              className={cn(
-                "text-2xl font-bold mb-2",
-                isDark ? "text-white" : "text-gray-900"
-              )}>
+              <h3
+                className={cn(
+                  "text-2xl font-bold mb-2",
+                  isDark ? "text-white" : "text-gray-900"
+                )}>
                 Ready to Start?
               </h3>
-              <p 
-               className={cn(           
-                isDark ? "text-gray-300" : "text-gray-600"
-              )}>
+              <p
+                className={cn(
+                  isDark ? "text-gray-300" : "text-gray-600"
+                )}>
                 Start creating contests and campaigns
               </p>
             </div>
 
             <div className="text-center">
               <Link href="/dashboard/contests/create">
-                <Button 
-                className={cn(
-                  "w-full py-3 px-8 text-lg",
-                  isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
-                )}>
+                <Button
+                  className={cn(
+                    "w-full py-3 px-8 text-lg",
+                    isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                  )}>
                   <Video className="w-6 h-6" />
                   Create Contest
                 </Button>
@@ -1609,7 +1609,7 @@ export default function GettingStartedClient({
             isDark ? "bg-[#170337]" : "bg-[#D9C0FF26]"
           )}>
             <div className="text-center mb-6">
-        
+
               <h3 className={cn(
                 "text-2xl font-bold",
                 isDark ? "text-white" : "text-gray-900"
@@ -1626,11 +1626,11 @@ export default function GettingStartedClient({
 
             <div className="text-center flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link href="/dashboard/opportunities">
-                <Button 
-                className={cn(
-                  "w-full py-3 px-8 text-lg",
-                  isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
-                )}>
+                <Button
+                  className={cn(
+                    "w-full py-3 px-8 text-lg",
+                    isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                  )}>
                   <Video className="w-5 h-5" />
                   Browse Contests
                 </Button>
@@ -1640,13 +1640,27 @@ export default function GettingStartedClient({
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <Button 
-                className={cn(
-                  "w-full py-3 px-8 text-lg",
-                  isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
-                )}>
+                <Button
+                  className={cn(
+                    "w-full py-3 px-8 text-lg",
+                    isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                  )}>
                   <FaDiscord className="w-5 h-5" />
-                  Join Creator Community
+                  Join Community
+                </Button>
+              </a>
+              <a
+                href={SOCIAL_LINKS.whatsapp}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button
+                  className={cn(
+                    "w-full py-3 px-8 text-lg",
+                    isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                  )}>
+                  <FaWhatsapp className="w-5 h-5" />
+                  Join Community
                 </Button>
               </a>
             </div>
