@@ -64,6 +64,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
 
+    // Only allow payments when contest status is verification_complete
+    if (contest.post_contest_status !== 'verification_complete') {
+      return NextResponse.json({ 
+        error: 'Payments can only be processed when contest status is \'verification_complete\'' 
+      }, { status: 400 });
+    }
+
     // Filter to verified submissions only
     const verifiedSubmissions = submissions.filter(s => s.status === "verified");
 

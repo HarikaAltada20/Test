@@ -131,6 +131,7 @@ export default async function AdminContestDetailPage({
         moderation_status,
         manual_points_adjustment,
         manual_points_reason,
+        filter_status,
         first_fetched_at,
         last_updated_at
       `,
@@ -167,6 +168,7 @@ export default async function AdminContestDetailPage({
           impressions,
           points,
           is_eligible,
+          filter_status,
           first_fetched_at,
           last_updated_at
         `,
@@ -220,12 +222,16 @@ export default async function AdminContestDetailPage({
       total_quote_reposts?: number;
       total_impressions?: number;
       current_rank?: number;
+      paid?: boolean;
+      paid_at?: string | null;
+      earnings?: number;
+      paid_rank?: number | null;
     }> = {};
     if (isTwitterCampaign) {
       try {
         const { data: leaderboardData, error: leaderboardError } = await supabase
           .from("twitter_campaign_leaderboard")
-          .select("creator_id, moderation_status, rejection_reason, manual_points_adjustment, manual_points_reason, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, current_rank")
+          .select("creator_id, moderation_status, rejection_reason, manual_points_adjustment, manual_points_reason, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, current_rank, paid, paid_at, earnings, paid_rank")
           .eq("contest_id", contestId);
 
         if (leaderboardError) {
@@ -250,6 +256,10 @@ export default async function AdminContestDetailPage({
                 total_quote_reposts: entry.total_quote_reposts || 0,
                 total_impressions: entry.total_impressions || 0,
                 current_rank: entry.current_rank || null,
+                paid: entry.paid || false,
+                paid_at: entry.paid_at || null,
+                earnings: entry.earnings || 0,
+                paid_rank: entry.paid_rank || null,
               };
             }
           });
@@ -482,6 +492,7 @@ export default async function AdminContestDetailPage({
           moderation_status: moderationStatus, // Default to "pending" if column doesn't exist
           manual_points_adjustment: manualAdjustment,
           manual_points_reason: tweet.manual_points_reason,
+          filter_status: (tweet as any).filter_status || null, // Track eligibility deletion status
           // Add nested creator object for compatibility
           creator: {
             id: actualCreatorProfileId,
