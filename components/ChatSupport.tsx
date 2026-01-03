@@ -178,8 +178,8 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email, userType }) => {
                 "flex-1 text-sm text-gray-700",
                 isDark ? "text-white" : "text-gray-700"
               )} >
-                For quicker responses, join our active Game of creators discord community.
-                <div className="mt-2">
+                For quicker responses, join our active Game of creators discord and WhatsApp communities.
+                <div className="mt-2 flex gap-2">
                   <a
                     href={SOCIAL_LINKS.discord}
                     target="_blank"
@@ -187,6 +187,14 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email, userType }) => {
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-purple-600 text-white hover:bg-purple-700"
                   >
                     <ExternalLink className="h-4 w-4" /> Join Discord
+                  </a>
+                  <a
+                    href={SOCIAL_LINKS.whatsapp}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-[#25D366] text-white hover:bg-[#20BA5A]"
+                  >
+                    <ExternalLink className="h-4 w-4" /> Join WhatsApp
                   </a>
                 </div>
               </div>
