@@ -176,7 +176,7 @@ async function recalculateTwitterLeaderboard(
     .eq("contest_id", contestId)
     .eq("creator_id", creatorId)
     .eq("is_eligible", true)
-    .in("moderation_status", ["pending", "approved"]); // Only count pending/approved
+    .in("moderation_status", ["pending", "verified"]); // Only count pending/verified
 
   // Calculate total points (base points + manual adjustments)
   let totalPoints = 0;
