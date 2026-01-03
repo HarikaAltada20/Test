@@ -912,7 +912,7 @@ export function ContestClientPage({
           id: tweet.id,
           created_at: tweet.tweet_created_at,
           content_link: tweet.tweet_url,
-          status: tweet.moderation_status === "approved" ? "verified" : tweet.moderation_status === "rejected" ? "rejected" : "pending",
+          status: tweet.moderation_status || "pending",
           views: tweet.impressions || 0,
           earnings: null,
           other_stats: {
@@ -7515,7 +7515,7 @@ export function ContestClientPage({
                             Verified (
                             {allSubmissionsForAnalytics?.filter((s: any) => {
                               const isTwitter = s.is_twitter_tweet;
-                              if (isTwitter) return s.moderation_status === "approved";
+                              if (isTwitter) return s.moderation_status === "verified";
                               return s.status === "verified";
                             }).length || 0}
                             )
@@ -7580,7 +7580,7 @@ export function ContestClientPage({
                             Verified/Paid (
                             {allSubmissionsForAnalytics?.filter((s: any) => {
                               const isTwitter = s.is_twitter_tweet;
-                              if (isTwitter) return s.moderation_status === "approved";
+                              if (isTwitter) return s.moderation_status === "verified";
                               return s.status === "verified" || s.status === "paid";
                             }).length || 0}
                             )
@@ -8304,7 +8304,7 @@ export function ContestClientPage({
                             <p className="text-xl font-bold">
                               {filteredAnalyticsSubmissions.filter((s: any) => {
                                 const isTwitter = s.is_twitter_tweet;
-                                if (isTwitter) return s.moderation_status === "approved";
+                                if (isTwitter) return s.moderation_status === "verified";
                                 return s.status === "verified" || s.status === "paid";
                               }).length}
                             </p>

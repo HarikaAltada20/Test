@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { debitCreatorWithdrawableBalance, logTransactionAsAdmin, REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
 
 /**
  * POST /api/contests/[id]/moderate-creator
@@ -73,7 +74,89 @@ export async function POST(
     }
 
     const supabaseAdmin = createAdminClient();
-    const moderationStatus = action === "approve" ? "approved" : "rejected";
+    const moderationStatus = action === "approve" ? "verified" : "rejected";
+
+    // Get current leaderboard entry to check if creator is paid
+    const { data: currentLeaderboardEntry, error: fetchError } = await supabaseAdmin
+      .from("twitter_campaign_leaderboard")
+      .select("paid, earnings")
+      .eq("contest_id", contestId)
+      .eq("creator_id", creatorId)
+      .single();
+
+    if (fetchError && fetchError.code !== "PGRST116") {
+      // PGRST116 is "not found", which is acceptable
+      console.error("[moderate-creator] Error fetching leaderboard entry:", fetchError);
+      return NextResponse.json(
+        { error: "Failed to fetch leaderboard entry" },
+        { status: 500 }
+      );
+    }
+
+    // Handle payment reversal if creator is currently paid and status is being changed away from paid
+    if (currentLeaderboardEntry?.paid) {
+      let reversalAmount = currentLeaderboardEntry.earnings || 0;
+      
+      if (!reversalAmount || reversalAmount <= 0) {
+        // Fallback: calculate net unreversed reward = rewards - prior reversals
+        const [{ data: rewardTxns, error: rewardErr }, { data: refundTxns, error: refundErr }] = await Promise.all([
+          supabaseAdmin
+            .from("money_transactions")
+            .select("id, amount")
+            .eq("user_id", creatorId)
+            .eq("type", "reward")
+            .contains("metadata", { contest_id: contestId, twitter_creator_id: creatorId }),
+          supabaseAdmin
+            .from("money_transactions")
+            .select("id, amount, remarks")
+            .eq("user_id", creatorId)
+            .eq("type", "refund")
+            .contains("metadata", { contest_id: contestId, twitter_creator_id: creatorId })
+        ] as any);
+
+        if (rewardErr || refundErr) {
+          const message = rewardErr?.message || refundErr?.message || "unknown";
+          return NextResponse.json(
+            { error: `Failed to fetch transactions for reversal: ${message}` },
+            { status: 500 }
+          );
+        }
+
+        const totalRewards = (rewardTxns || []).reduce((sum: number, tx: any) => sum + (tx.amount || 0), 0);
+        const totalReversals = (refundTxns || [])
+          .filter((tx: any) => !tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK)
+          .reduce((sum: number, tx: any) => sum + (tx.amount || 0), 0);
+        reversalAmount = Math.max(0, totalRewards - totalReversals);
+      }
+
+      if (reversalAmount > 0) {
+        // Debit creator wallet by the credited total
+        const debitRes = await debitCreatorWithdrawableBalance(creatorId, reversalAmount);
+        if (!debitRes.success) {
+          return NextResponse.json(
+            { error: `Failed to reverse creator credit: ${debitRes.error}` },
+            { status: 500 }
+          );
+        }
+
+        // Log a reversal transaction entry for audit trail
+        await logTransactionAsAdmin(
+          creatorId,
+          "refund",
+          reversalAmount,
+          "success",
+          `Reversal of Twitter contest reward - ${(contest as any)?.title || "Contest"}`,
+          {
+            remarks: REVERSAL_TRANSACTION_REMARK,
+            paymentMethod: "refund",
+            metadata: {
+              contest_id: contestId,
+              twitter_creator_id: creatorId,
+            },
+          }
+        );
+      }
+    }
 
     // Update twitter_campaign_leaderboard
     const leaderboardUpdateData: any = {
@@ -84,6 +167,14 @@ export async function POST(
       leaderboardUpdateData.rejection_reason = reason;
     } else {
       leaderboardUpdateData.rejection_reason = null;
+    }
+
+    // Clear paid status and earnings if creator was paid (reversal handled above)
+    if (currentLeaderboardEntry?.paid) {
+      leaderboardUpdateData.paid = false;
+      leaderboardUpdateData.paid_at = null;
+      leaderboardUpdateData.earnings = null;
+      leaderboardUpdateData.paid_rank = null;
     }
 
     const { error: leaderboardUpdateError } = await supabaseAdmin

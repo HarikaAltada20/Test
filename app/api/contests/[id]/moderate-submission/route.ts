@@ -74,7 +74,7 @@ export async function POST(
     }
 
     const supabaseAdmin = createAdminClient();
-    const moderationStatus = action === "approve" ? "approved" : "rejected";
+    const moderationStatus = action === "approve" ? "verified" : "rejected";
 
     // Update Twitter campaign tweet
     const updateData: any = {
