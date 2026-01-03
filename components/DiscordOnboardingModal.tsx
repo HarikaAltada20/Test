@@ -3,6 +3,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ExternalLink, Instagram, Youtube, Twitter, Linkedin, MessageCircle, MessagesSquare } from "lucide-react";
+import { FaWhatsapp } from "react-icons/fa";
 import Link from "next/link";
 import Image from "next/image";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
@@ -62,6 +63,18 @@ export function DiscordOnboardingModal({ isOpen, onClose, discordInviteUrl }: Di
         onClose();
     };
 
+    const handleJoinWhatsApp = () => {
+        if (SOCIAL_LINKS.whatsapp) {
+            window.open(SOCIAL_LINKS.whatsapp, "_blank", "noopener,noreferrer");
+        }
+        try {
+            if (typeof window !== "undefined") {
+                localStorage.setItem("discordOnboardingShown", "1");
+            }
+        } catch { }
+        onClose();
+    };
+
     return (
         <Dialog open={isOpen} onOpenChange={onClose} isdark={isDark}>
             <DialogContent className="sm:max-w-[560px]">
@@ -78,7 +91,7 @@ export function DiscordOnboardingModal({ isOpen, onClose, discordInviteUrl }: Di
                         "text-sm text-muted-foreground",
                         isDark ? "text-gray-300" : "text-gray-700"
                       )}>
-                        Join our Creator Community on Discord to get updates, support, and a $0.10 bonus credited to your withdrawable balance.
+                        Join our Creator Community on Discord and WhatsApp to get updates, support, and a $0.10 bonus credited to your withdrawable balance.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -135,6 +148,28 @@ export function DiscordOnboardingModal({ isOpen, onClose, discordInviteUrl }: Di
                                 <p className="text-xs text-muted-foreground mt-3">
                                     Copy the code and redeem it in Dashboard → Earnings → Redeem a Code to credit $0.10 to your withdrawable balance.
                                 </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className={cn(
+                        "p-5 rounded-lg border transition-colors",
+                        isDark ? "bg-[#D9FFE626] border-[#25D366] dark:to-green-900/20" : "bg-[#D9FFE626] border-[#25D366] dark:to-green-900/20"
+                      )}>
+                        <div className="flex items-start gap-4">
+                            <div>
+                                <FaWhatsapp className="h-5 w-5 text-[#25D366]" />
+                            </div>
+                            <div className="flex-1">
+                                <p className={cn(
+                                    "text-sm mb-2",
+                                    isDark ? "text-gray-300" : "text-gray-700"
+                                  )}>
+                                    <span className="font-semibold">Join our WhatsApp Community</span> to stay connected with other creators, get updates, and support.
+                                </p>
+                                <Button className="w-full bg-[#25D366] hover:bg-[#20BA5A] text-white" onClick={handleJoinWhatsApp}>
+                                    <ExternalLink className="h-4 w-4 mr-2" /> Join WhatsApp
+                                </Button>
                             </div>
                         </div>
                     </div>
