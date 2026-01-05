@@ -522,16 +522,16 @@ export default function ContestDetailClient({
     currentPage * itemsPerPage
   );
 
-  // Filter submissions for analytics based on active analytics tab
+ // Filter submissions for analytics based on active analytics tab
   // For Twitter tweets, use moderation_status; for regular submissions, use status
   const filteredAnalyticsSubmissions = currentSubmissions.filter((submission) => {
     const status = getStatus(submission);
 
     if (activeAnalyticsTab === "all") return true;
     if (activeAnalyticsTab === "verified_or_paid") {
-      return mappedStatus === "verified" || mappedStatus === "paid";
+      return status === "verified" || status === "paid";
     }
-    return mappedStatus === activeAnalyticsTab;
+    return status === activeAnalyticsTab;
   });
 
   // Creator-wise grouping logic
@@ -540,10 +540,10 @@ export default function ContestDetailClient({
 
     // Check if this is a Twitter leaderboard campaign
     const isTwitterLeaderboard =
-      (currentContest?.platform?.toLowerCase() === "twitter" ||
+      ((currentContest?.platform?.toLowerCase() === "twitter" ||
         currentContest?.platform?.toLowerCase() === "x") &&
-      currentContest?.contest_format === "text_image" &&
-      currentContest?.contest_type === "leaderboard";
+        currentContest?.contest_format === "text_image" &&
+        currentContest?.contest_type === "leaderboard");
 
     // For Twitter leaderboard campaigns, use data directly from twitter_campaign_leaderboard
     if (isTwitterLeaderboard) {
@@ -567,22 +567,18 @@ export default function ContestDetailClient({
 
       creatorIds.forEach((creatorId) => {
         const leaderboardData = creatorModerationData[creatorId] || {};
-        const creatorSubmissions = filteredSubmissions.filter(
-          (s: any) => s.creator_id === creatorId
-        );
+        const creatorSubmissions = filteredSubmissions.filter((s: any) => s.creator_id === creatorId);
         const firstSubmission = creatorSubmissions[0];
 
         grouped[creatorId] = {
           creator: {
             id: creatorId,
             username: firstSubmission?.creator?.username || "Unknown",
-            profile_picture_url:
-              firstSubmission?.creator?.profile_picture_url || null,
+            profile_picture_url: firstSubmission?.creator?.profile_picture_url || null,
             full_name: firstSubmission?.creator?.full_name || null,
           },
           submissions: creatorSubmissions,
-          totalCount:
-            leaderboardData.total_eligible_tweets || creatorSubmissions.length,
+          totalCount: leaderboardData.total_eligible_tweets || creatorSubmissions.length,
           statusCounts: {
             all: creatorSubmissions.length,
             verified: creatorSubmissions.filter((s: any) => {
@@ -590,18 +586,13 @@ export default function ContestDetailClient({
               return status === "verified";
             }).length,
             paid: creatorSubmissions.filter((s: any) => s.paid).length,
-            pending: creatorSubmissions.filter(
-              (s: any) =>
-                (s.is_twitter_tweet &&
-                  (!(s as any).moderation_status ||
-                    (s as any).moderation_status === "pending")) ||
-                (!s.is_twitter_tweet && s.status === "pending")
+            pending: creatorSubmissions.filter((s: any) =>
+              (s.is_twitter_tweet && (!(s as any).moderation_status || (s as any).moderation_status === "pending")) ||
+              (!s.is_twitter_tweet && s.status === "pending")
             ).length,
-            rejected: creatorSubmissions.filter(
-              (s: any) =>
-                (s.is_twitter_tweet &&
-                  (s as any).moderation_status === "rejected") ||
-                (!s.is_twitter_tweet && s.status === "rejected")
+            rejected: creatorSubmissions.filter((s: any) =>
+              (s.is_twitter_tweet && (s as any).moderation_status === "rejected") ||
+              (!s.is_twitter_tweet && s.status === "rejected")
             ).length,
             verified_paid: creatorSubmissions.filter((s: any) => {
               const status = (s.is_twitter_tweet && (s as any).moderation_status) || s.status;
@@ -620,23 +611,18 @@ export default function ContestDetailClient({
             quote_reposts: leaderboardData.total_quote_reposts || 0,
             impressions: leaderboardData.total_impressions || 0,
             points: leaderboardData.total_points || 0,
-            base_points:
-              (leaderboardData.total_points || 0) -
-              (leaderboardData.manual_points_adjustment || 0),
-            manual_points_adjustment:
-              leaderboardData.manual_points_adjustment || 0,
+            base_points: (leaderboardData.total_points || 0) - (leaderboardData.manual_points_adjustment || 0),
+            manual_points_adjustment: leaderboardData.manual_points_adjustment || 0,
             manual_points_reason: leaderboardData.manual_points_reason || null,
           },
           earnings: { expected: 0, granted: 0 },
           earningsBeforeCap: 0,
           bonus: { expected: 0, granted: 0 },
-          firstSubmittedAt:
-            creatorSubmissions.length > 0
-              ? creatorSubmissions[0].created_at
-              : new Date().toISOString(),
+          firstSubmittedAt: creatorSubmissions.length > 0
+            ? creatorSubmissions[0].created_at
+            : new Date().toISOString(),
           isCapped: false,
-          creator_moderation_status:
-            leaderboardData.moderation_status || "pending",
+          creator_moderation_status: leaderboardData.moderation_status || "pending",
           creator_rejection_reason: leaderboardData.rejection_reason || null,
           current_rank: leaderboardData.current_rank || null,
           paid: leaderboardData.paid || false,
@@ -685,6 +671,7 @@ export default function ContestDetailClient({
 
       return groupsArray;
     }
+
 
     // For non-Twitter leaderboard campaigns, use the original aggregation logic
     const grouped = filteredSubmissions.reduce((acc: any, submission: any) => {
