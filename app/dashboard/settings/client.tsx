@@ -47,7 +47,9 @@ import {
 } from "@/components/ui/dialog";
 import { useEffect, useState, useCallback } from "react";
 import { FaXTwitter } from "react-icons/fa6";
-import { SiInstagram, SiYoutube } from "react-icons/si";
+import { FaDiscord, FaWhatsapp } from "react-icons/fa";
+import { SiInstagram, SiYoutube, SiLinkedin } from "react-icons/si";
+import { SOCIAL_LINKS } from "@/constants/socialLinks";
 import dayjs from "dayjs";
 import { useRouter, useSearchParams } from "next/navigation";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
@@ -2269,8 +2271,220 @@ export default function SettingsPage({
             }
             return null;
           })}
-        {/* Connect Twitter Modal */}
-        <Dialog
+      </div>
+
+      {/* Follow Us & Join Communities Section */}
+      <div
+        className={cn(
+          "rounded-xl shadow-lg overflow-hidden",
+          isDark ? "bg-[#180438]" : "bg-white border border-gray-300"
+        )}
+      >
+        <div
+          className={cn(
+            "rounded-t-xl px-6 py-4 border-b",
+            isDark ? "bg-[#180438] border-gray-700" : "bg-white border-gray-200"
+          )}
+        >
+          <CardTitle
+            className={cn(
+              "text-2xl",
+              isDark ? "text-white" : "text-[#7F39EC]"
+            )}
+          >
+            Follow Us & Join Communities
+          </CardTitle>
+          <CardDescription className="mt-2">
+            Stay connected with us on social media and join our creator communities for updates, support, and exclusive opportunities.
+          </CardDescription>
+        </div>
+        <CardContent className="p-6">
+          <div className="space-y-4">
+            {/* Social Media Links */}
+            <div>
+              <h3
+                className={cn(
+                  "text-lg font-semibold mb-4",
+                  isDark ? "text-white" : "text-gray-900"
+                )}
+              >
+                Social Media
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <a
+                  href={SOCIAL_LINKS.twitter}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
+                    isDark
+                      ? "bg-[#1a0a2e] border-gray-700 hover:border-blue-500 hover:bg-[#1a0a2e]/80"
+                      : "bg-white border-gray-300 hover:border-blue-400 hover:bg-blue-50"
+                  )}
+                >
+                  <FaXTwitter className="h-5 w-5 text-black dark:text-white" />
+                  <span
+                    className={cn(
+                      "font-medium",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}
+                  >
+                    Twitter (X)
+                  </span>
+                  <ExternalLink className="h-4 w-4 ml-auto text-gray-400" />
+                </a>
+                <a
+                  href={SOCIAL_LINKS.instagram}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
+                    isDark
+                      ? "bg-[#1a0a2e] border-gray-700 hover:border-pink-500 hover:bg-[#1a0a2e]/80"
+                      : "bg-white border-gray-300 hover:border-pink-400 hover:bg-pink-50"
+                  )}
+                >
+                  <SiInstagram className="h-5 w-5 text-pink-600" />
+                  <span
+                    className={cn(
+                      "font-medium",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}
+                  >
+                    Instagram
+                  </span>
+                  <ExternalLink className="h-4 w-4 ml-auto text-gray-400" />
+                </a>
+                <a
+                  href={SOCIAL_LINKS.youtube}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
+                    isDark
+                      ? "bg-[#1a0a2e] border-gray-700 hover:border-red-500 hover:bg-[#1a0a2e]/80"
+                      : "bg-white border-gray-300 hover:border-red-400 hover:bg-red-50"
+                  )}
+                >
+                  <SiYoutube className="h-5 w-5 text-red-600" />
+                  <span
+                    className={cn(
+                      "font-medium",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}
+                  >
+                    YouTube
+                  </span>
+                  <ExternalLink className="h-4 w-4 ml-auto text-gray-400" />
+                </a>
+                <a
+                  href={SOCIAL_LINKS.linkedin}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
+                    isDark
+                      ? "bg-[#1a0a2e] border-gray-700 hover:border-blue-500 hover:bg-[#1a0a2e]/80"
+                      : "bg-white border-gray-300 hover:border-blue-400 hover:bg-blue-50"
+                  )}
+                >
+                  <SiLinkedin className="h-5 w-5 text-blue-600" />
+                  <span
+                    className={cn(
+                      "font-medium",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}
+                  >
+                    LinkedIn
+                  </span>
+                  <ExternalLink className="h-4 w-4 ml-auto text-gray-400" />
+                </a>
+              </div>
+            </div>
+
+            {/* Community Links */}
+            <div className="mt-6">
+              <h3
+                className={cn(
+                  "text-lg font-semibold mb-4",
+                  isDark ? "text-white" : "text-gray-900"
+                )}
+              >
+                Join Our Communities
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <a
+                  href={SOCIAL_LINKS.discord}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
+                    isDark
+                      ? "bg-[#5865F2]/10 border-[#5865F2]/30 hover:border-[#5865F2] hover:bg-[#5865F2]/20"
+                      : "bg-purple-50 border-purple-200 hover:border-[#5865F2] hover:bg-purple-100"
+                  )}
+                >
+                  <FaDiscord className="h-6 w-6 text-[#5865F2]" />
+                  <div className="flex-1">
+                    <span
+                      className={cn(
+                        "font-semibold block",
+                        isDark ? "text-white" : "text-gray-900"
+                      )}
+                    >
+                      Discord Community
+                    </span>
+                    <span
+                      className={cn(
+                        "text-sm",
+                        isDark ? "text-gray-400" : "text-gray-600"
+                      )}
+                    >
+                      Get updates, support, and bonus codes
+                    </span>
+                  </div>
+                  <ExternalLink className="h-4 w-4 text-gray-400" />
+                </a>
+                <a
+                  href={SOCIAL_LINKS.whatsapp}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
+                    isDark
+                      ? "bg-[#25D366]/10 border-[#25D366]/30 hover:border-[#25D366] hover:bg-[#25D366]/20"
+                      : "bg-green-50 border-green-200 hover:border-[#25D366] hover:bg-green-100"
+                  )}
+                >
+                  <FaWhatsapp className="h-6 w-6 text-[#25D366]" />
+                  <div className="flex-1">
+                    <span
+                      className={cn(
+                        "font-semibold block",
+                        isDark ? "text-white" : "text-gray-900"
+                      )}
+                    >
+                      WhatsApp Community
+                    </span>
+                    <span
+                      className={cn(
+                        "text-sm",
+                        isDark ? "text-gray-400" : "text-gray-600"
+                      )}
+                    >
+                      Connect with creators and get support
+                    </span>
+                  </div>
+                  <ExternalLink className="h-4 w-4 text-gray-400" />
+                </a>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </div>
+
+      {/* Connect Twitter Modal */}
+      <Dialog
           open={isTwitterModalOpen}
           onOpenChange={(open) => {
             setIsTwitterModalOpen(open);
@@ -3362,45 +3576,45 @@ export default function SettingsPage({
           </DialogContent>
         </Dialog>
 
-        {/* Log out button */}
-        <div
-          className={cn(
-            "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200",
-            isDark ? "bg-[#180438]" : "bg-white border border-gray-300"
-          )}
-        >
-          <div className="flex items-center gap-4">
-            <div
-              className={cn(
-                "p-2 rounded-lg",
-                isDark ? "bg-red-900/30" : "bg-red-100"
-              )}
-            >
-              <LogOut
-                className={cn(
-                  "h-5 w-5",
-                  isDark ? "text-red-400" : "text-red-600"
-                )}
-              />
-            </div>
-            <span
-              className={cn(
-                "font-medium",
-                isDark ? "text-white" : "text-gray-900"
-              )}
-            >
-              Log out
-            </span>
-          </div>
-          <Button
-            onClick={handleSignOut}
-            variant="destructive"
-            className="bg-red-600 hover:bg-red-700 text-white"
+      {/* Log out button */}
+      <div
+        className={cn(
+          "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200",
+          isDark ? "bg-[#180438]" : "bg-white border border-gray-300"
+        )}
+      >
+        <div className="flex items-center gap-4">
+          <div
+            className={cn(
+              "p-2 rounded-lg",
+              isDark ? "bg-red-900/30" : "bg-red-100"
+            )}
           >
-            Logout
-          </Button>
+            <LogOut
+              className={cn(
+                "h-5 w-5",
+                isDark ? "text-red-400" : "text-red-600"
+              )}
+            />
+          </div>
+          <span
+            className={cn(
+              "font-medium",
+              isDark ? "text-white" : "text-gray-900"
+            )}
+          >
+            Log out
+          </span>
         </div>
+        <Button
+          onClick={handleSignOut}
+          variant="destructive"
+          className="bg-red-600 hover:bg-red-700 text-white"
+        >
+          Logout
+        </Button>
       </div>
+
       {/* Danger Zone */}
       {/* <Card>
         <CardHeader>

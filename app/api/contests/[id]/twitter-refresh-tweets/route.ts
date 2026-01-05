@@ -803,7 +803,7 @@ export async function POST(
             .select("tweet_id")
             .eq("contest_id", contestId)
             .in("tweet_id", batch)
-            .eq("moderation_status", "approved");
+            .eq("moderation_status", "verified");
 
           if (approvedTweets && approvedTweets.length > 0) {
             const approvedTweetIds = approvedTweets.map((t: any) => t.tweet_id);

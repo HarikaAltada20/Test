@@ -92,6 +92,14 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
+     // Only allow payment actions when contest status is verification_complete
+    const isPaymentAction = action === SUBMISSION_STATUS.paid || action === 'mark_bonus_paid' || action === 'mark_both_paid';
+    if (isPaymentAction && contest.post_contest_status !== 'verification_complete') {
+      return NextResponse.json({ 
+        error: 'Payments can only be processed when contest status is \'verification_complete\'' 
+      }, { status: 400 });
+    }
+
     // Allow status updates for both leaderboard and CPM contests
     if (!contest.contest_type || !['leaderboard', 'cpm'].includes(contest.contest_type)) {
       return NextResponse.json({ 
