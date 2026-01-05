@@ -6209,7 +6209,7 @@ export default function EditContestPage({
                   <>
                     {/* Keywords section */}
                     <div className="space-y-3 mt-6">
-                      <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-2">
                           <h3 className="text-lg font-medium">Keywords</h3>
                         </div>
@@ -6280,7 +6280,7 @@ export default function EditContestPage({
 
                     {/* Mentions section */}
                     <div className="space-y-3 mt-6">
-                      <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-2">
                           <h3 className="text-lg font-medium">Mentions</h3>
                         </div>
@@ -6355,7 +6355,7 @@ export default function EditContestPage({
 
                     {/* Max Participants section */}
                     <div className="space-y-3 mt-6">
-                      <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-2">
                           <h3 className="text-lg font-medium">Max Participants</h3>
                         </div>

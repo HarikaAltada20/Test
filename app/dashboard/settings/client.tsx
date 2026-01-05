@@ -1744,7 +1744,11 @@ export default function SettingsPage({
               {/* Twitter Connection */}
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center space-x-3">
-                  <FaXTwitter className="text-2xl text-black" />
+                  <FaXTwitter className={cn(
+                    "text-2xl",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                  />
                   <div>
                     <h3 className="font-medium">Twitter (X)</h3>
                     {twitterConnected && twitterAccount ? (
@@ -2322,7 +2326,11 @@ export default function SettingsPage({
                       : "bg-white border-gray-300 hover:border-blue-400 hover:bg-blue-50"
                   )}
                 >
-                  <FaXTwitter className="h-5 w-5 text-black dark:text-white" />
+                  <FaXTwitter className={cn(
+                    "h-5 w-5",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                  />
                   <span
                     className={cn(
                       "font-medium",
