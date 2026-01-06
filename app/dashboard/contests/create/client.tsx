@@ -334,6 +334,7 @@ export default function CreateContestPage({
   const [targetRetweets, setTargetRetweets] = useState<number | "">("");
   const [targetQuoteReposts, setTargetQuoteReposts] = useState<number | "">("");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
+  const [flatFeeBonusCap, setFlatFeeBonusCap] = useState<number | string>(""); // In dollars - for CPM contests only
   const [bonusEnabled, setBonusEnabled] = useState(false);
   const [bonusHtml, setBonusHtml] = useState("");
   const [bonusJson, setBonusJson] = useState<any>(null);
@@ -918,21 +919,21 @@ export default function CreateContestPage({
           contest_based_details:
             contestType === "leaderboard"
               ? {
-                leaderboard_contest: {
-                  prizes: [],
-                  total_prize: 0,
-                  winner_count: 3,
-                },
-              }
+                  leaderboard_contest: {
+                    prizes: [],
+                    total_prize: 0,
+                    winner_count: 3,
+                  },
+                }
               : contestType === "cpm"
-                ? {
+              ? {
                   cpm_contest: {
                     cpm_rate_usd: 0,
                     total_budget: 0,
                     terms_conditions: "",
                   },
                 }
-                : null,
+              : null,
           // Categories, subcategories, and interests
           categories: contestCategories.length > 0 ? contestCategories : null,
           subcategories: (() => {
@@ -1349,8 +1350,9 @@ export default function CreateContestPage({
       console.error("Error saving draft:", error);
       toast({
         title: "Error",
-        description: `Failed to save draft: ${error.message || "Unknown error"
-          }`,
+        description: `Failed to save draft: ${
+          error.message || "Unknown error"
+        }`,
         variant: "destructive",
       });
       setIsLoading(false);
@@ -1443,15 +1445,16 @@ export default function CreateContestPage({
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-          (1000 * 60 * 60 * 24)
+            (1000 * 60 * 60 * 24)
         );
 
         // CRITICAL: Use exact same logic as getMinDateTime for consistency
         if (daysUntilStart < MIN_DAYS_UNTIL_START) {
           return {
             isValid: false,
-            error: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
-              } day gap required)`,
+            error: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
+              MIN_DAYS_UNTIL_START - 1
+            } day gap required)`,
           };
         }
 
@@ -1494,10 +1497,11 @@ export default function CreateContestPage({
           if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
             return {
               isValid: false,
-              error: `Prize for Winner ${i + 1
-                } must be at least ${formatCurrencyFromCents(
-                  MIN_PRIZE_PER_WINNER
-                )}`,
+              error: `Prize for Winner ${
+                i + 1
+              } must be at least ${formatCurrencyFromCents(
+                MIN_PRIZE_PER_WINNER
+              )}`,
             };
           }
 
@@ -1505,10 +1509,11 @@ export default function CreateContestPage({
           if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
             return {
               isValid: false,
-              error: `Prize for Winner ${i + 1
-                } cannot exceed ${formatCurrencyFromCents(
-                  MAX_PRIZE_PER_WINNER
-                )}. Please reduce the prize amount.`,
+              error: `Prize for Winner ${
+                i + 1
+              } cannot exceed ${formatCurrencyFromCents(
+                MAX_PRIZE_PER_WINNER
+              )}. Please reduce the prize amount.`,
             };
           }
         }
@@ -1529,6 +1534,30 @@ export default function CreateContestPage({
             isValid: false,
             error: `Your plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners. Please reduce the number of winners.`,
           };
+        }
+
+        // Total Budget validation when Flat Fee Bonus is enabled
+        const flatFeeBonusValue =
+          flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0;
+        if (flatFeeBonusValue) {
+          const flatFeeBonusDollars = parseFloat(flatFeeBonus.toString());
+
+          if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
+            return {
+              isValid: false,
+              error:
+                "Total Budget is required when Flat Fee Bonus is enabled. Please enter a budget amount.",
+            };
+          }
+
+          // Validate: Flat fee bonus cannot exceed total bonus budget (leaderboard)
+          const totalBudgetDollars = parseFloat(totalBudget.toString());
+          if (flatFeeBonusDollars > totalBudgetDollars) {
+            return {
+              isValid: false,
+              error: "Flat Fee Bonus cannot exceed Total Budget.",
+            };
+          }
         }
       } else if (contestType === "cpm") {
         // CPM validation
@@ -1597,6 +1626,99 @@ export default function CreateContestPage({
               planFeatures.minContestBudget
             )}. Please increase your total budget.`,
           };
+        }
+
+        // Validate: Total Budget is mandatory for CPM contests
+        if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
+          return {
+            isValid: false,
+            error: "Total Budget is mandatory for CPM contests.",
+          };
+        }
+
+        // Validate: Flat fee bonus selected but total budget missing
+        const flatFeeBonusValue =
+          flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0;
+        if (flatFeeBonusValue) {
+          if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
+            return {
+              isValid: false,
+              error: "Total Budget is required when Flat Fee Bonus is enabled.",
+            };
+          }
+
+          // Validate: Flat Fee Bonus Cap is required when flat fee bonus is enabled (CPM)
+          if (!flatFeeBonusCap || parseFloat(flatFeeBonusCap.toString()) <= 0) {
+            return {
+              isValid: false,
+              error:
+                "Flat Fee Bonus Cap is required when Flat Fee Bonus is enabled for CPM contests.",
+            };
+          }
+        }
+
+        // Validate: Flat Fee Bonus Cap must be greater than or equal to Flat Fee Bonus (CPM)
+        const flatFeeBonusCapValue =
+          flatFeeBonusCap && parseFloat(flatFeeBonusCap.toString()) > 0;
+        if (flatFeeBonusValue && flatFeeBonusCapValue) {
+          const bonusDollars = parseFloat(flatFeeBonus.toString());
+          const capDollars = parseFloat(flatFeeBonusCap.toString());
+          if (capDollars < bonusDollars) {
+            return {
+              isValid: false,
+              error:
+                "Flat Fee Bonus Cap must be greater than or equal to the Flat Fee Bonus amount.",
+            };
+          }
+        }
+
+        // Validate: Flat Fee Bonus Cap must not exceed Total Budget (CPM)
+        if (flatFeeBonusCapValue && totalBudget) {
+          const capInDollars = parseFloat(flatFeeBonusCap.toString());
+          const budgetInDollars = parseFloat(totalBudget.toString());
+          if (capInDollars > budgetInDollars) {
+            return {
+              isValid: false,
+              error: "Flat Fee Bonus Cap cannot exceed Total Budget.",
+            };
+          }
+        }
+
+        // Validate: Prevent contest creation if total money a single creator can earn > total budget
+        if (totalBudget) {
+          const totalBudgetDollars = parseFloat(totalBudget.toString());
+          const totalBudgetCents = totalBudgetDollars * 100;
+          let maxCreatorEarnings = 0;
+
+          // Add max earnings per creator if set
+          if (
+            maxEarningsPerCreator &&
+            parseFloat(maxEarningsPerCreator.toString()) > 0
+          ) {
+            maxCreatorEarnings +=
+              parseFloat(maxEarningsPerCreator.toString()) * 100;
+          }
+
+          // Add flat fee bonus cap if set (for CPM)
+          if (flatFeeBonusCapValue) {
+            maxCreatorEarnings += parseFloat(flatFeeBonusCap.toString()) * 100;
+          } else if (flatFeeBonusValue) {
+            // If no cap but flat fee bonus exists, calculate potential max
+            // (flat fee bonus * max submissions per creator)
+            const maxSubmissions = multipleSubmissionsEnabled
+              ? maxSubmissionsPerCreator
+              : 1;
+            const flatFeeBonusCents = parseFloat(flatFeeBonus.toString()) * 100;
+            maxCreatorEarnings += flatFeeBonusCents * maxSubmissions;
+          }
+
+          if (maxCreatorEarnings > totalBudgetCents) {
+            return {
+              isValid: false,
+              error:
+                "The maximum amount a single creator can earn exceeds the total budget. Please adjust the budget or reduce creator earnings limits.",
+            };
+          }
         }
       }
 
@@ -1718,7 +1840,8 @@ export default function CreateContestPage({
         for (let i = 0; i < winnerCount; i++) {
           if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
             setFormFeedback(
-              `Prize for Winner ${i + 1
+              `Prize for Winner ${
+                i + 1
               } must be at least ${formatCurrencyFromCents(
                 MIN_PRIZE_PER_WINNER
               )}`
@@ -1737,6 +1860,20 @@ export default function CreateContestPage({
           flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
             ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
             : undefined;
+
+        // Validate total budget when flat fee bonus is enabled
+        if (
+          flatFeeBonusCents &&
+          (!totalBudget || parseFloat(totalBudget.toString()) <= 0)
+        ) {
+          setFormFeedback(
+            "Total Budget is required when Flat Fee Bonus is enabled. Please enter a budget amount."
+          );
+          setFormFeedbackType("error");
+          setIsLoading(false);
+          setUploadProgress(null);
+          return;
+        }
 
         const totalBudgetCents =
           totalBudget && parseFloat(totalBudget.toString()) > 0
@@ -1829,6 +1966,11 @@ export default function CreateContestPage({
             ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
             : undefined;
 
+        const flatFeeBonusCapCents =
+          flatFeeBonusCap && parseFloat(flatFeeBonusCap.toString()) > 0
+            ? Math.round(parseFloat(flatFeeBonusCap.toString()) * 100)
+            : undefined;
+
         contestBasedDetails = {
           cpm_contest: {
             cpm_rate_usd: parseFloat(cpmRate.toString()) || 0,
@@ -1844,6 +1986,9 @@ export default function CreateContestPage({
             budget_spent: 0, // Initial value
             terms_conditions: termsConditions,
             ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
+            ...(flatFeeBonusCapCents && {
+              flat_fee_bonus_cap: flatFeeBonusCapCents,
+            }), // Only include if set
             // tiered_payouts: [] // Future use
           },
         };
@@ -1866,7 +2011,11 @@ export default function CreateContestPage({
         if (filteredMentions.length > 0) {
           twitterCampaign.mentions = filteredMentions;
         }
-        if (maxParticipants && typeof maxParticipants === "number" && maxParticipants > 0) {
+        if (
+          maxParticipants &&
+          typeof maxParticipants === "number" &&
+          maxParticipants > 0
+        ) {
           twitterCampaign.max_participants = maxParticipants;
         }
 
@@ -1879,7 +2028,10 @@ export default function CreateContestPage({
           }
         }
 
-        if ((contentType === "raid" || contentType === "awareness") && inspirationLinks.length > 0) {
+        if (
+          (contentType === "raid" || contentType === "awareness") &&
+          inspirationLinks.length > 0
+        ) {
           twitterCampaign.raid_target = {
             link: inspirationLinks[0]?.url || null,
             description: inspirationLinks[0]?.description || null,
@@ -1887,10 +2039,13 @@ export default function CreateContestPage({
               likes: targetLikes === "" ? null : targetLikes,
               comments: targetReplies === "" ? null : targetReplies,
               retweets: targetRetweets === "" ? null : targetRetweets,
-              quote_reposts: targetQuoteReposts === "" ? null : targetQuoteReposts,
+              quote_reposts:
+                targetQuoteReposts === "" ? null : targetQuoteReposts,
             },
-            keywords_requirement_mode: contentType === "raid" ? "" : keywordsRequirementMode,
-            mentions_requirement_mode: contentType === "raid" ? "" : mentionsRequirementMode,
+            keywords_requirement_mode:
+              contentType === "raid" ? "" : keywordsRequirementMode,
+            mentions_requirement_mode:
+              contentType === "raid" ? "" : mentionsRequirementMode,
           };
         }
 
@@ -2207,8 +2362,8 @@ export default function CreateContestPage({
         isDraft
           ? "Finalizing draft..."
           : contestId
-            ? "Updating contest..."
-            : "Creating contest..."
+          ? "Updating contest..."
+          : "Creating contest..."
       );
 
       // Helper function to process and group subcategories by category
@@ -2311,13 +2466,13 @@ export default function CreateContestPage({
         bonus_details:
           bonusEnabled && bonusHtml
             ? {
-              description_html: bonusHtml,
-              description_json: bonusJson,
-            }
+                description_html: bonusHtml,
+                description_json: bonusJson,
+              }
             : null,
         max_earnings_per_creator:
           maxEarningsPerCreator &&
-            parseFloat(maxEarningsPerCreator.toString()) > 0
+          parseFloat(maxEarningsPerCreator.toString()) > 0
             ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
             : null,
         // Note: flat_fee_bonus is now stored in contest_based_details (in cents)
@@ -2420,8 +2575,9 @@ export default function CreateContestPage({
       } else {
         toast({
           title: "Error",
-          description: `Failed to ${isDraft ? "save draft" : "create contest"
-            }: ${err.message || "Unknown error"}`,
+          description: `Failed to ${
+            isDraft ? "save draft" : "create contest"
+          }: ${err.message || "Unknown error"}`,
           variant: "destructive",
         });
       }
@@ -2476,7 +2632,8 @@ export default function CreateContestPage({
             retries > 0
           ) {
             console.warn(
-              `Submission failed (payment pending), retrying in ${delay / 1000
+              `Submission failed (payment pending), retrying in ${
+                delay / 1000
               }s...`
             );
             await new Promise((res) => setTimeout(res, delay));
@@ -2696,17 +2853,19 @@ export default function CreateContestPage({
       if (numValue < MIN_PRIZE_PER_WINNER) {
         toast({
           title: "Prize Amount Too Low",
-          description: `Prize amount for Winner ${index + 1
-            } cannot be less than ${formatCurrencyFromCents(
-              MIN_PRIZE_PER_WINNER
-            )}`,
+          description: `Prize amount for Winner ${
+            index + 1
+          } cannot be less than ${formatCurrencyFromCents(
+            MIN_PRIZE_PER_WINNER
+          )}`,
           variant: "destructive",
         });
       } else if (numValue > MAX_PRIZE_PER_WINNER) {
         toast({
           title: "Prize Amount Too High",
-          description: `Prize amount for Winner ${index + 1
-            } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+          description: `Prize amount for Winner ${
+            index + 1
+          } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
           variant: "destructive",
         });
       }
@@ -2727,8 +2886,9 @@ export default function CreateContestPage({
     if (count > planFeatures.maxWinnersPerContest) {
       toast({
         title: "Plan Limit",
-        description: `Your ${userPlan || "current"} plan is limited to ${planFeatures.maxWinnersPerContest
-          } winners per contest. Upgrade your plan for more.`,
+        description: `Your ${userPlan || "current"} plan is limited to ${
+          planFeatures.maxWinnersPerContest
+        } winners per contest. Upgrade your plan for more.`,
         variant: "destructive",
       });
       return;
@@ -2744,7 +2904,7 @@ export default function CreateContestPage({
         const position = i + 1;
         newAmounts.push(
           DEFAULT_PRIZE_ALLOCATIONS[
-          position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
+            position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
           ] || MIN_PRIZE_PER_WINNER
         );
       }
@@ -2801,7 +2961,11 @@ export default function CreateContestPage({
         if (filteredMentions.length > 0) {
           twitterCampaign.mentions = filteredMentions;
         }
-        if (maxParticipants && typeof maxParticipants === "number" && maxParticipants > 0) {
+        if (
+          maxParticipants &&
+          typeof maxParticipants === "number" &&
+          maxParticipants > 0
+        ) {
           twitterCampaign.max_participants = maxParticipants;
         }
 
@@ -2814,7 +2978,10 @@ export default function CreateContestPage({
           }
         }
 
-        if ((contentType === "raid" || contentType === "awareness") && inspirationLinks.length > 0) {
+        if (
+          (contentType === "raid" || contentType === "awareness") &&
+          inspirationLinks.length > 0
+        ) {
           twitterCampaign.raid_target = {
             link: inspirationLinks[0]?.url || null,
             description: inspirationLinks[0]?.description || null,
@@ -2822,10 +2989,13 @@ export default function CreateContestPage({
               likes: targetLikes === "" ? null : targetLikes,
               comments: targetReplies === "" ? null : targetReplies,
               retweets: targetRetweets === "" ? null : targetRetweets,
-              quote_reposts: targetQuoteReposts === "" ? null : targetQuoteReposts,
+              quote_reposts:
+                targetQuoteReposts === "" ? null : targetQuoteReposts,
             },
-            keywords_requirement_mode: contentType === "raid" ? "" : keywordsRequirementMode,
-            mentions_requirement_mode: contentType === "raid" ? "" : mentionsRequirementMode,
+            keywords_requirement_mode:
+              contentType === "raid" ? "" : keywordsRequirementMode,
+            mentions_requirement_mode:
+              contentType === "raid" ? "" : mentionsRequirementMode,
           };
         }
 
@@ -2886,7 +3056,10 @@ export default function CreateContestPage({
           .maybeSingle();
 
         // Preserve existing contest_based_details when updating
-        if (existingContest?.contest_based_details && basicsData.contest_based_details) {
+        if (
+          existingContest?.contest_based_details &&
+          basicsData.contest_based_details
+        ) {
           basicsData.contest_based_details = {
             ...existingContest.contest_based_details,
             ...basicsData.contest_based_details,
@@ -2967,8 +3140,8 @@ export default function CreateContestPage({
           missingFields.length === 1
             ? `Please fill in the following required field: ${missingFields[0]}`
             : `Please fill in the following required fields: ${missingFields.join(
-              ", "
-            )}`;
+                ", "
+              )}`;
         // Use toast-only error for basics step (no CardFooter alert)
         setToastError(errorMessage);
         return;
@@ -3257,7 +3430,10 @@ export default function CreateContestPage({
     console.log("Draft platform:", draft.platform);
     console.log("Draft contest_format:", draft.contest_format);
     console.log("Draft content_type:", draft.content_type);
-    console.log("Draft twitter_campaign:", draft.contest_based_details?.twitter_campaign);
+    console.log(
+      "Draft twitter_campaign:",
+      draft.contest_based_details?.twitter_campaign
+    );
 
     // Set draft/contest IDs first
     setDraftId(draft.id);
@@ -3265,6 +3441,11 @@ export default function CreateContestPage({
 
     // Basic contest fields
     setTitle(draft.title || "");
+
+    // Contest type (leaderboard or CPM)
+    if (draft.contest_type === "leaderboard" || draft.contest_type === "cpm") {
+      setContestType(draft.contest_type);
+    }
 
     // Set platform
     const draftPlatform = draft.platform || "youtube";
@@ -3305,13 +3486,19 @@ export default function CreateContestPage({
 
       if (twitterCampaign) {
         // Keywords from twitter_campaign.keywords
-        if (Array.isArray(twitterCampaign.keywords) && twitterCampaign.keywords.length > 0) {
+        if (
+          Array.isArray(twitterCampaign.keywords) &&
+          twitterCampaign.keywords.length > 0
+        ) {
           console.log("✅ Setting keywords to:", twitterCampaign.keywords);
           setKeywords(twitterCampaign.keywords);
         }
 
         // Mentions from twitter_campaign.mentions
-        if (Array.isArray(twitterCampaign.mentions) && twitterCampaign.mentions.length > 0) {
+        if (
+          Array.isArray(twitterCampaign.mentions) &&
+          twitterCampaign.mentions.length > 0
+        ) {
           console.log("✅ Setting mentions to:", twitterCampaign.mentions);
           setMentions(twitterCampaign.mentions);
         }
@@ -3359,16 +3546,28 @@ export default function CreateContestPage({
     if (twitterCampaign?.raid_target) {
       const raidTarget = twitterCampaign.raid_target;
       if (raidTarget.metrics && typeof raidTarget.metrics === "object") {
-        if (raidTarget.metrics.likes !== undefined && raidTarget.metrics.likes !== null) {
+        if (
+          raidTarget.metrics.likes !== undefined &&
+          raidTarget.metrics.likes !== null
+        ) {
           setTargetLikes(raidTarget.metrics.likes);
         }
-        if (raidTarget.metrics.comments !== undefined && raidTarget.metrics.comments !== null) {
+        if (
+          raidTarget.metrics.comments !== undefined &&
+          raidTarget.metrics.comments !== null
+        ) {
           setTargetReplies(raidTarget.metrics.comments);
         }
-        if (raidTarget.metrics.retweets !== undefined && raidTarget.metrics.retweets !== null) {
+        if (
+          raidTarget.metrics.retweets !== undefined &&
+          raidTarget.metrics.retweets !== null
+        ) {
           setTargetRetweets(raidTarget.metrics.retweets);
         }
-        if (raidTarget.metrics.quote_reposts !== undefined && raidTarget.metrics.quote_reposts !== null) {
+        if (
+          raidTarget.metrics.quote_reposts !== undefined &&
+          raidTarget.metrics.quote_reposts !== null
+        ) {
           setTargetQuoteReposts(raidTarget.metrics.quote_reposts);
         }
       }
@@ -3401,9 +3600,12 @@ export default function CreateContestPage({
       setTrackingLinks(draft.tracking_links);
     }
 
-    // Winners / prizes from contest_based_details
-    if (draft.contest_based_details?.leaderboard_contest) {
-      const lc = draft.contest_based_details.leaderboard_contest;
+    // Contest-based details (leaderboard & CPM specific data)
+    const contestDetails = draft.contest_based_details || {};
+
+    // Leaderboard contest details (winners, prizes, flat fee bonus, bonus budget)
+    if (contestDetails.leaderboard_contest) {
+      const lc = contestDetails.leaderboard_contest;
       if (lc.winner_count) {
         setWinnerCount(lc.winner_count);
       }
@@ -3413,6 +3615,78 @@ export default function CreateContestPage({
         );
         setWinnerAmounts(amounts);
         updateTotalPrizePool(amounts);
+      }
+
+      // Restore flat fee bonus (stored in cents)
+      if (
+        typeof lc.flat_fee_bonus === "number" &&
+        !isNaN(lc.flat_fee_bonus) &&
+        lc.flat_fee_bonus > 0
+      ) {
+        setFlatFeeBonus((lc.flat_fee_bonus / 100).toString());
+      }
+
+      // Restore total budget for bonuses (stored in cents as total_budget)
+      if (
+        typeof lc.total_budget === "number" &&
+        !isNaN(lc.total_budget) &&
+        lc.total_budget > 0
+      ) {
+        setTotalBudget((lc.total_budget / 100).toString());
+      }
+    }
+
+    // CPM contest details (rate, views, total budget, terms, flat fee bonus & cap)
+    if (contestDetails.cpm_contest) {
+      const cc = contestDetails.cpm_contest;
+
+      // Ensure contest type is CPM when CPM details exist
+      setContestType("cpm");
+
+      if (
+        typeof cc.cpm_rate_usd === "number" &&
+        !isNaN(cc.cpm_rate_usd) &&
+        cc.cpm_rate_usd > 0
+      ) {
+        setCpmRate(cc.cpm_rate_usd.toString());
+      }
+
+      if (cc.min_views !== undefined && cc.min_views !== null) {
+        setMinViews(cc.min_views);
+      }
+      if (cc.max_views !== undefined && cc.max_views !== null) {
+        setMaxViews(cc.max_views);
+      }
+
+      if (
+        typeof cc.total_budget === "number" &&
+        !isNaN(cc.total_budget) &&
+        cc.total_budget > 0
+      ) {
+        // Stored in cents, convert back to dollars
+        setTotalBudget((cc.total_budget / 100).toString());
+      }
+
+      if (typeof cc.terms_conditions === "string") {
+        setTermsConditions(cc.terms_conditions);
+      }
+
+      // Restore flat fee bonus (stored in cents)
+      if (
+        typeof cc.flat_fee_bonus === "number" &&
+        !isNaN(cc.flat_fee_bonus) &&
+        cc.flat_fee_bonus > 0
+      ) {
+        setFlatFeeBonus((cc.flat_fee_bonus / 100).toString());
+      }
+
+      // Restore flat fee bonus cap (stored in cents)
+      if (
+        typeof cc.flat_fee_bonus_cap === "number" &&
+        !isNaN(cc.flat_fee_bonus_cap) &&
+        cc.flat_fee_bonus_cap > 0
+      ) {
+        setFlatFeeBonusCap((cc.flat_fee_bonus_cap / 100).toString());
       }
     }
 
@@ -3559,23 +3833,28 @@ export default function CreateContestPage({
 
     let startMessage = "";
     if (daysUntilStart > 0) {
-      startMessage = `Your contest will be live in ${daysUntilStart} day${daysUntilStart !== 1 ? "s" : ""
-        }`;
+      startMessage = `Your contest will be live in ${daysUntilStart} day${
+        daysUntilStart !== 1 ? "s" : ""
+      }`;
       if (hoursUntilStart > 0)
-        startMessage += ` and ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
-          }`;
-    } else if (hoursUntilStart > 0) {
-      startMessage = `Your contest will be live in ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
+        startMessage += ` and ${hoursUntilStart} hour${
+          hoursUntilStart !== 1 ? "s" : ""
         }`;
+    } else if (hoursUntilStart > 0) {
+      startMessage = `Your contest will be live in ${hoursUntilStart} hour${
+        hoursUntilStart !== 1 ? "s" : ""
+      }`;
     } else {
       startMessage = "Your contest will be live soon";
     }
 
-    const durationMessage = `and will run for ${durationDays} day${durationDays !== 1 ? "s" : ""
-      }${durationHours > 0
+    const durationMessage = `and will run for ${durationDays} day${
+      durationDays !== 1 ? "s" : ""
+    }${
+      durationHours > 0
         ? ` and ${durationHours} hour${durationHours !== 1 ? "s" : ""}`
         : ""
-      }`;
+    }`;
 
     return `${startMessage} ${durationMessage}`;
   };
@@ -3709,15 +3988,16 @@ export default function CreateContestPage({
       disallowed.length === 1
         ? disallowed[0]
         : disallowed.slice(0, -1).join(", ") +
-        " and " +
-        disallowed[disallowed.length - 1];
+          " and " +
+          disallowed[disallowed.length - 1];
 
     return `For example, if today is ${formatDateWithOrdinal(
       startOfToday
     )}, you can create contests starting from ${formatDateWithOrdinal(
       minStartDate
-    )} (00:00 onwards). ${disallowedText} ${disallowed.length > 1 ? "are" : "is"
-      } not allowed.`;
+    )} (00:00 onwards). ${disallowedText} ${
+      disallowed.length > 1 ? "are" : "is"
+    } not allowed.`;
   };
 
   // High Budget Prompt Modal
@@ -3899,13 +4179,13 @@ export default function CreateContestPage({
                       "rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg",
                       isDark ? "bg-[#180438]" : "bg-white"
                     )}
-                  // className={`backdrop-blur-sm rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg ${
-                  //   currentPlan.price === 0
-                  //     ? "bg-white/90 border-gray-200" // Free plan
-                  //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                  //     ? "bg-white/90 border-gray-200" // Bronze plan
-                  //     : "bg-white/90 border-gray-200" // Higher plans
-                  // }`}
+                    // className={`backdrop-blur-sm rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg ${
+                    //   currentPlan.price === 0
+                    //     ? "bg-white/90 border-gray-200" // Free plan
+                    //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
+                    //     ? "bg-white/90 border-gray-200" // Bronze plan
+                    //     : "bg-white/90 border-gray-200" // Higher plans
+                    // }`}
                   >
                     <div
                       className={cn(
@@ -3921,21 +4201,21 @@ export default function CreateContestPage({
                               ? "bg-[#FFFFFF36] text-white"
                               : "text-[#4A00BE] bg-[#D8C3FF]"
                           )}
-                        // className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                        //   userPlan === subscriptionPlans[0].id
-                        //     ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
-                        //     : userPlan === subscriptionPlans[1].id
-                        //     ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
-                        //     : userPlan === subscriptionPlans[2].id
-                        //     ? "bg-gradient-to-br from-gray-400 to-slate-500 text-white"
-                        //     : userPlan === subscriptionPlans[3].id
-                        //     ? "bg-gradient-to-br from-yellow-400 to-orange-500 text-white"
-                        //     : userPlan === subscriptionPlans[4].id
-                        //     ? "bg-gradient-to-br from-purple-500 to-indigo-600 text-white"
-                        //     : userPlan === subscriptionPlans[5].id
-                        //     ? "bg-gradient-to-br from-blue-500 to-cyan-600 text-white"
-                        //     : "bg-gradient-to-br from-gray-500 to-gray-600 text-white"
-                        // }`}
+                          // className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                          //   userPlan === subscriptionPlans[0].id
+                          //     ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
+                          //     : userPlan === subscriptionPlans[1].id
+                          //     ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
+                          //     : userPlan === subscriptionPlans[2].id
+                          //     ? "bg-gradient-to-br from-gray-400 to-slate-500 text-white"
+                          //     : userPlan === subscriptionPlans[3].id
+                          //     ? "bg-gradient-to-br from-yellow-400 to-orange-500 text-white"
+                          //     : userPlan === subscriptionPlans[4].id
+                          //     ? "bg-gradient-to-br from-purple-500 to-indigo-600 text-white"
+                          //     : userPlan === subscriptionPlans[5].id
+                          //     ? "bg-gradient-to-br from-blue-500 to-cyan-600 text-white"
+                          //     : "bg-gradient-to-br from-gray-500 to-gray-600 text-white"
+                          // }`}
                         >
                           <Trophy className="h-6 w-6 sm:h-8 sm:w-8" />
                         </div>
@@ -4029,11 +4309,11 @@ export default function CreateContestPage({
                               "border rounded-xl p-4 flex flex-col justify-between shadow-sm",
                               isDark ? "border-gray-500" : "border-gray-300"
                             )}
-                          // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                          //   planFeatures.maxWinnersPerContest <= 3
-                          //     ? "bg-orange-50/80 border-orange-200"
-                          //     : "bg-white/80 border-gray-200/50"
-                          // }`}
+                            // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                            //   planFeatures.maxWinnersPerContest <= 3
+                            //     ? "bg-orange-50/80 border-orange-200"
+                            //     : "bg-white/80 border-gray-200/50"
+                            // }`}
                           >
                             <div className="flex items-start gap-4">
                               {/* <div
@@ -4060,7 +4340,7 @@ export default function CreateContestPage({
                                   <div className="flex items-center gap-2">
                                     <span className="text-xl font-bold text-green-600 border border-green-600 rounded-full px-6">
                                       {planFeatures.maxWinnersPerContest ===
-                                        Infinity
+                                      Infinity
                                         ? "∞"
                                         : planFeatures.maxWinnersPerContest}
                                     </span>
@@ -4089,11 +4369,11 @@ export default function CreateContestPage({
                                       ? "border-gray-600"
                                       : "bg-[#F0E7FD] border-purple-500 text-purple-600"
                                   )}
-                                // className={`mt-3 text-sm font-medium ${
-                                //   planFeatures.maxWinnersPerContest <= 3
-                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                // }`}
+                                  // className={`mt-3 text-sm font-medium ${
+                                  //   planFeatures.maxWinnersPerContest <= 3
+                                  //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                  //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                  // }`}
                                 >
                                   {planFeatures.maxWinnersPerContest <= 3
                                     ? "Upgrade for more winner slots!"
@@ -4168,12 +4448,12 @@ export default function CreateContestPage({
                             isDark ? "border-gray-500" : "border-gray-300"
                           )}
 
-                        // className={`backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300 ${
-                        //   planFeatures.minContestBudget >=
-                        //   HIGH_MIN_BUDGET_THRESHOLD
-                        //     ? "bg-white"
-                        //     : "bg-white/80 border-gray-200/50"
-                        // }`}
+                          // className={`backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300 ${
+                          //   planFeatures.minContestBudget >=
+                          //   HIGH_MIN_BUDGET_THRESHOLD
+                          //     ? "bg-white"
+                          //     : "bg-white/80 border-gray-200/50"
+                          // }`}
                         >
                           <div className="flex items-start gap-4">
                             {/* <div
@@ -4200,11 +4480,12 @@ export default function CreateContestPage({
                                 </h5>
                                 <div className="flex items-center gap-2">
                                   <span
-                                    className={`text-xl font-bold ${planFeatures.minContestBudget >=
+                                    className={`text-xl font-bold ${
+                                      planFeatures.minContestBudget >=
                                       HIGH_MIN_BUDGET_THRESHOLD
-                                      ? "text-green-600 border border-green-600 rounded-full px-6"
-                                      : "text-green-600 border border-green-600 rounded-full px-6"
-                                      }`}
+                                        ? "text-green-600 border border-green-600 rounded-full px-6"
+                                        : "text-green-600 border border-green-600 rounded-full px-6"
+                                    }`}
                                   >
                                     {formatCurrencyFromCents(
                                       planFeatures.minContestBudget
@@ -4212,10 +4493,10 @@ export default function CreateContestPage({
                                   </span>
                                   {planFeatures.minContestBudget >=
                                     HIGH_MIN_BUDGET_THRESHOLD && (
-                                      <span className="text-orange-500 text-sm">
-                                        ⚠️
-                                      </span>
-                                    )}
+                                    <span className="text-orange-500 text-sm">
+                                      ⚠️
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                               <p
@@ -4235,15 +4516,15 @@ export default function CreateContestPage({
                                     ? "border-gray-600"
                                     : "bg-[#F0E7FD] border-purple-500 text-purple-600"
                                 )}
-                              // className={`mt-4 text-sm font-medium ${
-                              //   planFeatures.minContestBudget >=
-                              //   HIGH_MIN_BUDGET_THRESHOLD
-                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              // }`}
+                                // className={`mt-4 text-sm font-medium ${
+                                //   planFeatures.minContestBudget >=
+                                //   HIGH_MIN_BUDGET_THRESHOLD
+                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                // }`}
                               >
                                 {planFeatures.minContestBudget >=
-                                  HIGH_MIN_BUDGET_THRESHOLD
+                                HIGH_MIN_BUDGET_THRESHOLD
                                   ? "Upgrade for lower minimum budgets!"
                                   : "Tip: Start with smaller budgets to test campaigns"}
                               </div>
@@ -4258,13 +4539,13 @@ export default function CreateContestPage({
                             isDark ? "border-gray-500" : "border-gray-300"
                           )}
 
-                        // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                        //   planFeatures.maxActiveContests <= 1
-                        //     ? "bg-white"
-                        //     : planFeatures.maxActiveContests <= 5
-                        //     ? "bg-orange-50/80 border-orange-200"
-                        //     : "bg-white/80 border-gray-200/50"
-                        // }`}
+                          // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                          //   planFeatures.maxActiveContests <= 1
+                          //     ? "bg-white"
+                          //     : planFeatures.maxActiveContests <= 5
+                          //     ? "bg-orange-50/80 border-orange-200"
+                          //     : "bg-white/80 border-gray-200/50"
+                          // }`}
                         >
                           <div className="flex items-start gap-4">
                             {/* <div
@@ -4292,12 +4573,13 @@ export default function CreateContestPage({
                                 </h5>
                                 <div className="flex items-center gap-2">
                                   <span
-                                    className={`text-xl font-bold ${planFeatures.maxActiveContests <= 1
-                                      ? "text-green-600 border border-green-600 rounded-full px-6"
-                                      : planFeatures.maxActiveContests <= 5
+                                    className={`text-xl font-bold ${
+                                      planFeatures.maxActiveContests <= 1
+                                        ? "text-green-600 border border-green-600 rounded-full px-6"
+                                        : planFeatures.maxActiveContests <= 5
                                         ? "text-green-600 border border-green-600 rounded-full px-6"
                                         : "text-green-600 border border-green-600 rounded-full px-6"
-                                      }`}
+                                    }`}
                                   >
                                     {planFeatures.maxActiveContests === Infinity
                                       ? "∞"
@@ -4305,10 +4587,11 @@ export default function CreateContestPage({
                                   </span>
                                   {planFeatures.maxActiveContests <= 5 && (
                                     <span
-                                      className={`text-sm ${planFeatures.maxActiveContests <= 1
-                                        ? "text-red-500"
-                                        : "text-orange-500"
-                                        }`}
+                                      className={`text-sm ${
+                                        planFeatures.maxActiveContests <= 1
+                                          ? "text-red-500"
+                                          : "text-orange-500"
+                                      }`}
                                     >
                                       ⚠️
                                     </span>
@@ -4332,19 +4615,19 @@ export default function CreateContestPage({
                                     ? "border-gray-600"
                                     : "bg-[#F0E7FD] border-purple-500 text-purple-600"
                                 )}
-                              // className={`mt-4 text-sm font-medium ${
-                              //   planFeatures.maxActiveContests <= 1
-                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              //     : planFeatures.maxActiveContests <= 5
-                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              //     : "mt-4 border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              // }`}
+                                // className={`mt-4 text-sm font-medium ${
+                                //   planFeatures.maxActiveContests <= 1
+                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                //     : planFeatures.maxActiveContests <= 5
+                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                //     : "mt-4 border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                // }`}
                               >
                                 {planFeatures.maxActiveContests <= 1
                                   ? "Only 1 contest allowed - upgrade now!"
                                   : planFeatures.maxActiveContests <= 5
-                                    ? "Upgrade for more simultaneous campaigns!"
-                                    : "Tip: Run parallel campaigns for different products"}
+                                  ? "Upgrade for more simultaneous campaigns!"
+                                  : "Tip: Run parallel campaigns for different products"}
                               </div>
                             </div>
                           </div>
@@ -4357,13 +4640,13 @@ export default function CreateContestPage({
                             isDark ? "border-gray-500" : "border-gray-300"
                           )}
 
-                        // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                        //   planFeatures.commissionPercentage >= 40
-                        //     ? "bg-red-50/80 border-red-200"
-                        //     : planFeatures.commissionPercentage >= 20
-                        //     ? "bg-orange-50/80 border-orange-200"
-                        //     : "bg-white/80 border-gray-200/50"
-                        // }`}
+                          // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                          //   planFeatures.commissionPercentage >= 40
+                          //     ? "bg-red-50/80 border-red-200"
+                          //     : planFeatures.commissionPercentage >= 20
+                          //     ? "bg-orange-50/80 border-orange-200"
+                          //     : "bg-white/80 border-gray-200/50"
+                          // }`}
                         >
                           <div className="flex items-start gap-4">
                             {/* <div
@@ -4391,22 +4674,24 @@ export default function CreateContestPage({
                                 </h5>
                                 <div className="flex items-center gap-2">
                                   <span
-                                    className={`text-xl font-bold ${planFeatures.commissionPercentage >= 40
-                                      ? "text-green-600 border border-green-600 rounded-full px-6"
-                                      : planFeatures.commissionPercentage >=
-                                        20
+                                    className={`text-xl font-bold ${
+                                      planFeatures.commissionPercentage >= 40
+                                        ? "text-green-600 border border-green-600 rounded-full px-6"
+                                        : planFeatures.commissionPercentage >=
+                                          20
                                         ? "text-green-600 border border-green-600 rounded-full px-6"
                                         : "text-green-600 border border-green-600 rounded-full px-6"
-                                      }`}
+                                    }`}
                                   >
                                     {planFeatures.commissionPercentage}%
                                   </span>
                                   {planFeatures.commissionPercentage >= 20 && (
                                     <span
-                                      className={`text-sm ${planFeatures.commissionPercentage >= 40
-                                        ? "text-red-500"
-                                        : "text-orange-500"
-                                        }`}
+                                      className={`text-sm ${
+                                        planFeatures.commissionPercentage >= 40
+                                          ? "text-red-500"
+                                          : "text-orange-500"
+                                      }`}
                                     >
                                       ⚠️
                                     </span>
@@ -4430,19 +4715,19 @@ export default function CreateContestPage({
                                     ? "border-gray-600"
                                     : "bg-[#F0E7FD] border-purple-500 text-purple-600"
                                 )}
-                              // className={`mt-4 text-sm font-medium ${
-                              //   planFeatures.commissionPercentage >= 40
-                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              //     : planFeatures.commissionPercentage >= 20
-                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              // }`}
+                                // className={`mt-4 text-sm font-medium ${
+                                //   planFeatures.commissionPercentage >= 40
+                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                //     : planFeatures.commissionPercentage >= 20
+                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                // }`}
                               >
                                 {planFeatures.maxActiveContests <= 1
                                   ? "Only 1 contest allowed - upgrade now!"
                                   : planFeatures.maxActiveContests <= 5
-                                    ? "Upgrade for more simultaneous campaigns!"
-                                    : "Tip: Run parallel campaigns for different products"}
+                                  ? "Upgrade for more simultaneous campaigns!"
+                                  : "Tip: Run parallel campaigns for different products"}
                               </div>
                             </div>
                           </div>
@@ -4456,13 +4741,13 @@ export default function CreateContestPage({
                       "rounded-xl p-8 text-black shadow-lg relative overflow-hidden",
                       isDark ? "bg-[#180438] text-white" : "bg-white text-black"
                     )}
-                  // className={`rounded-xl p-8 text-black shadow-lg relative overflow-hidden ${
-                  //   currentPlan.price === 0
-                  //     ? "bg-white" // Free plan - modern slate
-                  //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                  //     ? "bg-white" // Bronze plan - warm
-                  //     : "bg-white" // Higher plans - premium
-                  // }`}
+                    // className={`rounded-xl p-8 text-black shadow-lg relative overflow-hidden ${
+                    //   currentPlan.price === 0
+                    //     ? "bg-white" // Free plan - modern slate
+                    //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
+                    //     ? "bg-white" // Bronze plan - warm
+                    //     : "bg-white" // Higher plans - premium
+                    // }`}
                   >
                     {/* Background Pattern */}
                     {/* <div className="absolute inset-0 opacity-10">
@@ -4580,33 +4865,33 @@ export default function CreateContestPage({
                       {/* Enhanced Upgrade CTA for lower tier plans */}
                       {(currentPlan.price === 0 ||
                         planFeatures.commissionPercentage >= 20) && (
-                          <div className="rounded-2xl py-6 px-4 mt-4 border border-gray-300">
-                            <div className="flex items-start justify-between gap-6">
-                              <div className="flex-1 min-w-0">
-                                <h5 className="text-base font-bold">
-                                  {currentPlan.price === 0
-                                    ? "Ready to unlock more potential?"
-                                    : "Want better rates and more features?"}
-                                </h5>
-                                <p className="text-sm opacity-90 leading-relaxed pr-4">
-                                  {currentPlan.price === 0
-                                    ? "Upgrade to reduce commission and get more winners"
-                                    : "Higher plans offer lower commission rates and more flexibility"}
-                                </p>
-                              </div>
-                              {userPlan !== PRODUCT_IDS.CHAMPION && (
-                                <div className="flex-shrink-0">
-                                  <button
-                                    className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white"
-                                    onClick={() => setShowUpgradeModal(true)}
-                                  >
-                                    Upgrade Plan
-                                  </button>
-                                </div>
-                              )}
+                        <div className="rounded-2xl py-6 px-4 mt-4 border border-gray-300">
+                          <div className="flex items-start justify-between gap-6">
+                            <div className="flex-1 min-w-0">
+                              <h5 className="text-base font-bold">
+                                {currentPlan.price === 0
+                                  ? "Ready to unlock more potential?"
+                                  : "Want better rates and more features?"}
+                              </h5>
+                              <p className="text-sm opacity-90 leading-relaxed pr-4">
+                                {currentPlan.price === 0
+                                  ? "Upgrade to reduce commission and get more winners"
+                                  : "Higher plans offer lower commission rates and more flexibility"}
+                              </p>
                             </div>
+                            {userPlan !== PRODUCT_IDS.CHAMPION && (
+                              <div className="flex-shrink-0">
+                                <button
+                                  className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white"
+                                  onClick={() => setShowUpgradeModal(true)}
+                                >
+                                  Upgrade Plan
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -5036,11 +5321,13 @@ export default function CreateContestPage({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="totalBudgetPrize">
-                      Total Contest Budget (USD)
+                      Total Contest Budget (USD){" "}
+                      <span className="text-red-500">*</span>
                     </Label>
                     <Input
                       id="totalBudgetPrize"
                       type="number"
+                      required
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
@@ -5055,8 +5342,8 @@ export default function CreateContestPage({
                       min="1"
                     />
                     <p className="text-xs text-muted-foreground">
-                      The maximum total amount to be paid out for this contest.
-                      This is the effective prize pool.
+                      Required: The maximum total amount to be paid out for this
+                      contest. This is the effective prize pool.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -5123,10 +5410,11 @@ export default function CreateContestPage({
 
               {/* Flat Fee Bonus */}
               <div
-                className={`space-y-3 p-4 border rounded-lg ${isDark
-                  ? "bg-green-950/40 border-green-800"
-                  : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
-                  }`}
+                className={`space-y-3 p-4 border rounded-lg ${
+                  isDark
+                    ? "bg-green-950/40 border-green-800"
+                    : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
+                }`}
               >
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">🎁</span>
@@ -5176,6 +5464,74 @@ export default function CreateContestPage({
                 )}
               </div>
 
+              {/* Flat Fee Bonus Cap (Only for CPM contests with flat fee bonus) */}
+              {contestType === "cpm" &&
+                flatFeeBonus &&
+                parseFloat(flatFeeBonus.toString()) > 0 && (
+                  <div
+                    className={cn(
+                      "space-y-3 p-4 border rounded-lg",
+                      isDark
+                        ? "bg-purple-950/40 border-purple-800"
+                        : "bg-gradient-to-r from-purple-50 to-violet-50 border-purple-200"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">💰</span>
+                      <Label
+                        htmlFor="flatFeeBonusCap"
+                        className="text-base font-semibold"
+                      >
+                        Flat Fee Bonus Cap{" "}
+                        <span className="text-red-500">*</span>
+                      </Label>
+                    </div>
+                    <Input
+                      id="flatFeeBonusCap"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      value={flatFeeBonusCap}
+                      onChange={(e) => setFlatFeeBonusCap(e.target.value)}
+                      placeholder="e.g., 20 for $20 total cap"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Required: Maximum total flat fee bonus to distribute
+                      across all creators. Once this cap is reached, no more
+                      flat fee bonuses will be given. Must not exceed Total
+                      Budget.
+                    </p>
+                    {flatFeeBonusCap &&
+                      parseFloat(flatFeeBonusCap.toString()) > 0 && (
+                        <Alert
+                          className={cn(
+                            isDark
+                              ? "bg-purple-900/30 border-purple-900"
+                              : "bg-purple-100 border-purple-300"
+                          )}
+                        >
+                          <AlertDescription>
+                            ✓ Maximum flat fee bonus cap set to{" "}
+                            <strong>
+                              $
+                              {parseFloat(flatFeeBonusCap.toString()).toFixed(
+                                2
+                              )}
+                            </strong>
+                            . Once this amount is distributed, no more flat fee
+                            bonuses will be given.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                  </div>
+                )}
+
               {/* Total Budget for Bonuses (Only for Leaderboard contests with flat fee bonus) */}
               {contestType === "leaderboard" &&
                 flatFeeBonus &&
@@ -5194,7 +5550,8 @@ export default function CreateContestPage({
                         htmlFor="totalBudget"
                         className="text-base font-semibold"
                       >
-                        Total Budget for Bonuses (Optional)
+                        Total Budget for Bonuses{" "}
+                        <span className="text-red-500">*</span>
                       </Label>
                     </div>
                     <Input
@@ -5202,6 +5559,7 @@ export default function CreateContestPage({
                       type="number"
                       min="0"
                       step="0.01"
+                      required
                       value={totalBudget}
                       onChange={(e) => setTotalBudget(e.target.value)}
                       placeholder="e.g., 500 for $500 total budget"
@@ -5212,8 +5570,8 @@ export default function CreateContestPage({
                       )}
                     />
                     <p className="text-sm text-muted-foreground">
-                      Optional: Set a budget limit for flat fee bonuses and
-                      future features. Leave empty for no limit.
+                      Required: Set a budget limit for flat fee bonuses. This
+                      budget is required when Flat Fee Bonus is enabled.
                       <br />
                       <strong>Prize Pool:</strong>{" "}
                       {formatCurrencyFromCents(totalPrizePool)} (for rankings)
@@ -5431,21 +5789,22 @@ export default function CreateContestPage({
                   "w-full sm:w-auto",
                   !(formFeedback && formFeedbackType === "error")
                     ? cn(
-                      "sm:mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
-                      isDark
-                        ? "text-white bg-[#170337] border-gray-400"
-                        : "border-[#4A00BE] bg-white text-[#4A00BE]"
-                    )
+                        "sm:mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
+                        isDark
+                          ? "text-white bg-[#170337] border-gray-400"
+                          : "border-[#4A00BE] bg-white text-[#4A00BE]"
+                      )
                     : ""
                 )}
               >
                 Back
               </Button>
               <div
-                className={`flex flex-col sm:flex-row gap-3 w-full sm:w-auto ${formFeedback && formFeedbackType === "error"
-                  ? "sm:ml-4"
-                  : "sm:ml-auto"
-                  }`}
+                className={`flex flex-col sm:flex-row gap-3 w-full sm:w-auto ${
+                  formFeedback && formFeedbackType === "error"
+                    ? "sm:ml-4"
+                    : "sm:ml-auto"
+                }`}
               >
                 <button
                   className={cn(
@@ -5458,8 +5817,8 @@ export default function CreateContestPage({
                   disabled={isLoading || !title.trim()}
                 >
                   {isLoading &&
-                    uploadProgress &&
-                    uploadProgress.includes("draft") ? (
+                  uploadProgress &&
+                  uploadProgress.includes("draft") ? (
                     <div className="flex items-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                       <span>{uploadProgress}</span>
@@ -5488,8 +5847,8 @@ export default function CreateContestPage({
                   )}
                 >
                   {isLoading &&
-                    uploadProgress &&
-                    !uploadProgress.includes("draft") ? (
+                  uploadProgress &&
+                  !uploadProgress.includes("draft") ? (
                     <div className="flex items-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                       <span>{uploadProgress}</span>
@@ -5498,16 +5857,16 @@ export default function CreateContestPage({
                           uploadProgress.includes("Preparing")
                             ? 15
                             : uploadProgress.includes("Validating")
-                              ? 25
-                              : uploadProgress.includes("1/2")
-                                ? 40
-                                : uploadProgress.includes("2/2")
-                                  ? 60
-                                  : uploadProgress.includes("Creating")
-                                    ? 80
-                                    : uploadProgress.includes("submitted")
-                                      ? 100
-                                      : 10
+                            ? 25
+                            : uploadProgress.includes("1/2")
+                            ? 40
+                            : uploadProgress.includes("2/2")
+                            ? 60
+                            : uploadProgress.includes("Creating")
+                            ? 80
+                            : uploadProgress.includes("submitted")
+                            ? 100
+                            : 10
                         }
                         className="w-10 h-2"
                       />
@@ -6155,10 +6514,10 @@ export default function CreateContestPage({
                       step === "basics"
                         ? "8%"
                         : step === "brief"
-                          ? "35%"
-                          : step === "resources"
-                            ? "70%"
-                            : "100%",
+                        ? "35%"
+                        : step === "resources"
+                        ? "70%"
+                        : "100%",
                     // background:
                     //   "linear-gradient(270deg, #E9E9E9 60%, #7F39EC 100%)",
                   }}
@@ -6217,14 +6576,15 @@ export default function CreateContestPage({
                         )}
 
                         <div
-                          className={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 transition-all duration-500 ${isActive
-                            ? "bg-[#7F39EC] border-[#7F39EC] text-white"
-                            : isCompleted
+                          className={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 transition-all duration-500 ${
+                            isActive
+                              ? "bg-[#7F39EC] border-[#7F39EC] text-white"
+                              : isCompleted
                               ? "bg-[#7F39EC] border-[#7F39EC] text-white"
                               : isDark
-                                ? "bg-white border-white text-slate-500 shadow-md"
-                                : "bg-white border-slate-200 text-slate-400 shadow-md"
-                            }`}
+                              ? "bg-white border-white text-slate-500 shadow-md"
+                              : "bg-white border-slate-200 text-slate-400 shadow-md"
+                          }`}
                         >
                           {isCompleted ? (
                             <svg
@@ -6251,34 +6611,36 @@ export default function CreateContestPage({
                       {/* Step Content */}
                       <div className="mt-4 text-center max-w-32">
                         <h3
-                          className={`text-[14px] font-semibold transition-colors duration-300 ${isActive
-                            ? isDark
-                              ? "text-white"
-                              : "text-black"
-                            : isCompleted
+                          className={`text-[14px] font-semibold transition-colors duration-300 ${
+                            isActive
+                              ? isDark
+                                ? "text-white"
+                                : "text-black"
+                              : isCompleted
                               ? isDark
                                 ? "text-white"
                                 : "text-black"
                               : isDark
-                                ? "text-slate-400 text-md"
-                                : "text-slate-500 text-md"
-                            }`}
+                              ? "text-slate-400 text-md"
+                              : "text-slate-500 text-md"
+                          }`}
                         >
                           {stepItem.title}
                         </h3>
                         <p
-                          className={`text-[12px] mt-1 transition-colors duration-300 ${isActive
-                            ? isDark
-                              ? "text-white"
-                              : "text-black"
-                            : isCompleted
+                          className={`text-[12px] mt-1 transition-colors duration-300 ${
+                            isActive
+                              ? isDark
+                                ? "text-white"
+                                : "text-black"
+                              : isCompleted
                               ? isDark
                                 ? "text-white"
                                 : "text-black"
                               : isDark
-                                ? "text-slate-400"
-                                : "text-slate-400"
-                            }`}
+                              ? "text-slate-400"
+                              : "text-slate-400"
+                          }`}
                         >
                           {stepItem.description}
                         </p>
@@ -6306,30 +6668,30 @@ export default function CreateContestPage({
                     {step === "basics"
                       ? "1"
                       : step === "brief"
-                        ? "2"
-                        : step === "resources"
-                          ? "3"
-                          : "4"}
+                      ? "2"
+                      : step === "resources"
+                      ? "3"
+                      : "4"}
                   </div>
                   <div>
                     <h3 className="font-semibold text-foreground">
                       {step === "basics"
                         ? "Get Started"
                         : step === "brief"
-                          ? "Create Brief"
-                          : step === "resources"
-                            ? "Resources"
-                            : "Prize"}
+                        ? "Create Brief"
+                        : step === "resources"
+                        ? "Resources"
+                        : "Prize"}
                     </h3>
                     <p className="text-xs text-muted-foreground">
                       Step{" "}
                       {step === "basics"
                         ? "1"
                         : step === "brief"
-                          ? "2"
-                          : step === "resources"
-                            ? "3"
-                            : "4"}{" "}
+                        ? "2"
+                        : step === "resources"
+                        ? "3"
+                        : "4"}{" "}
                       of 4
                     </p>
                   </div>
@@ -6399,7 +6761,7 @@ export default function CreateContestPage({
                     className={cn(
                       "flex-1 justify-center",
                       contestFormat === "text_image" &&
-                      "bg-[#7F39EC] text-white"
+                        "bg-[#7F39EC] text-white"
                     )}
                     onClick={() => {
                       setContestFormat("text_image");
@@ -6461,11 +6823,13 @@ export default function CreateContestPage({
                   className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 pt-2"
                 >
                   <div
-                    className={`flex items-center space-x-2 p-4 border ${isDark ? "border-gray-600" : "border-gray-300"
-                      } rounded-lg cursor-pointer flex-1 
+                    className={`flex items-center space-x-2 p-4 border ${
+                      isDark ? "border-gray-600" : "border-gray-300"
+                    } rounded-lg cursor-pointer flex-1 
         hover:bg-[#D9C0FF26] 
-        ${contestType === "leaderboard" ? "bg-[#D9C0FF26] border-[#7F39EC]" : ""
-                      }`}
+        ${
+          contestType === "leaderboard" ? "bg-[#D9C0FF26] border-[#7F39EC]" : ""
+        }`}
                   >
                     <RadioGroupItem value="leaderboard" id="leaderboard" />
                     <Label htmlFor="leaderboard" className="cursor-pointer">
@@ -6493,17 +6857,20 @@ export default function CreateContestPage({
 
                     return (
                       <div
-                        className={`flex items-center space-x-2 p-4 border ${isDark ? "border-gray-600" : "border-gray-300"
-                          } rounded-lg flex-1 relative 
-                        ${isDisabled
+                        className={`flex items-center space-x-2 p-4 border ${
+                          isDark ? "border-gray-600" : "border-gray-300"
+                        } rounded-lg flex-1 relative 
+                        ${
+                          isDisabled
                             ? isDark
                               ? "opacity-50 cursor-not-allowed bg-slate-800"
                               : "opacity-50 cursor-not-allowed bg-gray-50"
-                            : `cursor-pointer hover:bg-[#D9C0FF26] ${contestType === "cpm"
-                              ? "bg-[#D9C0FF26] border-[#7F39EC]"
-                              : ""
-                            }`
-                          }`}
+                            : `cursor-pointer hover:bg-[#D9C0FF26] ${
+                                contestType === "cpm"
+                                  ? "bg-[#D9C0FF26] border-[#7F39EC]"
+                                  : ""
+                              }`
+                        }`}
                       >
                         <RadioGroupItem
                           value="cpm"
@@ -7195,9 +7562,9 @@ export default function CreateContestPage({
                                                       (item) =>
                                                         !(
                                                           item.category ===
-                                                          category.id &&
+                                                            category.id &&
                                                           item.subcategory ===
-                                                          subcategory
+                                                            subcategory
                                                         )
                                                     )
                                                   );
@@ -7493,7 +7860,7 @@ export default function CreateContestPage({
                             const isPartiallySelected =
                               selectedCountriesInRegion.length > 0 &&
                               selectedCountriesInRegion.length <
-                              countriesArray.length;
+                                countriesArray.length;
                             const hasAnySelected =
                               selectedCountriesInRegion.length > 0;
 
@@ -7643,12 +8010,13 @@ export default function CreateContestPage({
               <div className="space-y-2">
                 <Label>Thumbnail</Label>
                 <div
-                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive
-                    ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
-                    : isDark
+                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
+                    isDragActive
+                      ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
+                      : isDark
                       ? "border-slate-600 bg-[#170337]"
                       : "border-gray-300 bg-white"
-                    }`}
+                  }`}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -7685,8 +8053,8 @@ export default function CreateContestPage({
                             : thumbnail?.name || "Saved thumbnail"}
                           {thumbnail?.size
                             ? ` · ${(thumbnail.size / (1024 * 1024)).toFixed(
-                              2
-                            )}MB`
+                                2
+                              )}MB`
                             : ""}
                         </p>
                         <Button
@@ -7758,12 +8126,13 @@ export default function CreateContestPage({
                     </div>
                   )}
                 <div
-                  className={`flex gap-2 ${formFeedback &&
+                  className={`flex gap-2 ${
+                    formFeedback &&
                     formFeedbackType === "error" &&
                     step !== "basics"
-                    ? "ml-auto"
-                    : "ml-auto"
-                    }`}
+                      ? "ml-auto"
+                      : "ml-auto"
+                  }`}
                 >
                   <button
                     className={cn(
@@ -7776,8 +8145,8 @@ export default function CreateContestPage({
                     disabled={isLoading || !title.trim()}
                   >
                     {isLoading &&
-                      uploadProgress &&
-                      uploadProgress.includes("draft") ? (
+                    uploadProgress &&
+                    uploadProgress.includes("draft") ? (
                       <div className="flex items-center gap-2">
                         <span>{uploadProgress}</span>
                         <Progress
@@ -7929,7 +8298,7 @@ export default function CreateContestPage({
                 <>
                   {/* Keywords section */}
                   <div className="space-y-3 mt-6">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-2">
                         <h3 className="text-lg font-medium">Keywords</h3>
                         {/* <span className="text-red-500 font-bold text-lg">*</span> */}
@@ -8044,7 +8413,7 @@ export default function CreateContestPage({
 
                   {/* Mentions section */}
                   <div className="space-y-3 mt-6">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-2">
                         <h3 className="text-lg font-medium">Mentions</h3>
                       </div>
@@ -8161,9 +8530,11 @@ export default function CreateContestPage({
 
                   {/* Max Participants section */}
                   <div className="space-y-3 mt-6">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-medium">Max Participants</h3>
+                        <h3 className="text-lg font-medium">
+                          Max Participants
+                        </h3>
                       </div>
                       <p
                         className={cn(
@@ -8171,7 +8542,8 @@ export default function CreateContestPage({
                           isDark ? "text-gray-300" : "text-gray-500"
                         )}
                       >
-                        Optional: Limit the maximum number of participants for this campaign
+                        Optional: Limit the maximum number of participants for
+                        this campaign
                       </p>
                     </div>
                     <Input
@@ -8180,7 +8552,9 @@ export default function CreateContestPage({
                       value={maxParticipants}
                       onChange={(e) => {
                         const value = e.target.value;
-                        setMaxParticipants(value === "" ? "" : parseInt(value, 10));
+                        setMaxParticipants(
+                          value === "" ? "" : parseInt(value, 10)
+                        );
                       }}
                       placeholder="No limit (leave empty)"
                       className={cn(
@@ -8302,18 +8676,19 @@ export default function CreateContestPage({
                   className={cn(
                     "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
                     !(formFeedback && formFeedbackType === "error") &&
-                    (isDark
-                      ? "border-gray-300 text-gray-300"
-                      : "border-[#4A00BE] text-[#4A00BE]")
+                      (isDark
+                        ? "border-gray-300 text-gray-300"
+                        : "border-[#4A00BE] text-[#4A00BE]")
                   )}
                 >
                   Back
                 </button>
                 <div
-                  className={`flex gap-2 ${formFeedback && formFeedbackType === "error"
-                    ? "ml-4"
-                    : "ml-auto"
-                    }`}
+                  className={`flex gap-2 ${
+                    formFeedback && formFeedbackType === "error"
+                      ? "ml-4"
+                      : "ml-auto"
+                  }`}
                 >
                   <button
                     className={cn(
@@ -8326,8 +8701,8 @@ export default function CreateContestPage({
                     disabled={isLoading || !title.trim()}
                   >
                     {isLoading &&
-                      uploadProgress &&
-                      uploadProgress.includes("draft") ? (
+                    uploadProgress &&
+                    uploadProgress.includes("draft") ? (
                       <div className="flex items-center gap-2">
                         <span>{uploadProgress}</span>
                         <Progress
@@ -8404,12 +8779,13 @@ export default function CreateContestPage({
                   {/* Asset Upload */}
                   <div className="flex flex-col gap-6">
                     <div
-                      className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive
-                        ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
-                        : isDark
+                      className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
+                        isDragActive
+                          ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
+                          : isDark
                           ? "border-slate-600 bg-[#170337]"
                           : "border-gray-300 bg-white"
-                        }`}
+                      }`}
                       onClick={() => resourceFileRef.current?.click()}
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
@@ -8421,15 +8797,15 @@ export default function CreateContestPage({
                       {resourceFile ? (
                         <div className="relative flex items-center gap-3">
                           {resourceFile.type.startsWith("image/") &&
-                            resourceFilePreview ? (
+                          resourceFilePreview ? (
                             <img
                               src={resourceFilePreview}
                               alt="Preview"
                               className="w-16 h-16 object-cover rounded mr-3"
                             />
                           ) : resourceFile.name
-                            .toLowerCase()
-                            .endsWith(".pdf") ? (
+                              .toLowerCase()
+                              .endsWith(".pdf") ? (
                             <span className="inline-block mr-2 align-middle">
                               <svg
                                 width="40"
@@ -8462,8 +8838,8 @@ export default function CreateContestPage({
                               </svg>
                             </span>
                           ) : /\.(mp4|mov|avi|webm)$/i.test(
-                            resourceFile.name
-                          ) ? (
+                              resourceFile.name
+                            ) ? (
                             <span className="inline-block mr-2 align-middle">
                               <svg
                                 width="40"
@@ -8563,8 +8939,8 @@ export default function CreateContestPage({
                             <div className="text-xs text-gray-500">
                               {resourceFile.size >= 1024 * 1024
                                 ? (resourceFile.size / (1024 * 1024)).toFixed(
-                                  2
-                                ) + " MB"
+                                    2
+                                  ) + " MB"
                                 : (resourceFile.size / 1024).toFixed(2) + " KB"}
                             </div>
                             {resourceDescription && (
@@ -9017,17 +9393,19 @@ export default function CreateContestPage({
                                   { ...inspirationLinks[0], url },
                                 ]);
                               } else {
-                                setInspirationLinks([
-                                  { url, description: "" },
-                                ]);
+                                setInspirationLinks([{ url, description: "" }]);
                               }
                               setInspirationError(null);
                             }}
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="raidTweetDescription" className="mb-[2px]">
-                            Tweet Description <span className="text-red-500">*</span>
+                          <Label
+                            htmlFor="raidTweetDescription"
+                            className="mb-[2px]"
+                          >
+                            Tweet Description{" "}
+                            <span className="text-red-500">*</span>
                           </Label>
                           <Input
                             id="raidTweetDescription"
@@ -9045,9 +9423,7 @@ export default function CreateContestPage({
                                   { ...inspirationLinks[0], description },
                                 ]);
                               } else {
-                                setInspirationLinks([
-                                  { url: "", description },
-                                ]);
+                                setInspirationLinks([{ url: "", description }]);
                               }
                               setInspirationError(null);
                             }}
@@ -9063,8 +9439,12 @@ export default function CreateContestPage({
                       // Full UI for Awareness: Add button and list
                       <>
                         <div className="flex flex-col gap-2">
-                          <Label htmlFor="inspirationUrlInput" className="mb-[2px]">
-                            Inspiration Link <span className="text-red-500">*</span>
+                          <Label
+                            htmlFor="inspirationUrlInput"
+                            className="mb-[2px]"
+                          >
+                            Inspiration Link{" "}
+                            <span className="text-red-500">*</span>
                           </Label>
                           <Input
                             id="inspirationUrlInput"
@@ -9077,7 +9457,9 @@ export default function CreateContestPage({
                                 ? "bg-[#180438] border border-gray-600"
                                 : "bg-white"
                             )}
-                            onChange={(e) => setNewInspirationUrl(e.target.value)}
+                            onChange={(e) =>
+                              setNewInspirationUrl(e.target.value)
+                            }
                           />
                           <Label
                             htmlFor="inspirationDescriptionInput"
@@ -9151,7 +9533,9 @@ export default function CreateContestPage({
                                     rel="noopener noreferrer"
                                     className={cn(
                                       "font-medium hover:underline break-all",
-                                      isDark ? "text-purple-400" : "text-blue-600"
+                                      isDark
+                                        ? "text-purple-400"
+                                        : "text-blue-600"
                                     )}
                                   >
                                     {item.url}
@@ -9238,7 +9622,9 @@ export default function CreateContestPage({
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label htmlFor="targetRetweets">Target reposts/retweets</Label>
+                          <Label htmlFor="targetRetweets">
+                            Target reposts/retweets
+                          </Label>
                           <Input
                             id="targetRetweets"
                             type="number"
@@ -9260,7 +9646,9 @@ export default function CreateContestPage({
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label htmlFor="targetQuoteReposts">Target quote reposts</Label>
+                          <Label htmlFor="targetQuoteReposts">
+                            Target quote reposts
+                          </Label>
                           <Input
                             id="targetQuoteReposts"
                             type="number"
@@ -9395,11 +9783,11 @@ export default function CreateContestPage({
                                       href={
                                         item.url.includes("[creator]")
                                           ? item.url.replace(
-                                            /\[creator\]/gi,
-                                            encodeURIComponent(
-                                              currentUserFirstName
+                                              /\[creator\]/gi,
+                                              encodeURIComponent(
+                                                currentUserFirstName
+                                              )
                                             )
-                                          )
                                           : item.url
                                       }
                                       target="_blank"
@@ -9413,9 +9801,9 @@ export default function CreateContestPage({
                                     >
                                       {item.url.includes("[creator]")
                                         ? item.url.replace(
-                                          /\[creator\]/gi,
-                                          currentUserFirstName
-                                        )
+                                            /\[creator\]/gi,
+                                            currentUserFirstName
+                                          )
                                         : item.url}
                                     </a>
                                     <div
@@ -9474,8 +9862,8 @@ export default function CreateContestPage({
                         disabled={isLoading || !title.trim()}
                       >
                         {isLoading &&
-                          uploadProgress &&
-                          uploadProgress.includes("draft") ? (
+                        uploadProgress &&
+                        uploadProgress.includes("draft") ? (
                           <div className="flex items-center gap-2">
                             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                             <span>Saving...</span>
@@ -9548,9 +9936,43 @@ export default function CreateContestPage({
               <ContestPaymentSelection
                 contestAmount={
                   contestType === "leaderboard"
-                    ? totalPrizePool / 100 // Convert cents to dollars
+                    ? (() => {
+                        // For leaderboard contests, charge prize pool + total budget (if flat fee bonus is enabled)
+                        const prizePoolDollars = totalPrizePool / 100;
+                        const flatFeeBonusEnabled =
+                          flatFeeBonus &&
+                          parseFloat(flatFeeBonus.toString()) > 0;
+                        const totalBudgetDollars =
+                          flatFeeBonusEnabled &&
+                          totalBudget &&
+                          parseFloat(totalBudget.toString()) > 0
+                            ? parseFloat(totalBudget.toString())
+                            : 0;
+                        return prizePoolDollars + totalBudgetDollars;
+                      })()
                     : parseFloat(totalBudget.toString()) || 0
                 } // Budget is already in dollars
+                prizePoolAmount={
+                  contestType === "leaderboard"
+                    ? totalPrizePool / 100
+                    : undefined
+                }
+                bonusBudgetAmount={
+                  contestType === "leaderboard"
+                    ? (() => {
+                        const flatFeeBonusEnabled =
+                          flatFeeBonus &&
+                          parseFloat(flatFeeBonus.toString()) > 0;
+                        const totalBudgetDollars =
+                          flatFeeBonusEnabled &&
+                          totalBudget &&
+                          parseFloat(totalBudget.toString()) > 0
+                            ? parseFloat(totalBudget.toString())
+                            : 0;
+                        return totalBudgetDollars || undefined;
+                      })()
+                    : undefined
+                }
                 contestTitle={title || "Untitled Contest"}
                 contestId={draftId || undefined}
                 commissionPercentage={
