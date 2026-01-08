@@ -333,6 +333,20 @@ export default function CreateContestPage({
   const [targetReplies, setTargetReplies] = useState<number | "">("");
   const [targetRetweets, setTargetRetweets] = useState<number | "">("");
   const [targetQuoteReposts, setTargetQuoteReposts] = useState<number | "">("");
+  // Twitter CPM points configuration (Points Model): metric weights (empty = disabled)
+  const [twitterPointsConfig, setTwitterPointsConfig] = useState<{
+    likesWeight: number | string;
+    commentsWeight: number | string;
+    retweetsWeight: number | string;
+    quoteRepostsWeight: number | string;
+    impressionsWeight: number | string; // optional "views" points (impressions)
+  }>({
+    likesWeight: "",
+    commentsWeight: "",
+    retweetsWeight: "",
+    quoteRepostsWeight: "",
+    impressionsWeight: "",
+  });
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
   const [flatFeeBonusCap, setFlatFeeBonusCap] = useState<number | string>(""); // In dollars - for CPM contests only
   const [bonusEnabled, setBonusEnabled] = useState(false);
@@ -1572,14 +1586,20 @@ export default function CreateContestPage({
         if (cpmRateValue < MIN_CPM_RATE) {
           return {
             isValid: false,
-            error: `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+            error:
+              platform === "twitter" && contestFormat === "text_image"
+                ? `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 points.`
+                : `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
           };
         }
 
         if (cpmRateValue > MAX_CPM_RATE) {
           return {
             isValid: false,
-            error: `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+            error:
+              platform === "twitter" && contestFormat === "text_image"
+                ? `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 points.`
+                : `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
           };
         }
 
@@ -1595,6 +1615,34 @@ export default function CreateContestPage({
             isValid: false,
             error: "Terms & Conditions are required for CPM contests.",
           };
+        }
+
+        // Twitter CPM (Points Model): require at least one metric weight > 0
+        if (platform === "twitter" && contestFormat === "text_image") {
+          const likesWeight =
+            parseFloat(twitterPointsConfig.likesWeight.toString()) || 0;
+          const commentsWeight =
+            parseFloat(twitterPointsConfig.commentsWeight.toString()) || 0;
+          const retweetsWeight =
+            parseFloat(twitterPointsConfig.retweetsWeight.toString()) || 0;
+          const quoteRepostsWeight =
+            parseFloat(twitterPointsConfig.quoteRepostsWeight.toString()) || 0;
+          const impressionsWeight =
+            parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0;
+
+          if (
+            likesWeight <= 0 &&
+            commentsWeight <= 0 &&
+            retweetsWeight <= 0 &&
+            quoteRepostsWeight <= 0 &&
+            impressionsWeight <= 0
+          ) {
+            return {
+              isValid: false,
+              error:
+                "For Twitter CPM contests, please enable at least one metric (likes, comments/replies, retweets, quote reposts, or views) to count towards points and payout.",
+            };
+          }
         }
 
         // Validate minimum views vs maximum views
@@ -2018,6 +2066,27 @@ export default function CreateContestPage({
         ) {
           twitterCampaign.max_participants = maxParticipants;
         }
+
+        // CPM-based Twitter contests (Points Model): configure metric weights
+        // Stored in contest_based_details.twitter_campaign.points_config
+        const likesWeight =
+          parseFloat(twitterPointsConfig.likesWeight.toString()) || 0;
+        const commentsWeight =
+          parseFloat(twitterPointsConfig.commentsWeight.toString()) || 0;
+        const retweetsWeight =
+          parseFloat(twitterPointsConfig.retweetsWeight.toString()) || 0;
+        const quoteRepostsWeight =
+          parseFloat(twitterPointsConfig.quoteRepostsWeight.toString()) || 0;
+        const impressionsWeight =
+          parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0;
+
+        twitterCampaign.points_config = {
+          likes_weight: likesWeight,
+          comments_weight: commentsWeight,
+          retweets_weight: retweetsWeight,
+          quote_reposts_weight: quoteRepostsWeight,
+          impressions_weight: impressionsWeight, // optional "views" points
+        };
 
         if (contentType !== "raid") {
           if (keywordsRequirementMode) {
@@ -2969,6 +3038,26 @@ export default function CreateContestPage({
           twitterCampaign.max_participants = maxParticipants;
         }
 
+        // CPM-based Twitter contests (Points Model): configure metric weights
+        const likesWeight =
+          parseFloat(twitterPointsConfig.likesWeight.toString()) || 0;
+        const commentsWeight =
+          parseFloat(twitterPointsConfig.commentsWeight.toString()) || 0;
+        const retweetsWeight =
+          parseFloat(twitterPointsConfig.retweetsWeight.toString()) || 0;
+        const quoteRepostsWeight =
+          parseFloat(twitterPointsConfig.quoteRepostsWeight.toString()) || 0;
+        const impressionsWeight =
+          parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0;
+
+        twitterCampaign.points_config = {
+          likes_weight: likesWeight,
+          comments_weight: commentsWeight,
+          retweets_weight: retweetsWeight,
+          quote_reposts_weight: quoteRepostsWeight,
+          impressions_weight: impressionsWeight,
+        };
+
         if (contentType !== "raid") {
           if (keywordsRequirementMode) {
             twitterCampaign.keywords_requirement_mode = keywordsRequirementMode;
@@ -3513,6 +3602,31 @@ export default function CreateContestPage({
         if (twitterCampaign.max_participants) {
           setMaxParticipants(twitterCampaign.max_participants);
         }
+
+        // Twitter CPM points configuration (Points Model) - load weights from JSONB if present
+        const pointsConfig = twitterCampaign.points_config || {};
+        setTwitterPointsConfig({
+          likesWeight:
+            typeof pointsConfig.likes_weight === "number" && pointsConfig.likes_weight > 0
+              ? pointsConfig.likes_weight
+              : "",
+          commentsWeight:
+            typeof pointsConfig.comments_weight === "number" && pointsConfig.comments_weight > 0
+              ? pointsConfig.comments_weight
+              : "",
+          retweetsWeight:
+            typeof pointsConfig.retweets_weight === "number" && pointsConfig.retweets_weight > 0
+              ? pointsConfig.retweets_weight
+              : "",
+          quoteRepostsWeight:
+            typeof pointsConfig.quote_reposts_weight === "number" && pointsConfig.quote_reposts_weight > 0
+              ? pointsConfig.quote_reposts_weight
+              : "",
+          impressionsWeight:
+            typeof pointsConfig.impressions_weight === "number" && pointsConfig.impressions_weight > 0
+              ? pointsConfig.impressions_weight
+              : "",
+        });
       }
     }, 100);
 
@@ -5181,7 +5295,11 @@ export default function CreateContestPage({
                     CPM Contest Configuration
                   </h3>
                   <div className="space-y-2">
-                    <Label htmlFor="cpmRatePrize">CPM Rate (USD)</Label>
+                    <Label htmlFor="cpmRatePrize">
+                      {platform === "twitter" && contestFormat === "text_image"
+                        ? "CPM Rate (USD per 1000 points)"
+                        : "CPM Rate (USD)"}
+                    </Label>
                     <Input
                       id="cpmRatePrize"
                       type="number"
@@ -5195,19 +5313,31 @@ export default function CreateContestPage({
                           setCpmRate(MIN_CPM_RATE.toString());
                           toast({
                             title: "CPM Rate Too Low",
-                            description: `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+                            description:
+                              platform === "twitter" &&
+                              contestFormat === "text_image"
+                                ? `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 points.`
+                                : `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
                             variant: "destructive",
                           });
                         } else if (value && numValue > MAX_CPM_RATE) {
                           setCpmRate(MAX_CPM_RATE.toString());
                           toast({
                             title: "CPM Rate Too High",
-                            description: `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+                            description:
+                              platform === "twitter" &&
+                              contestFormat === "text_image"
+                                ? `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 points.`
+                                : `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
                             variant: "destructive",
                           });
                         }
                       }}
-                      placeholder="e.g., 1.50 for $1.50 per 1000 views"
+                      placeholder={
+                        platform === "twitter" && contestFormat === "text_image"
+                          ? "e.g., 4.00 for $4.00 per 1000 points"
+                          : "e.g., 1.50 for $1.50 per 1000 views"
+                      }
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
@@ -5218,107 +5348,269 @@ export default function CreateContestPage({
                       step="0.01"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Amount paid to creators per 1000 views. Range: $
-                      {MIN_CPM_RATE} - ${MAX_CPM_RATE} per 1000 views.
+                      {platform === "twitter" && contestFormat === "text_image"
+                        ? `Amount paid to creators per 1000 points. Points are calculated from the metric weights below. Range: $${MIN_CPM_RATE} - $${MAX_CPM_RATE} per 1000 points.`
+                        : `Amount paid to creators per 1000 views. Range: $${MIN_CPM_RATE} - $${MAX_CPM_RATE} per 1000 views.`}
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="minViewsPrize">
-                        Minimum Views (Optional)
-                      </Label>
-                      <Input
-                        id="minViewsPrize"
-                        type="number"
-                        className={cn(
-                          isDark
-                            ? "bg-[#180438] border border-gray-600 text-white"
-                            : "bg-white"
-                        )}
-                        value={minViews}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setMinViews(value);
-
-                          // Real-time validation
-                          const minViewsValue =
-                            value && value.trim() !== ""
-                              ? parseInt(value, 10)
-                              : null;
-                          const maxViewsValue =
-                            maxViews && maxViews.toString().trim() !== ""
-                              ? parseInt(maxViews.toString(), 10)
-                              : null;
-
-                          if (
-                            minViewsValue !== null &&
-                            maxViewsValue !== null &&
-                            minViewsValue >= maxViewsValue
-                          ) {
-                            toast({
-                              title: "Invalid View Range",
-                              description:
-                                "Minimum views must be less than maximum views.",
-                              variant: "destructive",
-                            });
-                          }
-                        }}
-                        placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
-                        min="0"
-                      />
+                  {platform === "twitter" && contestFormat === "text_image" && (
+                    <div className="space-y-3 mt-4">
+                      <h4 className="text-md font-medium">
+                        Twitter (X) CPM – Points Model
+                      </h4>
                       <p className="text-xs text-muted-foreground">
-                        Minimum views required for a submission to be eligible
-                        for payment.
+                        Choose which metrics count and set how many points each
+                        metric is worth. Payout is calculated from total points.
                       </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="maxViewsPrize">
-                        Maximum Views (Optional)
-                      </Label>
-                      <Input
-                        id="maxViewsPrize"
-                        type="number"
-                        value={maxViews}
-                        className={cn(
-                          isDark
-                            ? "bg-[#180438] border border-gray-600 text-white"
-                            : "bg-white"
-                        )}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setMaxViews(value);
 
-                          // Real-time validation
-                          const maxViewsValue =
-                            value && value.trim() !== ""
-                              ? parseInt(value, 10)
-                              : null;
-                          const minViewsValue =
-                            minViews && minViews.toString().trim() !== ""
-                              ? parseInt(minViews.toString(), 10)
-                              : null;
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                          <label className="flex items-center gap-2 text-sm">
+                            <span>Likes</span>
+                          </label>
+                          <div className="sm:col-span-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={twitterPointsConfig.likesWeight}
+                              onChange={(e) =>
+                                setTwitterPointsConfig((prev) => ({
+                                  ...prev,
+                                  likesWeight: e.target.value,
+                                }))
+                              }
+                              placeholder="e.g., 1"
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white"
+                              )}
+                            />
+                          </div>
+                        </div>
 
-                          if (
-                            minViewsValue !== null &&
-                            maxViewsValue !== null &&
-                            minViewsValue >= maxViewsValue
-                          ) {
-                            toast({
-                              title: "Invalid View Range",
-                              description:
-                                "Minimum views must be less than maximum views.",
-                              variant: "destructive",
-                            });
-                          }
-                        }}
-                        placeholder={`e.g., ${FORM_PLACEHOLDER_LARGE_AMOUNT}`}
-                        min="0"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Maximum views for which a submission will be paid.
-                      </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                          <label className="flex items-center gap-2 text-sm">
+                            <span>Comments / Replies</span>
+                          </label>
+                          <div className="sm:col-span-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={twitterPointsConfig.commentsWeight}
+                              onChange={(e) =>
+                                setTwitterPointsConfig((prev) => ({
+                                  ...prev,
+                                  commentsWeight: e.target.value,
+                                }))
+                              }
+                              placeholder="e.g., 3"
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white"
+                              )}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                          <label className="flex items-center gap-2 text-sm">
+                            <span>Retweets</span>
+                          </label>
+                          <div className="sm:col-span-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={twitterPointsConfig.retweetsWeight}
+                              onChange={(e) =>
+                                setTwitterPointsConfig((prev) => ({
+                                  ...prev,
+                                  retweetsWeight: e.target.value,
+                                }))
+                              }
+                              placeholder="e.g., 5"
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white"
+                              )}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                          <label className="flex items-center gap-2 text-sm">
+                            <span>Reposts / Quotes</span>
+                          </label>
+                          <div className="sm:col-span-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={twitterPointsConfig.quoteRepostsWeight}
+                              onChange={(e) =>
+                                setTwitterPointsConfig((prev) => ({
+                                  ...prev,
+                                  quoteRepostsWeight: e.target.value,
+                                }))
+                              }
+                              placeholder="e.g., 7"
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white"
+                              )}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                          <label className="flex items-center gap-2 text-sm">
+                            <span>Views</span>
+                          </label>
+                          <div className="sm:col-span-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.0001"
+                              value={twitterPointsConfig.impressionsWeight}
+                              onChange={(e) =>
+                                setTwitterPointsConfig((prev) => ({
+                                  ...prev,
+                                  impressionsWeight: e.target.value,
+                                }))
+                              }
+                              placeholder="e.g., 0.001"
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white"
+                              )}
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  {platform === "twitter" && contestFormat === "text_image" ? (
+                    <Alert
+                      className={cn(
+                        "border",
+                        isDark
+                          ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                          : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700"
+                      )}
+                    >
+                      <AlertDescription>
+                        Twitter CPM contests use the{" "}
+                        <strong>Points Model</strong>. Min/Max Views are not
+                        used here; payout is driven by total points and the CPM
+                        rate per 1,000 points.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="minViewsPrize">
+                          Minimum Views (Optional)
+                        </Label>
+                        <Input
+                          id="minViewsPrize"
+                          type="number"
+                          className={cn(
+                            isDark
+                              ? "bg-[#180438] border border-gray-600 text-white"
+                              : "bg-white"
+                          )}
+                          value={minViews}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setMinViews(value);
+
+                            // Real-time validation
+                            const minViewsValue =
+                              value && value.trim() !== ""
+                                ? parseInt(value, 10)
+                                : null;
+                            const maxViewsValue =
+                              maxViews && maxViews.toString().trim() !== ""
+                                ? parseInt(maxViews.toString(), 10)
+                                : null;
+
+                            if (
+                              minViewsValue !== null &&
+                              maxViewsValue !== null &&
+                              minViewsValue >= maxViewsValue
+                            ) {
+                              toast({
+                                title: "Invalid View Range",
+                                description:
+                                  "Minimum views must be less than maximum views.",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
+                          min="0"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Minimum views required for a submission to be eligible
+                          for payment.
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="maxViewsPrize">
+                          Maximum Views (Optional)
+                        </Label>
+                        <Input
+                          id="maxViewsPrize"
+                          type="number"
+                          value={maxViews}
+                          className={cn(
+                            isDark
+                              ? "bg-[#180438] border border-gray-600 text-white"
+                              : "bg-white"
+                          )}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setMaxViews(value);
+
+                            // Real-time validation
+                            const maxViewsValue =
+                              value && value.trim() !== ""
+                                ? parseInt(value, 10)
+                                : null;
+                            const minViewsValue =
+                              minViews && minViews.toString().trim() !== ""
+                                ? parseInt(minViews.toString(), 10)
+                                : null;
+
+                            if (
+                              minViewsValue !== null &&
+                              maxViewsValue !== null &&
+                              minViewsValue >= maxViewsValue
+                            ) {
+                              toast({
+                                title: "Invalid View Range",
+                                description:
+                                  "Minimum views must be less than maximum views.",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          placeholder={`e.g., ${FORM_PLACEHOLDER_LARGE_AMOUNT}`}
+                          min="0"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Maximum views for which a submission will be paid.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="totalBudgetPrize">
                       Total Contest Budget (USD){" "}
@@ -6765,10 +7057,7 @@ export default function CreateContestPage({
                     )}
                     onClick={() => {
                       setContestFormat("text_image");
-                      // Text/Image contests should use Leaderboard type and Twitter platform
-                      if (contestType === "cpm") {
-                        setContestType("leaderboard");
-                      }
+                      // Text/Image contests default to Twitter platform
                       if (platform !== "twitter") {
                         setPlatform("twitter");
                       }
@@ -6811,11 +7100,9 @@ export default function CreateContestPage({
                       planFeatures.contestTypes &&
                       planFeatures.contestTypes.includes("cpm");
 
-                    // Block CPM selection if not available for current format or plan
-                    if (
-                      value === "cpm" &&
-                      (!hasCpmAccess || contestFormat === "text_image")
-                    ) {
+                    // Block CPM selection if not available for current plan
+                    // For Twitter (text/image) CPM is allowed when plan supports CPM
+                    if (value === "cpm" && !hasCpmAccess) {
                       return; // Don't change the value
                     }
                     setContestType(value);
@@ -6852,7 +7139,10 @@ export default function CreateContestPage({
                     );
                     const isFreePlan = !currentPlan || currentPlan.price === 0;
 
-                    const isDisabledForFormat = contestFormat === "text_image";
+                    // CPM is allowed for:
+                    // - Video contests (YouTube/Instagram)
+                    // - Twitter text/image contests
+                    const isDisabledForFormat = false;
                     const isDisabled = !hasCpmAccess || isDisabledForFormat;
 
                     return (

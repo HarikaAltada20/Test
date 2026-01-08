@@ -464,6 +464,21 @@ export default function EditContestPage({
   const [totalBudget, setTotalBudget] = useState<number | string>("");
   const [termsConditions, setTermsConditions] = useState<string>("");
 
+  // Twitter CPM Points Model config
+  const [twitterPointsConfig, setTwitterPointsConfig] = useState<{
+    likesWeight: number | string;
+    commentsWeight: number | string;
+    retweetsWeight: number | string;
+    quoteRepostsWeight: number | string;
+    impressionsWeight: number | string;
+  }>({
+    likesWeight: "",
+    commentsWeight: "",
+    retweetsWeight: "",
+    quoteRepostsWeight: "",
+    impressionsWeight: "",
+  });
+
   // New features state (2025-10-01)
   const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] =
     useState(false);
@@ -1199,6 +1214,38 @@ export default function EditContestPage({
                     setTargetQuoteReposts(raidTarget.metrics.quote_reposts);
                   }
                 }
+              }
+
+              // Load Twitter CPM Points config
+              const pointsConfig = twitterCampaign?.points_config;
+              if (pointsConfig && typeof pointsConfig === "object") {
+                setTwitterPointsConfig({
+                  likesWeight:
+                    typeof pointsConfig.likes_weight === "number" &&
+                    pointsConfig.likes_weight > 0
+                      ? pointsConfig.likes_weight
+                      : "",
+                  commentsWeight:
+                    typeof pointsConfig.comments_weight === "number" &&
+                    pointsConfig.comments_weight > 0
+                      ? pointsConfig.comments_weight
+                      : "",
+                  retweetsWeight:
+                    typeof pointsConfig.retweets_weight === "number" &&
+                    pointsConfig.retweets_weight > 0
+                      ? pointsConfig.retweets_weight
+                      : "",
+                  quoteRepostsWeight:
+                    typeof pointsConfig.quote_reposts_weight === "number" &&
+                    pointsConfig.quote_reposts_weight > 0
+                      ? pointsConfig.quote_reposts_weight
+                      : "",
+                  impressionsWeight:
+                    typeof pointsConfig.impressions_weight === "number" &&
+                    pointsConfig.impressions_weight > 0
+                      ? pointsConfig.impressions_weight
+                      : "",
+                });
               }
             }
           }
@@ -2225,6 +2272,22 @@ export default function EditContestPage({
             contentType === "raid" ? "" : keywordsRequirementMode || "",
           mentions_requirement_mode:
             contentType === "raid" ? "" : mentionsRequirementMode || "",
+        };
+      }
+
+      // Add Twitter CPM Points config
+      if (contestType === "cpm") {
+        twitterCampaign.points_config = {
+          likes_weight:
+            parseFloat(twitterPointsConfig.likesWeight.toString()) || 0,
+          comments_weight:
+            parseFloat(twitterPointsConfig.commentsWeight.toString()) || 0,
+          retweets_weight:
+            parseFloat(twitterPointsConfig.retweetsWeight.toString()) || 0,
+          quote_reposts_weight:
+            parseFloat(twitterPointsConfig.quoteRepostsWeight.toString()) || 0,
+          impressions_weight:
+            parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0,
         };
       }
 
@@ -3464,7 +3527,7 @@ export default function EditContestPage({
           "💾 Updating complete contest data in database after payment..."
         );
 
-        const contestBasedDetails =
+        const contestBasedDetails: any =
           contestType === "leaderboard"
             ? {
                 leaderboard_contest: {
@@ -3490,6 +3553,27 @@ export default function EditContestPage({
                   terms_conditions: termsConditions,
                 },
               };
+
+        // Add Twitter CPM Points config
+        if (platform?.toLowerCase() === "twitter" && contestType === "cpm") {
+          contestBasedDetails.twitter_campaign = {
+            ...(contestBasedDetails.twitter_campaign || {}),
+            points_config: {
+              likes_weight:
+                parseFloat(twitterPointsConfig.likesWeight.toString()) || 0,
+              comments_weight:
+                parseFloat(twitterPointsConfig.commentsWeight.toString()) || 0,
+              retweets_weight:
+                parseFloat(twitterPointsConfig.retweetsWeight.toString()) || 0,
+              quote_reposts_weight:
+                parseFloat(twitterPointsConfig.quoteRepostsWeight.toString()) ||
+                0,
+              impressions_weight:
+                parseFloat(twitterPointsConfig.impressionsWeight.toString()) ||
+                0,
+            },
+          };
+        }
 
         // Helper function to process and group subcategories by category
         const processSubcategories = (
@@ -3575,7 +3659,7 @@ export default function EditContestPage({
         );
 
         // Prepare contest data update with all current form data
-        const contestBasedDetails =
+        const contestBasedDetails2: any =
           contestType === "leaderboard"
             ? {
                 leaderboard_contest: {
@@ -3601,6 +3685,27 @@ export default function EditContestPage({
                   terms_conditions: termsConditions,
                 },
               };
+
+        // Add Twitter CPM Points config
+        if (platform?.toLowerCase() === "twitter" && contestType === "cpm") {
+          contestBasedDetails2.twitter_campaign = {
+            ...(contestBasedDetails2.twitter_campaign || {}),
+            points_config: {
+              likes_weight:
+                parseFloat(twitterPointsConfig.likesWeight.toString()) || 0,
+              comments_weight:
+                parseFloat(twitterPointsConfig.commentsWeight.toString()) || 0,
+              retweets_weight:
+                parseFloat(twitterPointsConfig.retweetsWeight.toString()) || 0,
+              quote_reposts_weight:
+                parseFloat(twitterPointsConfig.quoteRepostsWeight.toString()) ||
+                0,
+              impressions_weight:
+                parseFloat(twitterPointsConfig.impressionsWeight.toString()) ||
+                0,
+            },
+          };
+        }
 
         // Helper function to process and group subcategories by category
         const processSubcategories = (
@@ -3644,7 +3749,7 @@ export default function EditContestPage({
           ),
           resources,
           contest_type: contestType,
-          contest_based_details: contestBasedDetails,
+          contest_based_details: contestBasedDetails2,
           // Categories, subcategories, and interests
           categories: contestCategories.length > 0 ? contestCategories : null,
           subcategories: processSubcategories(contestSubcategories),
@@ -8292,243 +8397,425 @@ export default function EditContestPage({
           {!datesOnly && contestType === "cpm" && (
             <div className="space-y-6">
               {/* <Separator /> */}
-              <div>
-                <h3 className="text-lg font-medium">CPM Configuration</h3>
-                <p className="text-sm text-muted-foreground">
-                  Configure the Cost Per Mille (CPM) details for this contest.
-                </p>
-              </div>
+              <div className="space-y-6 py-4 px-1">
+                <h3 className="text-lg font-medium">
+                  CPM Contest Configuration
+                </h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="cpmRate">
+                      {platform?.toLowerCase() === "twitter" &&
+                      contest?.contest_format === "text_image"
+                        ? "CPM Rate (USD per 1000 points)"
+                        : "CPM Rate (USD)"}
+                    </Label>
+                    <Input
+                      id="cpmRate"
+                      type="number"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white"
+                      )}
+                      value={cpmRate}
+                      onChange={(e) => setCpmRate(e.target.value)}
+                      onBlur={(e) => {
+                        const value = e.target.value;
+                        const numValue = parseFloat(value);
+
+                        if (value && numValue < MIN_CPM_RATE) {
+                          setCpmRate(MIN_CPM_RATE.toString());
+                          toast({
+                            title: "CPM Rate Too Low",
+                            description:
+                              platform?.toLowerCase() === "twitter" &&
+                              contest?.contest_format === "text_image"
+                                ? `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 points.`
+                                : `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+                            variant: "destructive",
+                          });
+                        } else if (value && numValue > MAX_CPM_RATE) {
+                          setCpmRate(MAX_CPM_RATE.toString());
+                          toast({
+                            title: "CPM Rate Too High",
+                            description:
+                              platform?.toLowerCase() === "twitter" &&
+                              contest?.contest_format === "text_image"
+                                ? `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 points.`
+                                : `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                      placeholder={
+                        platform?.toLowerCase() === "twitter" &&
+                        contest?.contest_format === "text_image"
+                          ? "e.g., 4.00 for $4.00 per 1000 points"
+                          : "e.g., 1.50 for $1.50 per 1000 views"
+                      }
+                      min={MIN_CPM_RATE}
+                      max={MAX_CPM_RATE}
+                      step="0.01"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {platform?.toLowerCase() === "twitter" &&
+                      contest?.contest_format === "text_image"
+                        ? `Amount paid to creators per 1000 points. Points are calculated from the metric weights below. Range: $${MIN_CPM_RATE} - $${MAX_CPM_RATE} per 1000 points.`
+                        : `Amount paid to creators per 1000 views. Range: $${MIN_CPM_RATE} - $${MAX_CPM_RATE} per 1000 views.`}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="totalBudget">
+                      Total Budget (USD) <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="totalBudget"
+                      type="number"
+                      value={totalBudget}
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
+                      onChange={(e) => {
+                        setTotalBudget(e.target.value);
+                        checkBudgetChange(undefined, e.target.value);
+                      }}
+                      placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
+                      step="0.01"
+                    />
+                  </div>
+                </div>
+
+                {/* Twitter CPM – Points Model Panel */}
+                {platform?.toLowerCase() === "twitter" && (
+                  <div className="space-y-3 mt-4">
+                    <h4 className="text-md font-medium">
+                      Twitter (X) CPM – Points Model
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      Choose which metrics count and set how many points each
+                      metric is worth. Payout is calculated from total points.
+                    </p>
+
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                        <label className="flex items-center gap-2 text-sm">
+                          <span>Likes</span>
+                        </label>
+                        <div className="sm:col-span-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={twitterPointsConfig.likesWeight}
+                            onChange={(e) =>
+                              setTwitterPointsConfig((prev) => ({
+                                ...prev,
+                                likesWeight: e.target.value,
+                              }))
+                            }
+                            placeholder="e.g., 1"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600 text-white"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                        <label className="flex items-center gap-2 text-sm">
+                          <span>Comments / Replies</span>
+                        </label>
+                        <div className="sm:col-span-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={twitterPointsConfig.commentsWeight}
+                            onChange={(e) =>
+                              setTwitterPointsConfig((prev) => ({
+                                ...prev,
+                                commentsWeight: e.target.value,
+                              }))
+                            }
+                            placeholder="e.g., 3"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600 text-white"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                        <label className="flex items-center gap-2 text-sm">
+                          <span>Retweets</span>
+                        </label>
+                        <div className="sm:col-span-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={twitterPointsConfig.retweetsWeight}
+                            onChange={(e) =>
+                              setTwitterPointsConfig((prev) => ({
+                                ...prev,
+                                retweetsWeight: e.target.value,
+                              }))
+                            }
+                            placeholder="e.g., 5"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600 text-white"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                        <label className="flex items-center gap-2 text-sm">
+                          <span>Reposts / Quotes</span>
+                        </label>
+                        <div className="sm:col-span-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={twitterPointsConfig.quoteRepostsWeight}
+                            onChange={(e) =>
+                              setTwitterPointsConfig((prev) => ({
+                                ...prev,
+                                quoteRepostsWeight: e.target.value,
+                              }))
+                            }
+                            placeholder="e.g., 7"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600 text-white"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                        <label className="flex items-center gap-2 text-sm">
+                          <span>Views</span>
+                        </label>
+                        <div className="sm:col-span-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.0001"
+                            value={twitterPointsConfig.impressionsWeight}
+                            onChange={(e) =>
+                              setTwitterPointsConfig((prev) => ({
+                                ...prev,
+                                impressionsWeight: e.target.value,
+                              }))
+                            }
+                            placeholder="e.g., 0.001"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600 text-white"
+                                : "bg-white"
+                            )}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Twitter CPM uses Points Model - show alert instead of min/max views */}
+                {platform?.toLowerCase() === "twitter" ? (
+                  <Alert
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                        : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700"
+                    )}
+                  >
+                    <AlertDescription>
+                      Twitter CPM contests use the <strong>Points Model</strong>
+                      . Min/Max Views are not used here; payout is driven by
+                      total points and the CPM rate per 1,000 points.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="minViews">Minimum Views (Optional)</Label>
+                      <Input
+                        id="minViews"
+                        type="number"
+                        value={minViews}
+                        className={cn(
+                          isDark
+                            ? "bg-[#180438] border border-gray-600"
+                            : "bg-white"
+                        )}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setMinViews(value);
+
+                          // Real-time validation
+                          const minViewsValue =
+                            value && value.trim() !== ""
+                              ? parseInt(value, 10)
+                              : null;
+                          const maxViewsValue =
+                            maxViews && maxViews.toString().trim() !== ""
+                              ? parseInt(maxViews.toString(), 10)
+                              : null;
+
+                          if (
+                            minViewsValue !== null &&
+                            maxViewsValue !== null &&
+                            minViewsValue >= maxViewsValue
+                          ) {
+                            toast({
+                              title: "Invalid View Range",
+                              description:
+                                "Minimum views must be less than maximum views.",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const value = e.target.value;
+                          const minViewsValue =
+                            value && value.trim() !== ""
+                              ? parseInt(value, 10)
+                              : null;
+                          const maxViewsValue =
+                            maxViews && maxViews.toString().trim() !== ""
+                              ? parseInt(maxViews.toString(), 10)
+                              : null;
+
+                          if (
+                            minViewsValue !== null &&
+                            maxViewsValue !== null &&
+                            minViewsValue >= maxViewsValue
+                          ) {
+                            toast({
+                              title: "Invalid View Range",
+                              description:
+                                "Minimum views must be less than maximum views.",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
+                        min="0"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Optional: Minimum views a submission needs to be
+                        eligible for earnings.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="maxViews">
+                        Maximum Views (Cap, Optional)
+                      </Label>
+                      <Input
+                        id="maxViews"
+                        type="number"
+                        value={maxViews}
+                        className={cn(
+                          isDark
+                            ? "bg-[#180438] border border-gray-600"
+                            : "bg-white"
+                        )}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setMaxViews(value);
+
+                          // Real-time validation
+                          const maxViewsValue =
+                            value && value.trim() !== ""
+                              ? parseInt(value, 10)
+                              : null;
+                          const minViewsValue =
+                            minViews && minViews.toString().trim() !== ""
+                              ? parseInt(minViews.toString(), 10)
+                              : null;
+
+                          if (
+                            minViewsValue !== null &&
+                            maxViewsValue !== null &&
+                            minViewsValue >= maxViewsValue
+                          ) {
+                            toast({
+                              title: "Invalid View Range",
+                              description:
+                                "Minimum views must be less than maximum views.",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const value = e.target.value;
+                          const maxViewsValue =
+                            value && value.trim() !== ""
+                              ? parseInt(value, 10)
+                              : null;
+                          const minViewsValue =
+                            minViews && minViews.toString().trim() !== ""
+                              ? parseInt(minViews.toString(), 10)
+                              : null;
+
+                          if (
+                            minViewsValue !== null &&
+                            maxViewsValue !== null &&
+                            minViewsValue >= maxViewsValue
+                          ) {
+                            toast({
+                              title: "Invalid View Range",
+                              description:
+                                "Minimum views must be less than maximum views.",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        placeholder={`e.g., ${FORM_PLACEHOLDER_LARGE_AMOUNT}`}
+                        min="0"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Optional: Maximum views for which a creator can be paid
+                        for a single submission.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
-                  <Label htmlFor="cpmRate">
-                    CPM Rate (USD per 1000 views){" "}
-                    <span className="text-red-500">*</span>
+                  <Label htmlFor="termsConditions">
+                    Terms & Conditions <span className="text-red-500">*</span>
                   </Label>
-                  <Input
-                    id="cpmRate"
-                    type="number"
+                  <Textarea
+                    id="termsConditions"
+                    value={termsConditions}
                     className={cn(
                       isDark
                         ? "bg-[#180438] border border-gray-600"
                         : "bg-white"
                     )}
-                    value={cpmRate}
-                    onChange={(e) => setCpmRate(e.target.value)}
-                    onBlur={(e) => {
-                      const value = e.target.value;
-                      const numValue = parseFloat(value);
-
-                      if (value && numValue < MIN_CPM_RATE) {
-                        setCpmRate(MIN_CPM_RATE.toString());
-                        toast({
-                          title: "CPM Rate Too Low",
-                          description: `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
-                          variant: "destructive",
-                        });
-                      } else if (value && numValue > MAX_CPM_RATE) {
-                        setCpmRate(MAX_CPM_RATE.toString());
-                        toast({
-                          title: "CPM Rate Too High",
-                          description: `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
-                          variant: "destructive",
-                        });
-                      }
-                    }}
-                    placeholder="e.g., 1.50"
-                    min={MIN_CPM_RATE}
-                    max={MAX_CPM_RATE}
-                    step="0.01"
+                    onChange={(e) => setTermsConditions(e.target.value)}
+                    placeholder="Outline the specific terms and conditions for creators participating in this CPM contest..."
+                    rows={6}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Range: ${MIN_CPM_RATE} - ${MAX_CPM_RATE} per 1000 views
+                    These terms will be shown to creators. Be clear and concise.
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="totalBudget">
-                    Total Budget (USD) <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="totalBudget"
-                    type="number"
-                    value={totalBudget}
-                    className={cn(
-                      isDark
-                        ? "bg-[#180438] border border-gray-600"
-                        : "bg-white"
-                    )}
-                    onChange={(e) => {
-                      setTotalBudget(e.target.value);
-                      checkBudgetChange(undefined, e.target.value);
-                    }}
-                    placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
-                    step="0.01"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="minViews">Minimum Views (Optional)</Label>
-                  <Input
-                    id="minViews"
-                    type="number"
-                    value={minViews}
-                    className={cn(
-                      isDark
-                        ? "bg-[#180438] border border-gray-600"
-                        : "bg-white"
-                    )}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setMinViews(value);
-
-                      // Real-time validation
-                      const minViewsValue =
-                        value && value.trim() !== ""
-                          ? parseInt(value, 10)
-                          : null;
-                      const maxViewsValue =
-                        maxViews && maxViews.toString().trim() !== ""
-                          ? parseInt(maxViews.toString(), 10)
-                          : null;
-
-                      if (
-                        minViewsValue !== null &&
-                        maxViewsValue !== null &&
-                        minViewsValue >= maxViewsValue
-                      ) {
-                        toast({
-                          title: "Invalid View Range",
-                          description:
-                            "Minimum views must be less than maximum views.",
-                          variant: "destructive",
-                        });
-                      }
-                    }}
-                    onBlur={(e) => {
-                      const value = e.target.value;
-                      const minViewsValue =
-                        value && value.trim() !== ""
-                          ? parseInt(value, 10)
-                          : null;
-                      const maxViewsValue =
-                        maxViews && maxViews.toString().trim() !== ""
-                          ? parseInt(maxViews.toString(), 10)
-                          : null;
-
-                      if (
-                        minViewsValue !== null &&
-                        maxViewsValue !== null &&
-                        minViewsValue >= maxViewsValue
-                      ) {
-                        toast({
-                          title: "Invalid View Range",
-                          description:
-                            "Minimum views must be less than maximum views.",
-                          variant: "destructive",
-                        });
-                      }
-                    }}
-                    placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
-                    min="0"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Optional: Minimum views a submission needs to be eligible
-                    for earnings.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="maxViews">
-                    Maximum Views (Cap, Optional)
-                  </Label>
-                  <Input
-                    id="maxViews"
-                    type="number"
-                    value={maxViews}
-                    className={cn(
-                      isDark
-                        ? "bg-[#180438] border border-gray-600"
-                        : "bg-white"
-                    )}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setMaxViews(value);
-
-                      // Real-time validation
-                      const maxViewsValue =
-                        value && value.trim() !== ""
-                          ? parseInt(value, 10)
-                          : null;
-                      const minViewsValue =
-                        minViews && minViews.toString().trim() !== ""
-                          ? parseInt(minViews.toString(), 10)
-                          : null;
-
-                      if (
-                        minViewsValue !== null &&
-                        maxViewsValue !== null &&
-                        minViewsValue >= maxViewsValue
-                      ) {
-                        toast({
-                          title: "Invalid View Range",
-                          description:
-                            "Minimum views must be less than maximum views.",
-                          variant: "destructive",
-                        });
-                      }
-                    }}
-                    onBlur={(e) => {
-                      const value = e.target.value;
-                      const maxViewsValue =
-                        value && value.trim() !== ""
-                          ? parseInt(value, 10)
-                          : null;
-                      const minViewsValue =
-                        minViews && minViews.toString().trim() !== ""
-                          ? parseInt(minViews.toString(), 10)
-                          : null;
-
-                      if (
-                        minViewsValue !== null &&
-                        maxViewsValue !== null &&
-                        minViewsValue >= maxViewsValue
-                      ) {
-                        toast({
-                          title: "Invalid View Range",
-                          description:
-                            "Minimum views must be less than maximum views.",
-                          variant: "destructive",
-                        });
-                      }
-                    }}
-                    placeholder={`e.g., ${FORM_PLACEHOLDER_LARGE_AMOUNT}`}
-                    min="0"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Optional: Maximum views for which a creator can be paid for
-                    a single submission.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="termsConditions">
-                  Terms & Conditions <span className="text-red-500">*</span>
-                </Label>
-                <Textarea
-                  id="termsConditions"
-                  value={termsConditions}
-                  className={cn(
-                    isDark ? "bg-[#180438] border border-gray-600" : "bg-white"
-                  )}
-                  onChange={(e) => setTermsConditions(e.target.value)}
-                  placeholder="Outline the specific terms and conditions for creators participating in this CPM contest..."
-                  rows={6}
-                />
-                <p className="text-xs text-muted-foreground">
-                  These terms will be shown to creators. Be clear and concise.
-                </p>
               </div>
             </div>
           )}

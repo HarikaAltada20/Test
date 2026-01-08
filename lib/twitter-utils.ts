@@ -9,6 +9,13 @@ export interface TwitterCampaignConfig {
   mentions?: string[];
   keywords_requirement_mode?: "all" | "any" | "";
   mentions_requirement_mode?: "all" | "any" | "";
+  // Optional configuration for how points are calculated in CPM-style Twitter contests
+  points_config?: {
+    likes_weight?: number;
+    comments_weight?: number;
+    retweets_weight?: number;
+    quote_reposts_weight?: number;
+  };
   raid_target?: {
     link?: string | null;
     description?: string | null;
@@ -28,9 +35,7 @@ export interface TwitterCampaignConfig {
  * We now treat contest_based_details.twitter_campaign as the single source
  * of truth and no longer support legacy twitter_* columns on contests.
  */
-export function getTwitterCampaign(
-  contest: any
-): TwitterCampaignConfig | null {
+export function getTwitterCampaign(contest: any): TwitterCampaignConfig | null {
   const campaign = contest?.contest_based_details?.twitter_campaign;
   return campaign && typeof campaign === "object" ? campaign : null;
 }
@@ -68,15 +73,16 @@ export function buildTwitterCampaignConfig(params: {
   const filteredMentions = mentions.filter((m) => m.trim() !== "");
 
   // Don't create config if no Twitter data
-  if (filteredKeywords.length === 0 && filteredMentions.length === 0 && !raidTarget) {
+  if (
+    filteredKeywords.length === 0 &&
+    filteredMentions.length === 0 &&
+    !raidTarget
+  ) {
     return null;
   }
 
   const config: TwitterCampaignConfig = {
-    campaign_type:
-      contentType === "raid"
-        ? "raid"
-        : "awareness", // Default to awareness for all non-raid campaigns
+    campaign_type: contentType === "raid" ? "raid" : "awareness", // Default to awareness for all non-raid campaigns
   };
 
   if (filteredKeywords.length > 0) {
@@ -107,8 +113,10 @@ export function buildTwitterCampaignConfig(params: {
         retweets: raidTarget.metrics?.retweets || null,
         quote_reposts: raidTarget.metrics?.quote_reposts || null,
       },
-      keywords_requirement_mode: contentType === "raid" ? "" : keywordsRequirementMode || "",
-      mentions_requirement_mode: contentType === "raid" ? "" : mentionsRequirementMode || "",
+      keywords_requirement_mode:
+        contentType === "raid" ? "" : keywordsRequirementMode || "",
+      mentions_requirement_mode:
+        contentType === "raid" ? "" : mentionsRequirementMode || "",
     };
   }
 
@@ -146,8 +154,8 @@ export function getTwitterRaidTarget(contest: any) {
  */
 export function extractTweetId(url: string): string | null {
   if (!url) return null;
-  const regex = /(?:https?:\/\/)?(?:www\.)?(?:x\.com|twitter\.com)\/\w+\/status\/(\d+)/i;
+  const regex =
+    /(?:https?:\/\/)?(?:www\.)?(?:x\.com|twitter\.com)\/\w+\/status\/(\d+)/i;
   const match = url.match(regex);
   return match ? match[1] : null;
 }
-

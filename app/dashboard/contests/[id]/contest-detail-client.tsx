@@ -4320,6 +4320,12 @@ export default function ContestDetailClient({
                     <div className="space-y-3">
                       <h3 className="font-semibold text-lg text-foreground">
                         CPM Configuration
+                        {currentContest.platform === "twitter" &&
+                          currentContest.contest_format === "text_image" && (
+                            <span className="ml-2 text-sm font-normal text-muted-foreground">
+                              (Points Model)
+                            </span>
+                          )}
                       </h3>
                       <div className="grid grid-col-1 md:grid-cols-2 gap-4">
                         <div
@@ -4342,7 +4348,10 @@ export default function ContestDetailClient({
                               currentContest.contest_based_details.cpm_contest
                                 .cpm_rate_usd
                             ).toFixed(2)}{" "}
-                            per 1000 views
+                            {currentContest.platform === "twitter" &&
+                            currentContest.contest_format === "text_image"
+                              ? "per 1000 points"
+                              : "per 1000 views"}
                           </span>
                         </div>
                         <div
@@ -4408,19 +4417,97 @@ export default function ContestDetailClient({
                             </span>
                           </div>
                         )}
-                        {/* <div>
-                          <h4 className="text-sm font-medium mt-3 mb-2 text-foreground">
-                            Terms & Conditions
-                          </h4>
-                          <div className="p-3 border rounded-lg bg-background text-sm text-foreground">
-                            <div className="whitespace-pre-wrap break-words">
-                              {currentContest.contest_based_details.cpm_contest
-                                .terms_conditions ||
-                                "No specific terms provided."}
-                            </div>
-                          </div>
-                        </div> */}
                       </div>
+
+                      {/* Twitter CPM Points Configuration */}
+                      {currentContest.platform === "twitter" &&
+                        currentContest.contest_format === "text_image" &&
+                        currentContest.contest_based_details?.twitter_campaign
+                          ?.points_config && (
+                          <div className="mt-4">
+                            <h4 className="text-md font-semibold mb-3 text-foreground">
+                              Points Breakdown (Twitter Metrics)
+                            </h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {(() => {
+                                const config =
+                                  currentContest.contest_based_details
+                                    .twitter_campaign.points_config;
+                                const metrics = [
+                                  {
+                                    label: "Likes",
+                                    weight: config.likes_weight,
+                                    icon: ThumbsUp,
+                                  },
+                                  {
+                                    label: "Comments/Replies",
+                                    weight: config.comments_weight,
+                                    icon: MessageCircle,
+                                  },
+                                  {
+                                    label: "Retweets",
+                                    weight: config.retweets_weight,
+                                    icon: RefreshCw,
+                                  },
+                                  {
+                                    label: "Quote Reposts",
+                                    weight: config.quote_reposts_weight,
+                                    icon: Share2,
+                                  },
+                                  {
+                                    label: "Views/Impressions",
+                                    weight: config.impressions_weight,
+                                    icon: Eye,
+                                  },
+                                ].filter((m) => m.weight > 0);
+
+                                return metrics.map((metric, idx) => {
+                                  const IconComponent = metric.icon;
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className={cn(
+                                        "flex justify-between items-center p-3 rounded-md border",
+                                        isDark
+                                          ? "border-gray-600 bg-[#170337]"
+                                          : "border-gray-300 bg-gray-50"
+                                      )}
+                                    >
+                                      <span
+                                        className={cn(
+                                          "text-sm font-medium flex items-center gap-2",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-gray-700"
+                                        )}
+                                      >
+                                        {IconComponent && (
+                                          <IconComponent className="h-4 w-4" />
+                                        )}
+                                        {metric.label}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          "text-sm font-semibold",
+                                          isDark
+                                            ? "text-purple-300"
+                                            : "text-purple-600"
+                                        )}
+                                      >
+                                        {metric.weight}{" "}
+                                        {metric.weight === 1 ? "pt" : "pts"}
+                                      </span>
+                                    </div>
+                                  );
+                                });
+                              })()}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-3">
+                              Points are calculated from each tweet's engagement
+                              metrics. Total points determine CPM-based payout.
+                            </p>
+                          </div>
+                        )}
                       <div>
                         <h4 className="text-md font-semibold mt-4 mb-2 text-foreground">
                           Terms & Conditions
@@ -5437,7 +5524,7 @@ export default function ContestDetailClient({
                                     ?.twitter_campaign?.raid_target?.metrics
                                     ?.quote_reposts === "number" && (
                                     <div className="flex items-center gap-1">
-                                      <MessageCircle className="h-4 w-4" />
+                                      <Share2 className="h-4 w-4" />
                                       <span>Target Quote Reposts:</span>
                                       <span className="font-medium">
                                         {currentContest.contest_based_details?.twitter_campaign?.raid_target?.metrics.quote_reposts?.toLocaleString()}
@@ -5448,7 +5535,7 @@ export default function ContestDetailClient({
                                     ?.twitter_campaign?.raid_target?.metrics
                                     ?.retweets === "number" && (
                                     <div className="flex items-center gap-1">
-                                      {/* <Repeat className="h-4 w-4" /> */}
+                                      <RefreshCw className="h-4 w-4" />
                                       <span>Target Retweets:</span>
                                       <span className="font-medium">
                                         {currentContest.contest_based_details?.twitter_campaign?.raid_target?.metrics.retweets?.toLocaleString()}
@@ -6420,19 +6507,34 @@ export default function ContestDetailClient({
                                     Manual Points
                                   </TableHead>
                                   <TableHead className="text-center">
-                                    Likes
+                                    <div className="flex items-center justify-center gap-1">
+                                      <ThumbsUp className="h-4 w-4" />
+                                      Likes
+                                    </div>
                                   </TableHead>
                                   <TableHead className="text-center">
-                                    Replies
+                                    <div className="flex items-center justify-center gap-1">
+                                      <MessageCircle className="h-4 w-4" />
+                                      Replies
+                                    </div>
                                   </TableHead>
                                   <TableHead className="text-center">
-                                    Retweets
+                                    <div className="flex items-center justify-center gap-1">
+                                      <RefreshCw className="h-4 w-4" />
+                                      Retweets
+                                    </div>
                                   </TableHead>
                                   <TableHead className="text-center">
-                                    Quote Reposts
+                                    <div className="flex items-center justify-center gap-1">
+                                      <Share2 className="h-4 w-4" />
+                                      Quote Reposts
+                                    </div>
                                   </TableHead>
                                   <TableHead className="text-center">
-                                    Impressions
+                                    <div className="flex items-center justify-center gap-1">
+                                      <Eye className="h-4 w-4" />
+                                      Impressions
+                                    </div>
                                   </TableHead>
                                   <TableHead className="text-center">
                                     Manual Points Reason
@@ -6444,10 +6546,16 @@ export default function ContestDetailClient({
                                     Views
                                   </TableHead>
                                   <TableHead className="text-center">
-                                    Likes
+                                    <div className="flex items-center justify-center gap-1">
+                                      <ThumbsUp className="h-4 w-4" />
+                                      Likes
+                                    </div>
                                   </TableHead>
                                   <TableHead className="text-center">
-                                    Comments
+                                    <div className="flex items-center justify-center gap-1">
+                                      <MessageCircle className="h-4 w-4" />
+                                      Comments
+                                    </div>
                                   </TableHead>
                                 </>
                               )}
@@ -7147,19 +7255,22 @@ export default function ContestDetailClient({
                                       {/* Retweets */}
                                       <TableCell className="text-center">
                                         <div className="flex flex-col items-center">
-                                          <span
-                                            className={cn(
-                                              "font-bold text-sm",
-                                              isDark
-                                                ? "text-white"
-                                                : "text-slate-900"
-                                            )}
-                                          >
-                                            {formatMetricValue(
-                                              submission.other_stats
-                                                ?.retweets || 0
-                                            )}
-                                          </span>
+                                          <div className="flex items-center gap-1">
+                                            <RefreshCw className="h-3 w-3 text-purple-400" />
+                                            <span
+                                              className={cn(
+                                                "font-bold text-sm",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-900"
+                                              )}
+                                            >
+                                              {formatMetricValue(
+                                                submission.other_stats
+                                                  ?.retweets || 0
+                                              )}
+                                            </span>
+                                          </div>
                                           <span
                                             className={cn(
                                               "text-xs",
@@ -7175,19 +7286,22 @@ export default function ContestDetailClient({
                                       {/* Quote Reposts */}
                                       <TableCell className="text-center">
                                         <div className="flex flex-col items-center">
-                                          <span
-                                            className={cn(
-                                              "font-bold text-sm",
-                                              isDark
-                                                ? "text-white"
-                                                : "text-slate-900"
-                                            )}
-                                          >
-                                            {formatMetricValue(
-                                              submission.other_stats
-                                                ?.quote_reposts || 0
-                                            )}
-                                          </span>
+                                          <div className="flex items-center gap-1">
+                                            <Share2 className="h-3 w-3 text-purple-400" />
+                                            <span
+                                              className={cn(
+                                                "font-bold text-sm",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-900"
+                                              )}
+                                            >
+                                              {formatMetricValue(
+                                                submission.other_stats
+                                                  ?.quote_reposts || 0
+                                              )}
+                                            </span>
+                                          </div>
                                           <span
                                             className={cn(
                                               "text-xs",
@@ -8009,19 +8123,34 @@ export default function ContestDetailClient({
                                         Manual Points
                                       </TableHead>
                                       <TableHead className="text-center">
-                                        Likes
+                                        <div className="flex items-center justify-center gap-1">
+                                          <ThumbsUp className="h-4 w-4" />
+                                          Likes
+                                        </div>
                                       </TableHead>
                                       <TableHead className="text-center">
-                                        Replies
+                                        <div className="flex items-center justify-center gap-1">
+                                          <MessageCircle className="h-4 w-4" />
+                                          Replies
+                                        </div>
                                       </TableHead>
                                       <TableHead className="text-center">
-                                        Retweets
+                                        <div className="flex items-center justify-center gap-1">
+                                          <RefreshCw className="h-4 w-4" />
+                                          Retweets
+                                        </div>
                                       </TableHead>
                                       <TableHead className="text-center">
-                                        Quote Reposts
+                                        <div className="flex items-center justify-center gap-1">
+                                          <Share2 className="h-4 w-4" />
+                                          Quote Reposts
+                                        </div>
                                       </TableHead>
                                       <TableHead className="text-center">
-                                        Impressions
+                                        <div className="flex items-center justify-center gap-1">
+                                          <Eye className="h-4 w-4" />
+                                          Impressions
+                                        </div>
                                       </TableHead>
                                     </>
                                   ) : (
@@ -8030,10 +8159,16 @@ export default function ContestDetailClient({
                                         Views
                                       </TableHead>
                                       <TableHead className="text-center">
-                                        Likes
+                                        <div className="flex items-center justify-center gap-1">
+                                          <ThumbsUp className="h-4 w-4" />
+                                          Likes
+                                        </div>
                                       </TableHead>
                                       <TableHead className="text-center">
-                                        Comments
+                                        <div className="flex items-center justify-center gap-1">
+                                          <MessageCircle className="h-4 w-4" />
+                                          Comments
+                                        </div>
                                       </TableHead>
                                       {/* Instagram-specific metrics */}
                                       {currentContest.platform
@@ -8402,30 +8537,46 @@ export default function ContestDetailClient({
                                                 </div>
                                               </TableCell>
                                               <TableCell className="text-center">
-                                                {formatMetricValue(
-                                                  group.metrics.likes || 0
-                                                )}
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <ThumbsUp className="h-3.5 w-3.5 text-purple-400" />
+                                                  {formatMetricValue(
+                                                    group.metrics.likes || 0
+                                                  )}
+                                                </div>
                                               </TableCell>
                                               <TableCell className="text-center">
-                                                {formatMetricValue(
-                                                  group.metrics.comments || 0
-                                                )}
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <MessageCircle className="h-3.5 w-3.5 text-purple-400" />
+                                                  {formatMetricValue(
+                                                    group.metrics.comments || 0
+                                                  )}
+                                                </div>
                                               </TableCell>
                                               <TableCell className="text-center">
-                                                {formatMetricValue(
-                                                  group.metrics.retweets || 0
-                                                )}
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <RefreshCw className="h-3.5 w-3.5 text-purple-400" />
+                                                  {formatMetricValue(
+                                                    group.metrics.retweets || 0
+                                                  )}
+                                                </div>
                                               </TableCell>
                                               <TableCell className="text-center">
-                                                {formatMetricValue(
-                                                  group.metrics.quote_reposts ||
-                                                    0
-                                                )}
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <Share2 className="h-3.5 w-3.5 text-purple-400" />
+                                                  {formatMetricValue(
+                                                    group.metrics
+                                                      .quote_reposts || 0
+                                                  )}
+                                                </div>
                                               </TableCell>
                                               <TableCell className="text-center">
-                                                {formatMetricValue(
-                                                  group.metrics.impressions || 0
-                                                )}
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <Eye className="h-3.5 w-3.5 text-purple-400" />
+                                                  {formatMetricValue(
+                                                    group.metrics.impressions ||
+                                                      0
+                                                  )}
+                                                </div>
                                               </TableCell>
                                             </>
                                           ) : (
@@ -8434,10 +8585,16 @@ export default function ContestDetailClient({
                                                 {group.metrics.views.toLocaleString()}
                                               </TableCell>
                                               <TableCell className="text-center">
-                                                {group.metrics.likes.toLocaleString()}
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <ThumbsUp className="h-3.5 w-3.5 text-purple-400" />
+                                                  {group.metrics.likes.toLocaleString()}
+                                                </div>
                                               </TableCell>
                                               <TableCell className="text-center">
-                                                {group.metrics.comments.toLocaleString()}
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <MessageCircle className="h-3.5 w-3.5 text-purple-400" />
+                                                  {group.metrics.comments.toLocaleString()}
+                                                </div>
                                               </TableCell>
                                               {/* Instagram-specific metrics */}
                                               {currentContest.platform
@@ -9545,7 +9702,7 @@ export default function ContestDetailClient({
                                                 </p>
                                               </div>
                                               <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                                <Share2 className="h-7 w-7" />
+                                                <RefreshCw className="h-7 w-7" />
                                               </div>
                                             </CardContent>
                                           </div>
@@ -9591,7 +9748,7 @@ export default function ContestDetailClient({
                                                 </p>
                                               </div>
                                               <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                                <RefreshCw className="h-7 w-7" />
+                                                <Share2 className="h-7 w-7" />
                                               </div>
                                             </CardContent>
                                           </div>
@@ -9771,7 +9928,7 @@ export default function ContestDetailClient({
                                               </p>
                                             </div>
                                             <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                              <Share2 className="h-7 w-7" />
+                                              <RefreshCw className="h-7 w-7" />
                                             </div>
                                           </CardContent>
                                         </div>
@@ -9820,7 +9977,7 @@ export default function ContestDetailClient({
                                               </p>
                                             </div>
                                             <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                              <RefreshCw className="h-7 w-7" />
+                                              <Share2 className="h-7 w-7" />
                                             </div>
                                           </CardContent>
                                         </div>
@@ -10060,7 +10217,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-r from-orange-200 to-orange-300"
                                   )}
                                   {renderMetricCard(
-                                    <Share2 className="h-6 w-6 text-white" />,
+                                    <RefreshCw className="h-6 w-6 text-white" />,
                                     "Total Retweets",
                                     metricsForDisplay?.total_retweets || 0,
                                     isDark
@@ -10071,7 +10228,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-r from-cyan-200 to-cyan-300"
                                   )}
                                   {renderMetricCard(
-                                    <RefreshCw className="h-6 w-6 text-white" />,
+                                    <Share2 className="h-6 w-6 text-white" />,
                                     "Total Quote Reposts",
                                     metricsForDisplay?.total_quote_reposts || 0,
                                     isDark
@@ -10740,7 +10897,11 @@ export default function ContestDetailClient({
                                       isDark ? "text-white" : "text-gray-500"
                                     )}
                                   >
-                                    Per 1,000 views
+                                    {currentContest.platform === "twitter" &&
+                                    currentContest.contest_format ===
+                                      "text_image"
+                                      ? "Per 1,000 points"
+                                      : "Per 1,000 views"}
                                   </p>
                                 </div>
                                 <div
