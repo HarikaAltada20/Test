@@ -967,13 +967,17 @@ export function ContestListClient({
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                     <span>
-                      CPM Rate:{" "}
+                      {contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x"
+                        ? "Points Rate: "
+                        : "CPM Rate: "}
                       <span className="font-medium">
                         {formatMoney(
                           contest.contest_based_details.cpm_contest
                             .cpm_rate_usd * 100
                         )}{" "}
-                        / 1k views
+                        {contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x"
+                          ? "/ 1k points"
+                          : "/ 1k views"}
                       </span>
                     </span>
                   </div>
@@ -1757,13 +1761,17 @@ export function ContestListClient({
                           transition: "none",
                         }}
                       >
-                        CPM Rate:{" "}
+                        {contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x"
+                          ? "Points Rate: "
+                          : "CPM Rate: "}
                         <span className="font-medium">
                           {formatMoney(
                             contest.contest_based_details.cpm_contest
                               .cpm_rate_usd * 100
                           )}{" "}
-                          / 1k views
+                          {contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x"
+                            ? "/ 1k points"
+                            : "/ 1k views"}
                         </span>
                       </span>
                     </div>
