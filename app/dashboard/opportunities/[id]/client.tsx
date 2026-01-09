@@ -2496,7 +2496,9 @@ export function ContestClientPage({
               <div className="flex text-center items-center">
                 {tab.label}
                 {tab.id === "leaderboard" &&
-                  contest?.contest_type === "leaderboard" &&
+                  (contest?.contest_type === "leaderboard" ||
+                    (contest?.platform?.toLowerCase() === "twitter" &&
+                      contest?.contest_type === "cpm")) &&
                   totalLeaderboardEntries > 0 && (
                     <Badge
                       variant="secondary"
