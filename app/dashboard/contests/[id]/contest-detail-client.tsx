@@ -6752,7 +6752,8 @@ export default function ContestDetailClient({
                                     //          (retweets × retweets_weight) + (quote_reposts × quote_reposts_weight) +
                                     //          (impressions × impressions_weight)
                                     // Note: Manual points adjustment removed for CPM Twitter contests
-                                    // Expected Reward = (Total Points ÷ 1,000) × CPM Rate + Flat Fee Bonus
+                                    // Expected Reward = (Total Points ÷ 1,000) × CPM Rate
+                                    // Note: Flat fee bonus is NOT included in expected reward (tracked separately)
 
                                     const pointsConfig =
                                       currentContest.contest_based_details
@@ -6825,17 +6826,18 @@ export default function ContestDetailClient({
                                     }
 
                                     // Calculate expected reward using formula: (Total Points ÷ 1,000) × CPM Rate
+                                    // Note: Flat fee bonus is NOT included in expected reward
                                     const calculatedEarnings =
                                       (totalPoints / 1000) *
                                       cpmConfig.cpm_rate_usd;
 
-                                    // Add flat fee bonus if applicable (convert from cents to dollars)
+                                    // Flat fee bonus is tracked separately (convert from cents to dollars)
                                     const flatFeeBonusCents =
                                       cpmConfig.flat_fee_bonus || 0;
                                     const flatFeeBonus =
                                       centsToDollars(flatFeeBonusCents);
                                     const totalExpectedReward =
-                                      calculatedEarnings + flatFeeBonus;
+                                      calculatedEarnings;
 
                                     // Build breakdown for display
                                     const breakdown = [];

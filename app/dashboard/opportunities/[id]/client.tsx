@@ -2996,70 +2996,113 @@ export function ContestClientPage({
                           ?.flat_fee_bonus && (
                           <div
                             className={cn(
-                              "flex items-center justify-between p-3 rounded-lg border transition-all duration-300",
+                              "flex flex-col gap-3 p-3 rounded-lg border transition-all duration-300",
                               isDark
                                 ? "bg-gradient-to-r from-green-900/40 to-emerald-900/40 border-green-400/40"
                                 : "bg-gradient-to-r from-green-50 to-green-50 border-green-200"
                             )}
                           >
-                            <div className="flex items-center gap-3">
-                              <Gift
-                                className={cn(
-                                  "h-5 w-5",
-                                  isDark ? "text-green-400" : "text-green-600"
-                                )}
-                              />
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isDark ? "text-slate-100" : "text-slate-900"
-                                )}
-                              >
-                                Guaranteed Bonus
-                              </span>
-                              <div className="group relative">
-                                <Info
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Gift
                                   className={cn(
-                                    "h-4 w-4 cursor-help",
+                                    "h-5 w-5",
                                     isDark ? "text-green-400" : "text-green-600"
                                   )}
                                 />
-                                <div
+                                <span
                                   className={cn(
-                                    "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center",
-                                    isDark
-                                      ? "bg-slate-800 text-slate-100"
-                                      : "bg-slate-900 text-white"
+                                    "font-medium",
+                                    isDark ? "text-slate-100" : "text-slate-900"
                                   )}
                                 >
-                                  Every submission that gets verified will
-                                  receive this guaranteed bonus amount. Your
-                                  submission will only get verified if you
-                                  follow the brief and rules & guidelines.
+                                  Guaranteed Bonus
+                                </span>
+                                <div className="group relative">
+                                  <Info
+                                    className={cn(
+                                      "h-4 w-4 cursor-help",
+                                      isDark
+                                        ? "text-green-400"
+                                        : "text-green-600"
+                                    )}
+                                  />
+                                  <div
+                                    className={cn(
+                                      "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center",
+                                      isDark
+                                        ? "bg-slate-800 text-slate-100"
+                                        : "bg-slate-900 text-white"
+                                    )}
+                                  >
+                                    Every submission that gets verified will
+                                    receive this guaranteed bonus amount. Your
+                                    submission will only get verified if you
+                                    follow the brief and rules & guidelines.
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div
+                                  className={cn(
+                                    "text-lg font-bold",
+                                    isDark ? "text-green-100" : "text-green-900"
+                                  )}
+                                >
+                                  {formatMoney(
+                                    contest.contest_based_details.cpm_contest
+                                      .flat_fee_bonus
+                                  )}
+                                </div>
+                                <div
+                                  className={cn(
+                                    "text-xs",
+                                    isDark ? "text-green-300" : "text-green-700"
+                                  )}
+                                >
+                                  per verified submission
                                 </div>
                               </div>
                             </div>
-                            <div className="text-right">
+                            {/* Flat Fee Bonus Cap (CPM only) */}
+                            {(contest.contest_based_details?.cpm_contest as any)
+                              ?.flat_fee_bonus_cap && (
                               <div
                                 className={cn(
-                                  "text-lg font-bold",
-                                  isDark ? "text-green-100" : "text-green-900"
+                                  "pt-3 border-t",
+                                  isDark
+                                    ? "border-green-800/70"
+                                    : "border-green-200"
                                 )}
                               >
-                                {formatMoney(
-                                  contest.contest_based_details.cpm_contest
-                                    .flat_fee_bonus
-                                )}
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium mb-1",
+                                    isDark ? "text-green-200" : "text-green-800"
+                                  )}
+                                >
+                                  Maximum Flat Fee Bonus Cap
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-base",
+                                    isDark ? "text-green-300" : "text-green-900"
+                                  )}
+                                >
+                                  Up to{" "}
+                                  <span className="font-semibold">
+                                    {formatMoney(
+                                      (
+                                        contest.contest_based_details
+                                          ?.cpm_contest as any
+                                      )?.flat_fee_bonus_cap
+                                    )}
+                                  </span>{" "}
+                                  total in flat bonuses can be distributed
+                                  across all creators.
+                                </p>
                               </div>
-                              <div
-                                className={cn(
-                                  "text-xs",
-                                  isDark ? "text-green-300" : "text-green-700"
-                                )}
-                              >
-                                per verified submission
-                              </div>
-                            </div>
+                            )}
                           </div>
                         )}
 
