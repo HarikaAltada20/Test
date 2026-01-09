@@ -4402,6 +4402,94 @@ export function ContestClientPage({
                     );
                   })()}
 
+                  {/* Twitter CPM Points Configuration */}
+                  {contest.platform === "twitter" &&
+                    contest.contest_format === "text_image" &&
+                    contest.contest_based_details?.twitter_campaign
+                      ?.points_config && (
+                      <div className="mt-4">
+                        <h4 className="text-md font-semibold mb-3 text-foreground">
+                          Points Breakdown (Twitter Metrics)
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {(() => {
+                            const config =
+                              contest.contest_based_details.twitter_campaign
+                                .points_config;
+                            const metrics = [
+                              {
+                                label: "Likes",
+                                weight: config.likes_weight,
+                                icon: ThumbsUp,
+                              },
+                              {
+                                label: "Comments/Replies",
+                                weight: config.comments_weight,
+                                icon: MessageCircle,
+                              },
+                              {
+                                label: "Retweets",
+                                weight: config.retweets_weight,
+                                icon: RefreshCw,
+                              },
+                              {
+                                label: "Quote Reposts",
+                                weight: config.quote_reposts_weight,
+                                icon: Share2,
+                              },
+                              {
+                                label: "Views/Impressions",
+                                weight: config.impressions_weight,
+                                icon: Eye,
+                              },
+                            ].filter((m) => m.weight > 0);
+
+                            return metrics.map((metric, idx) => {
+                              const IconComponent = metric.icon;
+                              return (
+                                <div
+                                  key={idx}
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600 bg-[#170337]"
+                                      : "border-gray-300 bg-gray-50"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium flex items-center gap-2",
+                                      isDark ? "text-white" : "text-gray-700"
+                                    )}
+                                  >
+                                    {IconComponent && (
+                                      <IconComponent className="h-4 w-4" />
+                                    )}
+                                    {metric.label}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "text-sm font-semibold",
+                                      isDark
+                                        ? "text-purple-300"
+                                        : "text-purple-600"
+                                    )}
+                                  >
+                                    {metric.weight}{" "}
+                                    {metric.weight === 1 ? "pt" : "pts"}
+                                  </span>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-3">
+                          Points are calculated from each tweet's engagement
+                          metrics. Total points determine CPM-based payout.
+                        </p>
+                      </div>
+                    )}
+
                   {/* Brief Section */}
                   <div
                     className={cn(
