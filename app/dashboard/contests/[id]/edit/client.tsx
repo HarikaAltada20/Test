@@ -479,6 +479,51 @@ export default function EditContestPage({
     impressionsWeight: "",
   });
 
+  // CPM Points Configuration (similar to RAID_POINTS_CONFIG)
+  const [cpmPointsConfig, setCpmPointsConfig] = useState<{
+    // Base points
+    comment_base_points: number | string;
+    retweet_base_points: number | string;
+    quote_repost_base_points: number | string;
+    // Comment engagement multipliers
+    comment_likes_multiplier: number | string;
+    comment_replies_multiplier: number | string;
+    comment_impressions_multiplier: number | string;
+    comment_retweets_multiplier: number | string;
+    comment_quote_reposts_multiplier: number | string;
+    // Retweet engagement multipliers
+    retweet_likes_multiplier: number | string;
+    retweet_replies_multiplier: number | string;
+    retweet_impressions_multiplier: number | string;
+    retweet_retweets_multiplier: number | string;
+    retweet_quote_reposts_multiplier: number | string;
+    // Quote repost engagement multipliers
+    quote_repost_likes_multiplier: number | string;
+    quote_repost_replies_multiplier: number | string;
+    quote_repost_impressions_multiplier: number | string;
+    quote_repost_retweets_multiplier: number | string;
+    quote_repost_quote_reposts_multiplier: number | string;
+  }>({
+    comment_base_points: "1",
+    retweet_base_points: "5",
+    quote_repost_base_points: "10",
+    comment_likes_multiplier: "0.1",
+    comment_replies_multiplier: "1",
+    comment_impressions_multiplier: "0.001",
+    comment_retweets_multiplier: "0",
+    comment_quote_reposts_multiplier: "0",
+    retweet_likes_multiplier: "0.05",
+    retweet_replies_multiplier: "0.05",
+    retweet_impressions_multiplier: "0.001",
+    retweet_retweets_multiplier: "0.05",
+    retweet_quote_reposts_multiplier: "0",
+    quote_repost_likes_multiplier: "0.1",
+    quote_repost_replies_multiplier: "0.1",
+    quote_repost_impressions_multiplier: "0.001",
+    quote_repost_retweets_multiplier: "0.1",
+    quote_repost_quote_reposts_multiplier: "0.1",
+  });
+
   // New features state (2025-10-01)
   const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] =
     useState(false);
@@ -490,6 +535,12 @@ export default function EditContestPage({
   const [category, setCategory] = useState<string>("technology");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
   const [flatFeeBonusCap, setFlatFeeBonusCap] = useState<number | string>(""); // In dollars - for CPM contests only
+
+  // Checkboxes to show/hide engagement multiplier sections
+  const [showCommentMultipliers, setShowCommentMultipliers] = useState(false);
+  const [showRetweetMultipliers, setShowRetweetMultipliers] = useState(false);
+  const [showQuoteRepostMultipliers, setShowQuoteRepostMultipliers] =
+    useState(false);
   const [bonusEnabled, setBonusEnabled] = useState(false);
   const [bonusHtml, setBonusHtml] = useState("");
   const [bonusJson, setBonusJson] = useState<any>(null);
@@ -997,6 +1048,124 @@ export default function EditContestPage({
                 setTermsConditions(cpmDetails.terms_conditions || "");
                 // Set original budget for tracking changes (cpm budget is stored in cents, prize pool only)
                 setOriginalBudget(cpmDetails.total_budget || 0);
+
+                // Load CPM Points Configuration if it exists
+                if (cpmDetails.points_config) {
+                  const pc = cpmDetails.points_config;
+                  // Only load values that exist - don't set defaults for missing fields
+                  setCpmPointsConfig({
+                    comment_base_points:
+                      pc.comment_base_points?.toString() ?? "1",
+                    retweet_base_points:
+                      pc.retweet_base_points?.toString() ?? "5",
+                    quote_repost_base_points:
+                      pc.quote_repost_base_points?.toString() ?? "10",
+                    comment_likes_multiplier:
+                      pc.comment_likes_multiplier !== undefined &&
+                      pc.comment_likes_multiplier !== null
+                        ? pc.comment_likes_multiplier.toString()
+                        : "",
+                    comment_replies_multiplier:
+                      pc.comment_replies_multiplier !== undefined &&
+                      pc.comment_replies_multiplier !== null
+                        ? pc.comment_replies_multiplier.toString()
+                        : "",
+                    comment_impressions_multiplier:
+                      pc.comment_impressions_multiplier !== undefined &&
+                      pc.comment_impressions_multiplier !== null
+                        ? pc.comment_impressions_multiplier.toString()
+                        : "",
+                    comment_retweets_multiplier:
+                      pc.comment_retweets_multiplier !== undefined &&
+                      pc.comment_retweets_multiplier !== null
+                        ? pc.comment_retweets_multiplier.toString()
+                        : "",
+                    comment_quote_reposts_multiplier:
+                      pc.comment_quote_reposts_multiplier !== undefined &&
+                      pc.comment_quote_reposts_multiplier !== null
+                        ? pc.comment_quote_reposts_multiplier.toString()
+                        : "",
+                    retweet_likes_multiplier:
+                      pc.retweet_likes_multiplier !== undefined &&
+                      pc.retweet_likes_multiplier !== null
+                        ? pc.retweet_likes_multiplier.toString()
+                        : "",
+                    retweet_replies_multiplier:
+                      pc.retweet_replies_multiplier !== undefined &&
+                      pc.retweet_replies_multiplier !== null
+                        ? pc.retweet_replies_multiplier.toString()
+                        : "",
+                    retweet_impressions_multiplier:
+                      pc.retweet_impressions_multiplier !== undefined &&
+                      pc.retweet_impressions_multiplier !== null
+                        ? pc.retweet_impressions_multiplier.toString()
+                        : "",
+                    retweet_retweets_multiplier:
+                      pc.retweet_retweets_multiplier !== undefined &&
+                      pc.retweet_retweets_multiplier !== null
+                        ? pc.retweet_retweets_multiplier.toString()
+                        : "",
+                    retweet_quote_reposts_multiplier:
+                      pc.retweet_quote_reposts_multiplier !== undefined &&
+                      pc.retweet_quote_reposts_multiplier !== null
+                        ? pc.retweet_quote_reposts_multiplier.toString()
+                        : "",
+                    quote_repost_likes_multiplier:
+                      pc.quote_repost_likes_multiplier !== undefined &&
+                      pc.quote_repost_likes_multiplier !== null
+                        ? pc.quote_repost_likes_multiplier.toString()
+                        : "",
+                    quote_repost_replies_multiplier:
+                      pc.quote_repost_replies_multiplier !== undefined &&
+                      pc.quote_repost_replies_multiplier !== null
+                        ? pc.quote_repost_replies_multiplier.toString()
+                        : "",
+                    quote_repost_impressions_multiplier:
+                      pc.quote_repost_impressions_multiplier !== undefined &&
+                      pc.quote_repost_impressions_multiplier !== null
+                        ? pc.quote_repost_impressions_multiplier.toString()
+                        : "",
+                    quote_repost_retweets_multiplier:
+                      pc.quote_repost_retweets_multiplier !== undefined &&
+                      pc.quote_repost_retweets_multiplier !== null
+                        ? pc.quote_repost_retweets_multiplier.toString()
+                        : "",
+                    quote_repost_quote_reposts_multiplier:
+                      pc.quote_repost_quote_reposts_multiplier !== undefined &&
+                      pc.quote_repost_quote_reposts_multiplier !== null
+                        ? pc.quote_repost_quote_reposts_multiplier.toString()
+                        : "",
+                  });
+
+                  // Set checkbox states based on existing multiplier data
+                  setShowCommentMultipliers(
+                    !!(
+                      pc.comment_likes_multiplier ||
+                      pc.comment_replies_multiplier ||
+                      pc.comment_impressions_multiplier ||
+                      pc.comment_retweets_multiplier ||
+                      pc.comment_quote_reposts_multiplier
+                    )
+                  );
+                  setShowRetweetMultipliers(
+                    !!(
+                      pc.retweet_likes_multiplier ||
+                      pc.retweet_replies_multiplier ||
+                      pc.retweet_impressions_multiplier ||
+                      pc.retweet_retweets_multiplier ||
+                      pc.retweet_quote_reposts_multiplier
+                    )
+                  );
+                  setShowQuoteRepostMultipliers(
+                    !!(
+                      pc.quote_repost_likes_multiplier ||
+                      pc.quote_repost_replies_multiplier ||
+                      pc.quote_repost_impressions_multiplier ||
+                      pc.quote_repost_retweets_multiplier ||
+                      pc.quote_repost_quote_reposts_multiplier
+                    )
+                  );
+                }
               }
             }
 
@@ -2219,6 +2388,123 @@ export default function EditContestPage({
         );
       }
 
+      // Add CPM Points Configuration (for Twitter CPM contests)
+      if (platform?.toLowerCase() === "twitter") {
+        // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
+        const isValidMultiplierValue = (value: number | string): boolean => {
+          if (value === null || value === undefined) return false;
+          const strValue = value.toString().trim();
+          if (strValue === "" || strValue === null) return false;
+          const numValue = parseFloat(strValue);
+          return !isNaN(numValue);
+        };
+
+        // Helper function to get multiplier value or undefined if invalid
+        const getMultiplierValue = (
+          value: number | string
+        ): number | undefined => {
+          if (!isValidMultiplierValue(value)) return undefined;
+          return parseFloat(value.toString().trim());
+        };
+
+        // Build points_config - only include fields with valid (non-blank) values
+        const pointsConfig: any = {};
+
+        if (showCommentMultipliers) {
+          const commentLikes = getMultiplierValue(
+            cpmPointsConfig.comment_likes_multiplier
+          );
+          const commentReplies = getMultiplierValue(
+            cpmPointsConfig.comment_replies_multiplier
+          );
+          const commentImpressions = getMultiplierValue(
+            cpmPointsConfig.comment_impressions_multiplier
+          );
+          const commentRetweets = getMultiplierValue(
+            cpmPointsConfig.comment_retweets_multiplier
+          );
+          const commentQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.comment_quote_reposts_multiplier
+          );
+
+          if (commentLikes !== undefined)
+            pointsConfig.comment_likes_multiplier = commentLikes;
+          if (commentReplies !== undefined)
+            pointsConfig.comment_replies_multiplier = commentReplies;
+          if (commentImpressions !== undefined)
+            pointsConfig.comment_impressions_multiplier = commentImpressions;
+          if (commentRetweets !== undefined)
+            pointsConfig.comment_retweets_multiplier = commentRetweets;
+          if (commentQuoteReposts !== undefined)
+            pointsConfig.comment_quote_reposts_multiplier = commentQuoteReposts;
+        }
+
+        if (showRetweetMultipliers) {
+          const retweetLikes = getMultiplierValue(
+            cpmPointsConfig.retweet_likes_multiplier
+          );
+          const retweetReplies = getMultiplierValue(
+            cpmPointsConfig.retweet_replies_multiplier
+          );
+          const retweetImpressions = getMultiplierValue(
+            cpmPointsConfig.retweet_impressions_multiplier
+          );
+          const retweetRetweets = getMultiplierValue(
+            cpmPointsConfig.retweet_retweets_multiplier
+          );
+          const retweetQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.retweet_quote_reposts_multiplier
+          );
+
+          if (retweetLikes !== undefined)
+            pointsConfig.retweet_likes_multiplier = retweetLikes;
+          if (retweetReplies !== undefined)
+            pointsConfig.retweet_replies_multiplier = retweetReplies;
+          if (retweetImpressions !== undefined)
+            pointsConfig.retweet_impressions_multiplier = retweetImpressions;
+          if (retweetRetweets !== undefined)
+            pointsConfig.retweet_retweets_multiplier = retweetRetweets;
+          if (retweetQuoteReposts !== undefined)
+            pointsConfig.retweet_quote_reposts_multiplier = retweetQuoteReposts;
+        }
+
+        if (showQuoteRepostMultipliers) {
+          const quoteRepostLikes = getMultiplierValue(
+            cpmPointsConfig.quote_repost_likes_multiplier
+          );
+          const quoteRepostReplies = getMultiplierValue(
+            cpmPointsConfig.quote_repost_replies_multiplier
+          );
+          const quoteRepostImpressions = getMultiplierValue(
+            cpmPointsConfig.quote_repost_impressions_multiplier
+          );
+          const quoteRepostRetweets = getMultiplierValue(
+            cpmPointsConfig.quote_repost_retweets_multiplier
+          );
+          const quoteRepostQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.quote_repost_quote_reposts_multiplier
+          );
+
+          if (quoteRepostLikes !== undefined)
+            pointsConfig.quote_repost_likes_multiplier = quoteRepostLikes;
+          if (quoteRepostReplies !== undefined)
+            pointsConfig.quote_repost_replies_multiplier = quoteRepostReplies;
+          if (quoteRepostImpressions !== undefined)
+            pointsConfig.quote_repost_impressions_multiplier =
+              quoteRepostImpressions;
+          if (quoteRepostRetweets !== undefined)
+            pointsConfig.quote_repost_retweets_multiplier = quoteRepostRetweets;
+          if (quoteRepostQuoteReposts !== undefined)
+            pointsConfig.quote_repost_quote_reposts_multiplier =
+              quoteRepostQuoteReposts;
+        }
+
+        // Only set points_config if there are valid values
+        if (Object.keys(pointsConfig).length > 0) {
+          cpmDetails.points_config = pointsConfig;
+        }
+      }
+
       contestBasedDetails.cpm_contest = cpmDetails;
     } else if (!datesOnly) {
       toast({
@@ -3214,6 +3500,132 @@ export default function EditContestPage({
                   : null;
               }
 
+              // Add CPM Points Configuration (for Twitter CPM contests)
+              if (platform?.toLowerCase() === "twitter") {
+                // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
+                const isValidMultiplierValue = (
+                  value: number | string
+                ): boolean => {
+                  if (value === null || value === undefined) return false;
+                  const strValue = value.toString().trim();
+                  if (strValue === "" || strValue === null) return false;
+                  const numValue = parseFloat(strValue);
+                  return !isNaN(numValue);
+                };
+
+                // Helper function to get multiplier value or undefined if invalid
+                const getMultiplierValue = (
+                  value: number | string
+                ): number | undefined => {
+                  if (!isValidMultiplierValue(value)) return undefined;
+                  return parseFloat(value.toString().trim());
+                };
+
+                // Build points_config - only include fields with valid (non-blank) values
+                const pointsConfig: any = {};
+
+                if (showCommentMultipliers) {
+                  const commentLikes = getMultiplierValue(
+                    cpmPointsConfig.comment_likes_multiplier
+                  );
+                  const commentReplies = getMultiplierValue(
+                    cpmPointsConfig.comment_replies_multiplier
+                  );
+                  const commentImpressions = getMultiplierValue(
+                    cpmPointsConfig.comment_impressions_multiplier
+                  );
+                  const commentRetweets = getMultiplierValue(
+                    cpmPointsConfig.comment_retweets_multiplier
+                  );
+                  const commentQuoteReposts = getMultiplierValue(
+                    cpmPointsConfig.comment_quote_reposts_multiplier
+                  );
+
+                  if (commentLikes !== undefined)
+                    pointsConfig.comment_likes_multiplier = commentLikes;
+                  if (commentReplies !== undefined)
+                    pointsConfig.comment_replies_multiplier = commentReplies;
+                  if (commentImpressions !== undefined)
+                    pointsConfig.comment_impressions_multiplier =
+                      commentImpressions;
+                  if (commentRetweets !== undefined)
+                    pointsConfig.comment_retweets_multiplier = commentRetweets;
+                  if (commentQuoteReposts !== undefined)
+                    pointsConfig.comment_quote_reposts_multiplier =
+                      commentQuoteReposts;
+                }
+
+                if (showRetweetMultipliers) {
+                  const retweetLikes = getMultiplierValue(
+                    cpmPointsConfig.retweet_likes_multiplier
+                  );
+                  const retweetReplies = getMultiplierValue(
+                    cpmPointsConfig.retweet_replies_multiplier
+                  );
+                  const retweetImpressions = getMultiplierValue(
+                    cpmPointsConfig.retweet_impressions_multiplier
+                  );
+                  const retweetRetweets = getMultiplierValue(
+                    cpmPointsConfig.retweet_retweets_multiplier
+                  );
+                  const retweetQuoteReposts = getMultiplierValue(
+                    cpmPointsConfig.retweet_quote_reposts_multiplier
+                  );
+
+                  if (retweetLikes !== undefined)
+                    pointsConfig.retweet_likes_multiplier = retweetLikes;
+                  if (retweetReplies !== undefined)
+                    pointsConfig.retweet_replies_multiplier = retweetReplies;
+                  if (retweetImpressions !== undefined)
+                    pointsConfig.retweet_impressions_multiplier =
+                      retweetImpressions;
+                  if (retweetRetweets !== undefined)
+                    pointsConfig.retweet_retweets_multiplier = retweetRetweets;
+                  if (retweetQuoteReposts !== undefined)
+                    pointsConfig.retweet_quote_reposts_multiplier =
+                      retweetQuoteReposts;
+                }
+
+                if (showQuoteRepostMultipliers) {
+                  const quoteRepostLikes = getMultiplierValue(
+                    cpmPointsConfig.quote_repost_likes_multiplier
+                  );
+                  const quoteRepostReplies = getMultiplierValue(
+                    cpmPointsConfig.quote_repost_replies_multiplier
+                  );
+                  const quoteRepostImpressions = getMultiplierValue(
+                    cpmPointsConfig.quote_repost_impressions_multiplier
+                  );
+                  const quoteRepostRetweets = getMultiplierValue(
+                    cpmPointsConfig.quote_repost_retweets_multiplier
+                  );
+                  const quoteRepostQuoteReposts = getMultiplierValue(
+                    cpmPointsConfig.quote_repost_quote_reposts_multiplier
+                  );
+
+                  if (quoteRepostLikes !== undefined)
+                    pointsConfig.quote_repost_likes_multiplier =
+                      quoteRepostLikes;
+                  if (quoteRepostReplies !== undefined)
+                    pointsConfig.quote_repost_replies_multiplier =
+                      quoteRepostReplies;
+                  if (quoteRepostImpressions !== undefined)
+                    pointsConfig.quote_repost_impressions_multiplier =
+                      quoteRepostImpressions;
+                  if (quoteRepostRetweets !== undefined)
+                    pointsConfig.quote_repost_retweets_multiplier =
+                      quoteRepostRetweets;
+                  if (quoteRepostQuoteReposts !== undefined)
+                    pointsConfig.quote_repost_quote_reposts_multiplier =
+                      quoteRepostQuoteReposts;
+                }
+
+                // Only set points_config if there are valid values
+                if (Object.keys(pointsConfig).length > 0) {
+                  cpmContestDetails.points_config = pointsConfig;
+                }
+              }
+
               return { cpm_contest: cpmContestDetails };
             })();
 
@@ -3633,6 +4045,78 @@ export default function EditContestPage({
                     : null;
                 }
 
+                // Add CPM Points Configuration (for Twitter CPM contests)
+                if (platform?.toLowerCase() === "twitter") {
+                  cpmContestDetails.points_config = {
+                    ...(showCommentMultipliers && {
+                      comment_likes_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.comment_likes_multiplier.toString()
+                        ) || 0.1,
+                      comment_replies_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.comment_replies_multiplier.toString()
+                        ) || 1,
+                      comment_impressions_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.comment_impressions_multiplier.toString()
+                        ) || 0.001,
+                      comment_retweets_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.comment_retweets_multiplier.toString()
+                        ) || 0,
+                      comment_quote_reposts_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.comment_quote_reposts_multiplier.toString()
+                        ) || 0,
+                    }),
+                    ...(showRetweetMultipliers && {
+                      retweet_likes_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.retweet_likes_multiplier.toString()
+                        ) || 0.05,
+                      retweet_replies_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.retweet_replies_multiplier.toString()
+                        ) || 0.05,
+                      retweet_impressions_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.retweet_impressions_multiplier.toString()
+                        ) || 0.001,
+                      retweet_retweets_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.retweet_retweets_multiplier.toString()
+                        ) || 0.05,
+                      retweet_quote_reposts_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.retweet_quote_reposts_multiplier.toString()
+                        ) || 0,
+                    }),
+                    ...(showQuoteRepostMultipliers && {
+                      quote_repost_likes_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.quote_repost_likes_multiplier.toString()
+                        ) || 0.1,
+                      quote_repost_replies_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.quote_repost_replies_multiplier.toString()
+                        ) || 0.1,
+                      quote_repost_impressions_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.quote_repost_impressions_multiplier.toString()
+                        ) || 0.001,
+                      quote_repost_retweets_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.quote_repost_retweets_multiplier.toString()
+                        ) || 0.1,
+                      quote_repost_quote_reposts_multiplier:
+                        parseFloat(
+                          cpmPointsConfig.quote_repost_quote_reposts_multiplier.toString()
+                        ) || 0.1,
+                    }),
+                  };
+                }
+
                 return { cpm_contest: cpmContestDetails };
               })();
 
@@ -3852,6 +4336,134 @@ export default function EditContestPage({
                   cpmContestDetails.max_views = maxViews
                     ? parseInt(maxViews.toString())
                     : null;
+                }
+
+                // Add CPM Points Configuration (for Twitter CPM contests)
+                if (platform?.toLowerCase() === "twitter") {
+                  // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
+                  const isValidMultiplierValue = (
+                    value: number | string
+                  ): boolean => {
+                    if (value === null || value === undefined) return false;
+                    const strValue = value.toString().trim();
+                    if (strValue === "" || strValue === null) return false;
+                    const numValue = parseFloat(strValue);
+                    return !isNaN(numValue);
+                  };
+
+                  // Helper function to get multiplier value or undefined if invalid
+                  const getMultiplierValue = (
+                    value: number | string
+                  ): number | undefined => {
+                    if (!isValidMultiplierValue(value)) return undefined;
+                    return parseFloat(value.toString().trim());
+                  };
+
+                  // Build points_config - only include fields with valid (non-blank) values
+                  const pointsConfig: any = {};
+
+                  if (showCommentMultipliers) {
+                    const commentLikes = getMultiplierValue(
+                      cpmPointsConfig.comment_likes_multiplier
+                    );
+                    const commentReplies = getMultiplierValue(
+                      cpmPointsConfig.comment_replies_multiplier
+                    );
+                    const commentImpressions = getMultiplierValue(
+                      cpmPointsConfig.comment_impressions_multiplier
+                    );
+                    const commentRetweets = getMultiplierValue(
+                      cpmPointsConfig.comment_retweets_multiplier
+                    );
+                    const commentQuoteReposts = getMultiplierValue(
+                      cpmPointsConfig.comment_quote_reposts_multiplier
+                    );
+
+                    if (commentLikes !== undefined)
+                      pointsConfig.comment_likes_multiplier = commentLikes;
+                    if (commentReplies !== undefined)
+                      pointsConfig.comment_replies_multiplier = commentReplies;
+                    if (commentImpressions !== undefined)
+                      pointsConfig.comment_impressions_multiplier =
+                        commentImpressions;
+                    if (commentRetweets !== undefined)
+                      pointsConfig.comment_retweets_multiplier =
+                        commentRetweets;
+                    if (commentQuoteReposts !== undefined)
+                      pointsConfig.comment_quote_reposts_multiplier =
+                        commentQuoteReposts;
+                  }
+
+                  if (showRetweetMultipliers) {
+                    const retweetLikes = getMultiplierValue(
+                      cpmPointsConfig.retweet_likes_multiplier
+                    );
+                    const retweetReplies = getMultiplierValue(
+                      cpmPointsConfig.retweet_replies_multiplier
+                    );
+                    const retweetImpressions = getMultiplierValue(
+                      cpmPointsConfig.retweet_impressions_multiplier
+                    );
+                    const retweetRetweets = getMultiplierValue(
+                      cpmPointsConfig.retweet_retweets_multiplier
+                    );
+                    const retweetQuoteReposts = getMultiplierValue(
+                      cpmPointsConfig.retweet_quote_reposts_multiplier
+                    );
+
+                    if (retweetLikes !== undefined)
+                      pointsConfig.retweet_likes_multiplier = retweetLikes;
+                    if (retweetReplies !== undefined)
+                      pointsConfig.retweet_replies_multiplier = retweetReplies;
+                    if (retweetImpressions !== undefined)
+                      pointsConfig.retweet_impressions_multiplier =
+                        retweetImpressions;
+                    if (retweetRetweets !== undefined)
+                      pointsConfig.retweet_retweets_multiplier =
+                        retweetRetweets;
+                    if (retweetQuoteReposts !== undefined)
+                      pointsConfig.retweet_quote_reposts_multiplier =
+                        retweetQuoteReposts;
+                  }
+
+                  if (showQuoteRepostMultipliers) {
+                    const quoteRepostLikes = getMultiplierValue(
+                      cpmPointsConfig.quote_repost_likes_multiplier
+                    );
+                    const quoteRepostReplies = getMultiplierValue(
+                      cpmPointsConfig.quote_repost_replies_multiplier
+                    );
+                    const quoteRepostImpressions = getMultiplierValue(
+                      cpmPointsConfig.quote_repost_impressions_multiplier
+                    );
+                    const quoteRepostRetweets = getMultiplierValue(
+                      cpmPointsConfig.quote_repost_retweets_multiplier
+                    );
+                    const quoteRepostQuoteReposts = getMultiplierValue(
+                      cpmPointsConfig.quote_repost_quote_reposts_multiplier
+                    );
+
+                    if (quoteRepostLikes !== undefined)
+                      pointsConfig.quote_repost_likes_multiplier =
+                        quoteRepostLikes;
+                    if (quoteRepostReplies !== undefined)
+                      pointsConfig.quote_repost_replies_multiplier =
+                        quoteRepostReplies;
+                    if (quoteRepostImpressions !== undefined)
+                      pointsConfig.quote_repost_impressions_multiplier =
+                        quoteRepostImpressions;
+                    if (quoteRepostRetweets !== undefined)
+                      pointsConfig.quote_repost_retweets_multiplier =
+                        quoteRepostRetweets;
+                    if (quoteRepostQuoteReposts !== undefined)
+                      pointsConfig.quote_repost_quote_reposts_multiplier =
+                        quoteRepostQuoteReposts;
+                  }
+
+                  // Only set points_config if there are valid values
+                  if (Object.keys(pointsConfig).length > 0) {
+                    cpmContestDetails.points_config = pointsConfig;
+                  }
                 }
 
                 return { cpm_contest: cpmContestDetails };
@@ -5068,6 +5680,123 @@ export default function EditContestPage({
         cpmDetails.flat_fee_bonus = Math.round(
           parseFloat(flatFeeBonus.toString()) * 100
         );
+      }
+
+      // Add CPM Points Configuration (for Twitter CPM contests)
+      if (platform?.toLowerCase() === "twitter") {
+        // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
+        const isValidMultiplierValue = (value: number | string): boolean => {
+          if (value === null || value === undefined) return false;
+          const strValue = value.toString().trim();
+          if (strValue === "" || strValue === null) return false;
+          const numValue = parseFloat(strValue);
+          return !isNaN(numValue);
+        };
+
+        // Helper function to get multiplier value or undefined if invalid
+        const getMultiplierValue = (
+          value: number | string
+        ): number | undefined => {
+          if (!isValidMultiplierValue(value)) return undefined;
+          return parseFloat(value.toString().trim());
+        };
+
+        // Build points_config - only include fields with valid (non-blank) values
+        const pointsConfig: any = {};
+
+        if (showCommentMultipliers) {
+          const commentLikes = getMultiplierValue(
+            cpmPointsConfig.comment_likes_multiplier
+          );
+          const commentReplies = getMultiplierValue(
+            cpmPointsConfig.comment_replies_multiplier
+          );
+          const commentImpressions = getMultiplierValue(
+            cpmPointsConfig.comment_impressions_multiplier
+          );
+          const commentRetweets = getMultiplierValue(
+            cpmPointsConfig.comment_retweets_multiplier
+          );
+          const commentQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.comment_quote_reposts_multiplier
+          );
+
+          if (commentLikes !== undefined)
+            pointsConfig.comment_likes_multiplier = commentLikes;
+          if (commentReplies !== undefined)
+            pointsConfig.comment_replies_multiplier = commentReplies;
+          if (commentImpressions !== undefined)
+            pointsConfig.comment_impressions_multiplier = commentImpressions;
+          if (commentRetweets !== undefined)
+            pointsConfig.comment_retweets_multiplier = commentRetweets;
+          if (commentQuoteReposts !== undefined)
+            pointsConfig.comment_quote_reposts_multiplier = commentQuoteReposts;
+        }
+
+        if (showRetweetMultipliers) {
+          const retweetLikes = getMultiplierValue(
+            cpmPointsConfig.retweet_likes_multiplier
+          );
+          const retweetReplies = getMultiplierValue(
+            cpmPointsConfig.retweet_replies_multiplier
+          );
+          const retweetImpressions = getMultiplierValue(
+            cpmPointsConfig.retweet_impressions_multiplier
+          );
+          const retweetRetweets = getMultiplierValue(
+            cpmPointsConfig.retweet_retweets_multiplier
+          );
+          const retweetQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.retweet_quote_reposts_multiplier
+          );
+
+          if (retweetLikes !== undefined)
+            pointsConfig.retweet_likes_multiplier = retweetLikes;
+          if (retweetReplies !== undefined)
+            pointsConfig.retweet_replies_multiplier = retweetReplies;
+          if (retweetImpressions !== undefined)
+            pointsConfig.retweet_impressions_multiplier = retweetImpressions;
+          if (retweetRetweets !== undefined)
+            pointsConfig.retweet_retweets_multiplier = retweetRetweets;
+          if (retweetQuoteReposts !== undefined)
+            pointsConfig.retweet_quote_reposts_multiplier = retweetQuoteReposts;
+        }
+
+        if (showQuoteRepostMultipliers) {
+          const quoteRepostLikes = getMultiplierValue(
+            cpmPointsConfig.quote_repost_likes_multiplier
+          );
+          const quoteRepostReplies = getMultiplierValue(
+            cpmPointsConfig.quote_repost_replies_multiplier
+          );
+          const quoteRepostImpressions = getMultiplierValue(
+            cpmPointsConfig.quote_repost_impressions_multiplier
+          );
+          const quoteRepostRetweets = getMultiplierValue(
+            cpmPointsConfig.quote_repost_retweets_multiplier
+          );
+          const quoteRepostQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.quote_repost_quote_reposts_multiplier
+          );
+
+          if (quoteRepostLikes !== undefined)
+            pointsConfig.quote_repost_likes_multiplier = quoteRepostLikes;
+          if (quoteRepostReplies !== undefined)
+            pointsConfig.quote_repost_replies_multiplier = quoteRepostReplies;
+          if (quoteRepostImpressions !== undefined)
+            pointsConfig.quote_repost_impressions_multiplier =
+              quoteRepostImpressions;
+          if (quoteRepostRetweets !== undefined)
+            pointsConfig.quote_repost_retweets_multiplier = quoteRepostRetweets;
+          if (quoteRepostQuoteReposts !== undefined)
+            pointsConfig.quote_repost_quote_reposts_multiplier =
+              quoteRepostQuoteReposts;
+        }
+
+        // Only set points_config if there are valid values
+        if (Object.keys(pointsConfig).length > 0) {
+          cpmDetails.points_config = pointsConfig;
+        }
       }
 
       // Add flat fee bonus cap if specified (stored in cents) - required for CPM contests with flat fee bonus
@@ -8813,82 +9542,548 @@ export default function EditContestPage({
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
-                        <label className="flex items-center gap-2 text-sm">
-                          <span>Comments / Replies</span>
-                        </label>
-                        <div className="sm:col-span-2">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={twitterPointsConfig.commentsWeight}
-                            onChange={(e) =>
-                              setTwitterPointsConfig((prev) => ({
-                                ...prev,
-                                commentsWeight: e.target.value,
-                              }))
-                            }
-                            placeholder="e.g., 3"
-                            className={cn(
-                              isDark
-                                ? "bg-[#180438] border border-gray-600 text-white"
-                                : "bg-white"
-                            )}
-                          />
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                          <label className="flex items-center gap-2 text-sm">
+                            <span>Comments / Replies</span>
+                          </label>
+                          <div className="sm:col-span-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={twitterPointsConfig.commentsWeight}
+                              onChange={(e) =>
+                                setTwitterPointsConfig((prev) => ({
+                                  ...prev,
+                                  commentsWeight: e.target.value,
+                                }))
+                              }
+                              placeholder="e.g., 3"
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white"
+                              )}
+                            />
+                          </div>
                         </div>
+                        <div className="flex items-center gap-2 ml-0 sm:ml-[calc(33.333%+0.75rem)]">
+                          <Checkbox
+                            id="showCommentMultipliers"
+                            checked={showCommentMultipliers}
+                            onCheckedChange={(checked) =>
+                              setShowCommentMultipliers(checked === true)
+                            }
+                          />
+                          <Label
+                            htmlFor="showCommentMultipliers"
+                            className="text-sm cursor-pointer"
+                          >
+                            Configure Comment Engagement Multipliers
+                          </Label>
+                        </div>
+                        {showCommentMultipliers && (
+                          <div className="ml-0 sm:ml-[calc(33.333%+0.75rem)] mt-3 p-4 border rounded-lg space-y-3">
+                            <h5 className="text-sm font-medium">
+                              Comment Engagement Multipliers
+                            </h5>
+                            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="commentLikesMultiplier">
+                                  Likes Multiplier
+                                </Label>
+                                <Input
+                                  id="commentLikesMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={
+                                    cpmPointsConfig.comment_likes_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      comment_likes_multiplier: e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="commentRepliesMultiplier">
+                                  Replies Multiplier
+                                </Label>
+                                <Input
+                                  id="commentRepliesMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={
+                                    cpmPointsConfig.comment_replies_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      comment_replies_multiplier:
+                                        e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="commentImpressionsMultiplier">
+                                  Impressions Multiplier
+                                </Label>
+                                <Input
+                                  id="commentImpressionsMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.0001"
+                                  value={
+                                    cpmPointsConfig.comment_impressions_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      comment_impressions_multiplier:
+                                        e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="commentRetweetsMultiplier">
+                                  Retweets Multiplier
+                                </Label>
+                                <Input
+                                  id="commentRetweetsMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={
+                                    cpmPointsConfig.comment_retweets_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      comment_retweets_multiplier:
+                                        e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="commentQuoteRepostsMultiplier">
+                                  Quote Reposts Multiplier
+                                </Label>
+                                <Input
+                                  id="commentQuoteRepostsMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={
+                                    cpmPointsConfig.comment_quote_reposts_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      comment_quote_reposts_multiplier:
+                                        e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
-                        <label className="flex items-center gap-2 text-sm">
-                          <span>Retweets</span>
-                        </label>
-                        <div className="sm:col-span-2">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={twitterPointsConfig.retweetsWeight}
-                            onChange={(e) =>
-                              setTwitterPointsConfig((prev) => ({
-                                ...prev,
-                                retweetsWeight: e.target.value,
-                              }))
-                            }
-                            placeholder="e.g., 5"
-                            className={cn(
-                              isDark
-                                ? "bg-[#180438] border border-gray-600 text-white"
-                                : "bg-white"
-                            )}
-                          />
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                          <label className="flex items-center gap-2 text-sm">
+                            <span>Retweets</span>
+                          </label>
+                          <div className="sm:col-span-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={twitterPointsConfig.retweetsWeight}
+                              onChange={(e) =>
+                                setTwitterPointsConfig((prev) => ({
+                                  ...prev,
+                                  retweetsWeight: e.target.value,
+                                }))
+                              }
+                              placeholder="e.g., 5"
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white"
+                              )}
+                            />
+                          </div>
                         </div>
+                        <div className="flex items-center gap-2 ml-0 sm:ml-[calc(33.333%+0.75rem)]">
+                          <Checkbox
+                            id="showRetweetMultipliers"
+                            checked={showRetweetMultipliers}
+                            onCheckedChange={(checked) =>
+                              setShowRetweetMultipliers(checked === true)
+                            }
+                          />
+                          <Label
+                            htmlFor="showRetweetMultipliers"
+                            className="text-sm cursor-pointer"
+                          >
+                            Configure Retweet Engagement Multipliers
+                          </Label>
+                        </div>
+                        {showRetweetMultipliers && (
+                          <div className="ml-0 sm:ml-[calc(33.333%+0.75rem)] mt-3 p-4 border rounded-lg space-y-3">
+                            <h5 className="text-sm font-medium">
+                              Retweet Engagement Multipliers
+                            </h5>
+                            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="retweetLikesMultiplier">
+                                  Likes Multiplier
+                                </Label>
+                                <Input
+                                  id="retweetLikesMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={
+                                    cpmPointsConfig.retweet_likes_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      retweet_likes_multiplier: e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="retweetRepliesMultiplier">
+                                  Replies Multiplier
+                                </Label>
+                                <Input
+                                  id="retweetRepliesMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={
+                                    cpmPointsConfig.retweet_replies_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      retweet_replies_multiplier:
+                                        e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="retweetImpressionsMultiplier">
+                                  Impressions Multiplier
+                                </Label>
+                                <Input
+                                  id="retweetImpressionsMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.0001"
+                                  value={
+                                    cpmPointsConfig.retweet_impressions_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      retweet_impressions_multiplier:
+                                        e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="retweetRetweetsMultiplier">
+                                  Retweets Multiplier
+                                </Label>
+                                <Input
+                                  id="retweetRetweetsMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={
+                                    cpmPointsConfig.retweet_retweets_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      retweet_retweets_multiplier:
+                                        e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="retweetQuoteRepostsMultiplier">
+                                  Quote Reposts Multiplier
+                                </Label>
+                                <Input
+                                  id="retweetQuoteRepostsMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={
+                                    cpmPointsConfig.retweet_quote_reposts_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      retweet_quote_reposts_multiplier:
+                                        e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
-                        <label className="flex items-center gap-2 text-sm">
-                          <span>Reposts / Quotes</span>
-                        </label>
-                        <div className="sm:col-span-2">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={twitterPointsConfig.quoteRepostsWeight}
-                            onChange={(e) =>
-                              setTwitterPointsConfig((prev) => ({
-                                ...prev,
-                                quoteRepostsWeight: e.target.value,
-                              }))
-                            }
-                            placeholder="e.g., 7"
-                            className={cn(
-                              isDark
-                                ? "bg-[#180438] border border-gray-600 text-white"
-                                : "bg-white"
-                            )}
-                          />
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                          <label className="flex items-center gap-2 text-sm">
+                            <span>Reposts / Quotes</span>
+                          </label>
+                          <div className="sm:col-span-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={twitterPointsConfig.quoteRepostsWeight}
+                              onChange={(e) =>
+                                setTwitterPointsConfig((prev) => ({
+                                  ...prev,
+                                  quoteRepostsWeight: e.target.value,
+                                }))
+                              }
+                              placeholder="e.g., 7"
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white"
+                              )}
+                            />
+                          </div>
                         </div>
+                        <div className="flex items-center gap-2 ml-0 sm:ml-[calc(33.333%+0.75rem)]">
+                          <Checkbox
+                            id="showQuoteRepostMultipliers"
+                            checked={showQuoteRepostMultipliers}
+                            onCheckedChange={(checked) =>
+                              setShowQuoteRepostMultipliers(checked === true)
+                            }
+                          />
+                          <Label
+                            htmlFor="showQuoteRepostMultipliers"
+                            className="text-sm cursor-pointer"
+                          >
+                            Configure Quote Repost Engagement Multipliers
+                          </Label>
+                        </div>
+                        {showQuoteRepostMultipliers && (
+                          <div className="ml-0 sm:ml-[calc(33.333%+0.75rem)] mt-3 p-4 border rounded-lg space-y-3">
+                            <h5 className="text-sm font-medium">
+                              Quote Repost Engagement Multipliers
+                            </h5>
+                            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="quoteRepostLikesMultiplier">
+                                  Likes Multiplier
+                                </Label>
+                                <Input
+                                  id="quoteRepostLikesMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={
+                                    cpmPointsConfig.quote_repost_likes_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      quote_repost_likes_multiplier:
+                                        e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="quoteRepostRepliesMultiplier">
+                                  Replies Multiplier
+                                </Label>
+                                <Input
+                                  id="quoteRepostRepliesMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={
+                                    cpmPointsConfig.quote_repost_replies_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      quote_repost_replies_multiplier:
+                                        e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="quoteRepostImpressionsMultiplier">
+                                  Impressions Multiplier
+                                </Label>
+                                <Input
+                                  id="quoteRepostImpressionsMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.0001"
+                                  value={
+                                    cpmPointsConfig.quote_repost_impressions_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      quote_repost_impressions_multiplier:
+                                        e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="quoteRepostRetweetsMultiplier">
+                                  Retweets Multiplier
+                                </Label>
+                                <Input
+                                  id="quoteRepostRetweetsMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={
+                                    cpmPointsConfig.quote_repost_retweets_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      quote_repost_retweets_multiplier:
+                                        e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="quoteRepostQuoteRepostsMultiplier">
+                                  Quote Reposts Multiplier
+                                </Label>
+                                <Input
+                                  id="quoteRepostQuoteRepostsMultiplier"
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={
+                                    cpmPointsConfig.quote_repost_quote_reposts_multiplier
+                                  }
+                                  onChange={(e) =>
+                                    setCpmPointsConfig((prev) => ({
+                                      ...prev,
+                                      quote_repost_quote_reposts_multiplier:
+                                        e.target.value,
+                                    }))
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white"
+                                  )}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
@@ -9981,7 +11176,7 @@ export default function EditContestPage({
                 commissionPercentage={
                   contestCommissionRate !== null
                     ? contestCommissionRate
-                    : getPlanFeatures(userPlan).commissionPercentage
+                    : getPlanFeatures(userPlan).commissionPercentage ?? 0
                 }
                 onPaymentSuccess={handlePaymentSuccess}
                 onPaymentError={handlePaymentError}
