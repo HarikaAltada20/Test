@@ -30,7 +30,18 @@ export function getMetricsRefreshCooldownInfoOpportunities(lastUpdateTimestamp: 
 
   const lastUpdate = new Date(lastUpdateTimestamp);
   const now = new Date();
+  
+  // Handle invalid dates - if date parsing failed, allow refresh
+  if (isNaN(lastUpdate.getTime())) {
+    return { canRefresh: true, remainingMs: 0, remainingMinutes: 0 };
+  }
+  
   const timeSinceUpdate = now.getTime() - lastUpdate.getTime();
+  
+  // If date is in the future (timezone issues or data corruption), allow refresh
+  if (timeSinceUpdate < 0) {
+    return { canRefresh: true, remainingMs: 0, remainingMinutes: 0 };
+  }
   
   const canRefresh = timeSinceUpdate >= METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES;
   const remainingMs = Math.max(0, METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES - timeSinceUpdate);
@@ -51,7 +62,18 @@ export function getMetricsRefreshCooldownInfoBrand(lastUpdateTimestamp: string |
 
   const lastUpdate = new Date(lastUpdateTimestamp);
   const now = new Date();
+  
+  // Handle invalid dates - if date parsing failed, allow refresh
+  if (isNaN(lastUpdate.getTime())) {
+    return { canRefresh: true, remainingMs: 0, remainingMinutes: 0 };
+  }
+  
   const timeSinceUpdate = now.getTime() - lastUpdate.getTime();
+  
+  // If date is in the future (timezone issues or data corruption), allow refresh
+  if (timeSinceUpdate < 0) {
+    return { canRefresh: true, remainingMs: 0, remainingMinutes: 0 };
+  }
   
   const canRefresh = timeSinceUpdate >= METRICS_REFRESH_COOLDOWN_MS_BRAND;
   const remainingMs = Math.max(0, METRICS_REFRESH_COOLDOWN_MS_BRAND - timeSinceUpdate);
@@ -72,7 +94,18 @@ export function getMetricsRefreshCooldownInfoAdmin(lastUpdateTimestamp: string |
 
   const lastUpdate = new Date(lastUpdateTimestamp);
   const now = new Date();
+  
+  // Handle invalid dates - if date parsing failed, allow refresh
+  if (isNaN(lastUpdate.getTime())) {
+    return { canRefresh: true, remainingMs: 0, remainingMinutes: 0 };
+  }
+  
   const timeSinceUpdate = now.getTime() - lastUpdate.getTime();
+  
+  // If date is in the future (timezone issues or data corruption), allow refresh
+  if (timeSinceUpdate < 0) {
+    return { canRefresh: true, remainingMs: 0, remainingMinutes: 0 };
+  }
   
   const canRefresh = timeSinceUpdate >= METRICS_REFRESH_COOLDOWN_MS_ADMIN;
   const remainingMs = Math.max(0, METRICS_REFRESH_COOLDOWN_MS_ADMIN - timeSinceUpdate);

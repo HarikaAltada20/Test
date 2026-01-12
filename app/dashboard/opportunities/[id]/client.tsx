@@ -30,6 +30,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  Loader2,
   Clock,
   Monitor,
   Play,
@@ -579,6 +580,35 @@ export function ContestClientPage({
     }
   };
 
+  // Helper function to determine if refresh should be disabled and why
+  const getRefreshButtonState = () => {
+    if (!contest) {
+      return { isDisabled: true, disabledReason: "Contest not loaded" };
+    }
+
+    const cooldownInfo = getMetricsRefreshCooldownInfoOpportunities(
+      contest?.last_metrics_updated
+    );
+
+    const isLocked =
+      contest.post_contest_status === "in_review" ||
+      contest.post_contest_status === "verification_complete" ||
+      contest.post_contest_status === "payouts_processed";
+
+    const isDisabled = isRefreshingMetrics || !cooldownInfo.canRefresh || isLocked;
+
+    let disabledReason = "";
+    if (isRefreshingMetrics) {
+      disabledReason = "Refreshing metrics...";
+    } else if (isLocked) {
+      disabledReason = "Metrics are locked after contest review begins";
+    } else if (!cooldownInfo.canRefresh) {
+      disabledReason = `Please wait ${formatRemainingTime(cooldownInfo.remainingMs)}`;
+    }
+
+    return { isDisabled, disabledReason, cooldownInfo };
+  };
+
   const fetchLeaderboard = async (pageToFetch: number = 1) => {
     if (!isMounted) return;
     setLoadingLeaderboard(true);
@@ -600,6 +630,17 @@ export function ContestClientPage({
           setTotalLeaderboardPages(totalPages);
           setTotalLeaderboardEntries(totalEntries);
           setContestType("leaderboard"); // Set dummy contest type
+
+          // Mark as loaded only after successful fetch
+          const platform = contest?.platform || 'unknown';
+          const contestKey = `${contestId}-${platform}`;
+          leaderboardLoadedRef.current = contestKey;
+
+          // If we got data, reset the empty refetch flag
+          if (paginatedEntries.length > 0 || totalEntries > 0) {
+            emptyDataRefetchAttemptedRef.current = null;
+          }
+
           setLoadingLeaderboard(false);
         }
       }, 300);
@@ -624,6 +665,12 @@ export function ContestClientPage({
         setTotalLeaderboardPages(data.totalPages);
         setTotalLeaderboardEntries(data.totalEntries);
         setContestType(data.contestType || null); // Set contest type from API
+
+        // Mark as loaded only after successful fetch (even if empty - that's a valid response)
+        // Get platform from contest state (it should be available by the time this runs)
+        const platform = contest?.platform || 'unknown';
+        const contestKey = `${contestId}-${platform}`;
+        leaderboardLoadedRef.current = contestKey;
       }
     } catch (err: any) {
       console.error("Error fetching leaderboard:", err);
@@ -761,10 +808,20 @@ export function ContestClientPage({
         } else {
           setMyLeaderboardEntry(null);
         }
+        // Mark as fetched to prevent repeated calls
+        const platform = contest?.platform || 'unknown';
+        const contestKey = `${contestId}-${platform}`;
+        myRankFetchedRef.current = contestKey;
       }
     } catch (err: any) {
       console.error("Error fetching user's submission data:", err);
-      if (isMounted) setMyLeaderboardEntry(null);
+      if (isMounted) {
+        setMyLeaderboardEntry(null);
+        // Mark as fetched even on error to prevent infinite retries
+        const platform = contest?.platform || 'unknown';
+        const contestKey = `${contestId}-${platform}`;
+        myRankFetchedRef.current = contestKey;
+      }
     } finally {
       if (isMounted) setLoadingMySubmission(false);
     }
@@ -795,6 +852,16 @@ export function ContestClientPage({
         setTotalLeaderboardPages(data.totalPages || 1);
         setTotalLeaderboardEntries(data.totalEntries || 0);
         setContestType("leaderboard");
+
+        // Mark as loaded only after successful fetch (even if empty - that's a valid response)
+        const platform = contest?.platform || 'twitter';
+        const contestKey = `${contestId}-${platform}`;
+        leaderboardLoadedRef.current = contestKey;
+
+        // If we got data, reset the empty refetch flag (in case data was cleared and refetched)
+        if ((data.leaderboard?.length || 0) > 0 || (data.totalEntries || 0) > 0) {
+          emptyDataRefetchAttemptedRef.current = null;
+        }
       }
     } catch (err: any) {
       console.error("Error fetching Twitter leaderboard:", err);
@@ -837,10 +904,20 @@ export function ContestClientPage({
         } else {
           setMyLeaderboardEntry(null);
         }
+        // Mark as fetched to prevent repeated calls
+        const platform = contest?.platform || 'twitter';
+        const contestKey = `${contestId}-${platform}`;
+        myRankFetchedRef.current = contestKey;
       }
     } catch (err: any) {
       console.error("Error fetching Twitter my-rank data:", err);
-      if (isMounted) setMyLeaderboardEntry(null);
+      if (isMounted) {
+        setMyLeaderboardEntry(null);
+        // Mark as fetched even on error to prevent infinite retries
+        const platform = contest?.platform || 'twitter';
+        const contestKey = `${contestId}-${platform}`;
+        myRankFetchedRef.current = contestKey;
+      }
     } finally {
       if (isMounted) setLoadingMySubmission(false);
     }
@@ -1067,15 +1144,18 @@ export function ContestClientPage({
 
       // Fetch contest details - this is usually needed for prize info, title, etc.
       // regardless of where leaderboard data comes from.
+      let contestData: any = null;
       try {
-        const { data: contestData, error: contestError } = await supabase
+        const { data: fetchedContestData, error: contestError } = await supabase
           .from("contests_with_status")
           .select(`*, advertiser_profiles ( company_name )`)
           .eq("id", contestId)
           .maybeSingle();
 
         if (contestError) throw contestError;
-        if (!contestData) throw new Error("Contest not found.");
+        if (!fetchedContestData) throw new Error("Contest not found.");
+
+        contestData = fetchedContestData;
 
         // Only published contests should be available to creators
         if (contestData.moderation_status !== "published") {
@@ -1134,12 +1214,23 @@ export function ContestClientPage({
         if (isMounted) setError(err.message || "Failed to load page data");
       } finally {
         // Call leaderboard fetches after initial contest/user data attempt
-        if (isMounted) {
-          fetchLeaderboard(1);
-          fetchMySubmissionData(); // This will use dummy data if flag is true
+        if (isMounted && contestData) {
+          // Fetch leaderboard based on platform type
+          const isTwitterContest = contestData?.platform?.toLowerCase() === "twitter" || contestData?.platform?.toLowerCase() === "x";
+          const contestKey = `${contestId}-${contestData.platform}`;
+
+          if (isTwitterContest) {
+            fetchTwitterLeaderboard();
+            fetchMyTwitterRank();
+            // Note: leaderboardLoadedRef will be set in fetchTwitterLeaderboard after successful fetch
+          } else {
+            fetchLeaderboard(1);
+            fetchMySubmissionData(); // This will use dummy data if flag is true
+            // Note: leaderboardLoadedRef will be set in fetchLeaderboard after successful fetch
+          }
           fetchPostContestStatus(); // Fetch post-contest status for transparency
           // Fetch Twitter metrics if this is a Twitter campaign
-          if (contest?.platform?.toLowerCase() === "twitter") {
+          if (isTwitterContest) {
             fetchTwitterMetrics();
           }
           setLoading(false); // Done with initial loading phase
@@ -1182,6 +1273,10 @@ export function ContestClientPage({
 
   // Track if leaderboard has been loaded for current contest to avoid refetching on tab switch
   const leaderboardLoadedRef = useRef<string | null>(null);
+  // Track if we've attempted a refetch for empty data to prevent infinite loops
+  const emptyDataRefetchAttemptedRef = useRef<string | null>(null);
+  // Track if my rank has been fetched to prevent repeated calls
+  const myRankFetchedRef = useRef<string | null>(null);
 
   // Reset loaded flag when contest changes
   useEffect(() => {
@@ -1190,41 +1285,51 @@ export function ContestClientPage({
       // If contest changed, reset the loaded flag
       if (leaderboardLoadedRef.current !== contestKey) {
         leaderboardLoadedRef.current = null;
+        emptyDataRefetchAttemptedRef.current = null;
+        myRankFetchedRef.current = null;
       }
     }
   }, [contestId, contest?.platform]);
 
-  // When user switches to the Leaderboard tab, choose the correct data source:
+  // When user switches to the Leaderboard tab, ensure data is loaded:
   // - For Twitter contests, use Twitter-specific leaderboard APIs
   // - For other contests, use the existing generic leaderboard APIs
-  // Only fetch if data hasn't been loaded for this contest yet (to avoid refetching on tab switch)
+  // Only fetch once per contest/tab combination to avoid infinite loops
   useEffect(() => {
     if (!isMounted || !contestId || !contest) return;
 
     if (activeTab !== "leaderboard") return;
 
-    const isTwitterContest = contest.platform === "twitter";
+    const isTwitterContest = contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x";
     const contestKey = `${contestId}-${contest.platform}`;
     const hasLoaded = leaderboardLoadedRef.current === contestKey;
 
+    // Only fetch if we haven't loaded for this contest yet
+    // Don't check leaderboard.length, totalLeaderboardEntries, or loadingLeaderboard here 
+    // as they would cause infinite loops when state changes
+    // The ref is set after successful fetch (even if empty), which prevents refetching
+    const shouldFetch = !hasLoaded;
+
     if (isTwitterContest) {
-      // Only fetch if we haven't loaded for this contest yet
-      if (!hasLoaded) {
+      // Fetch if we haven't loaded for this contest yet
+      if (shouldFetch) {
         fetchTwitterLeaderboard();
-        leaderboardLoadedRef.current = contestKey;
+        // Note: leaderboardLoadedRef will be set in fetchTwitterLeaderboard after successful fetch
       }
-      // Only fetch my rank if we don't have it
-      if (!myLeaderboardEntry) {
+      // Only fetch my rank if we don't have it and haven't fetched it yet
+      if (!myLeaderboardEntry && myRankFetchedRef.current !== contestKey) {
         fetchMyTwitterRank();
+        // Note: myRankFetchedRef will be set in fetchMyTwitterRank after fetch completes
       }
     } else {
-      // For other platforms, only fetch if we haven't loaded for this contest yet
-      if (!hasLoaded) {
+      // For other platforms, fetch if we haven't loaded for this contest yet
+      if (shouldFetch) {
         fetchLeaderboard(1);
-        leaderboardLoadedRef.current = contestKey;
+        // Note: leaderboardLoadedRef will be set in fetchLeaderboard after successful fetch
       }
-      if (!myLeaderboardEntry) {
+      if (!myLeaderboardEntry && myRankFetchedRef.current !== contestKey) {
         fetchMySubmissionData();
+        // Note: myRankFetchedRef will be set in fetchMySubmissionData after fetch completes
       }
     }
   }, [activeTab, contestId, contest]);
@@ -5095,6 +5200,7 @@ export function ContestClientPage({
                   isDark={isDark}
                   showHeader={true}
                   lastMetricsUpdated={contest?.last_metrics_updated}
+                  cooldownType="opportunities"
                 />
               </div>
             </TabPanel>
@@ -5110,439 +5216,2024 @@ export function ContestClientPage({
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
-            ) : leaderboard.length === 0 && totalLeaderboardEntries === 0 ? (
-              <div className="text-center py-8">
-                <Trophy className="mx-auto h-12 w-12 text-slate-400" />
-                <p
-                  className={cn(
-                    "mb-2",
-                    isDark ? "text-slate-300" : "text-slate-600"
-                  )}
-                >
-                  No submissions yet. Be the first!
-                </p>
-              </div>
             ) : (
               <div className="space-y-3">
-                {/* Earnings View Mode Toggle - Show for both CPM and leaderboard contests with bonus */}
-                {/* Only show if contest is ended and payouts are processed */}
-                {(contest?.contest_type === "leaderboard" ||
-                  contest?.contest_type === "cpm") &&
-                  (contest.contest_based_details?.leaderboard_contest
-                    ?.flat_fee_bonus ||
-                    contest.contest_based_details?.cpm_contest
-                      ?.flat_fee_bonus ||
-                    (contest as any).bonus_details?.description_html) &&
-                  contest?.status?.toLowerCase() === "ended" &&
-                  contest?.post_contest_status === "payouts_processed" && (
-                    <div
+                {/* Show empty state if no leaderboard entries */}
+                {leaderboard.length === 0 && totalLeaderboardEntries === 0 ? (
+                  <div className="text-center py-8">
+                    <Trophy className="mx-auto h-12 w-12 text-slate-400" />
+                    <p
                       className={cn(
-                        "flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 p-4 rounded-xl border shadow-sm",
-                        isDark
-                          ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-                          : "bg-[#D9C0FF26] border-[#D9C0FF]"
+                        "mb-2",
+                        isDark ? "text-slate-300" : "text-slate-600"
                       )}
                     >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={cn(
-                            "p-2 rounded-lg",
-                            isDark
-                              ? "bg-[#FFFFFF42] text-white"
-                              : "bg-[#D8C3FF] text-[#4A00BE]"
-                          )}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <span
-                            className={cn(
-                              "text-sm font-semibold",
-                              isDark ? "text-white" : "text-slate-800"
-                            )}
-                          >
-                            Earnings Display
-                          </span>
-                          <p
-                            className={cn(
-                              "text-xs mt-0.5",
-                              isDark ? "text-white" : "text-slate-700"
-                            )}
-                          >
-                            Choose how to view your earnings breakdown
-                          </p>
-                        </div>
-                      </div>
-                      <div
-                        className={cn(
-                          "flex rounded-lg p-1 w-full sm:w-auto",
-                          isDark
-                            ? "bg-[#C9A7FF26]  border-[#C9A7FF]"
-                            : "bg-[#D9C0FF26] border-[#D9C0FF]"
-                        )}
-                      >
-                        <Button
-                          variant={
-                            leaderboardViewMode === "simple"
-                              ? "default"
-                              : "ghost"
-                          }
-                          size="sm"
-                          onClick={() => setLeaderboardViewMode("simple")}
-                          className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardViewMode === "simple"
-                            ? isDark
-                              ? "bg-purple-600 text-white"
-                              : "bg-purple-500 text-white"
-                            : isDark
-                              ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                              : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                            }`}
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <div className="w-2 h-2 rounded-full bg-current opacity-60" />
-                            Simple
-                          </span>
-                        </Button>
-                        <Button
-                          variant={
-                            leaderboardViewMode === "detailed"
-                              ? "default"
-                              : "ghost"
-                          }
-                          size="sm"
-                          onClick={() => setLeaderboardViewMode("detailed")}
-                          className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardViewMode === "detailed"
-                            ? isDark
-                              ? "bg-purple-600 text-white"
-                              : "bg-purple-500 text-white"
-                            : isDark
-                              ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                              : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                            }`}
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <div className="w-2 h-2 rounded-full bg-current opacity-60" />
-                            Detailed
-                          </span>
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                {/* Leaderboard Display Mode Toggle - Only show when multiple submissions are enabled and NOT Twitter */}
-                {contest?.multiple_submissions_enabled &&
-                  contest?.platform?.toLowerCase() !== "twitter" && (
-                    <div
-                      className={cn(
-                        "flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 p-4 rounded-xl border shadow-sm",
-                        isDark
-                          ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-                          : "bg-[#D9C0FF26] border-[#D9C0FF]"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={cn(
-                            "p-2 rounded-lg",
-                            isDark
-                              ? "bg-[#FFFFFF42] text-white"
-                              : "bg-[#D8C3FF] text-[#4A00BE]"
-                          )}
-                        >
-                          <ListOrdered className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <span
-                            className={cn(
-                              "text-sm font-semibold",
-                              isDark ? "text-white" : "text-slate-800"
-                            )}
-                          >
-                            Leaderboard Display
-                          </span>
-                          <p
-                            className={cn(
-                              "text-xs mt-0.5",
-                              isDark ? "text-white" : "text-slate-700"
-                            )}
-                          >
-                            View by creator or individual submissions
-                          </p>
-                        </div>
-                      </div>
-                      <div
-                        className={cn(
-                          "flex rounded-lg p-1 w-full sm:w-auto",
-                          isDark
-                            ? "bg-[#C9A7FF26]  border-[#C9A7FF]"
-                            : "bg-[#D9C0FF26] border-[#D9C0FF]"
-                        )}
-                      >
-                        <Button
-                          variant={
-                            leaderboardDisplayMode === "submission"
-                              ? "default"
-                              : "ghost"
-                          }
-                          size="sm"
-                          onClick={() =>
-                            setLeaderboardDisplayMode("submission")
-                          }
-                          className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardDisplayMode === "submission"
-                            ? isDark
-                              ? "bg-purple-600 text-white"
-                              : "bg-purple-500 text-white"
-                            : isDark
-                              ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                              : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                            }`}
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <div className="w-2 h-2 rounded-full bg-current opacity-60" />
-                            Submission Wise
-                          </span>
-                        </Button>
-                        <Button
-                          variant={
-                            leaderboardDisplayMode === "creator"
-                              ? "default"
-                              : "ghost"
-                          }
-                          size="sm"
-                          onClick={() => setLeaderboardDisplayMode("creator")}
-                          className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardDisplayMode === "creator"
-                            ? isDark
-                              ? "bg-purple-600 text-white"
-                              : "bg-purple-500 text-white"
-                            : isDark
-                              ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                              : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                            }`}
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <div className="w-2 h-2 rounded-full bg-current opacity-60" />
-                            Creator Wise
-                          </span>
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                {/* Logged-in User's Rank Card */}
-                {loadingMySubmission && (
-                  <div className="text-center py-3">
-                    <p>Loading your rank...</p>
+                      No submissions yet. Be the first!
+                    </p>
                   </div>
-                )}
-                {(() => {
-                  // Show best submission if user has multiple, otherwise show current leaderboard entry
-                  const bestSubmission = getBestSubmission();
-                  const displayEntry = bestSubmission || myLeaderboardEntry;
+                ) : (
+                  <>
 
-                  return (
-                    displayEntry && (
-                      <Card
-                        key={`my-rank-${displayEntry.id}`}
-                        className={cn(
-                          "overflow-hidden mb-6 border",
-                          isDark
-                            ? "border-[#C9A7FF] bg-[#000000]"
-                            : "border-[#D9C0FF] bg-white"
-                        )}
-                      >
-                        <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-1 sm:space-x-1">
-                          <div className="flex flex-1 items-center gap-3 sm:gap-4 min-w-0">
+                    {/* Earnings View Mode Toggle - Show for both CPM and leaderboard contests with bonus */}
+                    {/* Only show if contest is ended and payouts are processed */}
+                    {(contest?.contest_type === "leaderboard" ||
+                      contest?.contest_type === "cpm") &&
+                      (contest.contest_based_details?.leaderboard_contest
+                        ?.flat_fee_bonus ||
+                        contest.contest_based_details?.cpm_contest
+                          ?.flat_fee_bonus ||
+                        (contest as any).bonus_details?.description_html) &&
+                      contest?.status?.toLowerCase() === "ended" &&
+                      contest?.post_contest_status === "payouts_processed" && (
+                        <div
+                          className={cn(
+                            "flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 p-4 rounded-xl border shadow-sm",
+                            isDark
+                              ? "bg-[#C9A7FF26] border-[#C9A7FF]"
+                              : "bg-[#D9C0FF26] border-[#D9C0FF]"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
                             <div
                               className={cn(
-                                "flex flex-col items-center justify-center w-10 sm:w-12 flex-shrink-0 rounded-xl px-1 py-1.5",
+                                "p-2 rounded-lg",
                                 isDark
-                                  ? "bg-[#C9A7FF26] text-[#F5EBFF]"
-                                  : "bg-[#D9C0FF40] text-[#4A00BE]"
+                                  ? "bg-[#FFFFFF42] text-white"
+                                  : "bg-[#D8C3FF] text-[#4A00BE]"
                               )}
                             >
-                              <div className="text-lg sm:text-xl font-extrabold leading-none">
-                                #
-                                {bestSubmission
-                                  ? rankLookupMap.get(bestSubmission.id)
-                                  : myLeaderboardEntry?.rank || "?"}
-                              </div>
-                              {bestSubmission &&
-                                myLeaderboardEntry &&
-                                bestSubmission.id !== myLeaderboardEntry.id && (
-                                  <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/15 text-primary">
-                                    Best
-                                  </span>
-                                )}
+                              <Eye className="h-4 w-4" />
                             </div>
+                            <div>
+                              <span
+                                className={cn(
+                                  "text-sm font-semibold",
+                                  isDark ? "text-white" : "text-slate-800"
+                                )}
+                              >
+                                Earnings Display
+                              </span>
+                              <p
+                                className={cn(
+                                  "text-xs mt-0.5",
+                                  isDark ? "text-white" : "text-slate-700"
+                                )}
+                              >
+                                Choose how to view your earnings breakdown
+                              </p>
+                            </div>
+                          </div>
+                          <div
+                            className={cn(
+                              "flex rounded-lg p-1 w-full sm:w-auto",
+                              isDark
+                                ? "bg-[#C9A7FF26]  border-[#C9A7FF]"
+                                : "bg-[#D9C0FF26] border-[#D9C0FF]"
+                            )}
+                          >
+                            <Button
+                              variant={
+                                leaderboardViewMode === "simple"
+                                  ? "default"
+                                  : "ghost"
+                              }
+                              size="sm"
+                              onClick={() => setLeaderboardViewMode("simple")}
+                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardViewMode === "simple"
+                                ? isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-500 text-white"
+                                : isDark
+                                  ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                  : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                }`}
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-full bg-current opacity-60" />
+                                Simple
+                              </span>
+                            </Button>
+                            <Button
+                              variant={
+                                leaderboardViewMode === "detailed"
+                                  ? "default"
+                                  : "ghost"
+                              }
+                              size="sm"
+                              onClick={() => setLeaderboardViewMode("detailed")}
+                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardViewMode === "detailed"
+                                ? isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-500 text-white"
+                                : isDark
+                                  ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                  : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                }`}
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-full bg-current opacity-60" />
+                                Detailed
+                              </span>
+                            </Button>
+                          </div>
+                        </div>
+                      )}
 
-                            <div className="flex items-center gap-3 min-w-0">
-                              <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
-                                <AvatarImage
-                                  src={
-                                    displayEntry.user_platform_pfp_url ??
-                                    displayEntry.creator_pfp_url ??
-                                    undefined
-                                  }
-                                  alt={
-                                    contest?.platform === "twitter"
-                                      ? (displayEntry as any).app_username ||
-                                      displayEntry.user_platform_username
-                                      : displayEntry.user_platform_username
-                                  }
-                                />
-                                <AvatarFallback
+                    {/* Leaderboard Display Mode Toggle - Only show when multiple submissions are enabled and NOT Twitter */}
+                    {contest?.multiple_submissions_enabled &&
+                      contest?.platform?.toLowerCase() !== "twitter" && (
+                        <div
+                          className={cn(
+                            "flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 p-4 rounded-xl border shadow-sm",
+                            isDark
+                              ? "bg-[#C9A7FF26] border-[#C9A7FF]"
+                              : "bg-[#D9C0FF26] border-[#D9C0FF]"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={cn(
+                                "p-2 rounded-lg",
+                                isDark
+                                  ? "bg-[#FFFFFF42] text-white"
+                                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                              )}
+                            >
+                              <ListOrdered className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <span
+                                className={cn(
+                                  "text-sm font-semibold",
+                                  isDark ? "text-white" : "text-slate-800"
+                                )}
+                              >
+                                Leaderboard Display
+                              </span>
+                              <p
+                                className={cn(
+                                  "text-xs mt-0.5",
+                                  isDark ? "text-white" : "text-slate-700"
+                                )}
+                              >
+                                View by creator or individual submissions
+                              </p>
+                            </div>
+                          </div>
+                          <div
+                            className={cn(
+                              "flex rounded-lg p-1 w-full sm:w-auto",
+                              isDark
+                                ? "bg-[#C9A7FF26]  border-[#C9A7FF]"
+                                : "bg-[#D9C0FF26] border-[#D9C0FF]"
+                            )}
+                          >
+                            <Button
+                              variant={
+                                leaderboardDisplayMode === "submission"
+                                  ? "default"
+                                  : "ghost"
+                              }
+                              size="sm"
+                              onClick={() =>
+                                setLeaderboardDisplayMode("submission")
+                              }
+                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardDisplayMode === "submission"
+                                ? isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-500 text-white"
+                                : isDark
+                                  ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                  : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                }`}
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-full bg-current opacity-60" />
+                                Submission Wise
+                              </span>
+                            </Button>
+                            <Button
+                              variant={
+                                leaderboardDisplayMode === "creator"
+                                  ? "default"
+                                  : "ghost"
+                              }
+                              size="sm"
+                              onClick={() => setLeaderboardDisplayMode("creator")}
+                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardDisplayMode === "creator"
+                                ? isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-500 text-white"
+                                : isDark
+                                  ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                  : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                }`}
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-full bg-current opacity-60" />
+                                Creator Wise
+                              </span>
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                    {/* Logged-in User's Rank Card */}
+                    {loadingMySubmission && (
+                      <div className="text-center py-3">
+                        <p>Loading your rank...</p>
+                      </div>
+                    )}
+                    {(() => {
+                      // Show best submission if user has multiple, otherwise show current leaderboard entry
+                      const bestSubmission = getBestSubmission();
+                      const displayEntry = bestSubmission || myLeaderboardEntry;
+
+                      return (
+                        displayEntry && (
+                          <Card
+                            key={`my-rank-${displayEntry.id}`}
+                            className={cn(
+                              "overflow-hidden mb-6 border",
+                              isDark
+                                ? "border-[#C9A7FF] bg-[#000000]"
+                                : "border-[#D9C0FF] bg-white"
+                            )}
+                          >
+                            <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-1 sm:space-x-1">
+                              <div className="flex flex-1 items-center gap-3 sm:gap-4 min-w-0">
+                                <div
                                   className={cn(
-                                    "bg-primary/20",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    "flex flex-col items-center justify-center w-10 sm:w-12 flex-shrink-0 rounded-xl px-1 py-1.5",
+                                    isDark
+                                      ? "bg-[#C9A7FF26] text-[#F5EBFF]"
+                                      : "bg-[#D9C0FF40] text-[#4A00BE]"
                                   )}
                                 >
-                                  {(contest?.platform === "twitter"
-                                    ? ((displayEntry as any).app_username as
-                                      | string
-                                      | undefined)
-                                    : displayEntry.user_platform_username)?.[0]?.toUpperCase() ||
-                                    "U"}
-                                </AvatarFallback>
-                              </Avatar>
-
-                              <div className="flex flex-col min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <p
-                                    className={cn(
-                                      "text-sm sm:text-base font-semibold truncate",
-                                      isDark ? "text-white" : "text-gray-700"
-                                    )}
-                                    title={
-                                      contest?.platform === "twitter"
-                                        ? (displayEntry as any).app_username ||
-                                        displayEntry.user_platform_username
-                                        : displayEntry.user_platform_username
-                                    }
-                                  >
-                                    {(contest?.platform === "twitter"
-                                      ? (displayEntry as any).app_username ||
-                                      displayEntry.user_platform_username
-                                      : displayEntry.user_platform_username) +
-                                      " "}
-                                    (You)
-                                    {bestSubmission &&
-                                      myLeaderboardEntry &&
-                                      bestSubmission.id !==
-                                      myLeaderboardEntry.id && (
-                                        <span className="text-xs text-primary/70 ml-2">
-                                          • Best Performance
-                                        </span>
-                                      )}
-                                  </p>
-                                  {renderVerificationBadges(
-                                    displayEntry.status
-                                  )}
-                                  {/* Show rejected badge for Twitter entries */}
-                                  {contest?.platform === "twitter" &&
-                                    (displayEntry as any).moderation_status ===
-                                    "rejected" && (
-                                      <Badge
-                                        className="ml-2 bg-red-500 text-white text-xs"
-                                        variant="destructive"
-                                      >
-                                        Rejected
-                                      </Badge>
+                                  <div className="text-lg sm:text-xl font-extrabold leading-none">
+                                    #
+                                    {bestSubmission
+                                      ? rankLookupMap.get(bestSubmission.id)
+                                      : myLeaderboardEntry?.rank || "?"}
+                                  </div>
+                                  {bestSubmission &&
+                                    myLeaderboardEntry &&
+                                    bestSubmission.id !== myLeaderboardEntry.id && (
+                                      <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/15 text-primary">
+                                        Best
+                                      </span>
                                     )}
                                 </div>
-                                {/* Show rejection reason if available - compact UI */}
-                                {contest?.platform === "twitter" &&
-                                  (displayEntry as any).moderation_status ===
-                                  "rejected" &&
-                                  (displayEntry as any).rejection_reason && (
-                                    <div className="flex items-center gap-2 mt-1 mb-2">
-                                      <AlertCircle
-                                        className={cn(
-                                          "h-4 w-4 flex-shrink-0",
-                                          isDark
-                                            ? "text-red-400"
-                                            : "text-red-600"
-                                        )}
-                                      />
+
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
+                                    <AvatarImage
+                                      src={
+                                        displayEntry.user_platform_pfp_url ??
+                                        displayEntry.creator_pfp_url ??
+                                        undefined
+                                      }
+                                      alt={
+                                        contest?.platform === "twitter"
+                                          ? (displayEntry as any).app_username ||
+                                          displayEntry.user_platform_username
+                                          : displayEntry.user_platform_username
+                                      }
+                                    />
+                                    <AvatarFallback
+                                      className={cn(
+                                        "bg-primary/20",
+                                        isDark ? "text-white" : "text-gray-900"
+                                      )}
+                                    >
+                                      {(contest?.platform === "twitter"
+                                        ? ((displayEntry as any).app_username as
+                                          | string
+                                          | undefined)
+                                        : displayEntry.user_platform_username)?.[0]?.toUpperCase() ||
+                                        "U"}
+                                    </AvatarFallback>
+                                  </Avatar>
+
+                                  <div className="flex flex-col min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
                                       <p
                                         className={cn(
-                                          "text-xs flex-1 truncate",
-                                          isDark
-                                            ? "text-red-300"
-                                            : "text-red-600"
+                                          "text-sm sm:text-base font-semibold truncate",
+                                          isDark ? "text-white" : "text-gray-700"
                                         )}
+                                        title={
+                                          contest?.platform === "twitter"
+                                            ? (displayEntry as any).app_username ||
+                                            displayEntry.user_platform_username
+                                            : displayEntry.user_platform_username
+                                        }
                                       >
-                                        <span className="font-medium">
-                                          Rejection Reason:
-                                        </span>{" "}
-                                        {(displayEntry as any).rejection_reason
-                                          .length > 50
-                                          ? `${(
-                                            displayEntry as any
-                                          ).rejection_reason.substring(
-                                            0,
-                                            50
-                                          )}...`
-                                          : (displayEntry as any)
-                                            .rejection_reason}
+                                        {(contest?.platform === "twitter"
+                                          ? (displayEntry as any).app_username ||
+                                          displayEntry.user_platform_username
+                                          : displayEntry.user_platform_username) +
+                                          " "}
+                                        (You)
+                                        {bestSubmission &&
+                                          myLeaderboardEntry &&
+                                          bestSubmission.id !==
+                                          myLeaderboardEntry.id && (
+                                            <span className="text-xs text-primary/70 ml-2">
+                                              • Best Performance
+                                            </span>
+                                          )}
                                       </p>
-                                      {(displayEntry as any).rejection_reason
-                                        .length > 50 && (
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                            onClick={() => {
-                                              setRejectionReasonModalOpen(true);
-                                              setRejectionReasonText(
-                                                (displayEntry as any)
-                                                  .rejection_reason
-                                              );
-                                            }}
+                                      {renderVerificationBadges(
+                                        displayEntry.status
+                                      )}
+                                      {/* Show rejected badge for Twitter entries */}
+                                      {contest?.platform === "twitter" &&
+                                        (displayEntry as any).moderation_status ===
+                                        "rejected" && (
+                                          <Badge
+                                            className="ml-2 bg-red-500 text-white text-xs"
+                                            variant="destructive"
                                           >
-                                            More
-                                          </Button>
+                                            Rejected
+                                          </Badge>
                                         )}
                                     </div>
-                                  )}
-                                {/* Show explanation for rejected entries */}
-                                {contest?.platform === "twitter" &&
-                                  (displayEntry as any).moderation_status ===
-                                  "rejected" && (
-                                    <p
-                                      className={cn(
-                                        "text-xs mb-2",
-                                        isDark ? "text-red-300" : "text-red-600"
+                                    {/* Show rejection reason if available - compact UI */}
+                                    {contest?.platform === "twitter" &&
+                                      (displayEntry as any).moderation_status ===
+                                      "rejected" &&
+                                      (displayEntry as any).rejection_reason && (
+                                        <div className="flex items-center gap-2 mt-1 mb-2">
+                                          <AlertCircle
+                                            className={cn(
+                                              "h-4 w-4 flex-shrink-0",
+                                              isDark
+                                                ? "text-red-400"
+                                                : "text-red-600"
+                                            )}
+                                          />
+                                          <p
+                                            className={cn(
+                                              "text-xs flex-1 truncate",
+                                              isDark
+                                                ? "text-red-300"
+                                                : "text-red-600"
+                                            )}
+                                          >
+                                            <span className="font-medium">
+                                              Rejection Reason:
+                                            </span>{" "}
+                                            {(displayEntry as any).rejection_reason
+                                              .length > 50
+                                              ? `${(
+                                                displayEntry as any
+                                              ).rejection_reason.substring(
+                                                0,
+                                                50
+                                              )}...`
+                                              : (displayEntry as any)
+                                                .rejection_reason}
+                                          </p>
+                                          {(displayEntry as any).rejection_reason
+                                            .length > 50 && (
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                onClick={() => {
+                                                  setRejectionReasonModalOpen(true);
+                                                  setRejectionReasonText(
+                                                    (displayEntry as any)
+                                                      .rejection_reason
+                                                  );
+                                                }}
+                                              >
+                                                More
+                                              </Button>
+                                            )}
+                                        </div>
                                       )}
-                                    >
-                                      Your entry has been rejected.
-                                    </p>
-                                  )}
-                                {!(
-                                  contest?.platform === "twitter" &&
-                                  (displayEntry as any).moderation_status ===
-                                  "rejected"
-                                ) && (
-                                    <p
-                                      className={cn(
-                                        "text-xs mb-2",
-                                        isDark
-                                          ? "text-gray-300"
-                                          : "text-slate-500"
+                                    {/* Show explanation for rejected entries */}
+                                    {contest?.platform === "twitter" &&
+                                      (displayEntry as any).moderation_status ===
+                                      "rejected" && (
+                                        <p
+                                          className={cn(
+                                            "text-xs mb-2",
+                                            isDark ? "text-red-300" : "text-red-600"
+                                          )}
+                                        >
+                                          Your entry has been rejected.
+                                        </p>
                                       )}
+                                    {!(
+                                      contest?.platform === "twitter" &&
+                                      (displayEntry as any).moderation_status ===
+                                      "rejected"
+                                    ) && (
+                                        <p
+                                          className={cn(
+                                            "text-xs mb-2",
+                                            isDark
+                                              ? "text-gray-300"
+                                              : "text-slate-500"
+                                          )}
+                                        >
+                                          Submitted:{" "}
+                                          {formatTimeAgo(displayEntry.created_at)}
+                                        </p>
+                                      )}
+                                    {/* Twitter Metrics - Horizontal Layout - Hide for rejected entries */}
+                                    {contest?.platform === "twitter" &&
+                                      (displayEntry as any)
+                                        .total_eligible_tweets !== undefined &&
+                                      !(
+                                        (displayEntry as any).moderation_status ===
+                                        "rejected"
+                                      ) && (
+                                        <div className="flex flex-wrap items-center gap-3 mt-1">
+                                          <div className="flex items-center gap-1">
+                                            <FileText
+                                              className={cn(
+                                                "h-3.5 w-3.5",
+                                                isDark
+                                                  ? "text-gray-400"
+                                                  : "text-slate-500"
+                                              )}
+                                            />
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-400"
+                                                  : "text-slate-600"
+                                              )}
+                                            >
+                                              {(displayEntry as any)
+                                                .total_eligible_tweets || 0}{" "}
+                                              tweets
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <Eye
+                                              className={cn(
+                                                "h-3.5 w-3.5",
+                                                isDark
+                                                  ? "text-gray-400"
+                                                  : "text-slate-500"
+                                              )}
+                                            />
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-400"
+                                                  : "text-slate-600"
+                                              )}
+                                            >
+                                              {(
+                                                (displayEntry as any)
+                                                  .total_impressions || 0
+                                              ).toLocaleString()}{" "}
+                                              impressions
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <ThumbsUp className="h-3.5 w-3.5 text-pink-500" />
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              {(displayEntry as any).total_likes ||
+                                                0}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <RefreshCw className="h-3.5 w-3.5 text-green-500" />
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              {(displayEntry as any)
+                                                .total_retweets || 0}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <MessageCircle
+                                              className={cn(
+                                                "h-3.5 w-3.5",
+                                                isDark
+                                                  ? "text-gray-400"
+                                                  : "text-gray-600"
+                                              )}
+                                            />
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              {(displayEntry as any)
+                                                .total_replies || 0}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
+                                <div className="flex items-center space-x-2">
+                                  <p
+                                    className={cn(
+                                      "text-base sm:text-lg font-bold",
+                                      isDark ? "text-white" : "text-gray-900"
+                                    )}
+                                  >
+                                    {contest?.platform === "twitter" ? (
+                                      <>
+                                        {typeof (displayEntry as any)
+                                          .total_points === "number"
+                                          ? (
+                                            displayEntry as any
+                                          ).total_points.toLocaleString()
+                                          : "0"}{" "}
+                                        points
+                                      </>
+                                    ) : (
+                                      <>
+                                        {displayEntry.views
+                                          ? displayEntry.views.toLocaleString()
+                                          : "0"}{" "}
+                                        views
+                                      </>
+                                    )}
+                                  </p>
+                                  {displayEntry.content_link && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 sm:h-8 sm:w-8 text-primary/80 hover:text-primary dark:text-primary-foreground/80 dark:hover:text-primary-foreground"
+                                      asChild
                                     >
-                                      Submitted:{" "}
-                                      {formatTimeAgo(displayEntry.created_at)}
-                                    </p>
+                                      <Link
+                                        href={displayEntry.content_link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title="View Your Content"
+                                      >
+                                        <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                                      </Link>
+                                    </Button>
                                   )}
-                                {/* Twitter Metrics - Horizontal Layout - Hide for rejected entries */}
-                                {contest?.platform === "twitter" &&
-                                  (displayEntry as any)
-                                    .total_eligible_tweets !== undefined &&
-                                  !(
+                                </div>
+                                {(() => {
+                                  // Don't show winning zone for rejected entries
+                                  if (
+                                    contest?.platform === "twitter" &&
                                     (displayEntry as any).moderation_status ===
                                     "rejected"
-                                  ) && (
-                                    <div className="flex flex-wrap items-center gap-3 mt-1">
+                                  ) {
+                                    return null;
+                                  }
+
+                                  let prizeDisplay = null;
+                                  if (displayEntry.earnings > 0) {
+                                    // Show actual earnings for verified or paid submissions; otherwise show expected
+                                    const isEarned =
+                                      displayEntry.status === "verified" ||
+                                      displayEntry.status === "paid";
+                                    const earningsLabel = isEarned
+                                      ? "Earned"
+                                      : "Expected";
+
+                                    // Check for flat fee bonus in detailed mode
+                                    if (leaderboardViewMode === "detailed") {
+                                      const flatFeeBonus =
+                                        contestType === "cpm"
+                                          ? (contest.contest_based_details as any)
+                                            ?.cpm_contest?.flat_fee_bonus || 0
+                                          : (contest.contest_based_details as any)
+                                            ?.leaderboard_contest
+                                            ?.flat_fee_bonus || 0;
+
+                                      if (flatFeeBonus > 0) {
+                                        const totalEarnings =
+                                          displayEntry.earnings + flatFeeBonus;
+                                        prizeDisplay = (
+                                          <div className="space-y-1">
+                                            <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                              {earningsLabel}:{" "}
+                                              {formatMoney(totalEarnings)}
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                              <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                              <span className="whitespace-nowrap">
+                                                {formatMoney(displayEntry.earnings)}{" "}
+                                                {contestType === "cpm"
+                                                  ? "CPM"
+                                                  : "Prize"}
+                                              </span>
+                                              <span className="text-green-600 dark:text-green-400">
+                                                +
+                                              </span>
+                                              <span className="whitespace-nowrap">
+                                                {formatMoney(flatFeeBonus)} Bonus
+                                              </span>
+                                            </div>
+                                          </div>
+                                        );
+                                      } else {
+                                        prizeDisplay = (
+                                          <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                            {earningsLabel}:{" "}
+                                            {formatMoney(displayEntry.earnings)}
+                                          </div>
+                                        );
+                                      }
+                                    } else {
+                                      // Simple view - show total earnings if bonus exists
+                                      const flatFeeBonus =
+                                        contestType === "cpm"
+                                          ? (contest.contest_based_details as any)
+                                            ?.cpm_contest?.flat_fee_bonus || 0
+                                          : (contest.contest_based_details as any)
+                                            ?.leaderboard_contest
+                                            ?.flat_fee_bonus || 0;
+
+                                      const totalEarnings =
+                                        displayEntry.earnings + flatFeeBonus;
+                                      prizeDisplay = (
+                                        <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                          {earningsLabel}:{" "}
+                                          {formatMoney(totalEarnings)}
+                                        </div>
+                                      );
+                                    }
+                                  } else if (
+                                    contest.contest_type === "leaderboard" &&
+                                    Array.isArray(
+                                      contest.contest_based_details
+                                        ?.leaderboard_contest?.prizes
+                                    ) &&
+                                    myLeaderboardEntry?.rank
+                                  ) {
+                                    const prizeInfo = (
+                                      contest.contest_based_details
+                                        .leaderboard_contest.prizes as PrizeInfo[]
+                                    ).find(
+                                      (p) => p.position === myLeaderboardEntry?.rank
+                                    );
+                                    if (prizeInfo) {
+                                      const prizeText =
+                                        contest.status === "active"
+                                          ? "Winning Zone"
+                                          : "Prize";
+
+                                      // Check for flat fee bonus in detailed mode
+                                      if (leaderboardViewMode === "detailed") {
+                                        const flatFeeBonus =
+                                          (contest.contest_based_details as any)
+                                            ?.leaderboard_contest?.flat_fee_bonus ||
+                                          0;
+
+                                        if (flatFeeBonus > 0) {
+                                          const totalEarnings =
+                                            prizeInfo.amount + flatFeeBonus;
+                                          prizeDisplay = (
+                                            <div className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                              <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                              <div>
+                                                <div>
+                                                  {prizeText}:{" "}
+                                                  {formatMoney(totalEarnings)}
+                                                </div>
+                                                <div className="text-xs text-amber-600 dark:text-amber-500">
+                                                  ({formatMoney(prizeInfo.amount)}{" "}
+                                                  Prize +{" "}
+                                                  {formatMoney(flatFeeBonus)} Bonus)
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        } else {
+                                          prizeDisplay = (
+                                            <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                              <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                              {prizeText}:{" "}
+                                              {formatMoney(prizeInfo.amount)}
+                                            </span>
+                                          );
+                                        }
+                                      } else {
+                                        // Simple view - show total if bonus exists
+                                        const flatFeeBonus =
+                                          (contest.contest_based_details as any)
+                                            ?.leaderboard_contest?.flat_fee_bonus ||
+                                          0;
+                                        const totalEarnings =
+                                          prizeInfo.amount + flatFeeBonus;
+
+                                        prizeDisplay = (
+                                          <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                            <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                            {prizeText}:{" "}
+                                            {formatMoney(totalEarnings)}
+                                          </span>
+                                        );
+                                      }
+                                    }
+                                  }
+                                  return prizeDisplay ? (
+                                    <div className="text-xs sm:text-sm">
+                                      {prizeDisplay}
+                                    </div>
+                                  ) : null;
+                                })()}
+                              </div>
+                            </CardContent>
+
+                            {/* View All Submissions Button - Only show if user has multiple submissions */}
+                            {getUserSubmissions().length > 1 && (
+                              <div className="px-3 pb-3 sm:px-4 sm:pb-4">
+                                <Dialog
+                                  open={showAllSubmissionsModal}
+                                  onOpenChange={setShowAllSubmissionsModal}
+                                  isdark={isDark}
+                                >
+                                  <DialogTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="flex w-full items-center justify-center gap-2 px-3 py-3 rounded-full"
+                                      style={{
+                                        backgroundColor: isDark
+                                          ? "#7F39EC"
+                                          : "#D9C0FF61",
+                                        color: isDark ? "white" : "#7F39EC",
+                                        transition: "none",
+                                      }}
+                                    >
+                                      <ListOrdered className="h-3 w-3 mr-2" />
+                                      View All Your Submissions (
+                                      {getUserSubmissions().length})
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+                                    <DialogHeader className="flex-shrink-0">
+                                      <DialogTitle className="flex items-center gap-2">
+                                        <ListOrdered className="h-5 w-5" />
+                                        All Your Submissions (
+                                        {getUserSubmissions().length})
+                                      </DialogTitle>
+
+                                      {/* View Mode Toggle for Modal */}
+                                      {(contest?.contest_type === "leaderboard" ||
+                                        contest?.contest_type === "cpm") &&
+                                        (contest.contest_based_details
+                                          ?.leaderboard_contest?.flat_fee_bonus ||
+                                          contest.contest_based_details?.cpm_contest
+                                            ?.flat_fee_bonus ||
+                                          (contest as any).bonus_details
+                                            ?.description_html) && (
+                                          <div className="flex justify-center mt-4">
+                                            <div
+                                              className={cn(
+                                                "flex rounded-lg p-1",
+                                                isDark
+                                                  ? "bg-[#170337]"
+                                                  : "bg-white dark:bg-slate-700 shadow-sm border border-slate-200 dark:border-slate-600"
+                                              )}
+                                            >
+                                              <Button
+                                                variant={
+                                                  modalViewMode === "simple"
+                                                    ? "default"
+                                                    : "ghost"
+                                                }
+                                                size="sm"
+                                                onClick={() =>
+                                                  setModalViewMode("simple")
+                                                }
+                                                className={`text-xs px-3 py-1.5 transition-all duration-200 ${modalViewMode === "simple"
+                                                  ? isDark
+                                                    ? "bg-purple-600 text-white"
+                                                    : "bg-purple-500 text-white"
+                                                  : isDark
+                                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                                  }`}
+                                              >
+                                                Simple
+                                              </Button>
+                                              <Button
+                                                variant={
+                                                  modalViewMode === "detailed"
+                                                    ? "default"
+                                                    : "ghost"
+                                                }
+                                                size="sm"
+                                                onClick={() =>
+                                                  setModalViewMode("detailed")
+                                                }
+                                                className={`text-xs px-3 py-1.5 transition-all duration-200 ${modalViewMode === "detailed"
+                                                  ? isDark
+                                                    ? "bg-purple-600 text-white"
+                                                    : "bg-purple-500 text-white"
+                                                  : isDark
+                                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                                  }`}
+                                              >
+                                                Detailed
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        )}
+                                    </DialogHeader>
+
+                                    {/* Scrollable Content Area */}
+                                    <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                                      {getUserSubmissions().length === 0 ? (
+                                        <div className="text-center py-8">
+                                          <p
+                                            className={cn(
+                                              "text-sm",
+                                              isDark
+                                                ? "text-gray-400"
+                                                : "text-gray-600"
+                                            )}
+                                          >
+                                            No submissions found
+                                          </p>
+                                        </div>
+                                      ) : (
+                                        (() => {
+                                          const userSubmissions =
+                                            getUserSubmissions();
+                                          const totalPages = Math.ceil(
+                                            userSubmissions.length /
+                                            modalItemsPerPage
+                                          );
+                                          const startIndex =
+                                            (modalCurrentPage - 1) *
+                                            modalItemsPerPage;
+                                          const endIndex =
+                                            startIndex + modalItemsPerPage;
+                                          const currentSubmissions =
+                                            userSubmissions.slice(
+                                              startIndex,
+                                              endIndex
+                                            );
+
+                                          return (
+                                            <>
+                                              {currentSubmissions.map(
+                                                (submission, index) => {
+                                                  // Get actual rank from leaderboard using O(1) lookup
+                                                  const actualRank =
+                                                    rankLookupMap.get(
+                                                      submission.id
+                                                    ) || "?";
+
+                                                  // Earnings display based on modal view mode
+                                                  let prizeDisplay = null;
+                                                  if (submission.earnings > 0) {
+                                                    const isEarned =
+                                                      submission.status ===
+                                                      "verified" ||
+                                                      submission.status === "paid";
+                                                    const earningsLabel = isEarned
+                                                      ? "Earned"
+                                                      : "Expected";
+
+                                                    const flatFeeBonus =
+                                                      contestType === "cpm"
+                                                        ? (
+                                                          contest.contest_based_details as any
+                                                        )?.cpm_contest
+                                                          ?.flat_fee_bonus || 0
+                                                        : (
+                                                          contest.contest_based_details as any
+                                                        )?.leaderboard_contest
+                                                          ?.flat_fee_bonus || 0;
+                                                    const totalEarnings =
+                                                      submission.earnings +
+                                                      flatFeeBonus;
+
+                                                    if (
+                                                      modalViewMode ===
+                                                      "detailed" &&
+                                                      flatFeeBonus > 0
+                                                    ) {
+                                                      prizeDisplay = (
+                                                        <div className="space-y-1">
+                                                          <div
+                                                            className={cn(
+                                                              "font-semibold text-green-600 dark:text-green-400 text-sm",
+                                                              isDark
+                                                                ? "text-green-400"
+                                                                : "text-green-600"
+                                                            )}
+                                                          >
+                                                            {earningsLabel}:{" "}
+                                                            {formatMoney(
+                                                              totalEarnings
+                                                            )}
+                                                          </div>
+                                                          <div
+                                                            className={cn(
+                                                              "flex flex-wrap items-center gap-1.5 text-xs",
+                                                              isDark
+                                                                ? "text-green-400 bg-green-900/20 border border-green-800"
+                                                                : "text-green-600 bg-green-50 border border-green-200"
+                                                            )}
+                                                          >
+                                                            <div
+                                                              className={cn(
+                                                                "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                                                                isDark
+                                                                  ? "bg-green-400"
+                                                                  : "bg-green-500"
+                                                              )}
+                                                            ></div>
+                                                            <span className="whitespace-nowrap">
+                                                              {formatMoney(
+                                                                submission.earnings
+                                                              )}{" "}
+                                                              {contestType === "cpm"
+                                                                ? "CPM"
+                                                                : "Prize"}
+                                                            </span>
+                                                            <span
+                                                              className={cn(
+                                                                "text-green-600 dark:text-green-400",
+                                                                isDark
+                                                                  ? "text-green-400"
+                                                                  : "text-green-600"
+                                                              )}
+                                                            >
+                                                              +
+                                                            </span>
+                                                            <span className="whitespace-nowrap">
+                                                              {formatMoney(
+                                                                flatFeeBonus
+                                                              )}{" "}
+                                                              Bonus
+                                                            </span>
+                                                          </div>
+                                                        </div>
+                                                      );
+                                                    } else {
+                                                      prizeDisplay = (
+                                                        <span
+                                                          className={cn(
+                                                            "font-semibold text-green-600 dark:text-green-400",
+                                                            isDark
+                                                              ? "text-green-400"
+                                                              : "text-green-600"
+                                                          )}
+                                                        >
+                                                          {earningsLabel}:{" "}
+                                                          {formatMoney(
+                                                            totalEarnings
+                                                          )}
+                                                        </span>
+                                                      );
+                                                    }
+                                                  }
+
+                                                  // No safety check needed - data comes from existing leaderboard
+
+                                                  return (
+                                                    <Card
+                                                      key={submission.id}
+                                                      className="border border-slate-200 dark:border-slate-700"
+                                                    >
+                                                      <CardContent className="p-3 sm:p-4 flex items-center space-x-3 sm:space-x-4">
+                                                        <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0">
+                                                          #{actualRank}
+                                                        </div>
+                                                        <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
+                                                          <AvatarImage
+                                                            src={
+                                                              submission.user_platform_pfp_url ??
+                                                              submission.creator_pfp_url ??
+                                                              undefined
+                                                            }
+                                                            alt={
+                                                              submission.user_platform_username
+                                                            }
+                                                          />
+                                                          <AvatarFallback
+                                                            className={cn(
+                                                              "bg-primary/20 text-primary",
+                                                              isDark
+                                                                ? "text-primary-foreground"
+                                                                : "text-primary"
+                                                            )}
+                                                          >
+                                                            {submission.user_platform_username?.[0]?.toUpperCase() ||
+                                                              "U"}
+                                                          </AvatarFallback>
+                                                        </Avatar>
+                                                        <div className="flex-grow min-w-0">
+                                                          <div className="flex items-center gap-2 mb-1">
+                                                            <p
+                                                              className={cn(
+                                                                "text-sm sm:text-base font-semibold truncate",
+                                                                isDark
+                                                                  ? "text-white"
+                                                                  : "text-gray-900"
+                                                              )}
+                                                            >
+                                                              {contest?.platform ===
+                                                                "twitter"
+                                                                ? (
+                                                                  submission as any
+                                                                ).app_username ||
+                                                                submission.user_platform_username
+                                                                : submission.user_platform_username}{" "}
+                                                              {actualRank ===
+                                                                myLeaderboardEntry?.rank &&
+                                                                "(You)"}
+                                                            </p>
+                                                            {renderVerificationBadges(
+                                                              submission.status
+                                                            )}
+                                                          </div>
+                                                          <p
+                                                            className={cn(
+                                                              "text-xs text-slate-600 dark:text-slate-400 mb-2",
+                                                              isDark
+                                                                ? "text-gray-400"
+                                                                : "text-gray-600"
+                                                            )}
+                                                          >
+                                                            Submitted:{" "}
+                                                            {formatTimeAgo(
+                                                              submission.created_at
+                                                            )}
+                                                          </p>
+                                                          <div
+                                                            className={cn(
+                                                              "flex items-center gap-4 text-xs",
+                                                              isDark
+                                                                ? "text-gray-400"
+                                                                : "text-gray-600"
+                                                            )}
+                                                          >
+                                                            <div className="flex items-center gap-1">
+                                                              <Eye className="h-3 w-3" />
+                                                              {submission.views.toLocaleString()}{" "}
+                                                              views
+                                                            </div>
+                                                            {prizeDisplay}
+                                                          </div>
+                                                        </div>
+                                                        {submission.content_link && (
+                                                          <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            asChild
+                                                            className="h-8 w-8 p-0"
+                                                          >
+                                                            <Link
+                                                              href={
+                                                                submission.content_link
+                                                              }
+                                                              target="_blank"
+                                                              rel="noopener noreferrer"
+                                                              title="View Content"
+                                                            >
+                                                              <PlayCircle className="h-4 w-4" />
+                                                            </Link>
+                                                          </Button>
+                                                        )}
+                                                      </CardContent>
+                                                    </Card>
+                                                  );
+                                                }
+                                              )}
+
+                                              {/* Pagination Controls */}
+                                              {(() => {
+                                                const userSubmissions =
+                                                  getUserSubmissions();
+                                                const totalPages = Math.ceil(
+                                                  userSubmissions.length /
+                                                  modalItemsPerPage
+                                                );
+
+                                                if (totalPages <= 1) return null;
+
+                                                return (
+                                                  <div className="flex items-center justify-center gap-2 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                                    <Button
+                                                      variant="outline"
+                                                      size="sm"
+                                                      onClick={() =>
+                                                        setModalCurrentPage(
+                                                          (prev) =>
+                                                            Math.max(1, prev - 1)
+                                                        )
+                                                      }
+                                                      disabled={
+                                                        modalCurrentPage === 1
+                                                      }
+                                                      className="flex items-center gap-1"
+                                                    >
+                                                      <ChevronLeft className="h-4 w-4" />
+                                                      Previous
+                                                    </Button>
+
+                                                    <div className="flex items-center gap-1">
+                                                      {Array.from(
+                                                        {
+                                                          length: Math.min(
+                                                            5,
+                                                            totalPages
+                                                          ),
+                                                        },
+                                                        (_, i) => {
+                                                          let pageNum: number = 1;
+                                                          if (totalPages <= 5) {
+                                                            pageNum = i + 1;
+                                                          } else if (
+                                                            modalCurrentPage <= 3
+                                                          ) {
+                                                            pageNum = i + 1;
+                                                          } else if (
+                                                            modalCurrentPage >=
+                                                            totalPages - 2
+                                                          ) {
+                                                            pageNum =
+                                                              totalPages - 4 + i;
+                                                          } else {
+                                                            pageNum =
+                                                              modalCurrentPage -
+                                                              2 +
+                                                              i;
+                                                          }
+
+                                                          return (
+                                                            <Button
+                                                              key={pageNum}
+                                                              variant={
+                                                                modalCurrentPage ===
+                                                                  pageNum
+                                                                  ? "default"
+                                                                  : "outline"
+                                                              }
+                                                              size="sm"
+                                                              onClick={() =>
+                                                                setModalCurrentPage(
+                                                                  pageNum
+                                                                )
+                                                              }
+                                                              className="w-8 h-8 p-0"
+                                                            >
+                                                              {pageNum}
+                                                            </Button>
+                                                          );
+                                                        }
+                                                      )}
+                                                    </div>
+
+                                                    <Button
+                                                      variant="outline"
+                                                      size="sm"
+                                                      onClick={() =>
+                                                        setModalCurrentPage(
+                                                          (prev) =>
+                                                            Math.min(
+                                                              totalPages,
+                                                              prev + 1
+                                                            )
+                                                        )
+                                                      }
+                                                      disabled={
+                                                        modalCurrentPage ===
+                                                        totalPages
+                                                      }
+                                                      className="flex items-center gap-1"
+                                                    >
+                                                      Next
+                                                      <ChevronRight className="h-4 w-4" />
+                                                    </Button>
+                                                  </div>
+                                                );
+                                              })()}
+                                            </>
+                                          );
+                                        })()
+                                      )}
+                                    </div>
+                                  </DialogContent>
+                                </Dialog>
+                              </div>
+                            )}
+                          </Card>
+                        )
+                      );
+                    })()}
+
+                    {/* Leaderboard Metrics - Moved after user's rank card for better UX */}
+                    {(() => {
+                      const { isDisabled, disabledReason, cooldownInfo } = getRefreshButtonState();
+                      return (
+                        <div className={cn(
+                          "flex items-center justify-between p-4 rounded-xl border shadow-sm mb-4",
+                          isDark
+                            ? "bg-[#180438] border-gray-700"
+                            : "bg-white border-gray-300"
+                        )}>
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "p-2 rounded-lg",
+                              isDark
+                                ? "bg-purple-900/30 text-purple-400"
+                                : "bg-purple-100 text-purple-600"
+                            )}>
+                              <RefreshCw className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <h3 className={cn(
+                                "text-lg font-semibold",
+                                isDark ? "text-white" : "text-gray-900"
+                              )}>
+                                Leaderboard Metrics
+                              </h3>
+                              <p className={cn(
+                                "text-sm",
+                                isDark ? "text-gray-400" : "text-gray-600"
+                              )}>
+                                {contest?.last_metrics_updated
+                                  ? `Last updated: ${formatTimeAgo(contest.last_metrics_updated)}`
+                                  : "Metrics not yet updated"}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            onClick={handleRefreshMetrics}
+                            disabled={isDisabled}
+                            variant="outline"
+                            size="sm"
+                            className={cn(
+                              "flex items-center gap-2",
+                              isDisabled
+                                ? "opacity-60 cursor-not-allowed"
+                                : isDark
+                                  ? "border-purple-600 text-purple-300 hover:bg-purple-900/30"
+                                  : "border-purple-500 text-purple-600 hover:bg-purple-50"
+                            )}
+                            title={disabledReason || "Refresh metrics and leaderboard"}
+                          >
+                            {isRefreshingMetrics ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4" />
+                            )}
+                            <span className="hidden sm:inline">
+                              {isRefreshingMetrics
+                                ? "Updating..."
+                                : !cooldownInfo?.canRefresh
+                                  ? `Wait ${cooldownInfo?.remainingMinutes}m`
+                                  : "Refresh Metrics"}
+                            </span>
+                            <span className="sm:hidden">
+                              {isRefreshingMetrics
+                                ? "Updating..."
+                                : !cooldownInfo?.canRefresh
+                                  ? `${cooldownInfo?.remainingMinutes}m`
+                                  : "Refresh"}
+                            </span>
+                          </Button>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Creator Videos Modal */}
+                    <Dialog
+                      open={showCreatorVideosModal}
+                      onOpenChange={setShowCreatorVideosModal}
+                      isdark={isDark}
+                    >
+                      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+                        <DialogHeader className="flex-shrink-0">
+                          <DialogTitle
+                            className={cn(
+                              "flex items-center gap-2",
+                              isDark ? "text-white" : "text-gray-700"
+                            )}
+                          >
+                            <Eye className="h-5 w-5" />
+                            {(() => {
+                              const creatorGroup =
+                                groupedLeaderboardByCreator?.find(
+                                  (group) => group.creator_id === selectedCreatorId
+                                );
+                              return creatorGroup
+                                ? `All Videos by ${creatorGroup.creator_username} (${getCreatorVideos.length})`
+                                : "Creator Videos";
+                            })()}
+                          </DialogTitle>
+                        </DialogHeader>
+
+                        {/* Scrollable Content Area */}
+                        <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                          {getCreatorVideos.length === 0 ? (
+                            <div className="text-center py-8">
+                              <p
+                                className={cn(
+                                  "text-sm",
+                                  isDark ? "text-gray-400" : "text-gray-600"
+                                )}
+                              >
+                                No videos found
+                              </p>
+                            </div>
+                          ) : (
+                            (() => {
+                              const totalPages = Math.ceil(
+                                getCreatorVideos.length / creatorVideosItemsPerPage
+                              );
+                              const startIndex =
+                                (creatorVideosCurrentPage - 1) *
+                                creatorVideosItemsPerPage;
+                              const endIndex =
+                                startIndex + creatorVideosItemsPerPage;
+                              const currentVideos = getCreatorVideos.slice(
+                                startIndex,
+                                endIndex
+                              );
+                              const creatorGroup =
+                                groupedLeaderboardByCreator?.find(
+                                  (group) => group.creator_id === selectedCreatorId
+                                );
+
+                              return (
+                                <>
+                                  {currentVideos.map((video, index) => {
+                                    // Calculate sequential rank within the modal (starting from 1)
+                                    const modalRank = startIndex + index + 1;
+                                    // Get actual leaderboard rank for prize lookup
+                                    const actualRank =
+                                      rankLookupMap.get(video.id) || null;
+
+                                    // Earnings display - match leaderboard format
+                                    let prizeDisplay = null;
+                                    if (video.earnings > 0) {
+                                      // For CPM contests, show Expected vs Earned based on verification/paid status
+                                      if (contestType === "cpm") {
+                                        const isEarned =
+                                          video.status === "verified" ||
+                                          video.status === "paid";
+                                        const earningsLabel = isEarned
+                                          ? "Earned"
+                                          : "Expected";
+
+                                        // Check if there's a flat fee bonus
+                                        const flatFeeBonus =
+                                          (contest.contest_based_details as any)
+                                            ?.cpm_contest?.flat_fee_bonus || 0;
+
+                                        // Calculate total earnings (CPM + Bonus if applicable)
+                                        const totalEarnings =
+                                          video.earnings + flatFeeBonus;
+
+                                        // Show detailed breakdown if in detailed mode and bonus exists
+                                        if (
+                                          leaderboardViewMode === "detailed" &&
+                                          flatFeeBonus > 0
+                                        ) {
+                                          prizeDisplay = (
+                                            <div className="space-y-1">
+                                              <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                                {earningsLabel}:{" "}
+                                                {formatMoney(totalEarnings)}
+                                              </div>
+                                              <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                                <span className="whitespace-nowrap">
+                                                  {formatMoney(video.earnings)} CPM
+                                                </span>
+                                                <span className="text-green-600 dark:text-green-400">
+                                                  +
+                                                </span>
+                                                <span className="whitespace-nowrap">
+                                                  {formatMoney(flatFeeBonus)} Bonus
+                                                </span>
+                                              </div>
+                                            </div>
+                                          );
+                                        } else {
+                                          prizeDisplay = (
+                                            <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                              {earningsLabel}:{" "}
+                                              {formatMoney(totalEarnings)}
+                                            </div>
+                                          );
+                                        }
+                                      } else {
+                                        // For leaderboard contests with earnings
+                                        if (
+                                          contestType === "leaderboard" &&
+                                          leaderboardViewMode === "detailed"
+                                        ) {
+                                          // Check for flat fee bonus in leaderboard contests
+                                          const flatFeeBonus =
+                                            (contest.contest_based_details as any)
+                                              ?.leaderboard_contest
+                                              ?.flat_fee_bonus || 0;
+
+                                          if (flatFeeBonus > 0) {
+                                            const totalEarnings =
+                                              video.earnings + flatFeeBonus;
+                                            prizeDisplay = (
+                                              <div className="space-y-1">
+                                                <div
+                                                  className={cn(
+                                                    "font-semibold text-base",
+                                                    isDark
+                                                      ? "text-green-300"
+                                                      : "text-green-600"
+                                                  )}
+                                                >
+                                                  Earned:{" "}
+                                                  {formatMoney(totalEarnings)}
+                                                </div>
+                                                <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                                  <span className="whitespace-nowrap">
+                                                    {formatMoney(video.earnings)}{" "}
+                                                    Prize
+                                                  </span>
+                                                  <span className="text-green-600 dark:text-green-400">
+                                                    +
+                                                  </span>
+                                                  <span className="whitespace-nowrap">
+                                                    {formatMoney(flatFeeBonus)}{" "}
+                                                    Bonus
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            );
+                                          } else {
+                                            prizeDisplay = (
+                                              <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                                Earned:{" "}
+                                                {formatMoney(video.earnings)}
+                                              </div>
+                                            );
+                                          }
+                                        } else {
+                                          // Simple view for leaderboard or non-CPM contests
+                                          prizeDisplay = (
+                                            <span className="font-semibold text-green-600 dark:text-green-400">
+                                              Earned: {formatMoney(video.earnings)}
+                                            </span>
+                                          );
+                                        }
+                                      }
+                                    } else if (
+                                      contest.contest_type === "leaderboard" &&
+                                      Array.isArray(
+                                        contest.contest_based_details
+                                          ?.leaderboard_contest?.prizes
+                                      )
+                                    ) {
+                                      const prizeInfo = actualRank
+                                        ? (
+                                          contest.contest_based_details
+                                            .leaderboard_contest
+                                            .prizes as PrizeInfo[]
+                                        ).find((p) => p.position === actualRank)
+                                        : null;
+                                      if (prizeInfo) {
+                                        const prizeText =
+                                          contest.status === "active"
+                                            ? "Winning Zone"
+                                            : "Prize";
+
+                                        // In detailed mode, show bonus information if available
+                                        if (leaderboardViewMode === "detailed") {
+                                          const flatFeeBonus =
+                                            (contest.contest_based_details as any)
+                                              ?.leaderboard_contest
+                                              ?.flat_fee_bonus || 0;
+
+                                          if (flatFeeBonus > 0) {
+                                            const totalEarnings =
+                                              prizeInfo.amount + flatFeeBonus;
+                                            prizeDisplay = (
+                                              <div className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                                <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                                <div>
+                                                  <div>
+                                                    {prizeText}:{" "}
+                                                    {formatMoney(totalEarnings)}
+                                                  </div>
+                                                  <div className="text-xs text-amber-600 dark:text-amber-500">
+                                                    ({formatMoney(prizeInfo.amount)}{" "}
+                                                    Prize +{" "}
+                                                    {formatMoney(flatFeeBonus)}{" "}
+                                                    Bonus)
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          } else {
+                                            prizeDisplay = (
+                                              <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                                <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                                {prizeText}:{" "}
+                                                {formatMoney(prizeInfo.amount)}
+                                              </span>
+                                            );
+                                          }
+                                        } else {
+                                          // Simple view
+                                          prizeDisplay = (
+                                            <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                              <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                              {prizeText}:{" "}
+                                              {formatMoney(prizeInfo.amount)}
+                                            </span>
+                                          );
+                                        }
+                                      }
+                                    }
+
+                                    return (
+                                      <div
+                                        key={video.id}
+                                        className="border border-[#D1B7F9] rounded-xl overflow-hidden"
+                                      >
+                                        <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
+                                          <div className="flex items-center space-x-3 md:space-x-4">
+                                            <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
+                                              {modalRank}
+                                            </h2>
+                                            <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
+                                              <AvatarImage
+                                                src={
+                                                  video.user_platform_pfp_url ??
+                                                  video.creator_pfp_url ??
+                                                  undefined
+                                                }
+                                                alt={video.user_platform_username}
+                                              />
+                                              <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
+                                                {video.user_platform_username?.[0]?.toUpperCase() ||
+                                                  "U"}
+                                              </AvatarFallback>
+                                            </Avatar>
+
+                                            <div className="flex-grow min-w-0">
+                                              <div className="flex items-center gap-2 mb-1">
+                                                <p
+                                                  className={cn(
+                                                    "text-sm sm:text-base font-semibold truncate",
+                                                    isDark
+                                                      ? "text-white"
+                                                      : "text-gray-700"
+                                                  )}
+                                                >
+                                                  {contest?.platform === "twitter"
+                                                    ? (video as any).app_username ||
+                                                    video.user_platform_username
+                                                    : video.user_platform_username}
+                                                </p>
+                                                {renderVerificationBadges(
+                                                  video.status
+                                                )}
+                                              </div>
+                                              <p
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-slate-500"
+                                                )}
+                                              >
+                                                Submitted:{" "}
+                                                {formatTimeAgo(video.created_at)}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
+                                            <div className="flex items-center space-x-2">
+                                              <p
+                                                className={cn(
+                                                  "text-base sm:text-lg font-bold",
+                                                  isDark
+                                                    ? "text-white"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                {video.views
+                                                  ? video.views.toLocaleString()
+                                                  : "0"}{" "}
+                                                views
+                                              </p>
+                                              {video.content_link &&
+                                                (contest?.status?.toLowerCase() ===
+                                                  "ended" ||
+                                                  contest?.status?.toLowerCase() ===
+                                                  "completed") && (
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className={cn(
+                                                      "h-7 w-7 sm:h-8 sm:w-8",
+                                                      isDark
+                                                        ? "text-gray-300"
+                                                        : "text-slate-500"
+                                                    )}
+                                                    asChild
+                                                  >
+                                                    <Link
+                                                      href={video.content_link}
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      title="View Content"
+                                                    >
+                                                      <PlayCircle className="h-4 w-4" />
+                                                    </Link>
+                                                  </Button>
+                                                )}
+                                            </div>
+                                            {prizeDisplay && (
+                                              <div className="text-xs sm:text-sm">
+                                                {prizeDisplay}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </CardContent>
+                                      </div>
+                                    );
+                                  })}
+
+                                  {/* Pagination Controls */}
+                                  {totalPages > 1 && (
+                                    <div className="flex items-center justify-center gap-2 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                          setCreatorVideosCurrentPage((prev) =>
+                                            Math.max(1, prev - 1)
+                                          )
+                                        }
+                                        disabled={creatorVideosCurrentPage === 1}
+                                        className="flex items-center gap-1"
+                                      >
+                                        <ChevronLeft className="h-4 w-4" />
+                                        Previous
+                                      </Button>
+
+                                      <div className="flex items-center gap-1">
+                                        {Array.from(
+                                          {
+                                            length: Math.min(5, totalPages),
+                                          },
+                                          (_, i) => {
+                                            let pageNum: number = 1;
+                                            if (totalPages <= 5) {
+                                              pageNum = i + 1;
+                                            } else if (
+                                              creatorVideosCurrentPage <= 3
+                                            ) {
+                                              pageNum = i + 1;
+                                            } else if (
+                                              creatorVideosCurrentPage >=
+                                              totalPages - 2
+                                            ) {
+                                              pageNum = totalPages - 4 + i;
+                                            } else {
+                                              pageNum =
+                                                creatorVideosCurrentPage - 2 + i;
+                                            }
+
+                                            return (
+                                              <Button
+                                                key={pageNum}
+                                                variant={
+                                                  creatorVideosCurrentPage ===
+                                                    pageNum
+                                                    ? "default"
+                                                    : "outline"
+                                                }
+                                                size="sm"
+                                                onClick={() =>
+                                                  setCreatorVideosCurrentPage(
+                                                    pageNum
+                                                  )
+                                                }
+                                                className="w-8 h-8 p-0"
+                                              >
+                                                {pageNum}
+                                              </Button>
+                                            );
+                                          }
+                                        )}
+                                      </div>
+
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                          setCreatorVideosCurrentPage((prev) =>
+                                            Math.min(totalPages, prev + 1)
+                                          )
+                                        }
+                                        disabled={
+                                          creatorVideosCurrentPage === totalPages
+                                        }
+                                        className="flex items-center gap-1"
+                                      >
+                                        Next
+                                        <ChevronRight className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+
+                    {/* Submission Stats and Info - only relevant for non-Twitter contests */}
+                    {contest?.platform !== "twitter" && (
+                      <div
+                        className={cn(
+                          "border rounded-lg p-3 mb-4",
+                          isDark
+                            ? "bg-blue-700/30 border-blue-700/50"
+                            : "bg-blue-50 border-blue-200"
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={cn(
+                              "flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5",
+                              isDark
+                                ? "bg-blue-500/30 text-white"
+                                : "bg-blue-100 text-blue-600"
+                            )}
+                          >
+                            <Info className="w-3 h-3" />
+                          </div>
+                          <div className="flex-1">
+                            <p
+                              className={cn(
+                                "text-md font-medium",
+                                isDark ? "text-white" : "text-blue-900"
+                              )}
+                            >
+                              Leaderboard Display
+                            </p>
+                            <div
+                              className={cn(
+                                "text-sm mt-1 space-y-1",
+                                isDark ? "text-gray-300" : "text-blue-700"
+                              )}
+                            >
+                              <p>
+                                Only non-rejected submissions are shown in the
+                                leaderboard.
+                                {contest?.multiple_submissions_enabled &&
+                                  leaderboardDisplayMode === "creator" &&
+                                  " Currently viewing by creator (all submissions grouped)."}
+                              </p>
+                              {contest?.live_submission_count !== null &&
+                                contest?.live_submission_count !== undefined && (
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <span className="font-medium">
+                                      Submissions:
+                                    </span>
+                                    <span className="text-green-700 font-semibold">
+                                      {totalLeaderboardEntries} active
+                                    </span>
+                                    {contest.live_submission_count !==
+                                      totalLeaderboardEntries && (
+                                        <>
+                                          <span
+                                            className={cn(
+                                              "text-blue-600",
+                                              isDark
+                                                ? "text-gray-400"
+                                                : "text-blue-700"
+                                            )}
+                                          >
+                                            |
+                                          </span>
+                                          <span className="text-red-700 font-semibold">
+                                            {contest.live_submission_count -
+                                              totalLeaderboardEntries}{" "}
+                                            rejected
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-blue-600",
+                                              isDark
+                                                ? "text-gray-400"
+                                                : "text-blue-700"
+                                            )}
+                                          >
+                                            |
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-blue-700",
+                                              isDark
+                                                ? "text-gray-400"
+                                                : "text-blue-700"
+                                            )}
+                                          >
+                                            {contest.live_submission_count} total
+                                          </span>
+                                        </>
+                                      )}
+                                  </div>
+                                )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Render leaderboard based on display mode */}
+                    {leaderboardDisplayMode === "creator" &&
+                      groupedLeaderboardByCreator
+                      ? // Creator-wise display
+                      groupedLeaderboardByCreator.map((creatorGroup, index) => {
+                        // For Twitter, use current_rank from API; for others, calculate from pagination
+                        const rank =
+                          contest?.platform === "twitter" &&
+                            (creatorGroup as any).best_rank
+                            ? (creatorGroup as any).best_rank
+                            : (leaderboardCurrentPage - 1) *
+                            leaderboardItemsPerPage +
+                            index +
+                            1;
+                        let prizeDisplay = null;
+
+                        // Calculate total earnings including bonuses
+                        const flatFeeBonus =
+                          contestType === "cpm"
+                            ? (contest.contest_based_details as any)?.cpm_contest
+                              ?.flat_fee_bonus || 0
+                            : (contest.contest_based_details as any)
+                              ?.leaderboard_contest?.flat_fee_bonus || 0;
+
+                        const totalEarnings =
+                          creatorGroup.total_earnings +
+                          flatFeeBonus * creatorGroup.submission_count;
+
+                        if (creatorGroup.total_earnings > 0 || flatFeeBonus > 0) {
+                          if (
+                            leaderboardViewMode === "detailed" &&
+                            flatFeeBonus > 0
+                          ) {
+                            prizeDisplay = (
+                              <div className="space-y-1">
+                                <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                  Total Earned: {formatMoney(totalEarnings)}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                  <span className="whitespace-nowrap">
+                                    {formatMoney(creatorGroup.total_earnings)}{" "}
+                                    {contestType === "cpm" ? "CPM" : "Prize"}
+                                  </span>
+                                  <span className="text-green-600 dark:text-green-400">
+                                    +
+                                  </span>
+                                  <span className="whitespace-nowrap">
+                                    {formatMoney(
+                                      flatFeeBonus * creatorGroup.submission_count
+                                    )}{" "}
+                                    Bonus ({creatorGroup.submission_count} sub.)
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          } else {
+                            prizeDisplay = (
+                              <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                Total Earned: {formatMoney(totalEarnings)}
+                              </div>
+                            );
+                          }
+                        } else if (
+                          contest.contest_type === "leaderboard" &&
+                          Array.isArray(
+                            contest.contest_based_details?.leaderboard_contest
+                              ?.prizes
+                          )
+                        ) {
+                          const prizeInfo = (
+                            contest.contest_based_details.leaderboard_contest
+                              .prizes as PrizeInfo[]
+                          ).find((p) => p.position === creatorGroup.best_rank);
+                          if (prizeInfo) {
+                            const prizeText =
+                              contest.status === "active"
+                                ? "Winning Zone"
+                                : "Prize";
+                            const totalPrize =
+                              prizeInfo.amount +
+                              flatFeeBonus * creatorGroup.submission_count;
+
+                            if (
+                              leaderboardViewMode === "detailed" &&
+                              flatFeeBonus > 0
+                            ) {
+                              prizeDisplay = (
+                                <div className="space-y-1">
+                                  <div className="font-semibold text-amber-500 dark:text-amber-400 text-base flex items-center">
+                                    <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                    {prizeText}: {formatMoney(totalPrize)}
+                                  </div>
+                                  <div className="text-xs text-amber-600 dark:text-amber-500">
+                                    ({formatMoney(prizeInfo.amount)} Prize +{" "}
+                                    {formatMoney(
+                                      flatFeeBonus * creatorGroup.submission_count
+                                    )}{" "}
+                                    Bonus)
+                                  </div>
+                                </div>
+                              );
+                            } else {
+                              prizeDisplay = (
+                                <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                  <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                  {prizeText}: {formatMoney(totalPrize)}
+                                </span>
+                              );
+                            }
+                          }
+                        }
+
+                        return (
+                          <div
+                            key={creatorGroup.creator_id}
+                            className="border border-[#D1B7F9] rounded-xl overflow-hidden"
+                          >
+                            <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
+                              <div className="flex items-center space-x-3 md:space-x-4">
+                                <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
+                                  {contest?.platform === "twitter"
+                                    ? `#${rank}`
+                                    : rank}
+                                </h2>
+                                <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
+                                  <AvatarImage
+                                    src={
+                                      creatorGroup.user_platform_pfp_url ??
+                                      creatorGroup.creator_pfp_url ??
+                                      undefined
+                                    }
+                                    alt={creatorGroup.creator_username}
+                                  />
+                                  <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
+                                    {creatorGroup.creator_username?.[0]?.toUpperCase() ||
+                                      "U"}
+                                  </AvatarFallback>
+                                </Avatar>
+
+                                <div className="flex-grow min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <p
+                                      className={cn(
+                                        "text-sm sm:text-base font-semibold truncate",
+                                        isDark ? "text-white" : "text-gray-700"
+                                      )}
+                                    >
+                                      {contest?.platform === "twitter"
+                                        ? (creatorGroup as any).app_full_name ||
+                                        (creatorGroup as any).app_username ||
+                                        creatorGroup.creator_username
+                                        : creatorGroup.creator_username}
+                                    </p>
+                                  </div>
+                                  {contest?.platform === "twitter" ? (
+                                    <div className="flex flex-wrap items-center gap-3 mt-1.5">
                                       <div className="flex items-center gap-1">
                                         <FileText
                                           className={cn(
@@ -5560,7 +7251,7 @@ export function ContestClientPage({
                                               : "text-slate-600"
                                           )}
                                         >
-                                          {(displayEntry as any)
+                                          {(creatorGroup as any)
                                             .total_eligible_tweets || 0}{" "}
                                           tweets
                                         </span>
@@ -5583,7 +7274,7 @@ export function ContestClientPage({
                                           )}
                                         >
                                           {(
-                                            (displayEntry as any)
+                                            (creatorGroup as any)
                                               .total_impressions || 0
                                           ).toLocaleString()}{" "}
                                           impressions
@@ -5599,8 +7290,7 @@ export function ContestClientPage({
                                               : "text-gray-700"
                                           )}
                                         >
-                                          {(displayEntry as any).total_likes ||
-                                            0}
+                                          {(creatorGroup as any).total_likes || 0}
                                         </span>
                                       </div>
                                       <div className="flex items-center gap-1">
@@ -5613,8 +7303,8 @@ export function ContestClientPage({
                                               : "text-gray-700"
                                           )}
                                         >
-                                          {(displayEntry as any)
-                                            .total_retweets || 0}
+                                          {(creatorGroup as any).total_retweets ||
+                                            0}
                                         </span>
                                       </div>
                                       <div className="flex items-center gap-1">
@@ -5634,1624 +7324,333 @@ export function ContestClientPage({
                                               : "text-gray-700"
                                           )}
                                         >
-                                          {(displayEntry as any)
-                                            .total_replies || 0}
+                                          {(creatorGroup as any).total_replies ||
+                                            0}
                                         </span>
                                       </div>
-                                    </div>
-                                  )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
-                            <div className="flex items-center space-x-2">
-                              <p
-                                className={cn(
-                                  "text-base sm:text-lg font-bold",
-                                  isDark ? "text-white" : "text-gray-900"
-                                )}
-                              >
-                                {contest?.platform === "twitter" ? (
-                                  <>
-                                    {typeof (displayEntry as any)
-                                      .total_points === "number"
-                                      ? (
-                                        displayEntry as any
-                                      ).total_points.toLocaleString()
-                                      : "0"}{" "}
-                                    points
-                                  </>
-                                ) : (
-                                  <>
-                                    {displayEntry.views
-                                      ? displayEntry.views.toLocaleString()
-                                      : "0"}{" "}
-                                    views
-                                  </>
-                                )}
-                              </p>
-                              {displayEntry.content_link && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 sm:h-8 sm:w-8 text-primary/80 hover:text-primary dark:text-primary-foreground/80 dark:hover:text-primary-foreground"
-                                  asChild
-                                >
-                                  <Link
-                                    href={displayEntry.content_link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    title="View Your Content"
-                                  >
-                                    <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
-                                  </Link>
-                                </Button>
-                              )}
-                            </div>
-                            {(() => {
-                              // Don't show winning zone for rejected entries
-                              if (
-                                contest?.platform === "twitter" &&
-                                (displayEntry as any).moderation_status ===
-                                "rejected"
-                              ) {
-                                return null;
-                              }
-
-                              let prizeDisplay = null;
-                              if (displayEntry.earnings > 0) {
-                                // Show actual earnings for verified or paid submissions; otherwise show expected
-                                const isEarned =
-                                  displayEntry.status === "verified" ||
-                                  displayEntry.status === "paid";
-                                const earningsLabel = isEarned
-                                  ? "Earned"
-                                  : "Expected";
-
-                                // Check for flat fee bonus in detailed mode
-                                if (leaderboardViewMode === "detailed") {
-                                  const flatFeeBonus =
-                                    contestType === "cpm"
-                                      ? (contest.contest_based_details as any)
-                                        ?.cpm_contest?.flat_fee_bonus || 0
-                                      : (contest.contest_based_details as any)
-                                        ?.leaderboard_contest
-                                        ?.flat_fee_bonus || 0;
-
-                                  if (flatFeeBonus > 0) {
-                                    const totalEarnings =
-                                      displayEntry.earnings + flatFeeBonus;
-                                    prizeDisplay = (
-                                      <div className="space-y-1">
-                                        <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                          {earningsLabel}:{" "}
-                                          {formatMoney(totalEarnings)}
-                                        </div>
-                                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
-                                          <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                                          <span className="whitespace-nowrap">
-                                            {formatMoney(displayEntry.earnings)}{" "}
-                                            {contestType === "cpm"
-                                              ? "CPM"
-                                              : "Prize"}
-                                          </span>
-                                          <span className="text-green-600 dark:text-green-400">
-                                            +
-                                          </span>
-                                          <span className="whitespace-nowrap">
-                                            {formatMoney(flatFeeBonus)} Bonus
-                                          </span>
-                                        </div>
-                                      </div>
-                                    );
-                                  } else {
-                                    prizeDisplay = (
-                                      <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                        {earningsLabel}:{" "}
-                                        {formatMoney(displayEntry.earnings)}
-                                      </div>
-                                    );
-                                  }
-                                } else {
-                                  // Simple view - show total earnings if bonus exists
-                                  const flatFeeBonus =
-                                    contestType === "cpm"
-                                      ? (contest.contest_based_details as any)
-                                        ?.cpm_contest?.flat_fee_bonus || 0
-                                      : (contest.contest_based_details as any)
-                                        ?.leaderboard_contest
-                                        ?.flat_fee_bonus || 0;
-
-                                  const totalEarnings =
-                                    displayEntry.earnings + flatFeeBonus;
-                                  prizeDisplay = (
-                                    <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                      {earningsLabel}:{" "}
-                                      {formatMoney(totalEarnings)}
-                                    </div>
-                                  );
-                                }
-                              } else if (
-                                contest.contest_type === "leaderboard" &&
-                                Array.isArray(
-                                  contest.contest_based_details
-                                    ?.leaderboard_contest?.prizes
-                                ) &&
-                                myLeaderboardEntry?.rank
-                              ) {
-                                const prizeInfo = (
-                                  contest.contest_based_details
-                                    .leaderboard_contest.prizes as PrizeInfo[]
-                                ).find(
-                                  (p) => p.position === myLeaderboardEntry?.rank
-                                );
-                                if (prizeInfo) {
-                                  const prizeText =
-                                    contest.status === "active"
-                                      ? "Winning Zone"
-                                      : "Prize";
-
-                                  // Check for flat fee bonus in detailed mode
-                                  if (leaderboardViewMode === "detailed") {
-                                    const flatFeeBonus =
-                                      (contest.contest_based_details as any)
-                                        ?.leaderboard_contest?.flat_fee_bonus ||
-                                      0;
-
-                                    if (flatFeeBonus > 0) {
-                                      const totalEarnings =
-                                        prizeInfo.amount + flatFeeBonus;
-                                      prizeDisplay = (
-                                        <div className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                                          <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                          <div>
-                                            <div>
-                                              {prizeText}:{" "}
-                                              {formatMoney(totalEarnings)}
-                                            </div>
-                                            <div className="text-xs text-amber-600 dark:text-amber-500">
-                                              ({formatMoney(prizeInfo.amount)}{" "}
-                                              Prize +{" "}
-                                              {formatMoney(flatFeeBonus)} Bonus)
-                                            </div>
-                                          </div>
-                                        </div>
-                                      );
-                                    } else {
-                                      prizeDisplay = (
-                                        <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                                          <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                          {prizeText}:{" "}
-                                          {formatMoney(prizeInfo.amount)}
-                                        </span>
-                                      );
-                                    }
-                                  } else {
-                                    // Simple view - show total if bonus exists
-                                    const flatFeeBonus =
-                                      (contest.contest_based_details as any)
-                                        ?.leaderboard_contest?.flat_fee_bonus ||
-                                      0;
-                                    const totalEarnings =
-                                      prizeInfo.amount + flatFeeBonus;
-
-                                    prizeDisplay = (
-                                      <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                                        <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                        {prizeText}:{" "}
-                                        {formatMoney(totalEarnings)}
-                                      </span>
-                                    );
-                                  }
-                                }
-                              }
-                              return prizeDisplay ? (
-                                <div className="text-xs sm:text-sm">
-                                  {prizeDisplay}
-                                </div>
-                              ) : null;
-                            })()}
-                          </div>
-                        </CardContent>
-
-                        {/* View All Submissions Button - Only show if user has multiple submissions */}
-                        {getUserSubmissions().length > 1 && (
-                          <div className="px-3 pb-3 sm:px-4 sm:pb-4">
-                            <Dialog
-                              open={showAllSubmissionsModal}
-                              onOpenChange={setShowAllSubmissionsModal}
-                              isdark={isDark}
-                            >
-                              <DialogTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="flex w-full items-center justify-center gap-2 px-3 py-3 rounded-full"
-                                  style={{
-                                    backgroundColor: isDark
-                                      ? "#7F39EC"
-                                      : "#D9C0FF61",
-                                    color: isDark ? "white" : "#7F39EC",
-                                    transition: "none",
-                                  }}
-                                >
-                                  <ListOrdered className="h-3 w-3 mr-2" />
-                                  View All Your Submissions (
-                                  {getUserSubmissions().length})
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
-                                <DialogHeader className="flex-shrink-0">
-                                  <DialogTitle className="flex items-center gap-2">
-                                    <ListOrdered className="h-5 w-5" />
-                                    All Your Submissions (
-                                    {getUserSubmissions().length})
-                                  </DialogTitle>
-
-                                  {/* View Mode Toggle for Modal */}
-                                  {(contest?.contest_type === "leaderboard" ||
-                                    contest?.contest_type === "cpm") &&
-                                    (contest.contest_based_details
-                                      ?.leaderboard_contest?.flat_fee_bonus ||
-                                      contest.contest_based_details?.cpm_contest
-                                        ?.flat_fee_bonus ||
-                                      (contest as any).bonus_details
-                                        ?.description_html) && (
-                                      <div className="flex justify-center mt-4">
-                                        <div
-                                          className={cn(
-                                            "flex rounded-lg p-1",
-                                            isDark
-                                              ? "bg-[#170337]"
-                                              : "bg-white dark:bg-slate-700 shadow-sm border border-slate-200 dark:border-slate-600"
-                                          )}
-                                        >
-                                          <Button
-                                            variant={
-                                              modalViewMode === "simple"
-                                                ? "default"
-                                                : "ghost"
-                                            }
-                                            size="sm"
-                                            onClick={() =>
-                                              setModalViewMode("simple")
-                                            }
-                                            className={`text-xs px-3 py-1.5 transition-all duration-200 ${modalViewMode === "simple"
-                                              ? isDark
-                                                ? "bg-purple-600 text-white"
-                                                : "bg-purple-500 text-white"
-                                              : isDark
-                                                ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                                : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                                              }`}
-                                          >
-                                            Simple
-                                          </Button>
-                                          <Button
-                                            variant={
-                                              modalViewMode === "detailed"
-                                                ? "default"
-                                                : "ghost"
-                                            }
-                                            size="sm"
-                                            onClick={() =>
-                                              setModalViewMode("detailed")
-                                            }
-                                            className={`text-xs px-3 py-1.5 transition-all duration-200 ${modalViewMode === "detailed"
-                                              ? isDark
-                                                ? "bg-purple-600 text-white"
-                                                : "bg-purple-500 text-white"
-                                              : isDark
-                                                ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                                : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                                              }`}
-                                          >
-                                            Detailed
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    )}
-                                </DialogHeader>
-
-                                {/* Scrollable Content Area */}
-                                <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-                                  {getUserSubmissions().length === 0 ? (
-                                    <div className="text-center py-8">
-                                      <p
-                                        className={cn(
-                                          "text-sm",
-                                          isDark
-                                            ? "text-gray-400"
-                                            : "text-gray-600"
-                                        )}
-                                      >
-                                        No submissions found
-                                      </p>
                                     </div>
                                   ) : (
-                                    (() => {
-                                      const userSubmissions =
-                                        getUserSubmissions();
-                                      const totalPages = Math.ceil(
-                                        userSubmissions.length /
-                                        modalItemsPerPage
-                                      );
-                                      const startIndex =
-                                        (modalCurrentPage - 1) *
-                                        modalItemsPerPage;
-                                      const endIndex =
-                                        startIndex + modalItemsPerPage;
-                                      const currentSubmissions =
-                                        userSubmissions.slice(
-                                          startIndex,
-                                          endIndex
-                                        );
-
-                                      return (
-                                        <>
-                                          {currentSubmissions.map(
-                                            (submission, index) => {
-                                              // Get actual rank from leaderboard using O(1) lookup
-                                              const actualRank =
-                                                rankLookupMap.get(
-                                                  submission.id
-                                                ) || "?";
-
-                                              // Earnings display based on modal view mode
-                                              let prizeDisplay = null;
-                                              if (submission.earnings > 0) {
-                                                const isEarned =
-                                                  submission.status ===
-                                                  "verified" ||
-                                                  submission.status === "paid";
-                                                const earningsLabel = isEarned
-                                                  ? "Earned"
-                                                  : "Expected";
-
-                                                const flatFeeBonus =
-                                                  contestType === "cpm"
-                                                    ? (
-                                                      contest.contest_based_details as any
-                                                    )?.cpm_contest
-                                                      ?.flat_fee_bonus || 0
-                                                    : (
-                                                      contest.contest_based_details as any
-                                                    )?.leaderboard_contest
-                                                      ?.flat_fee_bonus || 0;
-                                                const totalEarnings =
-                                                  submission.earnings +
-                                                  flatFeeBonus;
-
-                                                if (
-                                                  modalViewMode ===
-                                                  "detailed" &&
-                                                  flatFeeBonus > 0
-                                                ) {
-                                                  prizeDisplay = (
-                                                    <div className="space-y-1">
-                                                      <div
-                                                        className={cn(
-                                                          "font-semibold text-green-600 dark:text-green-400 text-sm",
-                                                          isDark
-                                                            ? "text-green-400"
-                                                            : "text-green-600"
-                                                        )}
-                                                      >
-                                                        {earningsLabel}:{" "}
-                                                        {formatMoney(
-                                                          totalEarnings
-                                                        )}
-                                                      </div>
-                                                      <div
-                                                        className={cn(
-                                                          "flex flex-wrap items-center gap-1.5 text-xs",
-                                                          isDark
-                                                            ? "text-green-400 bg-green-900/20 border border-green-800"
-                                                            : "text-green-600 bg-green-50 border border-green-200"
-                                                        )}
-                                                      >
-                                                        <div
-                                                          className={cn(
-                                                            "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                                                            isDark
-                                                              ? "bg-green-400"
-                                                              : "bg-green-500"
-                                                          )}
-                                                        ></div>
-                                                        <span className="whitespace-nowrap">
-                                                          {formatMoney(
-                                                            submission.earnings
-                                                          )}{" "}
-                                                          {contestType === "cpm"
-                                                            ? "CPM"
-                                                            : "Prize"}
-                                                        </span>
-                                                        <span
-                                                          className={cn(
-                                                            "text-green-600 dark:text-green-400",
-                                                            isDark
-                                                              ? "text-green-400"
-                                                              : "text-green-600"
-                                                          )}
-                                                        >
-                                                          +
-                                                        </span>
-                                                        <span className="whitespace-nowrap">
-                                                          {formatMoney(
-                                                            flatFeeBonus
-                                                          )}{" "}
-                                                          Bonus
-                                                        </span>
-                                                      </div>
-                                                    </div>
-                                                  );
-                                                } else {
-                                                  prizeDisplay = (
-                                                    <span
-                                                      className={cn(
-                                                        "font-semibold text-green-600 dark:text-green-400",
-                                                        isDark
-                                                          ? "text-green-400"
-                                                          : "text-green-600"
-                                                      )}
-                                                    >
-                                                      {earningsLabel}:{" "}
-                                                      {formatMoney(
-                                                        totalEarnings
-                                                      )}
-                                                    </span>
-                                                  );
-                                                }
-                                              }
-
-                                              // No safety check needed - data comes from existing leaderboard
-
-                                              return (
-                                                <Card
-                                                  key={submission.id}
-                                                  className="border border-slate-200 dark:border-slate-700"
-                                                >
-                                                  <CardContent className="p-3 sm:p-4 flex items-center space-x-3 sm:space-x-4">
-                                                    <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0">
-                                                      #{actualRank}
-                                                    </div>
-                                                    <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
-                                                      <AvatarImage
-                                                        src={
-                                                          submission.user_platform_pfp_url ??
-                                                          submission.creator_pfp_url ??
-                                                          undefined
-                                                        }
-                                                        alt={
-                                                          submission.user_platform_username
-                                                        }
-                                                      />
-                                                      <AvatarFallback
-                                                        className={cn(
-                                                          "bg-primary/20 text-primary",
-                                                          isDark
-                                                            ? "text-primary-foreground"
-                                                            : "text-primary"
-                                                        )}
-                                                      >
-                                                        {submission.user_platform_username?.[0]?.toUpperCase() ||
-                                                          "U"}
-                                                      </AvatarFallback>
-                                                    </Avatar>
-                                                    <div className="flex-grow min-w-0">
-                                                      <div className="flex items-center gap-2 mb-1">
-                                                        <p
-                                                          className={cn(
-                                                            "text-sm sm:text-base font-semibold truncate",
-                                                            isDark
-                                                              ? "text-white"
-                                                              : "text-gray-900"
-                                                          )}
-                                                        >
-                                                          {contest?.platform ===
-                                                            "twitter"
-                                                            ? (
-                                                              submission as any
-                                                            ).app_username ||
-                                                            submission.user_platform_username
-                                                            : submission.user_platform_username}{" "}
-                                                          {actualRank ===
-                                                            myLeaderboardEntry?.rank &&
-                                                            "(You)"}
-                                                        </p>
-                                                        {renderVerificationBadges(
-                                                          submission.status
-                                                        )}
-                                                      </div>
-                                                      <p
-                                                        className={cn(
-                                                          "text-xs text-slate-600 dark:text-slate-400 mb-2",
-                                                          isDark
-                                                            ? "text-gray-400"
-                                                            : "text-gray-600"
-                                                        )}
-                                                      >
-                                                        Submitted:{" "}
-                                                        {formatTimeAgo(
-                                                          submission.created_at
-                                                        )}
-                                                      </p>
-                                                      <div
-                                                        className={cn(
-                                                          "flex items-center gap-4 text-xs",
-                                                          isDark
-                                                            ? "text-gray-400"
-                                                            : "text-gray-600"
-                                                        )}
-                                                      >
-                                                        <div className="flex items-center gap-1">
-                                                          <Eye className="h-3 w-3" />
-                                                          {submission.views.toLocaleString()}{" "}
-                                                          views
-                                                        </div>
-                                                        {prizeDisplay}
-                                                      </div>
-                                                    </div>
-                                                    {submission.content_link && (
-                                                      <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        asChild
-                                                        className="h-8 w-8 p-0"
-                                                      >
-                                                        <Link
-                                                          href={
-                                                            submission.content_link
-                                                          }
-                                                          target="_blank"
-                                                          rel="noopener noreferrer"
-                                                          title="View Content"
-                                                        >
-                                                          <PlayCircle className="h-4 w-4" />
-                                                        </Link>
-                                                      </Button>
-                                                    )}
-                                                  </CardContent>
-                                                </Card>
-                                              );
-                                            }
-                                          )}
-
-                                          {/* Pagination Controls */}
-                                          {(() => {
-                                            const userSubmissions =
-                                              getUserSubmissions();
-                                            const totalPages = Math.ceil(
-                                              userSubmissions.length /
-                                              modalItemsPerPage
-                                            );
-
-                                            if (totalPages <= 1) return null;
-
-                                            return (
-                                              <div className="flex items-center justify-center gap-2 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
-                                                <Button
-                                                  variant="outline"
-                                                  size="sm"
-                                                  onClick={() =>
-                                                    setModalCurrentPage(
-                                                      (prev) =>
-                                                        Math.max(1, prev - 1)
-                                                    )
-                                                  }
-                                                  disabled={
-                                                    modalCurrentPage === 1
-                                                  }
-                                                  className="flex items-center gap-1"
-                                                >
-                                                  <ChevronLeft className="h-4 w-4" />
-                                                  Previous
-                                                </Button>
-
-                                                <div className="flex items-center gap-1">
-                                                  {Array.from(
-                                                    {
-                                                      length: Math.min(
-                                                        5,
-                                                        totalPages
-                                                      ),
-                                                    },
-                                                    (_, i) => {
-                                                      let pageNum;
-                                                      if (totalPages <= 5) {
-                                                        pageNum = i + 1;
-                                                      } else if (
-                                                        modalCurrentPage <= 3
-                                                      ) {
-                                                        pageNum = i + 1;
-                                                      } else if (
-                                                        modalCurrentPage >=
-                                                        totalPages - 2
-                                                      ) {
-                                                        pageNum =
-                                                          totalPages - 4 + i;
-                                                      } else {
-                                                        pageNum =
-                                                          modalCurrentPage -
-                                                          2 +
-                                                          i;
-                                                      }
-
-                                                      return (
-                                                        <Button
-                                                          key={pageNum}
-                                                          variant={
-                                                            modalCurrentPage ===
-                                                              pageNum
-                                                              ? "default"
-                                                              : "outline"
-                                                          }
-                                                          size="sm"
-                                                          onClick={() =>
-                                                            setModalCurrentPage(
-                                                              pageNum
-                                                            )
-                                                          }
-                                                          className="w-8 h-8 p-0"
-                                                        >
-                                                          {pageNum}
-                                                        </Button>
-                                                      );
-                                                    }
-                                                  )}
-                                                </div>
-
-                                                <Button
-                                                  variant="outline"
-                                                  size="sm"
-                                                  onClick={() =>
-                                                    setModalCurrentPage(
-                                                      (prev) =>
-                                                        Math.min(
-                                                          totalPages,
-                                                          prev + 1
-                                                        )
-                                                    )
-                                                  }
-                                                  disabled={
-                                                    modalCurrentPage ===
-                                                    totalPages
-                                                  }
-                                                  className="flex items-center gap-1"
-                                                >
-                                                  Next
-                                                  <ChevronRight className="h-4 w-4" />
-                                                </Button>
-                                              </div>
-                                            );
-                                          })()}
-                                        </>
-                                      );
-                                    })()
+                                    <div className="flex items-center gap-1 mt-1.5">
+                                      <Video
+                                        className={cn(
+                                          "h-4 w-4",
+                                          isDark
+                                            ? "text-gray-400"
+                                            : "text-slate-500"
+                                        )}
+                                      />
+                                      <p
+                                        className={cn(
+                                          "text-xs",
+                                          isDark
+                                            ? "text-gray-400"
+                                            : "text-slate-700"
+                                        )}
+                                      >
+                                        {creatorGroup.submission_count}{" "}
+                                        {creatorGroup.submission_count === 1
+                                          ? "submission"
+                                          : "submissions"}
+                                      </p>
+                                    </div>
                                   )}
                                 </div>
-                              </DialogContent>
-                            </Dialog>
-                          </div>
-                        )}
-                      </Card>
-                    )
-                  );
-                })()}
-
-                {/* Creator Videos Modal */}
-                <Dialog
-                  open={showCreatorVideosModal}
-                  onOpenChange={setShowCreatorVideosModal}
-                  isdark={isDark}
-                >
-                  <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
-                    <DialogHeader className="flex-shrink-0">
-                      <DialogTitle
-                        className={cn(
-                          "flex items-center gap-2",
-                          isDark ? "text-white" : "text-gray-700"
-                        )}
-                      >
-                        <Eye className="h-5 w-5" />
-                        {(() => {
-                          const creatorGroup =
-                            groupedLeaderboardByCreator?.find(
-                              (group) => group.creator_id === selectedCreatorId
-                            );
-                          return creatorGroup
-                            ? `All Videos by ${creatorGroup.creator_username} (${getCreatorVideos.length})`
-                            : "Creator Videos";
-                        })()}
-                      </DialogTitle>
-                    </DialogHeader>
-
-                    {/* Scrollable Content Area */}
-                    <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-                      {getCreatorVideos.length === 0 ? (
-                        <div className="text-center py-8">
-                          <p
-                            className={cn(
-                              "text-sm",
-                              isDark ? "text-gray-400" : "text-gray-600"
-                            )}
-                          >
-                            No videos found
-                          </p>
-                        </div>
-                      ) : (
-                        (() => {
-                          const totalPages = Math.ceil(
-                            getCreatorVideos.length / creatorVideosItemsPerPage
-                          );
-                          const startIndex =
-                            (creatorVideosCurrentPage - 1) *
-                            creatorVideosItemsPerPage;
-                          const endIndex =
-                            startIndex + creatorVideosItemsPerPage;
-                          const currentVideos = getCreatorVideos.slice(
-                            startIndex,
-                            endIndex
-                          );
-                          const creatorGroup =
-                            groupedLeaderboardByCreator?.find(
-                              (group) => group.creator_id === selectedCreatorId
-                            );
-
-                          return (
-                            <>
-                              {currentVideos.map((video, index) => {
-                                // Calculate sequential rank within the modal (starting from 1)
-                                const modalRank = startIndex + index + 1;
-                                // Get actual leaderboard rank for prize lookup
-                                const actualRank =
-                                  rankLookupMap.get(video.id) || null;
-
-                                // Earnings display - match leaderboard format
-                                let prizeDisplay = null;
-                                if (video.earnings > 0) {
-                                  // For CPM contests, show Expected vs Earned based on verification/paid status
-                                  if (contestType === "cpm") {
-                                    const isEarned =
-                                      video.status === "verified" ||
-                                      video.status === "paid";
-                                    const earningsLabel = isEarned
-                                      ? "Earned"
-                                      : "Expected";
-
-                                    // Check if there's a flat fee bonus
-                                    const flatFeeBonus =
-                                      (contest.contest_based_details as any)
-                                        ?.cpm_contest?.flat_fee_bonus || 0;
-
-                                    // Calculate total earnings (CPM + Bonus if applicable)
-                                    const totalEarnings =
-                                      video.earnings + flatFeeBonus;
-
-                                    // Show detailed breakdown if in detailed mode and bonus exists
-                                    if (
-                                      leaderboardViewMode === "detailed" &&
-                                      flatFeeBonus > 0
-                                    ) {
-                                      prizeDisplay = (
-                                        <div className="space-y-1">
-                                          <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                            {earningsLabel}:{" "}
-                                            {formatMoney(totalEarnings)}
-                                          </div>
-                                          <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                                            <span className="whitespace-nowrap">
-                                              {formatMoney(video.earnings)} CPM
-                                            </span>
-                                            <span className="text-green-600 dark:text-green-400">
-                                              +
-                                            </span>
-                                            <span className="whitespace-nowrap">
-                                              {formatMoney(flatFeeBonus)} Bonus
-                                            </span>
-                                          </div>
-                                        </div>
-                                      );
-                                    } else {
-                                      prizeDisplay = (
-                                        <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                          {earningsLabel}:{" "}
-                                          {formatMoney(totalEarnings)}
-                                        </div>
-                                      );
-                                    }
-                                  } else {
-                                    // For leaderboard contests with earnings
-                                    if (
-                                      contestType === "leaderboard" &&
-                                      leaderboardViewMode === "detailed"
-                                    ) {
-                                      // Check for flat fee bonus in leaderboard contests
-                                      const flatFeeBonus =
-                                        (contest.contest_based_details as any)
-                                          ?.leaderboard_contest
-                                          ?.flat_fee_bonus || 0;
-
-                                      if (flatFeeBonus > 0) {
-                                        const totalEarnings =
-                                          video.earnings + flatFeeBonus;
-                                        prizeDisplay = (
-                                          <div className="space-y-1">
-                                            <div
-                                              className={cn(
-                                                "font-semibold text-base",
-                                                isDark
-                                                  ? "text-green-300"
-                                                  : "text-green-600"
-                                              )}
-                                            >
-                                              Earned:{" "}
-                                              {formatMoney(totalEarnings)}
-                                            </div>
-                                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
-                                              <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                                              <span className="whitespace-nowrap">
-                                                {formatMoney(video.earnings)}{" "}
-                                                Prize
-                                              </span>
-                                              <span className="text-green-600 dark:text-green-400">
-                                                +
-                                              </span>
-                                              <span className="whitespace-nowrap">
-                                                {formatMoney(flatFeeBonus)}{" "}
-                                                Bonus
-                                              </span>
-                                            </div>
-                                          </div>
-                                        );
-                                      } else {
-                                        prizeDisplay = (
-                                          <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                            Earned:{" "}
-                                            {formatMoney(video.earnings)}
-                                          </div>
-                                        );
-                                      }
-                                    } else {
-                                      // Simple view for leaderboard or non-CPM contests
-                                      prizeDisplay = (
-                                        <span className="font-semibold text-green-600 dark:text-green-400">
-                                          Earned: {formatMoney(video.earnings)}
-                                        </span>
-                                      );
-                                    }
-                                  }
-                                } else if (
-                                  contest.contest_type === "leaderboard" &&
-                                  Array.isArray(
-                                    contest.contest_based_details
-                                      ?.leaderboard_contest?.prizes
-                                  )
-                                ) {
-                                  const prizeInfo = actualRank
-                                    ? (
-                                      contest.contest_based_details
-                                        .leaderboard_contest
-                                        .prizes as PrizeInfo[]
-                                    ).find((p) => p.position === actualRank)
-                                    : null;
-                                  if (prizeInfo) {
-                                    const prizeText =
-                                      contest.status === "active"
-                                        ? "Winning Zone"
-                                        : "Prize";
-
-                                    // In detailed mode, show bonus information if available
-                                    if (leaderboardViewMode === "detailed") {
-                                      const flatFeeBonus =
-                                        (contest.contest_based_details as any)
-                                          ?.leaderboard_contest
-                                          ?.flat_fee_bonus || 0;
-
-                                      if (flatFeeBonus > 0) {
-                                        const totalEarnings =
-                                          prizeInfo.amount + flatFeeBonus;
-                                        prizeDisplay = (
-                                          <div className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                                            <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                            <div>
-                                              <div>
-                                                {prizeText}:{" "}
-                                                {formatMoney(totalEarnings)}
-                                              </div>
-                                              <div className="text-xs text-amber-600 dark:text-amber-500">
-                                                ({formatMoney(prizeInfo.amount)}{" "}
-                                                Prize +{" "}
-                                                {formatMoney(flatFeeBonus)}{" "}
-                                                Bonus)
-                                              </div>
-                                            </div>
-                                          </div>
-                                        );
-                                      } else {
-                                        prizeDisplay = (
-                                          <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                                            <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                            {prizeText}:{" "}
-                                            {formatMoney(prizeInfo.amount)}
-                                          </span>
-                                        );
-                                      }
-                                    } else {
-                                      // Simple view
-                                      prizeDisplay = (
-                                        <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                                          <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                          {prizeText}:{" "}
-                                          {formatMoney(prizeInfo.amount)}
-                                        </span>
-                                      );
-                                    }
-                                  }
-                                }
-
-                                return (
-                                  <div
-                                    key={video.id}
-                                    className="border border-[#D1B7F9] rounded-xl overflow-hidden"
-                                  >
-                                    <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
-                                      <div className="flex items-center space-x-3 md:space-x-4">
-                                        <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
-                                          {modalRank}
-                                        </h2>
-                                        <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
-                                          <AvatarImage
-                                            src={
-                                              video.user_platform_pfp_url ??
-                                              video.creator_pfp_url ??
-                                              undefined
-                                            }
-                                            alt={video.user_platform_username}
-                                          />
-                                          <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
-                                            {video.user_platform_username?.[0]?.toUpperCase() ||
-                                              "U"}
-                                          </AvatarFallback>
-                                        </Avatar>
-
-                                        <div className="flex-grow min-w-0">
-                                          <div className="flex items-center gap-2 mb-1">
-                                            <p
-                                              className={cn(
-                                                "text-sm sm:text-base font-semibold truncate",
-                                                isDark
-                                                  ? "text-white"
-                                                  : "text-gray-700"
-                                              )}
-                                            >
-                                              {contest?.platform === "twitter"
-                                                ? (video as any).app_username ||
-                                                video.user_platform_username
-                                                : video.user_platform_username}
-                                            </p>
-                                            {renderVerificationBadges(
-                                              video.status
-                                            )}
-                                          </div>
-                                          <p
-                                            className={cn(
-                                              "text-xs",
-                                              isDark
-                                                ? "text-gray-300"
-                                                : "text-slate-500"
-                                            )}
-                                          >
-                                            Submitted:{" "}
-                                            {formatTimeAgo(video.created_at)}
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
-                                        <div className="flex items-center space-x-2">
-                                          <p
-                                            className={cn(
-                                              "text-base sm:text-lg font-bold",
-                                              isDark
-                                                ? "text-white"
-                                                : "text-gray-700"
-                                            )}
-                                          >
-                                            {video.views
-                                              ? video.views.toLocaleString()
-                                              : "0"}{" "}
-                                            views
-                                          </p>
-                                          {video.content_link &&
-                                            (contest?.status?.toLowerCase() ===
-                                              "ended" ||
-                                              contest?.status?.toLowerCase() ===
-                                              "completed") && (
-                                              <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className={cn(
-                                                  "h-7 w-7 sm:h-8 sm:w-8",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-slate-500"
-                                                )}
-                                                asChild
-                                              >
-                                                <Link
-                                                  href={video.content_link}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  title="View Content"
-                                                >
-                                                  <PlayCircle className="h-4 w-4" />
-                                                </Link>
-                                              </Button>
-                                            )}
-                                        </div>
-                                        {prizeDisplay && (
-                                          <div className="text-xs sm:text-sm">
-                                            {prizeDisplay}
-                                          </div>
+                              </div>
+                              <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
+                                {contest?.platform === "twitter" ? (
+                                  <div className="flex items-center space-x-2">
+                                    <p
+                                      className={cn(
+                                        "text-base sm:text-lg font-bold",
+                                        isDark ? "text-white" : "text-gray-700"
+                                      )}
+                                    >
+                                      {typeof (creatorGroup as any)
+                                        .total_points === "number"
+                                        ? (
+                                          creatorGroup as any
+                                        ).total_points.toLocaleString()
+                                        : "0"}{" "}
+                                      points
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="flex items-center space-x-2">
+                                      <p
+                                        className={cn(
+                                          "text-base sm:text-lg font-bold",
+                                          isDark ? "text-white" : "text-gray-700"
                                         )}
-                                      </div>
-                                    </CardContent>
+                                      >
+                                        {creatorGroup.total_views.toLocaleString()}{" "}
+                                        views
+                                      </p>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          setSelectedCreatorId(
+                                            creatorGroup.creator_id
+                                          );
+                                          setShowCreatorVideosModal(true);
+                                          setCreatorVideosCurrentPage(1);
+                                        }}
+                                        className="h-6 w-6 p-0"
+                                        title="View all videos"
+                                      >
+                                        <Eye
+                                          className={cn(
+                                            "h-4 w-4",
+                                            isDark
+                                              ? "text-gray-400"
+                                              : "text-gray-600"
+                                          )}
+                                        />
+                                      </Button>
+                                    </div>
+                                  </>
+                                )}
+                                {prizeDisplay && (
+                                  <div className="text-xs sm:text-sm mt-2">
+                                    {prizeDisplay}
+                                  </div>
+                                )}
+                              </div>
+                            </CardContent>
+                          </div>
+                        );
+                      })
+                      : // Submission-wise display (original)
+                      leaderboard.map((entry, index) => {
+                        const rank =
+                          (leaderboardCurrentPage - 1) * leaderboardItemsPerPage +
+                          index +
+                          1;
+                        let prizeDisplay = null;
+
+                        if (entry.earnings > 0) {
+                          // For CPM contests, show Expected vs Earned based on verification/paid status
+                          if (contestType === "cpm") {
+                            const isEarned =
+                              entry.status === "verified" ||
+                              entry.status === "paid";
+                            const earningsLabel = isEarned
+                              ? "Earned"
+                              : "Expected";
+
+                            // Check if there's a flat fee bonus
+                            const flatFeeBonus =
+                              (contest.contest_based_details as any)?.cpm_contest
+                                ?.flat_fee_bonus || 0;
+
+                            // Calculate total earnings (CPM + Bonus if applicable)
+                            const totalEarnings = entry.earnings + flatFeeBonus;
+
+                            // Show detailed breakdown if in detailed mode and bonus exists
+                            if (
+                              leaderboardViewMode === "detailed" &&
+                              flatFeeBonus > 0
+                            ) {
+                              prizeDisplay = (
+                                <div className="space-y-1">
+                                  <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                    {earningsLabel}: {formatMoney(totalEarnings)}
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                    <span className="whitespace-nowrap">
+                                      {formatMoney(entry.earnings)} CPM
+                                    </span>
+                                    <span className="text-green-600 dark:text-green-400">
+                                      +
+                                    </span>
+                                    <span className="whitespace-nowrap">
+                                      {formatMoney(flatFeeBonus)} Bonus
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            } else {
+                              prizeDisplay = (
+                                <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                  {earningsLabel}: {formatMoney(totalEarnings)}
+                                </div>
+                              );
+                            }
+                          } else {
+                            // For leaderboard contests with earnings
+                            if (
+                              contestType === "leaderboard" &&
+                              leaderboardViewMode === "detailed"
+                            ) {
+                              // Check for flat fee bonus in leaderboard contests
+                              const flatFeeBonus =
+                                (contest.contest_based_details as any)
+                                  ?.leaderboard_contest?.flat_fee_bonus || 0;
+
+                              if (flatFeeBonus > 0) {
+                                const totalEarnings =
+                                  entry.earnings + flatFeeBonus;
+                                prizeDisplay = (
+                                  <div className="space-y-1">
+                                    <div
+                                      className={cn(
+                                        "font-semibold text-base",
+                                        isDark
+                                          ? "text-green-300"
+                                          : "text-green-600"
+                                      )}
+                                    >
+                                      Earned: {formatMoney(totalEarnings)}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                      <span className="whitespace-nowrap">
+                                        {formatMoney(entry.earnings)} Prize
+                                      </span>
+                                      <span className="text-green-600 dark:text-green-400">
+                                        +
+                                      </span>
+                                      <span className="whitespace-nowrap">
+                                        {formatMoney(flatFeeBonus)} Bonus
+                                      </span>
+                                    </div>
                                   </div>
                                 );
-                              })}
-
-                              {/* Pagination Controls */}
-                              {totalPages > 1 && (
-                                <div className="flex items-center justify-center gap-2 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() =>
-                                      setCreatorVideosCurrentPage((prev) =>
-                                        Math.max(1, prev - 1)
-                                      )
-                                    }
-                                    disabled={creatorVideosCurrentPage === 1}
-                                    className="flex items-center gap-1"
-                                  >
-                                    <ChevronLeft className="h-4 w-4" />
-                                    Previous
-                                  </Button>
-
-                                  <div className="flex items-center gap-1">
-                                    {Array.from(
-                                      {
-                                        length: Math.min(5, totalPages),
-                                      },
-                                      (_, i) => {
-                                        let pageNum;
-                                        if (totalPages <= 5) {
-                                          pageNum = i + 1;
-                                        } else if (
-                                          creatorVideosCurrentPage <= 3
-                                        ) {
-                                          pageNum = i + 1;
-                                        } else if (
-                                          creatorVideosCurrentPage >=
-                                          totalPages - 2
-                                        ) {
-                                          pageNum = totalPages - 4 + i;
-                                        } else {
-                                          pageNum =
-                                            creatorVideosCurrentPage - 2 + i;
-                                        }
-
-                                        return (
-                                          <Button
-                                            key={pageNum}
-                                            variant={
-                                              creatorVideosCurrentPage ===
-                                                pageNum
-                                                ? "default"
-                                                : "outline"
-                                            }
-                                            size="sm"
-                                            onClick={() =>
-                                              setCreatorVideosCurrentPage(
-                                                pageNum
-                                              )
-                                            }
-                                            className="w-8 h-8 p-0"
-                                          >
-                                            {pageNum}
-                                          </Button>
-                                        );
-                                      }
-                                    )}
+                              } else {
+                                prizeDisplay = (
+                                  <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                    Earned: {formatMoney(entry.earnings)}
                                   </div>
-
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() =>
-                                      setCreatorVideosCurrentPage((prev) =>
-                                        Math.min(totalPages, prev + 1)
-                                      )
-                                    }
-                                    disabled={
-                                      creatorVideosCurrentPage === totalPages
-                                    }
-                                    className="flex items-center gap-1"
-                                  >
-                                    Next
-                                    <ChevronRight className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              )}
-                            </>
-                          );
-                        })()
-                      )}
-                    </div>
-                  </DialogContent>
-                </Dialog>
-
-                {/* Leaderboard Header */}
-                <div className="flex items-center justify-between mb-4">
-                  <div
-                    className={cn(
-                      "text-md",
-                      isDark ? "text-white" : "text-black"
-                    )}
-                  >
-                    Last updated:{" "}
-                    {contest?.last_metrics_updated
-                      ? formatTimeAgo(contest.last_metrics_updated)
-                      : lastUpdated
-                        ? formatTimeAgo(lastUpdated)
-                        : "Never"}
-                  </div>
-
-                  {/* Refresh Metrics Button - Only show for active contests with submissions and not finalized */}
-                  {contest?.status === "active" &&
-                    totalLeaderboardEntries > 0 &&
-                    contest?.post_contest_status !== "in_review" &&
-                    contest?.post_contest_status !== "verification_complete" &&
-                    contest?.post_contest_status !== "payouts_processed" &&
-                    (() => {
-                      const cooldownInfo =
-                        getMetricsRefreshCooldownInfoOpportunities(
-                          contest?.last_metrics_updated
-                        );
-
-                      return (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleRefreshMetrics}
-                          disabled={
-                            isRefreshingMetrics || !cooldownInfo.canRefresh
-                          }
-                          className="py-2 rounded-lg text-md bg-[#4A00BE] text-white"
-                          title={
-                            !cooldownInfo.canRefresh
-                              ? `Available in ${formatRemainingTime(
-                                cooldownInfo.remainingMs
-                              )}`
-                              : "Refresh metrics now"
-                          }
-                        >
-                          <RefreshCw
-                            className={`h-4 w-4 ${isRefreshingMetrics ? "animate-spin" : ""
-                              }`}
-                          />
-                          {isRefreshingMetrics
-                            ? "Updating..."
-                            : !cooldownInfo.canRefresh
-                              ? `Wait ${formatRemainingTime(
-                                cooldownInfo.remainingMs
-                              )}`
-                              : "Refresh Metrics"}
-                        </Button>
-                      );
-                    })()}
-                </div>
-
-                {/* Submission Stats and Info - only relevant for non-Twitter contests */}
-                {contest?.platform !== "twitter" && (
-                  <div
-                    className={cn(
-                      "border rounded-lg p-3 mb-4",
-                      isDark
-                        ? "bg-blue-700/30 border-blue-700/50"
-                        : "bg-blue-50 border-blue-200"
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={cn(
-                          "flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5",
-                          isDark
-                            ? "bg-blue-500/30 text-white"
-                            : "bg-blue-100 text-blue-600"
-                        )}
-                      >
-                        <Info className="w-3 h-3" />
-                      </div>
-                      <div className="flex-1">
-                        <p
-                          className={cn(
-                            "text-md font-medium",
-                            isDark ? "text-white" : "text-blue-900"
-                          )}
-                        >
-                          Leaderboard Display
-                        </p>
-                        <div
-                          className={cn(
-                            "text-sm mt-1 space-y-1",
-                            isDark ? "text-gray-300" : "text-blue-700"
-                          )}
-                        >
-                          <p>
-                            Only non-rejected submissions are shown in the
-                            leaderboard.
-                            {contest?.multiple_submissions_enabled &&
-                              leaderboardDisplayMode === "creator" &&
-                              " Currently viewing by creator (all submissions grouped)."}
-                          </p>
-                          {contest?.live_submission_count !== null &&
-                            contest?.live_submission_count !== undefined && (
-                              <div className="flex items-center gap-2 mt-2">
-                                <span className="font-medium">
-                                  Submissions:
+                                );
+                              }
+                            } else {
+                              // Simple view for leaderboard or non-CPM contests
+                              prizeDisplay = (
+                                <span className="font-semibold text-green-600 dark:text-green-400">
+                                  Earned: {formatMoney(entry.earnings)}
                                 </span>
-                                <span className="text-green-700 font-semibold">
-                                  {totalLeaderboardEntries} active
-                                </span>
-                                {contest.live_submission_count !==
-                                  totalLeaderboardEntries && (
-                                    <>
-                                      <span
-                                        className={cn(
-                                          "text-blue-600",
-                                          isDark
-                                            ? "text-gray-400"
-                                            : "text-blue-700"
-                                        )}
-                                      >
-                                        |
-                                      </span>
-                                      <span className="text-red-700 font-semibold">
-                                        {contest.live_submission_count -
-                                          totalLeaderboardEntries}{" "}
-                                        rejected
-                                      </span>
-                                      <span
-                                        className={cn(
-                                          "text-blue-600",
-                                          isDark
-                                            ? "text-gray-400"
-                                            : "text-blue-700"
-                                        )}
-                                      >
-                                        |
-                                      </span>
-                                      <span
-                                        className={cn(
-                                          "text-blue-700",
-                                          isDark
-                                            ? "text-gray-400"
-                                            : "text-blue-700"
-                                        )}
-                                      >
-                                        {contest.live_submission_count} total
-                                      </span>
-                                    </>
-                                  )}
-                              </div>
-                            )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {/* Render leaderboard based on display mode */}
-                {leaderboardDisplayMode === "creator" &&
-                  groupedLeaderboardByCreator
-                  ? // Creator-wise display
-                  groupedLeaderboardByCreator.map((creatorGroup, index) => {
-                    // For Twitter, use current_rank from API; for others, calculate from pagination
-                    const rank =
-                      contest?.platform === "twitter" &&
-                        (creatorGroup as any).best_rank
-                        ? (creatorGroup as any).best_rank
-                        : (leaderboardCurrentPage - 1) *
-                        leaderboardItemsPerPage +
-                        index +
-                        1;
-                    let prizeDisplay = null;
-
-                    // Calculate total earnings including bonuses
-                    const flatFeeBonus =
-                      contestType === "cpm"
-                        ? (contest.contest_based_details as any)?.cpm_contest
-                          ?.flat_fee_bonus || 0
-                        : (contest.contest_based_details as any)
-                          ?.leaderboard_contest?.flat_fee_bonus || 0;
-
-                    const totalEarnings =
-                      creatorGroup.total_earnings +
-                      flatFeeBonus * creatorGroup.submission_count;
-
-                    if (creatorGroup.total_earnings > 0 || flatFeeBonus > 0) {
-                      if (
-                        leaderboardViewMode === "detailed" &&
-                        flatFeeBonus > 0
-                      ) {
-                        prizeDisplay = (
-                          <div className="space-y-1">
-                            <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                              Total Earned: {formatMoney(totalEarnings)}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
-                              <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                              <span className="whitespace-nowrap">
-                                {formatMoney(creatorGroup.total_earnings)}{" "}
-                                {contestType === "cpm" ? "CPM" : "Prize"}
-                              </span>
-                              <span className="text-green-600 dark:text-green-400">
-                                +
-                              </span>
-                              <span className="whitespace-nowrap">
-                                {formatMoney(
-                                  flatFeeBonus * creatorGroup.submission_count
-                                )}{" "}
-                                Bonus ({creatorGroup.submission_count} sub.)
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      } else {
-                        prizeDisplay = (
-                          <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                            Total Earned: {formatMoney(totalEarnings)}
-                          </div>
-                        );
-                      }
-                    } else if (
-                      contest.contest_type === "leaderboard" &&
-                      Array.isArray(
-                        contest.contest_based_details?.leaderboard_contest
-                          ?.prizes
-                      )
-                    ) {
-                      const prizeInfo = (
-                        contest.contest_based_details.leaderboard_contest
-                          .prizes as PrizeInfo[]
-                      ).find((p) => p.position === creatorGroup.best_rank);
-                      if (prizeInfo) {
-                        const prizeText =
-                          contest.status === "active"
-                            ? "Winning Zone"
-                            : "Prize";
-                        const totalPrize =
-                          prizeInfo.amount +
-                          flatFeeBonus * creatorGroup.submission_count;
-
-                        if (
-                          leaderboardViewMode === "detailed" &&
-                          flatFeeBonus > 0
+                              );
+                            }
+                          }
+                        } else if (
+                          contest.contest_type === "leaderboard" &&
+                          Array.isArray(
+                            contest.contest_based_details?.leaderboard_contest
+                              ?.prizes
+                          )
                         ) {
-                          prizeDisplay = (
-                            <div className="space-y-1">
-                              <div className="font-semibold text-amber-500 dark:text-amber-400 text-base flex items-center">
-                                <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                {prizeText}: {formatMoney(totalPrize)}
-                              </div>
-                              <div className="text-xs text-amber-600 dark:text-amber-500">
-                                ({formatMoney(prizeInfo.amount)} Prize +{" "}
-                                {formatMoney(
-                                  flatFeeBonus * creatorGroup.submission_count
-                                )}{" "}
-                                Bonus)
-                              </div>
-                            </div>
-                          );
-                        } else {
-                          prizeDisplay = (
-                            <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                              <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                              {prizeText}: {formatMoney(totalPrize)}
-                            </span>
-                          );
+                          const prizeInfo = (
+                            contest.contest_based_details.leaderboard_contest
+                              .prizes as PrizeInfo[]
+                          ).find((p) => p.position === rank);
+                          if (prizeInfo) {
+                            const prizeText =
+                              contest.status === "active"
+                                ? "Winning Zone"
+                                : "Prize";
+
+                            // In detailed mode, show bonus information if available
+                            if (leaderboardViewMode === "detailed") {
+                              const flatFeeBonus =
+                                (contest.contest_based_details as any)
+                                  ?.leaderboard_contest?.flat_fee_bonus || 0;
+
+                              if (flatFeeBonus > 0) {
+                                const totalEarnings =
+                                  prizeInfo.amount + flatFeeBonus;
+                                prizeDisplay = (
+                                  <div className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                    <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                    <div>
+                                      <div>
+                                        {prizeText}: {formatMoney(totalEarnings)}
+                                      </div>
+                                      <div className="text-xs text-amber-600 dark:text-amber-500">
+                                        ({formatMoney(prizeInfo.amount)} Prize +{" "}
+                                        {formatMoney(flatFeeBonus)} Bonus)
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              } else {
+                                prizeDisplay = (
+                                  <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                    <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                    {prizeText}: {formatMoney(prizeInfo.amount)}
+                                  </span>
+                                );
+                              }
+                            } else {
+                              // Simple view
+                              prizeDisplay = (
+                                <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                  <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                  {prizeText}: {formatMoney(prizeInfo.amount)}
+                                </span>
+                              );
+                            }
+                          }
                         }
-                      }
-                    }
 
-                    return (
-                      <div
-                        key={creatorGroup.creator_id}
-                        className="border border-[#D1B7F9] rounded-xl overflow-hidden"
-                      >
-                        <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
-                          <div className="flex items-center space-x-3 md:space-x-4">
-                            <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
-                              {contest?.platform === "twitter"
-                                ? `#${rank}`
-                                : rank}
-                            </h2>
-                            <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
-                              <AvatarImage
-                                src={
-                                  creatorGroup.user_platform_pfp_url ??
-                                  creatorGroup.creator_pfp_url ??
-                                  undefined
-                                }
-                                alt={creatorGroup.creator_username}
-                              />
-                              <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
-                                {creatorGroup.creator_username?.[0]?.toUpperCase() ||
-                                  "U"}
-                              </AvatarFallback>
-                            </Avatar>
-
-                            <div className="flex-grow min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <p
-                                  className={cn(
-                                    "text-sm sm:text-base font-semibold truncate",
-                                    isDark ? "text-white" : "text-gray-700"
-                                  )}
-                                >
-                                  {contest?.platform === "twitter"
-                                    ? (creatorGroup as any).app_full_name ||
-                                    (creatorGroup as any).app_username ||
-                                    creatorGroup.creator_username
-                                    : creatorGroup.creator_username}
-                                </p>
-                              </div>
-                              {contest?.platform === "twitter" ? (
-                                <div className="flex flex-wrap items-center gap-3 mt-1.5">
-                                  <div className="flex items-center gap-1">
-                                    <FileText
-                                      className={cn(
-                                        "h-3.5 w-3.5",
-                                        isDark
-                                          ? "text-gray-400"
-                                          : "text-slate-500"
-                                      )}
-                                    />
-                                    <span
-                                      className={cn(
-                                        "text-xs",
-                                        isDark
-                                          ? "text-gray-400"
-                                          : "text-slate-600"
-                                      )}
-                                    >
-                                      {(creatorGroup as any)
-                                        .total_eligible_tweets || 0}{" "}
-                                      tweets
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Eye
-                                      className={cn(
-                                        "h-3.5 w-3.5",
-                                        isDark
-                                          ? "text-gray-400"
-                                          : "text-slate-500"
-                                      )}
-                                    />
-                                    <span
-                                      className={cn(
-                                        "text-xs",
-                                        isDark
-                                          ? "text-gray-400"
-                                          : "text-slate-600"
-                                      )}
-                                    >
-                                      {(
-                                        (creatorGroup as any)
-                                          .total_impressions || 0
-                                      ).toLocaleString()}{" "}
-                                      impressions
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <ThumbsUp className="h-3.5 w-3.5 text-pink-500" />
-                                    <span
-                                      className={cn(
-                                        "text-xs",
-                                        isDark
-                                          ? "text-gray-300"
-                                          : "text-gray-700"
-                                      )}
-                                    >
-                                      {(creatorGroup as any).total_likes || 0}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <RefreshCw className="h-3.5 w-3.5 text-green-500" />
-                                    <span
-                                      className={cn(
-                                        "text-xs",
-                                        isDark
-                                          ? "text-gray-300"
-                                          : "text-gray-700"
-                                      )}
-                                    >
-                                      {(creatorGroup as any).total_retweets ||
-                                        0}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <MessageCircle
-                                      className={cn(
-                                        "h-3.5 w-3.5",
-                                        isDark
-                                          ? "text-gray-400"
-                                          : "text-gray-600"
-                                      )}
-                                    />
-                                    <span
-                                      className={cn(
-                                        "text-xs",
-                                        isDark
-                                          ? "text-gray-300"
-                                          : "text-gray-700"
-                                      )}
-                                    >
-                                      {(creatorGroup as any).total_replies ||
-                                        0}
-                                    </span>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-1 mt-1.5">
-                                  <Video
-                                    className={cn(
-                                      "h-4 w-4",
-                                      isDark
-                                        ? "text-gray-400"
-                                        : "text-slate-500"
-                                    )}
+                        return (
+                          <div
+                            key={entry.id}
+                            className="border border-[#D1B7F9] rounded-xl overflow-hidden"
+                          >
+                            <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
+                              <div className="flex items-center space-x-3 md:space-x-4">
+                                <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
+                                  {rank}
+                                </h2>
+                                <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
+                                  <AvatarImage
+                                    src={
+                                      entry.user_platform_pfp_url ??
+                                      entry.creator_pfp_url ??
+                                      undefined
+                                    }
+                                    alt={
+                                      contest?.platform === "twitter"
+                                        ? (entry as any).app_username ||
+                                        entry.user_platform_username
+                                        : entry.user_platform_username
+                                    }
                                   />
+                                  <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
+                                    {(contest?.platform === "twitter"
+                                      ? ((entry as any).app_username as
+                                        | string
+                                        | undefined)
+                                      : entry.user_platform_username)?.[0]?.toUpperCase() ||
+                                      "U"}
+                                  </AvatarFallback>
+                                </Avatar>
+
+                                <div className="flex-grow min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <p
+                                      className={cn(
+                                        "text-sm sm:text-base font-semibold truncate",
+                                        isDark ? "text-white" : "text-gray-700"
+                                      )}
+                                    >
+                                      {entry.user_platform_username}
+                                    </p>
+                                    {renderVerificationBadges(entry.status)}
+                                  </div>
                                   <p
                                     className={cn(
                                       "text-xs",
-                                      isDark
-                                        ? "text-gray-400"
-                                        : "text-slate-700"
+                                      isDark ? "text-gray-300" : "text-slate-500"
                                     )}
                                   >
-                                    {creatorGroup.submission_count}{" "}
-                                    {creatorGroup.submission_count === 1
-                                      ? "submission"
-                                      : "submissions"}
+                                    Submitted: {formatTimeAgo(entry.created_at)}
                                   </p>
                                 </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
-                            {contest?.platform === "twitter" ? (
-                              <div className="flex items-center space-x-2">
-                                <p
-                                  className={cn(
-                                    "text-base sm:text-lg font-bold",
-                                    isDark ? "text-white" : "text-gray-700"
-                                  )}
-                                >
-                                  {typeof (creatorGroup as any)
-                                    .total_points === "number"
-                                    ? (
-                                      creatorGroup as any
-                                    ).total_points.toLocaleString()
-                                    : "0"}{" "}
-                                  points
-                                </p>
                               </div>
-                            ) : (
-                              <>
+                              <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
                                 <div className="flex items-center space-x-2">
                                   <p
                                     className={cn(
@@ -7259,369 +7658,96 @@ export function ContestClientPage({
                                       isDark ? "text-white" : "text-gray-700"
                                     )}
                                   >
-                                    {creatorGroup.total_views.toLocaleString()}{" "}
-                                    views
-                                  </p>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedCreatorId(
-                                        creatorGroup.creator_id
-                                      );
-                                      setShowCreatorVideosModal(true);
-                                      setCreatorVideosCurrentPage(1);
-                                    }}
-                                    className="h-6 w-6 p-0"
-                                    title="View all videos"
-                                  >
-                                    <Eye
-                                      className={cn(
-                                        "h-4 w-4",
-                                        isDark
-                                          ? "text-gray-400"
-                                          : "text-gray-600"
-                                      )}
-                                    />
-                                  </Button>
-                                </div>
-                              </>
-                            )}
-                            {prizeDisplay && (
-                              <div className="text-xs sm:text-sm mt-2">
-                                {prizeDisplay}
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      </div>
-                    );
-                  })
-                  : // Submission-wise display (original)
-                  leaderboard.map((entry, index) => {
-                    const rank =
-                      (leaderboardCurrentPage - 1) * leaderboardItemsPerPage +
-                      index +
-                      1;
-                    let prizeDisplay = null;
-
-                    if (entry.earnings > 0) {
-                      // For CPM contests, show Expected vs Earned based on verification/paid status
-                      if (contestType === "cpm") {
-                        const isEarned =
-                          entry.status === "verified" ||
-                          entry.status === "paid";
-                        const earningsLabel = isEarned
-                          ? "Earned"
-                          : "Expected";
-
-                        // Check if there's a flat fee bonus
-                        const flatFeeBonus =
-                          (contest.contest_based_details as any)?.cpm_contest
-                            ?.flat_fee_bonus || 0;
-
-                        // Calculate total earnings (CPM + Bonus if applicable)
-                        const totalEarnings = entry.earnings + flatFeeBonus;
-
-                        // Show detailed breakdown if in detailed mode and bonus exists
-                        if (
-                          leaderboardViewMode === "detailed" &&
-                          flatFeeBonus > 0
-                        ) {
-                          prizeDisplay = (
-                            <div className="space-y-1">
-                              <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                {earningsLabel}: {formatMoney(totalEarnings)}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
-                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                                <span className="whitespace-nowrap">
-                                  {formatMoney(entry.earnings)} CPM
-                                </span>
-                                <span className="text-green-600 dark:text-green-400">
-                                  +
-                                </span>
-                                <span className="whitespace-nowrap">
-                                  {formatMoney(flatFeeBonus)} Bonus
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        } else {
-                          prizeDisplay = (
-                            <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                              {earningsLabel}: {formatMoney(totalEarnings)}
-                            </div>
-                          );
-                        }
-                      } else {
-                        // For leaderboard contests with earnings
-                        if (
-                          contestType === "leaderboard" &&
-                          leaderboardViewMode === "detailed"
-                        ) {
-                          // Check for flat fee bonus in leaderboard contests
-                          const flatFeeBonus =
-                            (contest.contest_based_details as any)
-                              ?.leaderboard_contest?.flat_fee_bonus || 0;
-
-                          if (flatFeeBonus > 0) {
-                            const totalEarnings =
-                              entry.earnings + flatFeeBonus;
-                            prizeDisplay = (
-                              <div className="space-y-1">
-                                <div
-                                  className={cn(
-                                    "font-semibold text-base",
-                                    isDark
-                                      ? "text-green-300"
-                                      : "text-green-600"
-                                  )}
-                                >
-                                  Earned: {formatMoney(totalEarnings)}
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                                  <span className="whitespace-nowrap">
-                                    {formatMoney(entry.earnings)} Prize
-                                  </span>
-                                  <span className="text-green-600 dark:text-green-400">
-                                    +
-                                  </span>
-                                  <span className="whitespace-nowrap">
-                                    {formatMoney(flatFeeBonus)} Bonus
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          } else {
-                            prizeDisplay = (
-                              <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                Earned: {formatMoney(entry.earnings)}
-                              </div>
-                            );
-                          }
-                        } else {
-                          // Simple view for leaderboard or non-CPM contests
-                          prizeDisplay = (
-                            <span className="font-semibold text-green-600 dark:text-green-400">
-                              Earned: {formatMoney(entry.earnings)}
-                            </span>
-                          );
-                        }
-                      }
-                    } else if (
-                      contest.contest_type === "leaderboard" &&
-                      Array.isArray(
-                        contest.contest_based_details?.leaderboard_contest
-                          ?.prizes
-                      )
-                    ) {
-                      const prizeInfo = (
-                        contest.contest_based_details.leaderboard_contest
-                          .prizes as PrizeInfo[]
-                      ).find((p) => p.position === rank);
-                      if (prizeInfo) {
-                        const prizeText =
-                          contest.status === "active"
-                            ? "Winning Zone"
-                            : "Prize";
-
-                        // In detailed mode, show bonus information if available
-                        if (leaderboardViewMode === "detailed") {
-                          const flatFeeBonus =
-                            (contest.contest_based_details as any)
-                              ?.leaderboard_contest?.flat_fee_bonus || 0;
-
-                          if (flatFeeBonus > 0) {
-                            const totalEarnings =
-                              prizeInfo.amount + flatFeeBonus;
-                            prizeDisplay = (
-                              <div className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                                <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                <div>
-                                  <div>
-                                    {prizeText}: {formatMoney(totalEarnings)}
-                                  </div>
-                                  <div className="text-xs text-amber-600 dark:text-amber-500">
-                                    ({formatMoney(prizeInfo.amount)} Prize +{" "}
-                                    {formatMoney(flatFeeBonus)} Bonus)
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          } else {
-                            prizeDisplay = (
-                              <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                                <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                {prizeText}: {formatMoney(prizeInfo.amount)}
-                              </span>
-                            );
-                          }
-                        } else {
-                          // Simple view
-                          prizeDisplay = (
-                            <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                              <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                              {prizeText}: {formatMoney(prizeInfo.amount)}
-                            </span>
-                          );
-                        }
-                      }
-                    }
-
-                    return (
-                      <div
-                        key={entry.id}
-                        className="border border-[#D1B7F9] rounded-xl overflow-hidden"
-                      >
-                        <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
-                          <div className="flex items-center space-x-3 md:space-x-4">
-                            <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
-                              {rank}
-                            </h2>
-                            <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
-                              <AvatarImage
-                                src={
-                                  entry.user_platform_pfp_url ??
-                                  entry.creator_pfp_url ??
-                                  undefined
-                                }
-                                alt={
-                                  contest?.platform === "twitter"
-                                    ? (entry as any).app_username ||
-                                    entry.user_platform_username
-                                    : entry.user_platform_username
-                                }
-                              />
-                              <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
-                                {(contest?.platform === "twitter"
-                                  ? ((entry as any).app_username as
-                                    | string
-                                    | undefined)
-                                  : entry.user_platform_username)?.[0]?.toUpperCase() ||
-                                  "U"}
-                              </AvatarFallback>
-                            </Avatar>
-
-                            <div className="flex-grow min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <p
-                                  className={cn(
-                                    "text-sm sm:text-base font-semibold truncate",
-                                    isDark ? "text-white" : "text-gray-700"
-                                  )}
-                                >
-                                  {entry.user_platform_username}
-                                </p>
-                                {renderVerificationBadges(entry.status)}
-                              </div>
-                              <p
-                                className={cn(
-                                  "text-xs",
-                                  isDark ? "text-gray-300" : "text-slate-500"
-                                )}
-                              >
-                                Submitted: {formatTimeAgo(entry.created_at)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
-                            <div className="flex items-center space-x-2">
-                              <p
-                                className={cn(
-                                  "text-base sm:text-lg font-bold",
-                                  isDark ? "text-white" : "text-gray-700"
-                                )}
-                              >
-                                {contest?.platform === "twitter" ? (
-                                  <>
-                                    {typeof (entry as any).total_points ===
-                                      "number"
-                                      ? (
-                                        entry as any
-                                      ).total_points.toLocaleString()
-                                      : "0"}{" "}
-                                    points
-                                  </>
-                                ) : (
-                                  <>
-                                    {entry.views
-                                      ? entry.views.toLocaleString()
-                                      : "0"}{" "}
-                                    views
-                                  </>
-                                )}
-                              </p>
-                              {entry.content_link &&
-                                (contest?.status?.toLowerCase() === "ended" ||
-                                  contest?.status?.toLowerCase() ===
-                                  "completed") && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className={cn(
-                                      "h-7 w-7 sm:h-8 sm:w-8",
-                                      isDark
-                                        ? "text-gray-300"
-                                        : "text-slate-500"
+                                    {contest?.platform === "twitter" ? (
+                                      <>
+                                        {typeof (entry as any).total_points ===
+                                          "number"
+                                          ? (
+                                            entry as any
+                                          ).total_points.toLocaleString()
+                                          : "0"}{" "}
+                                        points
+                                      </>
+                                    ) : (
+                                      <>
+                                        {entry.views
+                                          ? entry.views.toLocaleString()
+                                          : "0"}{" "}
+                                        views
+                                      </>
                                     )}
-                                    asChild
-                                  >
-                                    <Link
-                                      href={entry.content_link}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="View Content"
-                                    >
-                                      <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
-                                    </Link>
-                                  </Button>
+                                  </p>
+                                  {entry.content_link &&
+                                    (contest?.status?.toLowerCase() === "ended" ||
+                                      contest?.status?.toLowerCase() ===
+                                      "completed") && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className={cn(
+                                          "h-7 w-7 sm:h-8 sm:w-8",
+                                          isDark
+                                            ? "text-gray-300"
+                                            : "text-slate-500"
+                                        )}
+                                        asChild
+                                      >
+                                        <Link
+                                          href={entry.content_link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title="View Content"
+                                        >
+                                          <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                                        </Link>
+                                      </Button>
+                                    )}
+                                </div>
+                                {prizeDisplay && (
+                                  <div className="text-xs sm:text-sm">
+                                    {prizeDisplay}
+                                  </div>
                                 )}
-                            </div>
-                            {prizeDisplay && (
-                              <div className="text-xs sm:text-sm">
-                                {prizeDisplay}
                               </div>
-                            )}
+                            </CardContent>
                           </div>
-                        </CardContent>
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
 
-                {/* Pagination Controls */}
-                {totalLeaderboardPages > 1 && (
-                  <div className="flex items-center justify-center space-x-4 py-4 mt-4 border-t border-slate-200 dark:border-slate-700">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        fetchLeaderboard(leaderboardCurrentPage - 1)
-                      }
-                      disabled={leaderboardCurrentPage <= 1}
-                    >
-                      Previous
-                    </Button>
-                    <span
-                      className={cn(
-                        "text-sm font-medium",
-                        isDark ? "text-gray-300" : "text-slate-500"
-                      )}
-                    >
-                      Page {leaderboardCurrentPage} of {totalLeaderboardPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        fetchLeaderboard(leaderboardCurrentPage + 1)
-                      }
-                      disabled={leaderboardCurrentPage >= totalLeaderboardPages}
-                    >
-                      Next
-                    </Button>
-                  </div>
+                    {/* Pagination Controls */}
+                    {totalLeaderboardPages > 1 && (
+                      <div className="flex items-center justify-center space-x-4 py-4 mt-4 border-t border-slate-200 dark:border-slate-700">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            fetchLeaderboard(leaderboardCurrentPage - 1)
+                          }
+                          disabled={leaderboardCurrentPage <= 1}
+                        >
+                          Previous
+                        </Button>
+                        <span
+                          className={cn(
+                            "text-sm font-medium",
+                            isDark ? "text-gray-300" : "text-slate-500"
+                          )}
+                        >
+                          Page {leaderboardCurrentPage} of {totalLeaderboardPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            fetchLeaderboard(leaderboardCurrentPage + 1)
+                          }
+                          disabled={leaderboardCurrentPage >= totalLeaderboardPages}
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -8147,7 +8273,7 @@ export function ContestClientPage({
                                   ) : null;
                                 })()}
 
-                                {/* Current Metrics Achieved Section (from target_current_*) */}
+                                {/* Current Progress Section (from target_current_*) */}
                                 {(() => {
                                   if (!twitterMetrics) return null;
 
@@ -8174,205 +8300,409 @@ export function ContestClientPage({
                                             : "text-slate-900"
                                         )}
                                       >
-                                        Current Metrics Achieved
+                                        Current Progress
                                       </h3>
                                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
                                         {twitterMetrics.target_current_likes !==
-                                          null && (
-                                            <div
-                                              className={cn(
-                                                "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                                isDark
-                                                  ? "bg-[#170337]"
-                                                  : "bg-white border border-slate-200"
-                                              )}
-                                            >
-                                              <CardContent className="p-6 flex justify-between items-center">
-                                                <div
-                                                  className={cn(
-                                                    "flex-1 space-y-2",
-                                                    isDark
-                                                      ? "text-white"
-                                                      : "text-slate-800"
+                                          null && (() => {
+                                            const current = twitterMetrics.target_current_likes || 0;
+                                            const target = targetLikes;
+                                            const isReached = target !== null && current >= target;
+                                            const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
+
+                                            return (
+                                              <div
+                                                className={cn(
+                                                  "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                                  isDark
+                                                    ? "bg-[#170337]"
+                                                    : "bg-white border border-slate-200"
+                                                )}
+                                              >
+                                                <CardContent className="p-6">
+                                                  <div className="flex justify-between items-start mb-3">
+                                                    <div
+                                                      className={cn(
+                                                        "flex-1 space-y-1",
+                                                        isDark
+                                                          ? "text-white"
+                                                          : "text-slate-800"
+                                                      )}
+                                                    >
+                                                      <p
+                                                        className={cn(
+                                                          "text-xs font-semibold uppercase tracking-wide",
+                                                          isDark
+                                                            ? "text-slate-200"
+                                                            : "text-slate-600"
+                                                        )}
+                                                      >
+                                                        Current Likes
+                                                      </p>
+                                                      <p
+                                                        className={cn(
+                                                          "text-2xl font-black",
+                                                          isDark
+                                                            ? "text-white"
+                                                            : "text-slate-800"
+                                                        )}
+                                                      >
+                                                        {current.toLocaleString()}
+                                                      </p>
+                                                      {target !== null && (
+                                                        <p
+                                                          className={cn(
+                                                            "text-xs",
+                                                            isDark
+                                                              ? "text-slate-400"
+                                                              : "text-slate-500"
+                                                          )}
+                                                        >
+                                                          of {target.toLocaleString()} target
+                                                        </p>
+                                                      )}
+                                                    </div>
+                                                    <div className={cn(
+                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                      isReached
+                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                        : "bg-gradient-to-br from-pink-500 to-rose-600"
+                                                    )}>
+                                                      {isReached ? (
+                                                        <CheckCircle2 className="h-7 w-7" />
+                                                      ) : (
+                                                        <ThumbsUp className="h-7 w-7" />
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                  {target !== null && target > 0 && (
+                                                    <div className="mt-3">
+                                                      <div className={cn(
+                                                        "h-2 rounded-full overflow-hidden",
+                                                        isDark ? "bg-slate-700" : "bg-slate-200"
+                                                      )}>
+                                                        <div
+                                                          className={cn(
+                                                            "h-full transition-all duration-500",
+                                                            isReached
+                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                              : "bg-gradient-to-r from-pink-500 to-rose-600"
+                                                          )}
+                                                          style={{ width: `${progress}%` }}
+                                                        />
+                                                      </div>
+                                                      <p className={cn(
+                                                        "text-xs mt-1 text-center",
+                                                        isDark ? "text-slate-400" : "text-slate-500"
+                                                      )}>
+                                                        {progress.toFixed(0)}% complete
+                                                      </p>
+                                                    </div>
                                                   )}
-                                                >
-                                                  <p
-                                                    className={cn(
-                                                      "text-sm font-semibold uppercase tracking-wide",
-                                                      isDark
-                                                        ? "text-slate-200"
-                                                        : "text-slate-600"
-                                                    )}
-                                                  >
-                                                    Current Likes
-                                                  </p>
-                                                  <p
-                                                    className={cn(
-                                                      "text-2xl font-black",
-                                                      isDark
-                                                        ? "text-white"
-                                                        : "text-slate-800"
-                                                    )}
-                                                  >
-                                                    {(
-                                                      twitterMetrics.target_current_likes ||
-                                                      0
-                                                    ).toLocaleString()}
-                                                  </p>
-                                                </div>
-                                                <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                                  <ThumbsUp className="h-7 w-7" />
-                                                </div>
-                                              </CardContent>
-                                            </div>
-                                          )}
+                                                </CardContent>
+                                              </div>
+                                            );
+                                          })()}
                                         {twitterMetrics.target_current_comments !==
-                                          null && (
-                                            <div
-                                              className={cn(
-                                                "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                                isDark
-                                                  ? "bg-[#170337]"
-                                                  : "bg-white border border-slate-200"
-                                              )}
-                                            >
-                                              <CardContent className="p-6 flex justify-between items-center">
-                                                <div
-                                                  className={cn(
-                                                    "flex-1 space-y-2",
-                                                    isDark
-                                                      ? "text-white"
-                                                      : "text-slate-800"
+                                          null && (() => {
+                                            const current = twitterMetrics.target_current_comments || 0;
+                                            const target = targetComments;
+                                            const isReached = target !== null && current >= target;
+                                            const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
+
+                                            return (
+                                              <div
+                                                className={cn(
+                                                  "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                                  isDark
+                                                    ? "bg-[#170337]"
+                                                    : "bg-white border border-slate-200"
+                                                )}
+                                              >
+                                                <CardContent className="p-6">
+                                                  <div className="flex justify-between items-start mb-3">
+                                                    <div
+                                                      className={cn(
+                                                        "flex-1 space-y-1",
+                                                        isDark
+                                                          ? "text-white"
+                                                          : "text-slate-800"
+                                                      )}
+                                                    >
+                                                      <p
+                                                        className={cn(
+                                                          "text-xs font-semibold uppercase tracking-wide",
+                                                          isDark
+                                                            ? "text-slate-200"
+                                                            : "text-slate-600"
+                                                        )}
+                                                      >
+                                                        Current Comments
+                                                      </p>
+                                                      <p
+                                                        className={cn(
+                                                          "text-2xl font-black",
+                                                          isDark
+                                                            ? "text-white"
+                                                            : "text-slate-800"
+                                                        )}
+                                                      >
+                                                        {current.toLocaleString()}
+                                                      </p>
+                                                      {target !== null && (
+                                                        <p
+                                                          className={cn(
+                                                            "text-xs",
+                                                            isDark
+                                                              ? "text-slate-400"
+                                                              : "text-slate-500"
+                                                          )}
+                                                        >
+                                                          of {target.toLocaleString()} target
+                                                        </p>
+                                                      )}
+                                                    </div>
+                                                    <div className={cn(
+                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                      isReached
+                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                        : "bg-gradient-to-br from-orange-500 to-amber-600"
+                                                    )}>
+                                                      {isReached ? (
+                                                        <CheckCircle2 className="h-7 w-7" />
+                                                      ) : (
+                                                        <MessageCircle className="h-7 w-7" />
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                  {target !== null && target > 0 && (
+                                                    <div className="mt-3">
+                                                      <div className={cn(
+                                                        "h-2 rounded-full overflow-hidden",
+                                                        isDark ? "bg-slate-700" : "bg-slate-200"
+                                                      )}>
+                                                        <div
+                                                          className={cn(
+                                                            "h-full transition-all duration-500",
+                                                            isReached
+                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                              : "bg-gradient-to-r from-orange-500 to-amber-600"
+                                                          )}
+                                                          style={{ width: `${progress}%` }}
+                                                        />
+                                                      </div>
+                                                      <p className={cn(
+                                                        "text-xs mt-1 text-center",
+                                                        isDark ? "text-slate-400" : "text-slate-500"
+                                                      )}>
+                                                        {progress.toFixed(0)}% complete
+                                                      </p>
+                                                    </div>
                                                   )}
-                                                >
-                                                  <p
-                                                    className={cn(
-                                                      "text-sm font-semibold uppercase tracking-wide",
-                                                      isDark
-                                                        ? "text-slate-200"
-                                                        : "text-slate-600"
-                                                    )}
-                                                  >
-                                                    Current Comments
-                                                  </p>
-                                                  <p
-                                                    className={cn(
-                                                      "text-2xl font-black",
-                                                      isDark
-                                                        ? "text-white"
-                                                        : "text-slate-800"
-                                                    )}
-                                                  >
-                                                    {(
-                                                      twitterMetrics.target_current_comments ||
-                                                      0
-                                                    ).toLocaleString()}
-                                                  </p>
-                                                </div>
-                                                <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                                  <MessageCircle className="h-7 w-7" />
-                                                </div>
-                                              </CardContent>
-                                            </div>
-                                          )}
+                                                </CardContent>
+                                              </div>
+                                            );
+                                          })()}
                                         {twitterMetrics.target_current_retweets !==
-                                          null && (
-                                            <div
-                                              className={cn(
-                                                "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                                isDark
-                                                  ? "bg-[#170337]"
-                                                  : "bg-white border border-slate-200"
-                                              )}
-                                            >
-                                              <CardContent className="p-6 flex justify-between items-center">
-                                                <div
-                                                  className={cn(
-                                                    "flex-1 space-y-2",
-                                                    isDark
-                                                      ? "text-white"
-                                                      : "text-slate-800"
+                                          null && (() => {
+                                            const current = twitterMetrics.target_current_retweets || 0;
+                                            const target = targetRetweets;
+                                            const isReached = target !== null && current >= target;
+                                            const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
+
+                                            return (
+                                              <div
+                                                className={cn(
+                                                  "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                                  isDark
+                                                    ? "bg-[#170337]"
+                                                    : "bg-white border border-slate-200"
+                                                )}
+                                              >
+                                                <CardContent className="p-6">
+                                                  <div className="flex justify-between items-start mb-3">
+                                                    <div
+                                                      className={cn(
+                                                        "flex-1 space-y-1",
+                                                        isDark
+                                                          ? "text-white"
+                                                          : "text-slate-800"
+                                                      )}
+                                                    >
+                                                      <p
+                                                        className={cn(
+                                                          "text-xs font-semibold uppercase tracking-wide",
+                                                          isDark
+                                                            ? "text-slate-200"
+                                                            : "text-slate-600"
+                                                        )}
+                                                      >
+                                                        Current Retweets
+                                                      </p>
+                                                      <p
+                                                        className={cn(
+                                                          "text-2xl font-black",
+                                                          isDark
+                                                            ? "text-white"
+                                                            : "text-slate-800"
+                                                        )}
+                                                      >
+                                                        {current.toLocaleString()}
+                                                      </p>
+                                                      {target !== null && (
+                                                        <p
+                                                          className={cn(
+                                                            "text-xs",
+                                                            isDark
+                                                              ? "text-slate-400"
+                                                              : "text-slate-500"
+                                                          )}
+                                                        >
+                                                          of {target.toLocaleString()} target
+                                                        </p>
+                                                      )}
+                                                    </div>
+                                                    <div className={cn(
+                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                      isReached
+                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                        : "bg-gradient-to-br from-cyan-500 to-teal-600"
+                                                    )}>
+                                                      {isReached ? (
+                                                        <CheckCircle2 className="h-7 w-7" />
+                                                      ) : (
+                                                        <Share2 className="h-7 w-7" />
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                  {target !== null && target > 0 && (
+                                                    <div className="mt-3">
+                                                      <div className={cn(
+                                                        "h-2 rounded-full overflow-hidden",
+                                                        isDark ? "bg-slate-700" : "bg-slate-200"
+                                                      )}>
+                                                        <div
+                                                          className={cn(
+                                                            "h-full transition-all duration-500",
+                                                            isReached
+                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                              : "bg-gradient-to-r from-cyan-500 to-teal-600"
+                                                          )}
+                                                          style={{ width: `${progress}%` }}
+                                                        />
+                                                      </div>
+                                                      <p className={cn(
+                                                        "text-xs mt-1 text-center",
+                                                        isDark ? "text-slate-400" : "text-slate-500"
+                                                      )}>
+                                                        {progress.toFixed(0)}% complete
+                                                      </p>
+                                                    </div>
                                                   )}
-                                                >
-                                                  <p
-                                                    className={cn(
-                                                      "text-sm font-semibold uppercase tracking-wide",
-                                                      isDark
-                                                        ? "text-slate-200"
-                                                        : "text-slate-600"
-                                                    )}
-                                                  >
-                                                    Current Retweets
-                                                  </p>
-                                                  <p
-                                                    className={cn(
-                                                      "text-2xl font-black",
-                                                      isDark
-                                                        ? "text-white"
-                                                        : "text-slate-800"
-                                                    )}
-                                                  >
-                                                    {(
-                                                      twitterMetrics.target_current_retweets ||
-                                                      0
-                                                    ).toLocaleString()}
-                                                  </p>
-                                                </div>
-                                                <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                                  <Share2 className="h-7 w-7" />
-                                                </div>
-                                              </CardContent>
-                                            </div>
-                                          )}
+                                                </CardContent>
+                                              </div>
+                                            );
+                                          })()}
                                         {twitterMetrics.target_current_quote_reposts !==
-                                          null && (
-                                            <div
-                                              className={cn(
-                                                "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                                isDark
-                                                  ? "bg-[#170337]"
-                                                  : "bg-white border border-slate-200"
-                                              )}
-                                            >
-                                              <CardContent className="p-6 flex justify-between items-center">
-                                                <div
-                                                  className={cn(
-                                                    "flex-1 space-y-2",
-                                                    isDark
-                                                      ? "text-white"
-                                                      : "text-slate-800"
+                                          null && (() => {
+                                            const current = twitterMetrics.target_current_quote_reposts || 0;
+                                            const target = targetQuoteReposts;
+                                            const isReached = target !== null && current >= target;
+                                            const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
+
+                                            return (
+                                              <div
+                                                className={cn(
+                                                  "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                                  isDark
+                                                    ? "bg-[#170337]"
+                                                    : "bg-white border border-slate-200"
+                                                )}
+                                              >
+                                                <CardContent className="p-6">
+                                                  <div className="flex justify-between items-start mb-3">
+                                                    <div
+                                                      className={cn(
+                                                        "flex-1 space-y-1",
+                                                        isDark
+                                                          ? "text-white"
+                                                          : "text-slate-800"
+                                                      )}
+                                                    >
+                                                      <p
+                                                        className={cn(
+                                                          "text-xs font-semibold uppercase tracking-wide",
+                                                          isDark
+                                                            ? "text-slate-200"
+                                                            : "text-slate-600"
+                                                        )}
+                                                      >
+                                                        Current Quote Reposts
+                                                      </p>
+                                                      <p
+                                                        className={cn(
+                                                          "text-2xl font-black",
+                                                          isDark
+                                                            ? "text-white"
+                                                            : "text-slate-800"
+                                                        )}
+                                                      >
+                                                        {current.toLocaleString()}
+                                                      </p>
+                                                      {target !== null && (
+                                                        <p
+                                                          className={cn(
+                                                            "text-xs",
+                                                            isDark
+                                                              ? "text-slate-400"
+                                                              : "text-slate-500"
+                                                          )}
+                                                        >
+                                                          of {target.toLocaleString()} target
+                                                        </p>
+                                                      )}
+                                                    </div>
+                                                    <div className={cn(
+                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                      isReached
+                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                        : "bg-gradient-to-br from-indigo-500 to-violet-600"
+                                                    )}>
+                                                      {isReached ? (
+                                                        <CheckCircle2 className="h-7 w-7" />
+                                                      ) : (
+                                                        <RefreshCw className="h-7 w-7" />
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                  {target !== null && target > 0 && (
+                                                    <div className="mt-3">
+                                                      <div className={cn(
+                                                        "h-2 rounded-full overflow-hidden",
+                                                        isDark ? "bg-slate-700" : "bg-slate-200"
+                                                      )}>
+                                                        <div
+                                                          className={cn(
+                                                            "h-full transition-all duration-500",
+                                                            isReached
+                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                              : "bg-gradient-to-r from-indigo-500 to-violet-600"
+                                                          )}
+                                                          style={{ width: `${progress}%` }}
+                                                        />
+                                                      </div>
+                                                      <p className={cn(
+                                                        "text-xs mt-1 text-center",
+                                                        isDark ? "text-slate-400" : "text-slate-500"
+                                                      )}>
+                                                        {progress.toFixed(0)}% complete
+                                                      </p>
+                                                    </div>
                                                   )}
-                                                >
-                                                  <p
-                                                    className={cn(
-                                                      "text-sm font-semibold uppercase tracking-wide",
-                                                      isDark
-                                                        ? "text-slate-200"
-                                                        : "text-slate-600"
-                                                    )}
-                                                  >
-                                                    Current Quote Reposts
-                                                  </p>
-                                                  <p
-                                                    className={cn(
-                                                      "text-2xl font-black",
-                                                      isDark
-                                                        ? "text-white"
-                                                        : "text-slate-800"
-                                                    )}
-                                                  >
-                                                    {(
-                                                      twitterMetrics.target_current_quote_reposts ||
-                                                      0
-                                                    ).toLocaleString()}
-                                                  </p>
-                                                </div>
-                                                <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                                  <RefreshCw className="h-7 w-7" />
-                                                </div>
-                                              </CardContent>
-                                            </div>
-                                          )}
+                                                </CardContent>
+                                              </div>
+                                            );
+                                          })()}
                                         {twitterMetrics.target_current_views !==
                                           null && (
                                             <div

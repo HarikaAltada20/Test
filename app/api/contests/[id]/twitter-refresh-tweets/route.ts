@@ -115,10 +115,10 @@ export async function POST(
       );
     }
 
-    // Load all active participants for this contest
+    // Load all active participants for this contest (including join date)
     const { data: participants, error: participantsError } = await supabase
       .from("twitter_campaign_participants")
-      .select("creator_id, twitter_username")
+      .select("creator_id, twitter_username, joined_at")
       .eq("contest_id", contestId)
       .eq("is_active", true);
 
@@ -341,58 +341,130 @@ export async function POST(
       // Remove @ if present to get a clean screen name
       const cleanUsername = username.replace("@", "");
 
+      // Get join date for this participant
+      const joinDate = participant.joined_at ? new Date(participant.joined_at) : null;
       console.log(
-        "[twitter-refresh-tweets] Fetching tweets via RapidAPI replies.php for user",
-        cleanUsername
+        `[twitter-refresh-tweets] Fetching tweets via RapidAPI replies.php for user ${cleanUsername}${joinDate ? ` (joined: ${joinDate.toISOString()})` : ''}`
       );
 
-      // Call RapidAPI replies.php endpoint directly
-      let timelineData: any;
-      try {
-        const options = {
-          method: "GET",
-          url: `https://${rapidApiHost}/replies.php`,
-          params: {
-            screenname: cleanUsername,
-          },
-          headers: {
-            "x-rapidapi-key": rapidApiKey,
-            "x-rapidapi-host": rapidApiHost,
-          },
-        };
+      // Fetch ALL tweets up to join date using pagination
+      let allTimelineTweets: any[] = [];
+      let cursor: string | null = null;
+      let hasMorePages = true;
+      let pageCount = 0;
+      const MAX_PAGES = 50; // Safety limit to prevent infinite loops
 
-        const res = await axios.request(options);
-        console.log(
-          "[twitter-refresh-tweets] RapidAPI replies.php raw response for",
-          cleanUsername,
-          res.data
-        );
-        timelineData = res.data;
-      } catch (err) {
-        console.error(
-          "[twitter-refresh-tweets] Error calling RapidAPI replies.php for",
-          cleanUsername,
-          err
-        );
-          return {
-            username: cleanUsername,
-            participant,
-            rawCount: 0,
-            normalizedCount: 0,
-            filteredCount: 0,
-            filteredTweets: [],
-            error:
-              "Error calling RapidAPI replies.php. Check server logs for details.",
-            totalFetched: 0,
-            totalFiltered: 0,
+      while (hasMorePages && pageCount < MAX_PAGES) {
+        try {
+          const options: any = {
+            method: "GET",
+            url: `https://${rapidApiHost}/replies.php`,
+            params: {
+              screenname: cleanUsername,
+            },
+            headers: {
+              "x-rapidapi-key": rapidApiKey,
+              "x-rapidapi-host": rapidApiHost,
+            },
           };
+
+          // Add cursor for pagination (if not first page)
+          if (cursor) {
+            options.params.cursor = cursor;
+          }
+
+          const res = await axios.request(options);
+          const pageData = res.data;
+          
+          const pageTimeline: any[] = Array.isArray(pageData?.timeline)
+            ? pageData.timeline
+            : [];
+
+          // Add tweets from this page
+          allTimelineTweets.push(...pageTimeline);
+
+          // Check if we've reached the join date
+          if (joinDate && pageTimeline.length > 0) {
+            const oldestTweet = pageTimeline[pageTimeline.length - 1];
+            const oldestTweetDate = oldestTweet?.created_at 
+              ? new Date(oldestTweet.created_at) 
+              : null;
+            
+            // If oldest tweet in this page is before join date, we've fetched enough
+            if (oldestTweetDate && oldestTweetDate < joinDate) {
+              console.log(
+                `[twitter-refresh-tweets] Reached join date for ${cleanUsername}. Oldest tweet: ${oldestTweetDate.toISOString()}, Join date: ${joinDate.toISOString()}`
+              );
+              hasMorePages = false;
+              break;
+            }
+          }
+
+          // Check for next cursor
+          const nextCursor = pageData?.next_cursor;
+          if (!nextCursor || nextCursor === "0" || nextCursor === 0) {
+            hasMorePages = false;
+          } else {
+            cursor = nextCursor;
+            pageCount++;
+            console.log(
+              `[twitter-refresh-tweets] Fetched page ${pageCount} for ${cleanUsername}, total tweets so far: ${allTimelineTweets.length}, next cursor: ${cursor}`
+            );
+          }
+        } catch (err) {
+          console.error(
+            `[twitter-refresh-tweets] Error calling RapidAPI replies.php for ${cleanUsername} (page ${pageCount + 1}):`,
+            err
+          );
+          // If first page fails, return error. If later page fails, use what we have
+          if (pageCount === 0) {
+            return {
+              username: cleanUsername,
+              participant,
+              rawCount: 0,
+              normalizedCount: 0,
+              filteredCount: 0,
+              filteredTweets: [],
+              error: "Error calling RapidAPI replies.php. Check server logs for details.",
+              totalFetched: 0,
+              totalFiltered: 0,
+            };
+          } else {
+            // Use what we've fetched so far
+            console.log(
+              `[twitter-refresh-tweets] Error on page ${pageCount + 1} for ${cleanUsername}, using ${allTimelineTweets.length} tweets fetched so far`
+            );
+            hasMorePages = false;
+          }
         }
+      }
 
-      const timeline: any[] = Array.isArray(timelineData?.timeline)
-        ? timelineData.timeline
-        : [];
+      if (pageCount >= MAX_PAGES) {
+        console.warn(
+          `[twitter-refresh-tweets] Reached MAX_PAGES limit (${MAX_PAGES}) for ${cleanUsername}, stopping pagination`
+        );
+      }
 
-      const mappedTweets = timeline.map((tweet: any) => {
+      console.log(
+        `[twitter-refresh-tweets] Completed pagination for ${cleanUsername}: ${allTimelineTweets.length} total tweets across ${pageCount + 1} pages`
+      );
+
+      const timeline = allTimelineTweets;
+
+      // Filter tweets to only include those created on or after join date
+      const filteredTimeline = joinDate 
+        ? timeline.filter((tweet: any) => {
+            const tweetDate = tweet.created_at ? new Date(tweet.created_at) : null;
+            if (!tweetDate) return false;
+            return tweetDate >= joinDate;
+          })
+        : timeline;
+
+      console.log(
+        `[twitter-refresh-tweets] Filtered ${timeline.length} tweets to ${filteredTimeline.length} tweets on/after join date for ${cleanUsername}`
+      );
+
+      const mappedTweets = filteredTimeline.map((tweet: any) => {
         const inferredType = tweet.retweeted_tweet
           ? "retweet"
           : tweet.quoted
@@ -615,13 +687,13 @@ export async function POST(
         return {
           username: cleanUsername,
           participant,
-          rawCount: timeline.length, // raw items returned by RapidAPI
-          normalizedCount: mappedTweets.length, // mapped/normalized tweets
+          rawCount: allTimelineTweets.length, // total raw items from all pages
+          normalizedCount: mappedTweets.length, // mapped/normalized tweets (after join date filter)
           filteredCount: campaignFilteredTweets.length, // tweets matching campaign rules
           allTweets: validTweets, // all valid tweets before campaign filters
           filteredTweets: campaignFilteredTweets, // tweets after keyword/mention filters
-          totalFetched: timeline.length,
-          totalFiltered: campaignFilteredTweets.length,
+          totalFetched: allTimelineTweets.length, // total fetched from all pages
+          totalFiltered: campaignFilteredTweets.length, // total after all filters
         };
       });
 
@@ -699,131 +771,31 @@ export async function POST(
     }
 
     // ============================================================================
-    // HANDLE DELETED TWEETS AND TWEETS THAT NO LONGER MATCH RULES
+    // NOTE: We do NOT mark tweets as deleted even after pagination
+    // Even though we fetch all tweets up to join date via pagination, there could still be:
+    // 1. API rate limits or temporary issues preventing complete fetch
+    // 2. Edge cases where tweets exist but aren't returned by the API
+    // 3. Tweets that were filtered out but still exist on Twitter
+    // 
+    // We'll keep existing tweets as-is if they're not found, rather than marking as deleted
     // ============================================================================
-    console.log(`[twitter-refresh-tweets] Processing deleted/edited tweets...`);
+    console.log(`[twitter-refresh-tweets] Skipping deletion marking - keeping existing tweets as-is even if not found`);
     
-    // Find tweets that were in DB but not in fresh API response
-    const tweetsToMarkAsDeleted = Array.from(existingTweetsMap.keys()).filter(
+    // Log tweets that weren't found for debugging, but don't mark as deleted
+    const tweetsNotInFreshResponse = Array.from(existingTweetsMap.keys()).filter(
       (tweetId) => !freshTweetIds.has(tweetId)
     );
 
-    if (tweetsToMarkAsDeleted.length > 0) {
+    if (tweetsNotInFreshResponse.length > 0) {
       console.log(
-        `[twitter-refresh-tweets] Marking ${tweetsToMarkAsDeleted.length} tweets as deleted/ineligible`
+        `[twitter-refresh-tweets] Note: ${tweetsNotInFreshResponse.length} tweets were not found in fresh paginated fetch, but keeping them as-is (may be due to API issues or edge cases)`
       );
-
-      // Batch update deleted tweets (chunks of 100 for performance)
-      const BATCH_SIZE = 100;
-      for (let i = 0; i < tweetsToMarkAsDeleted.length; i += BATCH_SIZE) {
-        const batch = tweetsToMarkAsDeleted.slice(i, i + BATCH_SIZE);
-        
-        // Mark as deleted/ineligible, but PRESERVE moderation status
-        const { error: updateError } = await supabaseAdmin
-          .from("twitter_campaign_tweets")
-          .update({
-            is_eligible: false,
-            filter_status: "deleted",
-            eligibility_reason:
-              "Tweet no longer found in creator's timeline or no longer matches campaign rules",
-            // DO NOT update moderation_status - preserve it!
-            // DO NOT update manual_points_adjustment - preserve it!
-            // DO NOT update manual_points_reason - preserve it!
-          })
-          .eq("contest_id", contestId)
-          .in("tweet_id", batch);
-
-        if (updateError) {
-          console.error(
-            `[twitter-refresh-tweets] Error marking tweets as deleted (batch ${i / BATCH_SIZE + 1}):`,
-            updateError
-          );
-        } else {
-          console.log(
-            `[twitter-refresh-tweets] Marked ${batch.length} tweets as deleted (batch ${i / BATCH_SIZE + 1})`
-          );
-        }
-      }
     }
 
-    // Handle tweets that were previously eligible but now don't match rules
-    // (They're in the API but didn't pass the filter)
-    // Note: This is already handled above - if a tweet doesn't pass filter, it won't be in freshTweetIds
-    // But we should also check for tweets that were approved but now don't match rules
-    const { data: previouslyEligibleTweets } = await supabaseAdmin
-      .from("twitter_campaign_tweets")
-      .select("tweet_id, moderation_status")
-      .eq("contest_id", contestId)
-      .eq("is_eligible", true)
-      .is("target_tweet_id", null);
-
-    const previouslyEligibleIds = new Set(
-      (previouslyEligibleTweets || []).map((t: any) => t.tweet_id)
-    );
-
-    // Find tweets that were eligible but are NOT in fresh filtered list
-    // (These are tweets that were in API but didn't pass the filter - likely edited)
-    const noLongerEligible = Array.from(previouslyEligibleIds).filter(
-      (tweetId) => !freshTweetIds.has(tweetId) && !tweetsToMarkAsDeleted.includes(tweetId)
-    );
-
-    if (noLongerEligible.length > 0) {
-      console.log(
-        `[twitter-refresh-tweets] Marking ${noLongerEligible.length} tweets as no longer matching rules`
-      );
-
-      // Batch update
-      const BATCH_SIZE = 100;
-      for (let i = 0; i < noLongerEligible.length; i += BATCH_SIZE) {
-        const batch = noLongerEligible.slice(i, i + BATCH_SIZE);
-
-        // Mark as ineligible, preserve moderation
-        const { error: updateError } = await supabaseAdmin
-          .from("twitter_campaign_tweets")
-          .update({
-            is_eligible: false,
-            filter_status: "filtered_out",
-            eligibility_reason:
-              "Tweet no longer matches campaign rules (may have been edited)",
-            // Preserve moderation - admin may want to see why it was approved before
-          })
-          .eq("contest_id", contestId)
-          .in("tweet_id", batch);
-
-        if (updateError) {
-          console.error(
-            `[twitter-refresh-tweets] Error marking tweets as filtered_out (batch ${i / BATCH_SIZE + 1}):`,
-            updateError
-          );
-        } else {
-          // Optionally: Auto-reject tweets that were approved but no longer match rules
-          // This ensures approved tweets that get edited to violate rules are rejected
-          const { data: approvedTweets } = await supabaseAdmin
-            .from("twitter_campaign_tweets")
-            .select("tweet_id")
-            .eq("contest_id", contestId)
-            .in("tweet_id", batch)
-            .eq("moderation_status", "verified");
-
-          if (approvedTweets && approvedTweets.length > 0) {
-            const approvedTweetIds = approvedTweets.map((t: any) => t.tweet_id);
-            await supabaseAdmin
-              .from("twitter_campaign_tweets")
-              .update({
-                moderation_status: "rejected",
-                manual_points_reason:
-                  "Tweet no longer matches campaign rules after edit. Previously approved tweet was edited and now violates rules.",
-              })
-              .eq("contest_id", contestId)
-              .in("tweet_id", approvedTweetIds);
-
-            console.log(
-              `[twitter-refresh-tweets] Auto-rejected ${approvedTweetIds.length} previously approved tweets that no longer match rules`
-            );
-          }
-        }
-      }
-    }
+    // NOTE: We also skip marking tweets as "filtered_out" if they're not in fresh response
+    // because the same reasons apply - not found doesn't mean they don't match rules
+    // They might just not be in the current API response due to pagination/limits
+    console.log(`[twitter-refresh-tweets] Skipping filtered_out marking - tweets not in response may still be valid`);
 
     // After saving filtered tweets, aggregate per-creator stats into twitter_campaign_leaderboard
     console.log(
@@ -929,11 +901,26 @@ export async function POST(
         .sort((a, b) => b.total_points - a.total_points);
 
       const nowIso = new Date().toISOString();
-      const cooldownMs = 5 * 60 * 1000; // 5 minutes
+      // Use 1 hour cooldown as per table definition (matches next_refresh_available_at default)
+      const cooldownMs = 60 * 60 * 1000; // 1 hour (60 minutes)
       const nextRefreshIso = new Date(Date.now() + cooldownMs).toISOString();
+
+      // Get existing leaderboard entries to preserve refresh_count
+      const { data: existingLeaderboardForRefresh } = await supabaseAdmin
+        .from("twitter_campaign_leaderboard")
+        .select("creator_id, refresh_count")
+        .eq("contest_id", contestId);
+
+      const refreshCountMap = new Map<string, number>();
+      if (existingLeaderboardForRefresh) {
+        existingLeaderboardForRefresh.forEach((entry: any) => {
+          refreshCountMap.set(entry.creator_id, (entry.refresh_count || 0) + 1);
+        });
+      }
 
       const upsertPayload = leaderboardEntries.map((entry, index) => {
         const leaderboardManualAdjustment = leaderboardManualAdjustments.get(entry.creatorId) || 0;
+        const refreshCount = refreshCountMap.get(entry.creatorId) || 1; // Default to 1 for new entries
         return {
           contest_id: contestId,
           creator_id: entry.creatorId,
@@ -948,6 +935,7 @@ export async function POST(
           current_rank: index + 1,
           last_refreshed_at: nowIso,
           next_refresh_available_at: nextRefreshIso,
+          refresh_count: refreshCount, // Increment refresh count
         };
       });
 
@@ -1051,12 +1039,16 @@ export async function POST(
     const totalImpressions = allTweets?.reduce((sum, t) => sum + (Number(t.impressions) || 0), 0) || 0;
     const totalPoints = allTweets?.reduce((sum, t) => sum + (t.points || 0), 0) || 0;
 
+    // Get campaign_type from contest data (already fetched earlier)
+    const campaignType = contestData?.contest_based_details?.twitter_campaign?.campaign_type || "awareness";
+
     // Update metrics table
     await supabaseAdmin
       .from("twitter_campaign_metrics")
       .upsert(
         {
           contest_id: contestId,
+          campaign_type: campaignType, // Required field - set to "awareness" or "raid" based on contest config
           total_filtered_tweets: totalFilteredTweets || 0,
           total_participants: totalParticipants || 0,
           total_likes: totalLikes,

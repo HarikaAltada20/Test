@@ -1,0 +1,42 @@
+create table public.twitter_campaign_metrics (
+  contest_id uuid not null,
+  campaign_type text not null,
+  total_filtered_tweets integer null default 0,
+  total_participants integer null default 0,
+  max_participants integer null,
+  total_likes integer null default 0,
+  total_replies integer null default 0,
+  total_retweets integer null default 0,
+  total_quote_reposts integer null default 0,
+  total_impressions integer null default 0,
+  total_points integer null default 0,
+  target_tweet_id text null,
+  target_tweet_url text null,
+  target_likes integer null,
+  target_comments integer null,
+  target_retweets integer null,
+  target_quote_reposts integer null,
+  target_current_likes integer null,
+  target_current_comments integer null,
+  target_current_retweets integer null,
+  target_current_quote_reposts integer null,
+  target_current_views integer null,
+  targets_reached boolean null,
+  last_updated_at timestamp with time zone not null default now(),
+  created_at timestamp with time zone not null default now(),
+  constraint twitter_campaign_metrics_pkey primary key (contest_id),
+  constraint twitter_campaign_metrics_contest_id_fkey foreign KEY (contest_id) references contests (id) on delete CASCADE,
+  constraint twitter_campaign_metrics_campaign_type_check check (
+    (
+      campaign_type = any (array['raid'::text, 'awareness'::text])
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_twitter_campaign_metrics_contest on public.twitter_campaign_metrics using btree (contest_id) TABLESPACE pg_default;
+
+create index IF not exists idx_twitter_campaign_metrics_type on public.twitter_campaign_metrics using btree (campaign_type) TABLESPACE pg_default;
+
+create index IF not exists idx_twitter_campaign_metrics_target on public.twitter_campaign_metrics using btree (contest_id, target_tweet_id) TABLESPACE pg_default
+where
+  (target_tweet_id is not null);

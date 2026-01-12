@@ -311,24 +311,36 @@ export function TwitterFeed({
                                 : cooldownType === "brand"
                                     ? getMetricsRefreshCooldownInfoBrand(currentLastMetricsUpdated)
                                     : getMetricsRefreshCooldownInfoOpportunities(currentLastMetricsUpdated);
+                            
+                            const isDisabled = isRefreshingFeed || !cooldownInfo.canRefresh;
+                            const disabledReason = !cooldownInfo.canRefresh
+                                ? `Please wait ${formatRemainingTime(cooldownInfo.remainingMs)}`
+                                : isRefreshingFeed
+                                ? "Refreshing feed..."
+                                : "";
+                            
                             return (
                                 <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={handleRefreshFeed}
-                                    disabled={isRefreshingFeed || !cooldownInfo.canRefresh}
+                                    disabled={isDisabled}
                                     className={cn(
-                                        isDark ? "text-white hover:bg-gray-700" : "text-gray-700",
-                                        (isRefreshingFeed || !cooldownInfo.canRefresh) && "opacity-50 cursor-not-allowed"
+                                        "flex items-center gap-2",
+                                        isDisabled
+                                            ? "opacity-60 cursor-not-allowed"
+                                            : isDark
+                                            ? "text-white hover:bg-gray-700"
+                                            : "text-gray-700 hover:bg-gray-100"
                                     )}
-                                    title={
-                                        !cooldownInfo.canRefresh
-                                            ? `Available in ${formatRemainingTime(cooldownInfo.remainingMs)}`
-                                            : "Refresh feed now"
-                                    }
+                                    title={disabledReason || "Refresh Twitter feed"}
                                 >
-                                    <RefreshCw className={cn("h-4 w-4", isRefreshingFeed && "animate-spin")} />
-                                    <span className="ml-2">
+                                    {isRefreshingFeed ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <RefreshCw className="h-4 w-4" />
+                                    )}
+                                    <span>
                                         {isRefreshingFeed
                                             ? "Refreshing..."
                                             : !cooldownInfo.canRefresh
