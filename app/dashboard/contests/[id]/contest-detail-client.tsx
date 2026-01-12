@@ -9997,9 +9997,11 @@ export default function ContestDetailClient({
                           metrics.total_quote_reposts +=
                             sub.other_stats.quote_reposts || 0;
                           metrics.total_impressions += sub.views || 0;
-                          metrics.total_points +=
-                            (sub.other_stats.points || 0) +
-                            (sub.other_stats.manual_points_adjustment || 0);
+                          // Use base_points instead of points (points might already include adjustment)
+                          const basePoints = sub.other_stats.base_points || 0;
+                          const manualAdjustment =
+                            sub.other_stats.manual_points_adjustment || 0;
+                          metrics.total_points += basePoints + manualAdjustment;
                         }
                       });
 
@@ -11187,61 +11189,94 @@ export default function ContestDetailClient({
                               currentContest.platform?.toLowerCase() === "x") &&
                             currentContest.contest_format === "text_image";
 
+                          // Check if this is a Twitter leaderboard contest
+                          const isTwitterLeaderboard =
+                            currentContest.contest_type === "leaderboard" &&
+                            (currentContest.platform?.toLowerCase() ===
+                              "twitter" ||
+                              currentContest.platform?.toLowerCase() === "x") &&
+                            currentContest.contest_format === "text_image";
+
                           // Calculate total points for CPM Twitter contests
                           const calculateTotalPoints = () => {
-                            if (!isTwitterCPM) return 0;
+                            if (isTwitterCPM) {
+                              const pointsConfig =
+                                currentContest.contest_based_details
+                                  ?.twitter_campaign?.points_config;
 
-                            const pointsConfig =
-                              currentContest.contest_based_details
-                                ?.twitter_campaign?.points_config;
+                              if (!pointsConfig) return 0;
 
-                            if (!pointsConfig) return 0;
+                              const metricWeights = {
+                                likes:
+                                  typeof pointsConfig.likes_weight === "number"
+                                    ? pointsConfig.likes_weight
+                                    : 0,
+                                comments:
+                                  typeof pointsConfig.comments_weight ===
+                                  "number"
+                                    ? pointsConfig.comments_weight
+                                    : 0,
+                                retweets:
+                                  typeof pointsConfig.retweets_weight ===
+                                  "number"
+                                    ? pointsConfig.retweets_weight
+                                    : 0,
+                                quoteReposts:
+                                  typeof pointsConfig.quote_reposts_weight ===
+                                  "number"
+                                    ? pointsConfig.quote_reposts_weight
+                                    : 0,
+                                impressions:
+                                  typeof pointsConfig.impressions_weight ===
+                                  "number"
+                                    ? pointsConfig.impressions_weight
+                                    : 0,
+                              };
 
-                            const metricWeights = {
-                              likes:
-                                typeof pointsConfig.likes_weight === "number"
-                                  ? pointsConfig.likes_weight
-                                  : 0,
-                              comments:
-                                typeof pointsConfig.comments_weight === "number"
-                                  ? pointsConfig.comments_weight
-                                  : 0,
-                              retweets:
-                                typeof pointsConfig.retweets_weight === "number"
-                                  ? pointsConfig.retweets_weight
-                                  : 0,
-                              quoteReposts:
-                                typeof pointsConfig.quote_reposts_weight ===
-                                "number"
-                                  ? pointsConfig.quote_reposts_weight
-                                  : 0,
-                              impressions:
-                                typeof pointsConfig.impressions_weight ===
-                                "number"
-                                  ? pointsConfig.impressions_weight
-                                  : 0,
-                            };
+                              return (
+                                filteredAnalyticsSubmissions?.reduce(
+                                  (sum, s) => {
+                                    if (!s.other_stats) return sum;
+                                    const likes = s.other_stats.likes || 0;
+                                    const replies = s.other_stats.replies || 0;
+                                    const retweets =
+                                      s.other_stats.retweets || 0;
+                                    const quoteReposts =
+                                      s.other_stats.quote_reposts || 0;
+                                    const impressions = s.views || 0;
 
-                            return (
-                              filteredAnalyticsSubmissions?.reduce((sum, s) => {
-                                if (!s.other_stats) return sum;
-                                const likes = s.other_stats.likes || 0;
-                                const replies = s.other_stats.replies || 0;
-                                const retweets = s.other_stats.retweets || 0;
-                                const quoteReposts =
-                                  s.other_stats.quote_reposts || 0;
-                                const impressions = s.views || 0;
+                                    const points =
+                                      likes * metricWeights.likes +
+                                      replies * metricWeights.comments +
+                                      retweets * metricWeights.retweets +
+                                      quoteReposts *
+                                        metricWeights.quoteReposts +
+                                      impressions * metricWeights.impressions;
 
-                                const points =
-                                  likes * metricWeights.likes +
-                                  replies * metricWeights.comments +
-                                  retweets * metricWeights.retweets +
-                                  quoteReposts * metricWeights.quoteReposts +
-                                  impressions * metricWeights.impressions;
+                                    return sum + points;
+                                  },
+                                  0
+                                ) || 0
+                              );
+                            }
 
-                                return sum + points;
-                              }, 0) || 0
-                            );
+                            // Calculate total points for leaderboard Twitter contests
+                            if (isTwitterLeaderboard) {
+                              return (
+                                filteredAnalyticsSubmissions?.reduce(
+                                  (sum, s) => {
+                                    const basePoints =
+                                      s.other_stats?.base_points || 0;
+                                    const manualAdjustment =
+                                      (s as any).manual_points_adjustment || 0;
+                                    return sum + basePoints + manualAdjustment;
+                                  },
+                                  0
+                                ) || 0
+                              );
+                            }
+
+                            return 0;
                           };
 
                           const totalPoints = calculateTotalPoints();
@@ -11349,7 +11384,7 @@ export default function ContestDetailClient({
                                         isDark ? "text-white" : "text-gray-600"
                                       )}
                                     >
-                                      {isTwitterCPM
+                                      {isTwitterCPM || isTwitterLeaderboard
                                         ? "Points Generated"
                                         : "Views Generated"}
                                     </p>
@@ -11359,10 +11394,25 @@ export default function ContestDetailClient({
                                         isDark ? "text-white" : "text-gray-900"
                                       )}
                                     >
-                                      {isTwitterCPM
+                                      {isTwitterCPM || isTwitterLeaderboard
                                         ? totalPoints.toLocaleString()
                                         : totalViews.toLocaleString()}
                                     </p>
+                                    {/* Show Total Points for leaderboard contests */}
+                                    {isTwitterLeaderboard &&
+                                      totalPoints > 0 && (
+                                        <p
+                                          className={cn(
+                                            "text-sm mt-2",
+                                            isDark
+                                              ? "text-gray-300"
+                                              : "text-gray-600"
+                                          )}
+                                        >
+                                          Total Points:{" "}
+                                          {totalPoints.toLocaleString()}
+                                        </p>
+                                      )}
                                     <p
                                       className={cn(
                                         "text-xs text-gray-500 mt-1",
