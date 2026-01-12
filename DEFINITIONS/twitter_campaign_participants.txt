@@ -1,0 +1,22 @@
+create table public.twitter_campaign_participants (
+  id uuid not null default gen_random_uuid (),
+  contest_id uuid not null,
+  creator_id uuid not null,
+  twitter_username text not null,
+  joined_at timestamp with time zone not null default now(),
+  is_active boolean null default true,
+  last_tweet_fetched_at timestamp with time zone null,
+  total_tweets_tracked integer null default 0,
+  constraint twitter_campaign_participants_pkey primary key (id),
+  constraint twitter_campaign_participants_contest_id_creator_id_key unique (contest_id, creator_id),
+  constraint twitter_campaign_participants_contest_id_fkey foreign KEY (contest_id) references contests (id) on delete CASCADE,
+  constraint twitter_campaign_participants_creator_id_fkey foreign KEY (creator_id) references users (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_twitter_participants_contest on public.twitter_campaign_participants using btree (contest_id) TABLESPACE pg_default;
+
+create index IF not exists idx_twitter_participants_creator on public.twitter_campaign_participants using btree (creator_id) TABLESPACE pg_default;
+
+create index IF not exists idx_twitter_participants_active on public.twitter_campaign_participants using btree (contest_id, is_active) TABLESPACE pg_default
+where
+  (is_active = true);
