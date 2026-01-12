@@ -2019,26 +2019,38 @@ export default function CreateContestPage({
             ? Math.round(parseFloat(flatFeeBonusCap.toString()) * 100)
             : undefined;
 
+        // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
+        const isTwitterCpmContest =
+          platform === "twitter" &&
+          contestFormat === "text_image" &&
+          contestType === "cpm";
+
+        const cpmContestDetails: any = {
+          cpm_rate_usd: parseFloat(cpmRate.toString()) || 0,
+          total_budget: (parseFloat(totalBudget.toString()) || 0) * 100, // Convert to cents
+          budget_spent: 0, // Initial value
+          terms_conditions: termsConditions,
+          ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
+          ...(flatFeeBonusCapCents && {
+            flat_fee_bonus_cap: flatFeeBonusCapCents,
+          }), // Only include if set
+          // tiered_payouts: [] // Future use
+        };
+
+        // Only include min_views and max_views for non-Twitter CPM contests
+        if (!isTwitterCpmContest) {
+          cpmContestDetails.min_views =
+            minViews && minViews.toString().trim() !== ""
+              ? parseInt(minViews.toString(), 10)
+              : null;
+          cpmContestDetails.max_views =
+            maxViews && maxViews.toString().trim() !== ""
+              ? parseInt(maxViews.toString(), 10)
+              : null;
+        }
+
         contestBasedDetails = {
-          cpm_contest: {
-            cpm_rate_usd: parseFloat(cpmRate.toString()) || 0,
-            min_views:
-              minViews && minViews.toString().trim() !== ""
-                ? parseInt(minViews.toString(), 10)
-                : null,
-            max_views:
-              maxViews && maxViews.toString().trim() !== ""
-                ? parseInt(maxViews.toString(), 10)
-                : null,
-            total_budget: (parseFloat(totalBudget.toString()) || 0) * 100, // Convert to cents
-            budget_spent: 0, // Initial value
-            terms_conditions: termsConditions,
-            ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
-            ...(flatFeeBonusCapCents && {
-              flat_fee_bonus_cap: flatFeeBonusCapCents,
-            }), // Only include if set
-            // tiered_payouts: [] // Future use
-          },
+          cpm_contest: cpmContestDetails,
         };
       }
 
@@ -3607,23 +3619,28 @@ export default function CreateContestPage({
         const pointsConfig = twitterCampaign.points_config || {};
         setTwitterPointsConfig({
           likesWeight:
-            typeof pointsConfig.likes_weight === "number" && pointsConfig.likes_weight > 0
+            typeof pointsConfig.likes_weight === "number" &&
+            pointsConfig.likes_weight > 0
               ? pointsConfig.likes_weight
               : "",
           commentsWeight:
-            typeof pointsConfig.comments_weight === "number" && pointsConfig.comments_weight > 0
+            typeof pointsConfig.comments_weight === "number" &&
+            pointsConfig.comments_weight > 0
               ? pointsConfig.comments_weight
               : "",
           retweetsWeight:
-            typeof pointsConfig.retweets_weight === "number" && pointsConfig.retweets_weight > 0
+            typeof pointsConfig.retweets_weight === "number" &&
+            pointsConfig.retweets_weight > 0
               ? pointsConfig.retweets_weight
               : "",
           quoteRepostsWeight:
-            typeof pointsConfig.quote_reposts_weight === "number" && pointsConfig.quote_reposts_weight > 0
+            typeof pointsConfig.quote_reposts_weight === "number" &&
+            pointsConfig.quote_reposts_weight > 0
               ? pointsConfig.quote_reposts_weight
               : "",
           impressionsWeight:
-            typeof pointsConfig.impressions_weight === "number" && pointsConfig.impressions_weight > 0
+            typeof pointsConfig.impressions_weight === "number" &&
+            pointsConfig.impressions_weight > 0
               ? pointsConfig.impressions_weight
               : "",
         });
@@ -5506,10 +5523,9 @@ export default function CreateContestPage({
                       )}
                     >
                       <AlertDescription>
-                        Twitter CPM contests use the{" "}
-                        <strong>Points Model</strong>. Min/Max Views are not
-                        used here; payout is driven by total points and the CPM
-                        rate per 1,000 points.
+                      Twitter CPM contests use the <strong>Points Model</strong>
+                      . Payout is calculated based on total points earned and
+                      the CPM rate per 1,000 points.
                       </AlertDescription>
                     </Alert>
                   ) : (

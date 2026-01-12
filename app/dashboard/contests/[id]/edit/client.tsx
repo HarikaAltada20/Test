@@ -1787,14 +1787,17 @@ export default function EditContestPage({
         return;
       }
 
-      const validInspirationLinks = inspirationLinks.filter(
-        (link) => link.url.trim() !== ""
-      );
-      if (validInspirationLinks.length === 0) {
-        showError("At least one inspiration link is required.");
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
+      // Skip inspiration links validation for raid campaign type
+      if (contentType !== "raid") {
+        const validInspirationLinks = inspirationLinks.filter(
+          (link) => link.url.trim() !== ""
+        );
+        if (validInspirationLinks.length === 0) {
+          showError("At least one inspiration link is required.");
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
       }
 
       const hasExistingResources = resources && resources.length > 0;
@@ -1841,9 +1844,12 @@ export default function EditContestPage({
         brief_json: briefJson,
         rules_html: rulesHtml,
         rules_json: rulesJson && typeof rulesJson === "object" ? rulesJson : {},
-        inspiration_links: inspirationLinks.filter(
-          (link) => link.url.trim() !== ""
-        ),
+        // For raid campaigns, target tweet is stored in contest_based_details.twitter_campaign.raid_target,
+        // so we avoid duplicating it in inspiration_links.
+        inspiration_links:
+          contentType === "raid"
+            ? null
+            : inspirationLinks.filter((link) => link.url.trim() !== ""),
         tracking_links: trackingLinks.filter((link) => link.url.trim() !== ""),
         // Categories, subcategories, and interests
         categories: contestCategories.length > 0 ? contestCategories : null,
@@ -2185,15 +2191,26 @@ export default function EditContestPage({
         return;
       }
       // Build CPM contest details
+      // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
+      const isTwitterCpmContest =
+        (contest?.platform?.toLowerCase() === "twitter" ||
+          contest?.platform?.toLowerCase() === "x") &&
+        contest?.contest_format === "text_image" &&
+        contestType === "cpm";
+
       const cpmDetails: any = {
         cpm_rate_usd: numCpmRate,
         total_budget: numTotalBudget * 100, // Convert dollars to cents
-        min_views: numMinViews,
-        max_views: numMaxViews,
         terms_conditions: termsConditions,
         budget_spent:
           contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
       };
+
+      // Only include min_views and max_views for non-Twitter CPM contests
+      if (!isTwitterCpmContest) {
+        cpmDetails.min_views = numMinViews;
+        cpmDetails.max_views = numMaxViews;
+      }
 
       // Add flat fee bonus if specified (stored in cents)
       if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
@@ -3171,17 +3188,34 @@ export default function EditContestPage({
                 winner_count: winnerCount,
               },
             }
-          : {
-              cpm_contest: {
+          : (() => {
+              // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
+              const isTwitterCpm =
+                (contest?.platform?.toLowerCase() === "twitter" ||
+                  contest?.platform?.toLowerCase() === "x") &&
+                contest?.contest_format === "text_image" &&
+                contestType === "cpm";
+
+              const cpmContestDetails: any = {
                 cpm_rate_usd: parseFloat(cpmRate.toString()),
-                min_views: minViews ? parseInt(minViews.toString()) : null,
-                max_views: maxViews ? parseInt(maxViews.toString()) : null,
                 total_budget: Math.round(
                   parseFloat(totalBudget.toString()) * 100
                 ),
                 terms_conditions: termsConditions,
-              },
-            };
+              };
+
+              // Only include min_views and max_views for non-Twitter CPM contests
+              if (!isTwitterCpm) {
+                cpmContestDetails.min_views = minViews
+                  ? parseInt(minViews.toString())
+                  : null;
+                cpmContestDetails.max_views = maxViews
+                  ? parseInt(maxViews.toString())
+                  : null;
+              }
+
+              return { cpm_contest: cpmContestDetails };
+            })();
 
       const { error: updateError } = await supabase
         .from("contests")
@@ -3277,11 +3311,14 @@ export default function EditContestPage({
       return "Contest thumbnail is required.";
     }
 
-    const validInspirationLinks = inspirationLinks.filter(
-      (link) => link.url.trim() !== ""
-    );
-    if (validInspirationLinks.length === 0) {
-      return "At least one inspiration link is required.";
+    // Skip inspiration links validation for raid campaign type
+    if (contentType !== "raid") {
+      const validInspirationLinks = inspirationLinks.filter(
+        (link) => link.url.trim() !== ""
+      );
+      if (validInspirationLinks.length === 0) {
+        return "At least one inspiration link is required.";
+      }
     }
 
     const hasExistingResources = resources && resources.length > 0;
@@ -3444,6 +3481,34 @@ export default function EditContestPage({
         return "Total Budget is mandatory for CPM contests.";
       }
 
+      // Twitter CPM (Points Model): require at least one metric weight > 0
+      if (
+        (platform?.toLowerCase() === "twitter" ||
+          platform?.toLowerCase() === "x") &&
+        contest?.contest_format === "text_image"
+      ) {
+        const likesWeight =
+          parseFloat(twitterPointsConfig.likesWeight.toString()) || 0;
+        const commentsWeight =
+          parseFloat(twitterPointsConfig.commentsWeight.toString()) || 0;
+        const retweetsWeight =
+          parseFloat(twitterPointsConfig.retweetsWeight.toString()) || 0;
+        const quoteRepostsWeight =
+          parseFloat(twitterPointsConfig.quoteRepostsWeight.toString()) || 0;
+        const impressionsWeight =
+          parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0;
+
+        if (
+          likesWeight <= 0 &&
+          commentsWeight <= 0 &&
+          retweetsWeight <= 0 &&
+          quoteRepostsWeight <= 0 &&
+          impressionsWeight <= 0
+        ) {
+          return "For Twitter CPM contests, please enable at least one metric (likes, comments/replies, retweets, quote reposts, or views) to count towards points and payout.";
+        }
+      }
+
       // Validate flat fee bonus and cap for CPM contests
       const flatFeeBonusValue =
         flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0;
@@ -3527,6 +3592,13 @@ export default function EditContestPage({
           "💾 Updating complete contest data in database after payment..."
         );
 
+        // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
+        const isTwitterCpmForPayment =
+          (contest?.platform?.toLowerCase() === "twitter" ||
+            contest?.platform?.toLowerCase() === "x") &&
+          contest?.contest_format === "text_image" &&
+          contestType === "cpm";
+
         const contestBasedDetails: any =
           contestType === "leaderboard"
             ? {
@@ -3542,23 +3614,93 @@ export default function EditContestPage({
                   winner_count: winnerCount,
                 },
               }
-            : {
-                cpm_contest: {
+            : (() => {
+                const cpmContestDetails: any = {
                   cpm_rate_usd: parseFloat(cpmRate.toString()),
-                  min_views: minViews ? parseInt(minViews.toString()) : null,
-                  max_views: maxViews ? parseInt(maxViews.toString()) : null,
                   total_budget: Math.round(
                     parseFloat(totalBudget.toString()) * 100
                   ),
                   terms_conditions: termsConditions,
-                },
-              };
+                };
 
-        // Add Twitter CPM Points config
-        if (platform?.toLowerCase() === "twitter" && contestType === "cpm") {
-          contestBasedDetails.twitter_campaign = {
-            ...(contestBasedDetails.twitter_campaign || {}),
-            points_config: {
+                // Only include min_views and max_views for non-Twitter CPM contests
+                if (!isTwitterCpmForPayment) {
+                  cpmContestDetails.min_views = minViews
+                    ? parseInt(minViews.toString())
+                    : null;
+                  cpmContestDetails.max_views = maxViews
+                    ? parseInt(maxViews.toString())
+                    : null;
+                }
+
+                return { cpm_contest: cpmContestDetails };
+              })();
+
+        // Add Twitter campaign config to contest_based_details
+        // raid: target a specific tweet and do like, comment, retweet, and quote repost around that tweet
+        // awareness: tweet openly with specified keywords/hashtags and mentions
+        if (
+          platform?.toLowerCase() === "twitter" &&
+          contest?.contest_format === "text_image"
+        ) {
+          const twitterCampaign: any = {
+            campaign_type: contentType === "raid" ? "raid" : "awareness", // Only 2 types: raid or awareness
+            // Include all tweet types by default (tweet, quote, retweet, reply) to support reposts and retweets
+            allowed_tweet_types: ["tweet", "quote", "retweet", "reply"],
+          };
+
+          const filteredKeywords = keywords.filter((k) => k.trim() !== "");
+          const filteredMentions = mentions.filter((m) => m.trim() !== "");
+
+          if (filteredKeywords.length > 0) {
+            twitterCampaign.keywords = filteredKeywords;
+          }
+          if (filteredMentions.length > 0) {
+            twitterCampaign.mentions = filteredMentions;
+          }
+          if (
+            maxParticipants &&
+            typeof maxParticipants === "number" &&
+            maxParticipants > 0
+          ) {
+            twitterCampaign.max_participants = maxParticipants;
+          }
+
+          if (contentType !== "raid") {
+            if (keywordsRequirementMode) {
+              twitterCampaign.keywords_requirement_mode =
+                keywordsRequirementMode;
+            }
+            if (mentionsRequirementMode) {
+              twitterCampaign.mentions_requirement_mode =
+                mentionsRequirementMode;
+            }
+          }
+
+          if (
+            (contentType === "raid" || contentType === "awareness") &&
+            twitterTargetUrl
+          ) {
+            twitterCampaign.raid_target = {
+              link: twitterTargetUrl || null,
+              description: twitterTargetDescription || null,
+              metrics: {
+                likes: targetLikes === "" ? null : targetLikes,
+                comments: targetReplies === "" ? null : targetReplies,
+                retweets: targetRetweets === "" ? null : targetRetweets,
+                quote_reposts:
+                  targetQuoteReposts === "" ? null : targetQuoteReposts,
+              },
+              keywords_requirement_mode:
+                contentType === "raid" ? "" : keywordsRequirementMode || "",
+              mentions_requirement_mode:
+                contentType === "raid" ? "" : mentionsRequirementMode || "",
+            };
+          }
+
+          // Add Twitter CPM Points config
+          if (contestType === "cpm") {
+            twitterCampaign.points_config = {
               likes_weight:
                 parseFloat(twitterPointsConfig.likesWeight.toString()) || 0,
               comments_weight:
@@ -3571,8 +3713,10 @@ export default function EditContestPage({
               impressions_weight:
                 parseFloat(twitterPointsConfig.impressionsWeight.toString()) ||
                 0,
-            },
-          };
+            };
+          }
+
+          contestBasedDetails.twitter_campaign = twitterCampaign;
         }
 
         // Helper function to process and group subcategories by category
@@ -3610,9 +3754,12 @@ export default function EditContestPage({
           },
           start_date: toUTCISOString(startDate, startTime),
           end_date: toUTCISOString(endDate, endTime),
-          inspiration_links: inspirationLinks.filter(
-            (link) => link.url.trim() !== ""
-          ),
+          // For raid campaigns, target tweet is stored in contest_based_details.twitter_campaign.raid_target,
+          // so we avoid duplicating it in inspiration_links.
+          inspiration_links:
+            contentType === "raid"
+              ? null
+              : inspirationLinks.filter((link) => link.url.trim() !== ""),
           tracking_links: trackingLinks.filter(
             (link) => link.url.trim() !== ""
           ),
@@ -3627,6 +3774,13 @@ export default function EditContestPage({
           // Regions and countries as JSONB
           region: buildRegionData(selectedRegions, selectedCountries),
           // Twitter data is now stored in contest_based_details.twitter_campaign
+          // Add new features (2025-10-01)
+          multiple_submissions_enabled: multipleSubmissionsEnabled,
+          max_submissions_per_creator: multipleSubmissionsEnabled
+            ? maxSubmissionsPerCreator
+            : 1,
+          content_type: contentType || null,
+          category: category || null,
           moderation_status: "draft", // Save as draft after successful payment
         };
 
@@ -3658,6 +3812,13 @@ export default function EditContestPage({
           "📝 No budget change - saving all form data as draft after payment"
         );
 
+        // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
+        const isTwitterCpmForDraft =
+          (contest?.platform?.toLowerCase() === "twitter" ||
+            contest?.platform?.toLowerCase() === "x") &&
+          contest?.contest_format === "text_image" &&
+          contestType === "cpm";
+
         // Prepare contest data update with all current form data
         const contestBasedDetails2: any =
           contestType === "leaderboard"
@@ -3674,23 +3835,93 @@ export default function EditContestPage({
                   winner_count: winnerCount,
                 },
               }
-            : {
-                cpm_contest: {
+            : (() => {
+                const cpmContestDetails: any = {
                   cpm_rate_usd: parseFloat(cpmRate.toString()),
-                  min_views: minViews ? parseInt(minViews.toString()) : null,
-                  max_views: maxViews ? parseInt(maxViews.toString()) : null,
                   total_budget: Math.round(
                     parseFloat(totalBudget.toString()) * 100
                   ),
                   terms_conditions: termsConditions,
-                },
-              };
+                };
 
-        // Add Twitter CPM Points config
-        if (platform?.toLowerCase() === "twitter" && contestType === "cpm") {
-          contestBasedDetails2.twitter_campaign = {
-            ...(contestBasedDetails2.twitter_campaign || {}),
-            points_config: {
+                // Only include min_views and max_views for non-Twitter CPM contests
+                if (!isTwitterCpmForDraft) {
+                  cpmContestDetails.min_views = minViews
+                    ? parseInt(minViews.toString())
+                    : null;
+                  cpmContestDetails.max_views = maxViews
+                    ? parseInt(maxViews.toString())
+                    : null;
+                }
+
+                return { cpm_contest: cpmContestDetails };
+              })();
+
+        // Add Twitter campaign config to contest_based_details
+        // raid: target a specific tweet and do like, comment, retweet, and quote repost around that tweet
+        // awareness: tweet openly with specified keywords/hashtags and mentions
+        if (
+          platform?.toLowerCase() === "twitter" &&
+          contest?.contest_format === "text_image"
+        ) {
+          const twitterCampaign: any = {
+            campaign_type: contentType === "raid" ? "raid" : "awareness", // Only 2 types: raid or awareness
+            // Include all tweet types by default (tweet, quote, retweet, reply) to support reposts and retweets
+            allowed_tweet_types: ["tweet", "quote", "retweet", "reply"],
+          };
+
+          const filteredKeywords = keywords.filter((k) => k.trim() !== "");
+          const filteredMentions = mentions.filter((m) => m.trim() !== "");
+
+          if (filteredKeywords.length > 0) {
+            twitterCampaign.keywords = filteredKeywords;
+          }
+          if (filteredMentions.length > 0) {
+            twitterCampaign.mentions = filteredMentions;
+          }
+          if (
+            maxParticipants &&
+            typeof maxParticipants === "number" &&
+            maxParticipants > 0
+          ) {
+            twitterCampaign.max_participants = maxParticipants;
+          }
+
+          if (contentType !== "raid") {
+            if (keywordsRequirementMode) {
+              twitterCampaign.keywords_requirement_mode =
+                keywordsRequirementMode;
+            }
+            if (mentionsRequirementMode) {
+              twitterCampaign.mentions_requirement_mode =
+                mentionsRequirementMode;
+            }
+          }
+
+          if (
+            (contentType === "raid" || contentType === "awareness") &&
+            twitterTargetUrl
+          ) {
+            twitterCampaign.raid_target = {
+              link: twitterTargetUrl || null,
+              description: twitterTargetDescription || null,
+              metrics: {
+                likes: targetLikes === "" ? null : targetLikes,
+                comments: targetReplies === "" ? null : targetReplies,
+                retweets: targetRetweets === "" ? null : targetRetweets,
+                quote_reposts:
+                  targetQuoteReposts === "" ? null : targetQuoteReposts,
+              },
+              keywords_requirement_mode:
+                contentType === "raid" ? "" : keywordsRequirementMode || "",
+              mentions_requirement_mode:
+                contentType === "raid" ? "" : mentionsRequirementMode || "",
+            };
+          }
+
+          // Add Twitter CPM Points config
+          if (contestType === "cpm") {
+            twitterCampaign.points_config = {
               likes_weight:
                 parseFloat(twitterPointsConfig.likesWeight.toString()) || 0,
               comments_weight:
@@ -3703,8 +3934,10 @@ export default function EditContestPage({
               impressions_weight:
                 parseFloat(twitterPointsConfig.impressionsWeight.toString()) ||
                 0,
-            },
-          };
+            };
+          }
+
+          contestBasedDetails2.twitter_campaign = twitterCampaign;
         }
 
         // Helper function to process and group subcategories by category
@@ -3741,9 +3974,12 @@ export default function EditContestPage({
           },
           start_date: toUTCISOString(startDate, startTime),
           end_date: toUTCISOString(endDate, endTime),
-          inspiration_links: inspirationLinks.filter(
-            (link) => link.url.trim() !== ""
-          ),
+          // For raid campaigns, target tweet is stored in contest_based_details.twitter_campaign.raid_target,
+          // so we avoid duplicating it in inspiration_links.
+          inspiration_links:
+            contentType === "raid"
+              ? null
+              : inspirationLinks.filter((link) => link.url.trim() !== ""),
           tracking_links: trackingLinks.filter(
             (link) => link.url.trim() !== ""
           ),
@@ -3758,6 +3994,13 @@ export default function EditContestPage({
           // Regions and countries as JSONB
           region: buildRegionData(selectedRegions, selectedCountries),
           // Twitter data is now stored in contest_based_details.twitter_campaign
+          // Add new features (2025-10-01)
+          multiple_submissions_enabled: multipleSubmissionsEnabled,
+          max_submissions_per_creator: multipleSubmissionsEnabled
+            ? maxSubmissionsPerCreator
+            : 1,
+          content_type: contentType || null,
+          category: category || null,
           moderation_status: "draft", // Save as draft after successful payment
         };
 
@@ -4248,14 +4491,17 @@ export default function EditContestPage({
         return;
       }
 
-      const validInspirationLinks = inspirationLinks.filter(
-        (link) => link.url.trim() !== ""
-      );
-      if (validInspirationLinks.length === 0) {
-        showError("At least one inspiration link is required.");
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
+      // Skip inspiration links validation for raid campaign type
+      if (contentType !== "raid") {
+        const validInspirationLinks = inspirationLinks.filter(
+          (link) => link.url.trim() !== ""
+        );
+        if (validInspirationLinks.length === 0) {
+          showError("At least one inspiration link is required.");
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
       }
 
       const hasExistingResources = resources && resources.length > 0;
@@ -4302,9 +4548,12 @@ export default function EditContestPage({
         brief_json: briefJson,
         rules_html: rulesHtml,
         rules_json: rulesJson && typeof rulesJson === "object" ? rulesJson : {},
-        inspiration_links: inspirationLinks.filter(
-          (link) => link.url.trim() !== ""
-        ),
+        // For raid campaigns, target tweet is stored in contest_based_details.twitter_campaign.raid_target,
+        // so we avoid duplicating it in inspiration_links.
+        inspiration_links:
+          contentType === "raid"
+            ? null
+            : inspirationLinks.filter((link) => link.url.trim() !== ""),
         tracking_links: trackingLinks.filter((link) => link.url.trim() !== ""),
         // Categories, subcategories, and interests
         categories: contestCategories.length > 0 ? contestCategories : null,
@@ -4793,15 +5042,26 @@ export default function EditContestPage({
         }
       }
 
+      // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
+      const isTwitterCpmContest =
+        (contest?.platform?.toLowerCase() === "twitter" ||
+          contest?.platform?.toLowerCase() === "x") &&
+        contest?.contest_format === "text_image" &&
+        contestType === "cpm";
+
       const cpmDetails: any = {
         cpm_rate_usd: parsedCpmRate || 0,
-        min_views: parsedMinViews,
-        max_views: parsedMaxViews,
         total_budget: parsedTotalBudget ? parsedTotalBudget * 100 : 0, // cents
         budget_spent:
           contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
         terms_conditions: (termsConditions || "").trim(),
       };
+
+      // Only include min_views and max_views for non-Twitter CPM contests
+      if (!isTwitterCpmContest) {
+        cpmDetails.min_views = parsedMinViews;
+        cpmDetails.max_views = parsedMaxViews;
+      }
 
       // Add flat fee bonus if specified (stored in cents)
       if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
@@ -4853,6 +5113,29 @@ export default function EditContestPage({
         twitterCampaign.max_participants = maxParticipants;
       }
 
+      // CPM-based Twitter contests (Points Model): configure metric weights
+      // Stored in contest_based_details.twitter_campaign.points_config
+      if (contestType === "cpm") {
+        const likesWeight =
+          parseFloat(twitterPointsConfig.likesWeight.toString()) || 0;
+        const commentsWeight =
+          parseFloat(twitterPointsConfig.commentsWeight.toString()) || 0;
+        const retweetsWeight =
+          parseFloat(twitterPointsConfig.retweetsWeight.toString()) || 0;
+        const quoteRepostsWeight =
+          parseFloat(twitterPointsConfig.quoteRepostsWeight.toString()) || 0;
+        const impressionsWeight =
+          parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0;
+
+        twitterCampaign.points_config = {
+          likes_weight: likesWeight,
+          comments_weight: commentsWeight,
+          retweets_weight: retweetsWeight,
+          quote_reposts_weight: quoteRepostsWeight,
+          impressions_weight: impressionsWeight, // optional "views" points
+        };
+      }
+
       if (contentType !== "raid") {
         if (keywordsRequirementMode) {
           twitterCampaign.keywords_requirement_mode = keywordsRequirementMode;
@@ -4862,17 +5145,21 @@ export default function EditContestPage({
         }
       }
 
-      // In "awareness" campaigns, twitterTargetUrl may not be set (it's optional),
-      // so only add raid_target if there is a URL.
-      if (contentType === "raid" && twitterTargetUrl) {
+      // For both raid and awareness campaigns, include raid_target if twitterTargetUrl exists
+      // For raid campaigns, target tweet is stored in twitterTargetUrl, not in inspirationLinks
+      if (
+        (contentType === "raid" || contentType === "awareness") &&
+        twitterTargetUrl
+      ) {
         twitterCampaign.raid_target = {
           link: twitterTargetUrl || null,
           description: twitterTargetDescription || null,
           metrics: {
-            likes: targetLikes || null,
-            comments: targetReplies || null,
-            retweets: targetRetweets || null,
-            quote_reposts: targetQuoteReposts || null,
+            likes: targetLikes === "" ? null : targetLikes,
+            comments: targetReplies === "" ? null : targetReplies,
+            retweets: targetRetweets === "" ? null : targetRetweets,
+            quote_reposts:
+              targetQuoteReposts === "" ? null : targetQuoteReposts,
           },
           keywords_requirement_mode:
             contentType === "raid" ? "" : keywordsRequirementMode || "",
@@ -8645,8 +8932,8 @@ export default function EditContestPage({
                   >
                     <AlertDescription>
                       Twitter CPM contests use the <strong>Points Model</strong>
-                      . Min/Max Views are not used here; payout is driven by
-                      total points and the CPM rate per 1,000 points.
+                      . Payout is calculated based on total points earned and
+                      the CPM rate per 1,000 points.
                     </AlertDescription>
                   </Alert>
                 ) : (

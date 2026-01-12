@@ -48,11 +48,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   Table,
   TableBody,
   TableCell,
@@ -819,17 +814,15 @@ export default function ContestDetailClient({
         group.metrics.base_points =
           (group.metrics.base_points || 0) +
           (submission.other_stats?.base_points || 0);
-        // Skip manual points accumulation for CPM Twitter contests
-        if (currentContest.contest_type !== "cpm") {
-          group.metrics.manual_points_adjustment =
-            (group.metrics.manual_points_adjustment || 0) +
-            ((submission as any).manual_points_adjustment || 0);
-          // Store manual points reason (use the latest one if multiple)
-          if ((submission as any).manual_points_reason) {
-            group.metrics.manual_points_reason = (
-              submission as any
-            ).manual_points_reason;
-          }
+        // Accumulate manual points adjustment for all contests (including CPM)
+        group.metrics.manual_points_adjustment =
+          (group.metrics.manual_points_adjustment || 0) +
+          ((submission as any).manual_points_adjustment || 0);
+        // Store manual points reason (use the latest one if multiple)
+        if ((submission as any).manual_points_reason) {
+          group.metrics.manual_points_reason = (
+            submission as any
+          ).manual_points_reason;
         }
       } else {
         // Aggregate YouTube/Instagram metrics
@@ -6511,16 +6504,12 @@ export default function ContestDetailClient({
                                   <TableHead className="text-center">
                                     Total Points
                                   </TableHead>
-                                  {currentContest.contest_type !== "cpm" && (
-                                    <TableHead className="text-center">
-                                      Base Points
-                                    </TableHead>
-                                  )}
-                                  {currentContest.contest_type !== "cpm" && (
-                                    <TableHead className="text-center">
-                                      Manual Points
-                                    </TableHead>
-                                  )}
+                                  <TableHead className="text-center">
+                                    Base Points
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Manual Points
+                                  </TableHead>
                                   <TableHead className="text-center">
                                     <div className="flex items-center justify-center gap-1">
                                       <ThumbsUp className="h-4 w-4" />
@@ -6551,11 +6540,9 @@ export default function ContestDetailClient({
                                       Impressions
                                     </div>
                                   </TableHead>
-                                  {currentContest.contest_type !== "cpm" && (
-                                    <TableHead className="text-center">
-                                      Manual Points Reason
-                                    </TableHead>
-                                  )}
+                                  <TableHead className="text-center">
+                                    Manual Points Reason
+                                  </TableHead>
                                 </>
                               ) : (
                                 <>
@@ -6750,8 +6737,7 @@ export default function ContestDetailClient({
                                     // For CPM Twitter contests, calculate using points according to brand's metric weights
                                     // Formula: Points = (likes × likes_weight) + (replies × comments_weight) +
                                     //          (retweets × retweets_weight) + (quote_reposts × quote_reposts_weight) +
-                                    //          (impressions × impressions_weight)
-                                    // Note: Manual points adjustment removed for CPM Twitter contests
+                                    //          (impressions × impressions_weight) + manual_points_adjustment
                                     // Expected Reward = (Total Points ÷ 1,000) × CPM Rate
                                     // Note: Flat fee bonus is NOT included in expected reward (tracked separately)
 
@@ -6806,16 +6792,19 @@ export default function ContestDetailClient({
                                         0;
                                       const impressions = submission.views || 0;
 
-                                      // Calculate total points using brand's formula
-                                      totalPoints =
+                                      // Calculate total points using brand's formula (base points + manual adjustment)
+                                      const basePoints =
                                         likes * metricWeights.likes +
                                         replies * metricWeights.comments +
                                         retweets * metricWeights.retweets +
                                         quoteReposts *
                                           metricWeights.quoteReposts +
                                         impressions * metricWeights.impressions;
-
-                                      // Manual points adjustment removed for CPM Twitter contests
+                                      const manualAdjustment =
+                                        (submission as any)
+                                          .manual_points_adjustment || 0;
+                                      totalPoints =
+                                        basePoints + manualAdjustment;
                                     } else {
                                       // Fallback to total_points from database if points_config not available
                                       totalPoints =
@@ -6959,7 +6948,6 @@ export default function ContestDetailClient({
                                             metricWeights.impressions,
                                         });
                                       }
-                                      // Manual adjustment removed for CPM Twitter contests
                                     }
 
                                     return {
@@ -7427,8 +7415,8 @@ export default function ContestDetailClient({
                                                 const impressions =
                                                   submission.views || 0;
 
-                                                // Calculate total points using brand's formula
-                                                const calculatedPoints =
+                                                // Calculate total points using brand's formula (base points + manual adjustment)
+                                                const basePoints =
                                                   likes * metricWeights.likes +
                                                   replies *
                                                     metricWeights.comments +
@@ -7438,10 +7426,14 @@ export default function ContestDetailClient({
                                                     metricWeights.quoteReposts +
                                                   impressions *
                                                     metricWeights.impressions;
-
-                                                // Manual points adjustment removed for CPM Twitter contests
+                                                const manualAdjustment =
+                                                  (submission as any)
+                                                    .manual_points_adjustment ||
+                                                  0;
+                                                const totalPoints =
+                                                  basePoints + manualAdjustment;
                                                 return formatMetricValue(
-                                                  calculatedPoints
+                                                  totalPoints
                                                 );
                                               }
                                               // Fallback to existing calculation for non-CPM or when points_config not available
@@ -7466,109 +7458,195 @@ export default function ContestDetailClient({
                                           </span>
                                         </div>
                                       </TableCell>
-                                      {/* Base Points - Hidden for CPM contests */}
-                                      {currentContest.contest_type !==
-                                        "cpm" && (
-                                        <TableCell className="text-center">
-                                          <div className="flex flex-col items-center">
-                                            <span
-                                              className={cn(
-                                                "font-bold text-sm",
-                                                isDark
-                                                  ? "text-white"
-                                                  : "text-slate-900"
-                                              )}
-                                            >
-                                              {formatMetricValue(
+                                      {/* Base Points */}
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <span
+                                            className={cn(
+                                              "font-bold text-sm",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-900"
+                                            )}
+                                          >
+                                            {(() => {
+                                              // For CPM Twitter contests, calculate base points using brand's metric weights
+                                              const isTwitterCPM =
+                                                isTwitterTweet &&
+                                                (currentContest.platform?.toLowerCase() ===
+                                                  "twitter" ||
+                                                  currentContest.platform?.toLowerCase() ===
+                                                    "x") &&
+                                                currentContest.contest_format ===
+                                                  "text_image" &&
+                                                currentContest.contest_type ===
+                                                  "cpm";
+                                              const cpmConfig =
+                                                currentContest
+                                                  .contest_based_details
+                                                  ?.cpm_contest;
+
+                                              if (
+                                                isTwitterCPM &&
+                                                cpmConfig?.cpm_rate_usd &&
+                                                submission.other_stats
+                                              ) {
+                                                const pointsConfig =
+                                                  currentContest
+                                                    .contest_based_details
+                                                    ?.twitter_campaign
+                                                    ?.points_config;
+
+                                                if (pointsConfig) {
+                                                  const metricWeights = {
+                                                    likes:
+                                                      typeof pointsConfig.likes_weight ===
+                                                      "number"
+                                                        ? pointsConfig.likes_weight
+                                                        : 0,
+                                                    comments:
+                                                      typeof pointsConfig.comments_weight ===
+                                                      "number"
+                                                        ? pointsConfig.comments_weight
+                                                        : 0,
+                                                    retweets:
+                                                      typeof pointsConfig.retweets_weight ===
+                                                      "number"
+                                                        ? pointsConfig.retweets_weight
+                                                        : 0,
+                                                    quoteReposts:
+                                                      typeof pointsConfig.quote_reposts_weight ===
+                                                      "number"
+                                                        ? pointsConfig.quote_reposts_weight
+                                                        : 0,
+                                                    impressions:
+                                                      typeof pointsConfig.impressions_weight ===
+                                                      "number"
+                                                        ? pointsConfig.impressions_weight
+                                                        : 0,
+                                                  };
+
+                                                  const likes =
+                                                    submission.other_stats
+                                                      .likes || 0;
+                                                  const replies =
+                                                    submission.other_stats
+                                                      .replies || 0;
+                                                  const retweets =
+                                                    submission.other_stats
+                                                      .retweets || 0;
+                                                  const quoteReposts =
+                                                    submission.other_stats
+                                                      .quote_reposts || 0;
+                                                  const impressions =
+                                                    submission.views || 0;
+
+                                                  // Calculate base points using brand's formula
+                                                  const basePoints =
+                                                    likes *
+                                                      metricWeights.likes +
+                                                    replies *
+                                                      metricWeights.comments +
+                                                    retweets *
+                                                      metricWeights.retweets +
+                                                    quoteReposts *
+                                                      metricWeights.quoteReposts +
+                                                    impressions *
+                                                      metricWeights.impressions;
+
+                                                  return formatMetricValue(
+                                                    basePoints
+                                                  );
+                                                }
+                                              }
+                                              // Fallback to stored base_points for non-CPM or when points_config not available
+                                              return formatMetricValue(
                                                 submission.other_stats
                                                   ?.base_points ||
                                                   submission.other_stats
                                                     ?.points ||
                                                   0
-                                              )}
-                                            </span>
+                                              );
+                                            })()}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            base
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      {/* Manual Points */}
+                                      <TableCell className="text-center">
+                                        <div className="flex flex-col items-center">
+                                          <span
+                                            className={cn(
+                                              "font-bold text-sm",
+                                              (submission as any)
+                                                .manual_points_adjustment > 0
+                                                ? "text-green-600"
+                                                : (submission as any)
+                                                    .manual_points_adjustment <
+                                                  0
+                                                ? "text-red-600"
+                                                : isDark
+                                                ? "text-white"
+                                                : "text-slate-900"
+                                            )}
+                                          >
+                                            {(submission as any)
+                                              .manual_points_adjustment > 0
+                                              ? "+"
+                                              : ""}
+                                            {formatMetricValue(
+                                              (submission as any)
+                                                .manual_points_adjustment || 0
+                                            )}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            manual
+                                          </span>
+                                          {(submission as any)
+                                            .manual_points_reason && (
                                             <span
                                               className={cn(
-                                                "text-xs",
+                                                "text-xs mt-0.5 italic truncate max-w-[100px]",
                                                 isDark
-                                                  ? "text-white"
-                                                  : "text-slate-500"
+                                                  ? "text-slate-400"
+                                                  : "text-slate-600"
                                               )}
-                                            >
-                                              base
-                                            </span>
-                                          </div>
-                                        </TableCell>
-                                      )}
-                                      {/* Manual Points - Hidden for CPM contests */}
-                                      {currentContest.contest_type !==
-                                        "cpm" && (
-                                        <TableCell className="text-center">
-                                          <div className="flex flex-col items-center">
-                                            <span
-                                              className={cn(
-                                                "font-bold text-sm",
+                                              title={
                                                 (submission as any)
-                                                  .manual_points_adjustment > 0
-                                                  ? "text-green-600"
-                                                  : (submission as any)
-                                                      .manual_points_adjustment <
-                                                    0
-                                                  ? "text-red-600"
-                                                  : isDark
-                                                  ? "text-white"
-                                                  : "text-slate-900"
-                                              )}
+                                                  .manual_points_reason
+                                              }
                                             >
                                               {(submission as any)
-                                                .manual_points_adjustment > 0
-                                                ? "+"
-                                                : ""}
-                                              {formatMetricValue(
-                                                (submission as any)
-                                                  .manual_points_adjustment || 0
-                                              )}
+                                                .manual_points_reason.length >
+                                              15
+                                                ? (
+                                                    submission as any
+                                                  ).manual_points_reason.substring(
+                                                    0,
+                                                    15
+                                                  ) + "..."
+                                                : (submission as any)
+                                                    .manual_points_reason}
                                             </span>
-                                            <span
-                                              className={cn(
-                                                "text-xs",
-                                                isDark
-                                                  ? "text-white"
-                                                  : "text-slate-500"
-                                              )}
-                                            >
-                                              manual
-                                            </span>
-                                            {(submission as any)
-                                              .manual_points_reason && (
-                                              <span
-                                                className={cn(
-                                                  "text-xs mt-0.5 italic truncate max-w-[100px]",
-                                                  isDark
-                                                    ? "text-slate-400"
-                                                    : "text-slate-600"
-                                                )}
-                                                title={
-                                                  (submission as any)
-                                                    .manual_points_reason
-                                                }
-                                              >
-                                                {(submission as any)
-                                                  .manual_points_reason.length >
-                                                15
-                                                  ? (
-                                                      submission as any
-                                                    ).manual_points_reason.substring(
-                                                      0,
-                                                      15
-                                                    ) + "..."
-                                                  : (submission as any)
-                                                      .manual_points_reason}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </TableCell>
-                                      )}
+                                          )}
+                                        </div>
+                                      </TableCell>
                                       {/* Likes */}
                                       <TableCell className="text-center">
                                         <div className="flex flex-col items-center">
@@ -7724,52 +7802,49 @@ export default function ContestDetailClient({
                                           </span>
                                         </div>
                                       </TableCell>
-                                      {/* Manual Points Reason - Hidden for CPM contests */}
-                                      {currentContest.contest_type !==
-                                        "cpm" && (
-                                        <TableCell className="text-center">
-                                          {(submission as any)
-                                            .manual_points_reason ? (
-                                            <div className="flex flex-col items-center">
-                                              <span
-                                                className={cn(
-                                                  "text-xs italic truncate max-w-[150px]",
-                                                  isDark
-                                                    ? "text-slate-400"
-                                                    : "text-slate-600"
-                                                )}
-                                                title={
-                                                  (submission as any)
-                                                    .manual_points_reason
-                                                }
-                                              >
-                                                {(submission as any)
-                                                  .manual_points_reason.length >
-                                                20
-                                                  ? (
-                                                      submission as any
-                                                    ).manual_points_reason.substring(
-                                                      0,
-                                                      20
-                                                    ) + "..."
-                                                  : (submission as any)
-                                                      .manual_points_reason}
-                                              </span>
-                                            </div>
-                                          ) : (
+                                      {/* Manual Points Reason */}
+                                      <TableCell className="text-center">
+                                        {(submission as any)
+                                          .manual_points_reason ? (
+                                          <div className="flex flex-col items-center">
                                             <span
                                               className={cn(
-                                                "text-xs",
+                                                "text-xs italic truncate max-w-[150px]",
                                                 isDark
-                                                  ? "text-slate-500"
-                                                  : "text-slate-400"
+                                                  ? "text-slate-400"
+                                                  : "text-slate-600"
                                               )}
+                                              title={
+                                                (submission as any)
+                                                  .manual_points_reason
+                                              }
                                             >
-                                              —
+                                              {(submission as any)
+                                                .manual_points_reason.length >
+                                              20
+                                                ? (
+                                                    submission as any
+                                                  ).manual_points_reason.substring(
+                                                    0,
+                                                    20
+                                                  ) + "..."
+                                                : (submission as any)
+                                                    .manual_points_reason}
                                             </span>
-                                          )}
-                                        </TableCell>
-                                      )}
+                                          </div>
+                                        ) : (
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-slate-500"
+                                                : "text-slate-400"
+                                            )}
+                                          >
+                                            —
+                                          </span>
+                                        )}
+                                      </TableCell>
                                     </>
                                   ) : (
                                     <>
@@ -7962,296 +8037,64 @@ export default function ContestDetailClient({
                                         currentContest.contest_format ===
                                           "text_image" &&
                                         (expectedInfo as any).breakdown ? (
-                                          <Popover>
-                                            <PopoverTrigger asChild>
-                                              <button
-                                                className={cn(
-                                                  "flex flex-col items-center cursor-pointer hover:opacity-80 transition-opacity",
-                                                  isDark
+                                          <div className="flex flex-col items-center">
+                                            <span
+                                              className={cn(
+                                                "text-lg font-bold tracking-wide",
+                                                expectedInfo.className.includes(
+                                                  "text-slate-500"
+                                                )
+                                                  ? isDark
+                                                    ? "text-slate-400"
+                                                    : "text-slate-500"
+                                                  : expectedInfo.className.includes(
+                                                      "text-slate-700"
+                                                    )
+                                                  ? isDark
                                                     ? "text-slate-200"
                                                     : "text-slate-700"
-                                                )}
-                                              >
-                                                <span
-                                                  className={cn(
-                                                    "text-lg font-bold tracking-wide",
-                                                    expectedInfo.className.includes(
-                                                      "text-slate-500"
-                                                    )
-                                                      ? isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-500"
-                                                      : expectedInfo.className.includes(
-                                                          "text-slate-700"
-                                                        )
-                                                      ? isDark
-                                                        ? "text-slate-200"
-                                                        : "text-slate-700"
-                                                      : isDark
-                                                      ? "text-white"
-                                                      : "text-slate-900"
-                                                  )}
-                                                >
-                                                  {(expectedInfo as any)
-                                                    .isTwitterCPM &&
-                                                  !(expectedInfo as any)
-                                                    .showReward
-                                                    ? expectedInfo.label
-                                                    : (expectedInfo as any)
-                                                        .isTwitterCPM &&
-                                                      (expectedInfo as any)
-                                                        .showReward
-                                                    ? `$${(
-                                                        Math.floor(
-                                                          expectedInfo.amount *
-                                                            100
-                                                        ) / 100
-                                                      ).toFixed(2)}`
-                                                    : expectedInfo.amount > 0
-                                                    ? `$${expectedInfo.amount.toFixed(
-                                                        2
-                                                      )}`
-                                                    : "$0.00"}
-                                                </span>
-                                                {((expectedInfo as any)
-                                                  .isTwitterCPM &&
-                                                  (expectedInfo as any)
-                                                    .showReward) ||
-                                                !(expectedInfo as any)
-                                                  .isTwitterCPM ? (
-                                                  <span
-                                                    className={cn(
-                                                      "text-xs uppercase tracking-wide flex items-center gap-1",
-                                                      isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-600"
-                                                    )}
-                                                  >
-                                                    {expectedInfo.label}
-                                                    {(expectedInfo as any)
-                                                      .isTwitterCPM &&
-                                                      (expectedInfo as any)
-                                                        .breakdown && (
-                                                        <Info className="h-3 w-3" />
-                                                      )}
-                                                  </span>
-                                                ) : null}
-                                              </button>
-                                            </PopoverTrigger>
-                                            <PopoverContent
-                                              className={cn(
-                                                "w-80",
-                                                isDark
-                                                  ? "bg-[#180438] border-gray-700"
-                                                  : "bg-white"
+                                                  : isDark
+                                                  ? "text-white"
+                                                  : "text-slate-900"
                                               )}
                                             >
-                                              <div className="space-y-3">
-                                                <h4
-                                                  className={cn(
-                                                    "font-semibold text-sm mb-3",
-                                                    isDark
-                                                      ? "text-white"
-                                                      : "text-slate-900"
-                                                  )}
-                                                >
-                                                  Expected Reward Calculation
-                                                </h4>
-                                                <div className="space-y-2">
-                                                  {(expectedInfo as any)
-                                                    .breakdown.length > 0 ? (
-                                                    <>
-                                                      {(
-                                                        expectedInfo as any
-                                                      ).breakdown.map(
-                                                        (
-                                                          item: any,
-                                                          idx: number
-                                                        ) => (
-                                                          <div
-                                                            key={idx}
-                                                            className={cn(
-                                                              "flex justify-between text-sm",
-                                                              isDark
-                                                                ? "text-slate-300"
-                                                                : "text-slate-700"
-                                                            )}
-                                                          >
-                                                            <span>
-                                                              {item.label}:
-                                                            </span>
-                                                            <span className="font-mono">
-                                                              {item.count !==
-                                                              null
-                                                                ? `${item.count.toLocaleString()} × ${
-                                                                    item.weight
-                                                                  } = ${item.points.toLocaleString()} pts`
-                                                                : `${
-                                                                    item.points >
-                                                                    0
-                                                                      ? "+"
-                                                                      : ""
-                                                                  }${item.points.toLocaleString()} pts`}
-                                                            </span>
-                                                          </div>
-                                                        )
-                                                      )}
-                                                      <div
-                                                        className={cn(
-                                                          "border-t pt-2 mt-2",
-                                                          isDark
-                                                            ? "border-gray-700"
-                                                            : "border-gray-200"
-                                                        )}
-                                                      >
-                                                        <div
-                                                          className={cn(
-                                                            "flex justify-between text-sm font-semibold",
-                                                            isDark
-                                                              ? "text-white"
-                                                              : "text-slate-900"
-                                                          )}
-                                                        >
-                                                          <span>
-                                                            Total Points:
-                                                          </span>
-                                                          <span className="font-mono">
-                                                            {(
-                                                              expectedInfo as any
-                                                            ).totalPoints.toLocaleString()}
-                                                          </span>
-                                                        </div>
-                                                      </div>
-                                                      <div
-                                                        className={cn(
-                                                          "text-xs",
-                                                          isDark
-                                                            ? "text-slate-400"
-                                                            : "text-slate-600"
-                                                        )}
-                                                      >
-                                                        (
-                                                        {(
-                                                          expectedInfo as any
-                                                        ).totalPoints.toLocaleString()}{" "}
-                                                        ÷ 1,000) × $
-                                                        {(
-                                                          expectedInfo as any
-                                                        ).cpmRate.toFixed(
-                                                          2
-                                                        )}{" "}
-                                                        = $
-                                                        {(expectedInfo as any)
-                                                          .isTwitterCPM
-                                                          ? (
-                                                              Math.floor(
-                                                                (
-                                                                  expectedInfo as any
-                                                                )
-                                                                  .calculatedEarnings *
-                                                                  100
-                                                              ) / 100
-                                                            ).toFixed(2)
-                                                          : (
-                                                              expectedInfo as any
-                                                            ).calculatedEarnings.toFixed(
-                                                              2
-                                                            )}
-                                                      </div>
-                                                      {(expectedInfo as any)
-                                                        .flatFeeBonus > 0 && (
-                                                        <div
-                                                          className={cn(
-                                                            "text-xs",
-                                                            isDark
-                                                              ? "text-slate-400"
-                                                              : "text-slate-600"
-                                                          )}
-                                                        >
-                                                          + Flat Fee Bonus: $
-                                                          {(
-                                                            expectedInfo as any
-                                                          ).flatFeeBonus.toFixed(
-                                                            2
-                                                          )}
-                                                        </div>
-                                                      )}
-                                                      <div
-                                                        className={cn(
-                                                          "border-t pt-2 mt-2",
-                                                          isDark
-                                                            ? "border-gray-700"
-                                                            : "border-gray-200"
-                                                        )}
-                                                      >
-                                                        <div
-                                                          className={cn(
-                                                            "flex justify-between text-sm font-bold",
-                                                            isDark
-                                                              ? "text-yellow-400"
-                                                              : "text-yellow-600"
-                                                          )}
-                                                        >
-                                                          <span>
-                                                            Estimated Earnings:
-                                                          </span>
-                                                          <span>
-                                                            {(
-                                                              expectedInfo as any
-                                                            ).isTwitterCPM &&
-                                                            (
-                                                              expectedInfo as any
-                                                            ).showReward
-                                                              ? `$${(
-                                                                  Math.floor(
-                                                                    expectedInfo.amount *
-                                                                      100
-                                                                  ) / 100
-                                                                ).toFixed(2)}`
-                                                              : expectedInfo.amount >
-                                                                0
-                                                              ? `$${expectedInfo.amount.toFixed(
-                                                                  2
-                                                                )}`
-                                                              : "$0.00"}
-                                                          </span>
-                                                        </div>
-                                                      </div>
-                                                      {(expectedInfo as any)
-                                                        .isTwitterCPM &&
-                                                        !(expectedInfo as any)
-                                                          .showReward && (
-                                                          <div
-                                                            className={cn(
-                                                              "text-xs text-center mt-2",
-                                                              isDark
-                                                                ? "text-slate-400"
-                                                                : "text-slate-600"
-                                                            )}
-                                                          >
-                                                            Points must reach
-                                                            1,000 to show
-                                                            expected reward
-                                                          </div>
-                                                        )}
-                                                    </>
-                                                  ) : (
-                                                    <div
-                                                      className={cn(
-                                                        "text-sm",
-                                                        isDark
-                                                          ? "text-slate-400"
-                                                          : "text-slate-600"
-                                                      )}
-                                                    >
-                                                      No engagement metrics
-                                                      available
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            </PopoverContent>
-                                          </Popover>
+                                              {(expectedInfo as any)
+                                                .isTwitterCPM &&
+                                              !(expectedInfo as any).showReward
+                                                ? expectedInfo.label
+                                                : (expectedInfo as any)
+                                                    .isTwitterCPM &&
+                                                  (expectedInfo as any)
+                                                    .showReward
+                                                ? `$${(
+                                                    Math.floor(
+                                                      expectedInfo.amount * 100
+                                                    ) / 100
+                                                  ).toFixed(2)}`
+                                                : expectedInfo.amount > 0
+                                                ? `$${expectedInfo.amount.toFixed(
+                                                    2
+                                                  )}`
+                                                : "$0.00"}
+                                            </span>
+                                            {((expectedInfo as any)
+                                              .isTwitterCPM &&
+                                              (expectedInfo as any)
+                                                .showReward) ||
+                                            !(expectedInfo as any)
+                                              .isTwitterCPM ? (
+                                              <span
+                                                className={cn(
+                                                  "text-xs uppercase tracking-wide",
+                                                  isDark
+                                                    ? "text-slate-400"
+                                                    : "text-slate-600"
+                                                )}
+                                              >
+                                                {expectedInfo.label}
+                                              </span>
+                                            ) : null}
+                                          </div>
                                         ) : (
                                           <div className="flex flex-col items-center">
                                             <div className="flex flex-col items-center">
@@ -8504,54 +8347,51 @@ export default function ContestDetailClient({
                                                 Reject Tweet
                                               </DropdownMenuItem>
                                             )}
-                                            {/* Hide manual points adjustment for CPM Twitter contests */}
-                                            {currentContest.contest_type !==
-                                              "cpm" && (
-                                              <>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuLabel className="text-purple-500">
-                                                  Points
-                                                </DropdownMenuLabel>
-                                                <DropdownMenuItem
-                                                  disabled={isLoading}
-                                                  onClick={() => {
-                                                    setPendingManualPointsSubmission(
-                                                      {
-                                                        id: submission.id,
-                                                        type: "tweet",
-                                                      }
-                                                    );
-                                                    setManualPointsModalOpen(
-                                                      true
-                                                    );
-                                                  }}
-                                                >
-                                                  <Star className="h-4 w-4 mr-2" />
-                                                  Adjust Tweet Points
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                  disabled={isLoading}
-                                                  onClick={() => {
-                                                    setPendingManualPointsSubmission(
-                                                      {
-                                                        id: submission.id,
-                                                        type: "leaderboard",
-                                                        creatorId:
-                                                          submission.creator_id ||
-                                                          undefined,
-                                                      }
-                                                    );
-                                                    setManualPointsModalOpen(
-                                                      true
-                                                    );
-                                                  }}
-                                                >
-                                                  <Users className="h-4 w-4 mr-2" />
-                                                  Adjust Creator Points (All
-                                                  Tweets)
-                                                </DropdownMenuItem>
-                                              </>
-                                            )}
+                                            {/* Manual points adjustment */}
+                                            <>
+                                              <DropdownMenuSeparator />
+                                              <DropdownMenuLabel className="text-purple-500">
+                                                Points
+                                              </DropdownMenuLabel>
+                                              <DropdownMenuItem
+                                                disabled={isLoading}
+                                                onClick={() => {
+                                                  setPendingManualPointsSubmission(
+                                                    {
+                                                      id: submission.id,
+                                                      type: "tweet",
+                                                    }
+                                                  );
+                                                  setManualPointsModalOpen(
+                                                    true
+                                                  );
+                                                }}
+                                              >
+                                                <Star className="h-4 w-4 mr-2" />
+                                                Adjust Tweet Points
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem
+                                                disabled={isLoading}
+                                                onClick={() => {
+                                                  setPendingManualPointsSubmission(
+                                                    {
+                                                      id: submission.id,
+                                                      type: "leaderboard",
+                                                      creatorId:
+                                                        submission.creator_id ||
+                                                        undefined,
+                                                    }
+                                                  );
+                                                  setManualPointsModalOpen(
+                                                    true
+                                                  );
+                                                }}
+                                              >
+                                                <Users className="h-4 w-4 mr-2" />
+                                                Adjust Creator Points (All
+                                                Tweets)
+                                              </DropdownMenuItem>
+                                            </>
                                           </>
                                         ) : (
                                           <>
@@ -8844,18 +8684,12 @@ export default function ContestDetailClient({
                                       <TableHead className="text-center">
                                         Total Points
                                       </TableHead>
-                                      {currentContest.contest_type !==
-                                        "cpm" && (
-                                        <TableHead className="text-center">
-                                          Base Points
-                                        </TableHead>
-                                      )}
-                                      {currentContest.contest_type !==
-                                        "cpm" && (
-                                        <TableHead className="text-center">
-                                          Manual Points
-                                        </TableHead>
-                                      )}
+                                      <TableHead className="text-center">
+                                        Base Points
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Manual Points
+                                      </TableHead>
                                       <TableHead className="text-center">
                                         <div className="flex items-center justify-center gap-1">
                                           <ThumbsUp className="h-4 w-4" />
@@ -8978,24 +8812,13 @@ export default function ContestDetailClient({
                                       </TableHead>
                                     </>
                                   )}
-                                  {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard campaigns */}
-                                  {(currentContest.platform?.toLowerCase() ===
-                                    "twitter" ||
-                                    currentContest.platform?.toLowerCase() ===
-                                      "x") &&
-                                    currentContest.contest_format ===
-                                      "text_image" &&
-                                    currentContest.contest_type ===
-                                      "leaderboard" && (
-                                      <>
-                                        <TableHead className="text-center">
-                                          Manual Points Adjustment
-                                        </TableHead>
-                                        <TableHead className="text-center">
-                                          Manual Points Reason
-                                        </TableHead>
-                                      </>
-                                    )}
+                                  {/* Manual Points Adjustment and Reason Columns */}
+                                  <TableHead className="text-center">
+                                    Manual Points Adjustment
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Manual Points Reason
+                                  </TableHead>
                                   {/* Rejection Reason Column - Show if there are any rejected creators */}
                                   {showRejectionReasonColumn && (
                                     <TableHead className="text-center">
@@ -9203,82 +9026,76 @@ export default function ContestDetailClient({
                                                   </span>
                                                 </div>
                                               </TableCell>
-                                              {/* Base Points - Hidden for CPM contests */}
-                                              {currentContest.contest_type !==
-                                                "cpm" && (
-                                                <TableCell className="text-center">
-                                                  <div className="flex flex-col items-center">
-                                                    <span
-                                                      className={cn(
-                                                        "font-bold text-sm",
-                                                        isDark
-                                                          ? "text-white"
-                                                          : "text-slate-900"
-                                                      )}
-                                                    >
-                                                      {formatMetricValue(
-                                                        group.metrics
-                                                          .base_points || 0
-                                                      )}
-                                                    </span>
-                                                    <span
-                                                      className={cn(
-                                                        "text-xs",
-                                                        isDark
-                                                          ? "text-slate-400"
-                                                          : "text-slate-500"
-                                                      )}
-                                                    >
-                                                      base
-                                                    </span>
-                                                  </div>
-                                                </TableCell>
-                                              )}
-                                              {/* Manual Points - Hidden for CPM contests */}
-                                              {currentContest.contest_type !==
-                                                "cpm" && (
-                                                <TableCell className="text-center">
-                                                  <div className="flex flex-col items-center">
-                                                    <span
-                                                      className={cn(
-                                                        "font-bold text-sm",
-                                                        group.metrics
-                                                          .manual_points_adjustment >
-                                                          0
-                                                          ? "text-green-600"
-                                                          : group.metrics
-                                                              .manual_points_adjustment <
-                                                            0
-                                                          ? "text-red-600"
-                                                          : isDark
-                                                          ? "text-white"
-                                                          : "text-slate-900"
-                                                      )}
-                                                    >
-                                                      {group.metrics
+                                              {/* Base Points */}
+                                              <TableCell className="text-center">
+                                                <div className="flex flex-col items-center">
+                                                  <span
+                                                    className={cn(
+                                                      "font-bold text-sm",
+                                                      isDark
+                                                        ? "text-white"
+                                                        : "text-slate-900"
+                                                    )}
+                                                  >
+                                                    {formatMetricValue(
+                                                      group.metrics
+                                                        .base_points || 0
+                                                    )}
+                                                  </span>
+                                                  <span
+                                                    className={cn(
+                                                      "text-xs",
+                                                      isDark
+                                                        ? "text-slate-400"
+                                                        : "text-slate-500"
+                                                    )}
+                                                  >
+                                                    base
+                                                  </span>
+                                                </div>
+                                              </TableCell>
+                                              {/* Manual Points */}
+                                              <TableCell className="text-center">
+                                                <div className="flex flex-col items-center">
+                                                  <span
+                                                    className={cn(
+                                                      "font-bold text-sm",
+                                                      group.metrics
                                                         .manual_points_adjustment >
-                                                      0
-                                                        ? "+"
-                                                        : ""}
-                                                      {formatMetricValue(
-                                                        group.metrics
-                                                          .manual_points_adjustment ||
+                                                        0
+                                                        ? "text-green-600"
+                                                        : group.metrics
+                                                            .manual_points_adjustment <
                                                           0
-                                                      )}
-                                                    </span>
-                                                    <span
-                                                      className={cn(
-                                                        "text-xs",
-                                                        isDark
-                                                          ? "text-slate-400"
-                                                          : "text-slate-500"
-                                                      )}
-                                                    >
-                                                      manual
-                                                    </span>
-                                                  </div>
-                                                </TableCell>
-                                              )}
+                                                        ? "text-red-600"
+                                                        : isDark
+                                                        ? "text-white"
+                                                        : "text-slate-900"
+                                                    )}
+                                                  >
+                                                    {group.metrics
+                                                      .manual_points_adjustment >
+                                                    0
+                                                      ? "+"
+                                                      : ""}
+                                                    {formatMetricValue(
+                                                      group.metrics
+                                                        .manual_points_adjustment ||
+                                                        0
+                                                    )}
+                                                  </span>
+                                                  <span
+                                                    className={cn(
+                                                      "text-xs",
+                                                      isDark
+                                                        ? "text-slate-400"
+                                                        : "text-slate-500"
+                                                    )}
+                                                  >
+                                                    manual
+                                                  </span>
+                                                </div>
+                                              </TableCell>
                                               <TableCell className="text-center">
                                                 <div className="flex items-center justify-center gap-1">
                                                   <ThumbsUp className="h-3.5 w-3.5 text-purple-400" />
@@ -9494,89 +9311,77 @@ export default function ContestDetailClient({
                                               </TableCell>
                                             </>
                                           )}
-                                          {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard campaigns */}
-                                          {(currentContest.platform?.toLowerCase() ===
-                                            "twitter" ||
-                                            currentContest.platform?.toLowerCase() ===
-                                              "x") &&
-                                            currentContest.contest_format ===
-                                              "text_image" &&
-                                            currentContest.contest_type ===
-                                              "leaderboard" && (
-                                              <>
-                                                <TableCell className="text-center">
-                                                  <div className="flex flex-col items-center">
-                                                    <span
-                                                      className={cn(
-                                                        "font-semibold text-sm",
-                                                        group.metrics
-                                                          .manual_points_adjustment >
-                                                          0
-                                                          ? "text-green-600"
-                                                          : group.metrics
-                                                              .manual_points_adjustment <
-                                                            0
-                                                          ? "text-red-600"
-                                                          : isDark
-                                                          ? "text-white"
-                                                          : "text-slate-900"
-                                                      )}
-                                                    >
-                                                      {group.metrics
-                                                        .manual_points_adjustment >
+                                          {/* Manual Points Adjustment and Reason Columns */}
+                                          <TableCell className="text-center">
+                                            <div className="flex flex-col items-center">
+                                              <span
+                                                className={cn(
+                                                  "font-semibold text-sm",
+                                                  group.metrics
+                                                    .manual_points_adjustment >
+                                                    0
+                                                    ? "text-green-600"
+                                                    : group.metrics
+                                                        .manual_points_adjustment <
                                                       0
-                                                        ? "+"
-                                                        : ""}
-                                                      {formatMetricValue(
-                                                        group.metrics
-                                                          .manual_points_adjustment ||
-                                                          0
-                                                      )}
-                                                    </span>
-                                                  </div>
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                  {group.metrics
-                                                    .manual_points_reason ? (
-                                                    <div className="flex flex-col items-center max-w-[200px] mx-auto">
-                                                      <span
-                                                        className={cn(
-                                                          "text-xs italic truncate",
-                                                          isDark
-                                                            ? "text-slate-300"
-                                                            : "text-slate-700"
-                                                        )}
-                                                        title={
-                                                          group.metrics
-                                                            .manual_points_reason
-                                                        }
-                                                      >
-                                                        {group.metrics
-                                                          .manual_points_reason
-                                                          .length > 30
-                                                          ? group.metrics.manual_points_reason.substring(
-                                                              0,
-                                                              30
-                                                            ) + "..."
-                                                          : group.metrics
-                                                              .manual_points_reason}
-                                                      </span>
-                                                    </div>
-                                                  ) : (
-                                                    <span
-                                                      className={cn(
-                                                        "text-xs",
-                                                        isDark
-                                                          ? "text-slate-500"
-                                                          : "text-slate-400"
-                                                      )}
-                                                    >
-                                                      —
-                                                    </span>
+                                                    ? "text-red-600"
+                                                    : isDark
+                                                    ? "text-white"
+                                                    : "text-slate-900"
+                                                )}
+                                              >
+                                                {group.metrics
+                                                  .manual_points_adjustment > 0
+                                                  ? "+"
+                                                  : ""}
+                                                {formatMetricValue(
+                                                  group.metrics
+                                                    .manual_points_adjustment ||
+                                                    0
+                                                )}
+                                              </span>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell className="text-center">
+                                            {group.metrics
+                                              .manual_points_reason ? (
+                                              <div className="flex flex-col items-center max-w-[200px] mx-auto">
+                                                <span
+                                                  className={cn(
+                                                    "text-xs italic truncate",
+                                                    isDark
+                                                      ? "text-slate-300"
+                                                      : "text-slate-700"
                                                   )}
-                                                </TableCell>
-                                              </>
+                                                  title={
+                                                    group.metrics
+                                                      .manual_points_reason
+                                                  }
+                                                >
+                                                  {group.metrics
+                                                    .manual_points_reason
+                                                    .length > 30
+                                                    ? group.metrics.manual_points_reason.substring(
+                                                        0,
+                                                        30
+                                                      ) + "..."
+                                                    : group.metrics
+                                                        .manual_points_reason}
+                                                </span>
+                                              </div>
+                                            ) : (
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-slate-500"
+                                                    : "text-slate-400"
+                                                )}
+                                              >
+                                                —
+                                              </span>
                                             )}
+                                          </TableCell>
                                           {/* Rejection Reason Column */}
                                           {showRejectionReasonColumn && (
                                             <TableCell className="text-center">
