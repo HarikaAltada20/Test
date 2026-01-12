@@ -417,63 +417,6 @@ export function ContestClientPage({
     if (contest?.platform === "twitter") {
       return leaderboard.map((entry: any, index: number) => {
         const currentRank = entry.current_rank || index + 1;
-
-        // For CPM contests, calculate total points using brand's metric weights + manual adjustment
-        let calculatedTotalPoints = entry.total_points || 0;
-        if (
-          contest?.contest_type === "cpm" &&
-          contest?.contest_based_details?.twitter_campaign?.points_config
-        ) {
-          const pointsConfig =
-            contest.contest_based_details.twitter_campaign.points_config;
-          const metricWeights = {
-            likes:
-              typeof pointsConfig.likes_weight === "number"
-                ? pointsConfig.likes_weight
-                : 0,
-            comments:
-              typeof pointsConfig.comments_weight === "number"
-                ? pointsConfig.comments_weight
-                : 0,
-            retweets:
-              typeof pointsConfig.retweets_weight === "number"
-                ? pointsConfig.retweets_weight
-                : 0,
-            quoteReposts:
-              typeof pointsConfig.quote_reposts_weight === "number"
-                ? pointsConfig.quote_reposts_weight
-                : 0,
-            impressions:
-              typeof pointsConfig.impressions_weight === "number"
-                ? pointsConfig.impressions_weight
-                : 0,
-          };
-
-          // Calculate base points from metrics
-          const basePoints =
-            (entry.total_likes || 0) * metricWeights.likes +
-            (entry.total_replies || 0) * metricWeights.comments +
-            (entry.total_retweets || 0) * metricWeights.retweets +
-            (entry.total_quote_reposts || 0) * metricWeights.quoteReposts +
-            (entry.total_impressions || 0) * metricWeights.impressions;
-
-          // Get stored total points (includes tweet-level adjustments)
-          const storedTotal = entry.total_points || 0;
-
-          // Calculate tweet-level adjustments
-          // Stored total = old_base + tweet_adjustments + creator_adjustment
-          // We need: new_base + tweet_adjustments + creator_adjustment
-          // Tweet adjustments = stored_total - old_base - creator_adjustment
-          // But we don't have old_base, so we calculate tweet adjustments as:
-          // tweet_adjustments = stored_total - calculated_base - creator_adjustment
-          const creatorAdjustment = entry.manual_points_adjustment || 0;
-          const tweetAdjustments = storedTotal - basePoints - creatorAdjustment;
-
-          // Total = new base points + tweet adjustments + creator adjustment
-          calculatedTotalPoints =
-            basePoints + tweetAdjustments + creatorAdjustment;
-        }
-
         return {
           creator_id: entry.creator_id,
           creator_username: entry.app_username || entry.creator_id,
@@ -487,8 +430,7 @@ export function ContestClientPage({
           best_rank: currentRank,
           submission_count: entry.total_eligible_tweets || 0,
           // Twitter-specific fields
-          total_points: calculatedTotalPoints,
-          manual_points_adjustment: entry.manual_points_adjustment || 0,
+          total_points: entry.total_points || 0,
           total_eligible_tweets: entry.total_eligible_tweets || 0,
           total_likes: entry.total_likes || 0,
           total_replies: entry.total_replies || 0,
@@ -966,7 +908,9 @@ export function ContestClientPage({
           is_eligible,
           moderation_status,
           manual_points_adjustment,
-          manual_points_reason
+          manual_points_reason,
+          target_tweet_id,
+          tweet_type
         `
         )
         .eq("contest_id", contestId)
@@ -992,7 +936,31 @@ export function ContestClientPage({
             quote_reposts: tweet.quote_reposts || 0,
             impressions: tweet.impressions || 0,
             points: (tweet.points || 0) + (tweet.manual_points_adjustment || 0),
-            base_points: tweet.points || 0,
+            // Calculate base points for raid campaigns
+            // For raid campaigns, points field contains base + bonus, so we need to calculate base from tweet_type
+            // For regular campaigns, points is just the base points
+            base_points: (() => {
+              if (tweet.target_tweet_id) {
+                // This is a raid engagement - calculate base points from tweet_type
+                const tweetType = tweet.tweet_type;
+                if (tweetType === "reply" || tweetType === "comment") {
+                  return 1; // comment_base_points
+                } else if (tweetType === "retweet") {
+                  return 5; // retweet_base_points
+                } else if (
+                  tweetType === "quote" ||
+                  tweetType === "quote_repost"
+                ) {
+                  return 10; // quote_repost_base_points
+                } else {
+                  // Fallback: if we can't determine type, use points as base (for backwards compatibility)
+                  return tweet.points || 0;
+                }
+              } else {
+                // Regular campaign - points is just base points
+                return tweet.points || 0;
+              }
+            })(),
             manual_points_adjustment: tweet.manual_points_adjustment || 0,
             manual_points_reason: tweet.manual_points_reason,
             tweet_type: tweet.tweet_type,
@@ -1748,10 +1716,7 @@ export function ContestClientPage({
                             contest.contest_based_details.cpm_contest
                               .cpm_rate_usd * 100
                           )}{" "}
-                          {contest.platform?.toLowerCase() === "twitter" ||
-                          contest.platform?.toLowerCase() === "x"
-                            ? "per 1000 points"
-                            : "per 1000 views"}
+                          per 1000 views
                         </div>
                       )}
                   </div>
@@ -2392,6 +2357,24 @@ export function ContestClientPage({
               </div>
             );
           })()}
+          {/* <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                  <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-purple-800 dark:text-purple-300 uppercase tracking-wide">Submissions</p>
+                  <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
+                    {contest.live_submission_count !== null && contest.live_submission_count >= 0
+                      ? contest.live_submission_count
+                      : 0}
+                  </p>
+                  <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">Total entries</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card> */}
         </div>
 
         {/* Post-Contest Status Section for Ended Contests */}
@@ -2554,9 +2537,7 @@ export function ContestClientPage({
               <div className="flex text-center items-center">
                 {tab.label}
                 {tab.id === "leaderboard" &&
-                  (contest?.contest_type === "leaderboard" ||
-                    (contest?.platform?.toLowerCase() === "twitter" &&
-                      contest?.contest_type === "cpm")) &&
+                  contest?.contest_type === "leaderboard" &&
                   totalLeaderboardEntries > 0 && (
                     <Badge
                       variant="secondary"
@@ -2794,10 +2775,7 @@ export function ContestClientPage({
                           )}
                         >
                           {contest.contest_type === "cpm"
-                            ? contest.platform?.toLowerCase() === "twitter" ||
-                              contest.platform?.toLowerCase() === "x"
-                              ? "per 1000 points"
-                              : "per 1000 views"
+                            ? "per 1000 views"
                             : "total prize"}
                         </div>
                       </div>
@@ -3056,113 +3034,70 @@ export function ContestClientPage({
                           ?.flat_fee_bonus && (
                           <div
                             className={cn(
-                              "flex flex-col gap-3 p-3 rounded-lg border transition-all duration-300",
+                              "flex items-center justify-between p-3 rounded-lg border transition-all duration-300",
                               isDark
                                 ? "bg-gradient-to-r from-green-900/40 to-emerald-900/40 border-green-400/40"
                                 : "bg-gradient-to-r from-green-50 to-green-50 border-green-200"
                             )}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <Gift
+                            <div className="flex items-center gap-3">
+                              <Gift
+                                className={cn(
+                                  "h-5 w-5",
+                                  isDark ? "text-green-400" : "text-green-600"
+                                )}
+                              />
+                              <span
+                                className={cn(
+                                  "font-medium",
+                                  isDark ? "text-slate-100" : "text-slate-900"
+                                )}
+                              >
+                                Guaranteed Bonus
+                              </span>
+                              <div className="group relative">
+                                <Info
                                   className={cn(
-                                    "h-5 w-5",
+                                    "h-4 w-4 cursor-help",
                                     isDark ? "text-green-400" : "text-green-600"
                                   )}
                                 />
-                                <span
-                                  className={cn(
-                                    "font-medium",
-                                    isDark ? "text-slate-100" : "text-slate-900"
-                                  )}
-                                >
-                                  Guaranteed Bonus
-                                </span>
-                                <div className="group relative">
-                                  <Info
-                                    className={cn(
-                                      "h-4 w-4 cursor-help",
-                                      isDark
-                                        ? "text-green-400"
-                                        : "text-green-600"
-                                    )}
-                                  />
-                                  <div
-                                    className={cn(
-                                      "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center",
-                                      isDark
-                                        ? "bg-slate-800 text-slate-100"
-                                        : "bg-slate-900 text-white"
-                                    )}
-                                  >
-                                    Every submission that gets verified will
-                                    receive this guaranteed bonus amount. Your
-                                    submission will only get verified if you
-                                    follow the brief and rules & guidelines.
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="text-right">
                                 <div
                                   className={cn(
-                                    "text-lg font-bold",
-                                    isDark ? "text-green-100" : "text-green-900"
+                                    "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center",
+                                    isDark
+                                      ? "bg-slate-800 text-slate-100"
+                                      : "bg-slate-900 text-white"
                                   )}
                                 >
-                                  {formatMoney(
-                                    contest.contest_based_details.cpm_contest
-                                      .flat_fee_bonus
-                                  )}
-                                </div>
-                                <div
-                                  className={cn(
-                                    "text-xs",
-                                    isDark ? "text-green-300" : "text-green-700"
-                                  )}
-                                >
-                                  per verified submission
+                                  Every submission that gets verified will
+                                  receive this guaranteed bonus amount. Your
+                                  submission will only get verified if you
+                                  follow the brief and rules & guidelines.
                                 </div>
                               </div>
                             </div>
-                            {/* Flat Fee Bonus Cap (CPM only) */}
-                            {(contest.contest_based_details?.cpm_contest as any)
-                              ?.flat_fee_bonus_cap && (
+                            <div className="text-right">
                               <div
                                 className={cn(
-                                  "pt-3 border-t",
-                                  isDark
-                                    ? "border-green-800/70"
-                                    : "border-green-200"
+                                  "text-lg font-bold",
+                                  isDark ? "text-green-100" : "text-green-900"
                                 )}
                               >
-                                <p
-                                  className={cn(
-                                    "text-sm font-medium mb-1",
-                                    isDark ? "text-green-200" : "text-green-800"
-                                  )}
-                                >
-                                  Maximum Flat Fee Bonus Cap
-                                </p>
-                                <p
-                                  className={cn(
-                                    "text-base",
-                                    isDark ? "text-green-300" : "text-green-900"
-                                  )}
-                                >
-                                  Up to{" "}
-                                  <span className="font-semibold">
-                                    {formatMoney(
-                                      (
-                                        contest.contest_based_details
-                                          ?.cpm_contest as any
-                                      )?.flat_fee_bonus_cap
-                                    )}
-                                  </span>{" "}
-                                  total in flat bonuses can be distributed
-                                  across all creators.
-                                </p>
+                                {formatMoney(
+                                  contest.contest_based_details.cpm_contest
+                                    .flat_fee_bonus
+                                )}
                               </div>
-                            )}
+                              <div
+                                className={cn(
+                                  "text-xs",
+                                  isDark ? "text-green-300" : "text-green-700"
+                                )}
+                              >
+                                per verified submission
+                              </div>
+                            </div>
                           </div>
                         )}
 
@@ -4462,94 +4397,6 @@ export function ContestClientPage({
                     );
                   })()}
 
-                  {/* Twitter CPM Points Configuration */}
-                  {contest.platform === "twitter" &&
-                    contest.contest_format === "text_image" &&
-                    contest.contest_based_details?.twitter_campaign
-                      ?.points_config && (
-                      <div className="mt-4">
-                        <h4 className="text-md font-semibold mb-3 text-foreground">
-                          Points Breakdown (Twitter Metrics)
-                        </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {(() => {
-                            const config =
-                              contest.contest_based_details.twitter_campaign
-                                .points_config;
-                            const metrics = [
-                              {
-                                label: "Likes",
-                                weight: config.likes_weight,
-                                icon: ThumbsUp,
-                              },
-                              {
-                                label: "Comments/Replies",
-                                weight: config.comments_weight,
-                                icon: MessageCircle,
-                              },
-                              {
-                                label: "Retweets",
-                                weight: config.retweets_weight,
-                                icon: RefreshCw,
-                              },
-                              {
-                                label: "Quote Reposts",
-                                weight: config.quote_reposts_weight,
-                                icon: Share2,
-                              },
-                              {
-                                label: "Views/Impressions",
-                                weight: config.impressions_weight,
-                                icon: Eye,
-                              },
-                            ].filter((m) => m.weight > 0);
-
-                            return metrics.map((metric, idx) => {
-                              const IconComponent = metric.icon;
-                              return (
-                                <div
-                                  key={idx}
-                                  className={cn(
-                                    "flex justify-between items-center p-3 rounded-md border",
-                                    isDark
-                                      ? "border-gray-600 bg-[#170337]"
-                                      : "border-gray-300 bg-gray-50"
-                                  )}
-                                >
-                                  <span
-                                    className={cn(
-                                      "text-sm font-medium flex items-center gap-2",
-                                      isDark ? "text-white" : "text-gray-700"
-                                    )}
-                                  >
-                                    {IconComponent && (
-                                      <IconComponent className="h-4 w-4" />
-                                    )}
-                                    {metric.label}
-                                  </span>
-                                  <span
-                                    className={cn(
-                                      "text-sm font-semibold",
-                                      isDark
-                                        ? "text-purple-300"
-                                        : "text-purple-600"
-                                    )}
-                                  >
-                                    {metric.weight}{" "}
-                                    {metric.weight === 1 ? "pt" : "pts"}
-                                  </span>
-                                </div>
-                              );
-                            });
-                          })()}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-3">
-                          Points are calculated from each tweet's engagement
-                          metrics. Total points determine CPM-based payout.
-                        </p>
-                      </div>
-                    )}
-
                   {/* Brief Section */}
                   <div
                     className={cn(
@@ -5845,92 +5692,12 @@ export function ContestClientPage({
                               >
                                 {contest?.platform === "twitter" ? (
                                   <>
-                                    {(() => {
-                                      // For CPM contests, calculate total points using brand's metric weights + manual adjustment
-                                      if (
-                                        contest?.contest_type === "cpm" &&
-                                        contest?.contest_based_details
-                                          ?.twitter_campaign?.points_config
-                                      ) {
-                                        const pointsConfig =
-                                          contest.contest_based_details
-                                            .twitter_campaign.points_config;
-                                        const metricWeights = {
-                                          likes:
-                                            typeof pointsConfig.likes_weight ===
-                                            "number"
-                                              ? pointsConfig.likes_weight
-                                              : 0,
-                                          comments:
-                                            typeof pointsConfig.comments_weight ===
-                                            "number"
-                                              ? pointsConfig.comments_weight
-                                              : 0,
-                                          retweets:
-                                            typeof pointsConfig.retweets_weight ===
-                                            "number"
-                                              ? pointsConfig.retweets_weight
-                                              : 0,
-                                          quoteReposts:
-                                            typeof pointsConfig.quote_reposts_weight ===
-                                            "number"
-                                              ? pointsConfig.quote_reposts_weight
-                                              : 0,
-                                          impressions:
-                                            typeof pointsConfig.impressions_weight ===
-                                            "number"
-                                              ? pointsConfig.impressions_weight
-                                              : 0,
-                                        };
-
-                                        // Calculate base points from metrics
-                                        const basePoints =
-                                          ((displayEntry as any).total_likes ||
-                                            0) *
-                                            metricWeights.likes +
-                                          ((displayEntry as any)
-                                            .total_replies || 0) *
-                                            metricWeights.comments +
-                                          ((displayEntry as any)
-                                            .total_retweets || 0) *
-                                            metricWeights.retweets +
-                                          ((displayEntry as any)
-                                            .total_quote_reposts || 0) *
-                                            metricWeights.quoteReposts +
-                                          ((displayEntry as any)
-                                            .total_impressions || 0) *
-                                            metricWeights.impressions;
-
-                                        // Get stored total and calculate adjustments
-                                        const storedTotal =
-                                          (displayEntry as any).total_points ||
-                                          0;
-                                        const creatorAdjustment =
-                                          (displayEntry as any)
-                                            .manual_points_adjustment || 0;
-
-                                        // Calculate tweet-level adjustments
-                                        // Tweet adjustments = stored_total - calculated_base - creator_adjustment
-                                        const tweetAdjustments =
-                                          storedTotal -
-                                          basePoints -
-                                          creatorAdjustment;
-
-                                        // Total = base + tweet adjustments + creator adjustment
-                                        const totalPoints =
-                                          basePoints +
-                                          tweetAdjustments +
-                                          creatorAdjustment;
-                                        return totalPoints.toLocaleString();
-                                      }
-                                      // Fallback to existing total_points for non-CPM contests
-                                      return typeof (displayEntry as any)
-                                        .total_points === "number"
-                                        ? (
-                                            displayEntry as any
-                                          ).total_points.toLocaleString()
-                                        : "0";
-                                    })()}{" "}
+                                    {typeof (displayEntry as any)
+                                      .total_points === "number"
+                                      ? (
+                                          displayEntry as any
+                                        ).total_points.toLocaleString()
+                                      : "0"}{" "}
                                     points
                                   </>
                                 ) : (
@@ -7508,23 +7275,21 @@ export function ContestClientPage({
                             </div>
                             <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
                               {contest?.platform === "twitter" ? (
-                                <div className="flex flex-col items-end space-y-1">
-                                  <div className="flex items-center space-x-2">
-                                    <p
-                                      className={cn(
-                                        "text-base sm:text-lg font-bold",
-                                        isDark ? "text-white" : "text-gray-700"
-                                      )}
-                                    >
-                                      {typeof (creatorGroup as any)
-                                        .total_points === "number"
-                                        ? (
-                                            creatorGroup as any
-                                          ).total_points.toLocaleString()
-                                        : "0"}{" "}
-                                      points
-                                    </p>
-                                  </div>
+                                <div className="flex items-center space-x-2">
+                                  <p
+                                    className={cn(
+                                      "text-base sm:text-lg font-bold",
+                                      isDark ? "text-white" : "text-gray-700"
+                                    )}
+                                  >
+                                    {typeof (creatorGroup as any)
+                                      .total_points === "number"
+                                      ? (
+                                          creatorGroup as any
+                                        ).total_points.toLocaleString()
+                                      : "0"}{" "}
+                                    points
+                                  </p>
                                 </div>
                               ) : (
                                 <>
@@ -7803,141 +7568,58 @@ export function ContestClientPage({
                               </div>
                             </div>
                             <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
-                              <div className="flex flex-col items-end space-y-1">
-                                <div className="flex items-center space-x-2">
-                                  <p
-                                    className={cn(
-                                      "text-base sm:text-lg font-bold",
-                                      isDark ? "text-white" : "text-gray-700"
-                                    )}
-                                  >
-                                    {contest?.platform === "twitter" ? (
-                                      <>
-                                        {(() => {
-                                          // For CPM contests, calculate total points using brand's metric weights + manual adjustment
-                                          if (
-                                            contest?.contest_type === "cpm" &&
-                                            contest?.contest_based_details
-                                              ?.twitter_campaign?.points_config
-                                          ) {
-                                            const pointsConfig =
-                                              contest.contest_based_details
-                                                .twitter_campaign.points_config;
-                                            const metricWeights = {
-                                              likes:
-                                                typeof pointsConfig.likes_weight ===
-                                                "number"
-                                                  ? pointsConfig.likes_weight
-                                                  : 0,
-                                              comments:
-                                                typeof pointsConfig.comments_weight ===
-                                                "number"
-                                                  ? pointsConfig.comments_weight
-                                                  : 0,
-                                              retweets:
-                                                typeof pointsConfig.retweets_weight ===
-                                                "number"
-                                                  ? pointsConfig.retweets_weight
-                                                  : 0,
-                                              quoteReposts:
-                                                typeof pointsConfig.quote_reposts_weight ===
-                                                "number"
-                                                  ? pointsConfig.quote_reposts_weight
-                                                  : 0,
-                                              impressions:
-                                                typeof pointsConfig.impressions_weight ===
-                                                "number"
-                                                  ? pointsConfig.impressions_weight
-                                                  : 0,
-                                            };
-
-                                            // Calculate base points from metrics
-                                            const basePoints =
-                                              ((entry as any).total_likes ||
-                                                0) *
-                                                metricWeights.likes +
-                                              ((entry as any).total_replies ||
-                                                0) *
-                                                metricWeights.comments +
-                                              ((entry as any).total_retweets ||
-                                                0) *
-                                                metricWeights.retweets +
-                                              ((entry as any)
-                                                .total_quote_reposts || 0) *
-                                                metricWeights.quoteReposts +
-                                              ((entry as any)
-                                                .total_impressions || 0) *
-                                                metricWeights.impressions;
-
-                                            // Get stored total and calculate adjustments
-                                            const storedTotal =
-                                              (entry as any).total_points || 0;
-                                            const creatorAdjustment =
-                                              (entry as any)
-                                                .manual_points_adjustment || 0;
-
-                                            // Calculate tweet-level adjustments
-                                            // Stored total includes: old_base + tweet_adjustments + creator_adjustment
-                                            // We calculate: new_base + tweet_adjustments + creator_adjustment
-                                            // Tweet adjustments = stored_total - calculated_base - creator_adjustment
-                                            const tweetAdjustments =
-                                              storedTotal -
-                                              basePoints -
-                                              creatorAdjustment;
-
-                                            // Total = base + tweet adjustments + creator adjustment
-                                            const totalPoints =
-                                              basePoints +
-                                              tweetAdjustments +
-                                              creatorAdjustment;
-                                            return totalPoints.toLocaleString();
-                                          }
-                                          // Fallback to existing total_points
-                                          return typeof (entry as any)
-                                            .total_points === "number"
-                                            ? (
-                                                entry as any
-                                              ).total_points.toLocaleString()
-                                            : "0";
-                                        })()}{" "}
-                                        points
-                                      </>
-                                    ) : (
-                                      <>
-                                        {entry.views
-                                          ? entry.views.toLocaleString()
-                                          : "0"}{" "}
-                                        views
-                                      </>
-                                    )}
-                                  </p>
-                                </div>
-                              </div>
-                              {entry.content_link &&
-                                (contest?.status?.toLowerCase() === "ended" ||
-                                  contest?.status?.toLowerCase() ===
-                                    "completed") && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className={cn(
-                                      "h-7 w-7 sm:h-8 sm:w-8",
-                                      isDark
-                                        ? "text-gray-300"
-                                        : "text-slate-500"
-                                    )}
-                                    asChild
-                                  >
-                                    <Link
-                                      href={entry.content_link}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="View Content"
+                              <div className="flex items-center space-x-2">
+                                <p
+                                  className={cn(
+                                    "text-base sm:text-lg font-bold",
+                                    isDark ? "text-white" : "text-gray-700"
+                                  )}
+                                >
+                                  {contest?.platform === "twitter" ? (
+                                    <>
+                                      {typeof (entry as any).total_points ===
+                                      "number"
+                                        ? (
+                                            entry as any
+                                          ).total_points.toLocaleString()
+                                        : "0"}{" "}
+                                      points
+                                    </>
+                                  ) : (
+                                    <>
+                                      {entry.views
+                                        ? entry.views.toLocaleString()
+                                        : "0"}{" "}
+                                      views
+                                    </>
+                                  )}
+                                </p>
+                                {entry.content_link &&
+                                  (contest?.status?.toLowerCase() === "ended" ||
+                                    contest?.status?.toLowerCase() ===
+                                      "completed") && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className={cn(
+                                        "h-7 w-7 sm:h-8 sm:w-8",
+                                        isDark
+                                          ? "text-gray-300"
+                                          : "text-slate-500"
+                                      )}
+                                      asChild
                                     >
-                                      <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
-                                    </Link>
-                                  </Button>
-                                )}
+                                      <Link
+                                        href={entry.content_link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title="View Content"
+                                      >
+                                        <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                                      </Link>
+                                    </Button>
+                                  )}
+                              </div>
                               {prizeDisplay && (
                                 <div className="text-xs sm:text-sm">
                                   {prizeDisplay}
@@ -8037,61 +7719,16 @@ export function ContestClientPage({
                   total_points: 0,
                 };
 
-                // Get metric weights from contest configuration (brand's given weights)
-                const pointsConfig =
-                  contest?.contest_based_details?.twitter_campaign
-                    ?.points_config || {};
-                const metricWeights = {
-                  likes:
-                    typeof pointsConfig.likes_weight === "number"
-                      ? pointsConfig.likes_weight
-                      : 0,
-                  comments:
-                    typeof pointsConfig.comments_weight === "number"
-                      ? pointsConfig.comments_weight
-                      : 0,
-                  retweets:
-                    typeof pointsConfig.retweets_weight === "number"
-                      ? pointsConfig.retweets_weight
-                      : 0,
-                  quoteReposts:
-                    typeof pointsConfig.quote_reposts_weight === "number"
-                      ? pointsConfig.quote_reposts_weight
-                      : 0,
-                  impressions:
-                    typeof pointsConfig.impressions_weight === "number"
-                      ? pointsConfig.impressions_weight
-                      : 0,
-                };
-
                 filteredAnalyticsSubmissions.forEach((sub: any) => {
                   if (sub.is_twitter_tweet && sub.other_stats) {
                     metrics.total_tweets += 1;
-
-                    const likes = sub.other_stats.likes || 0;
-                    const replies = sub.other_stats.replies || 0;
-                    const retweets = sub.other_stats.retweets || 0;
-                    const quoteReposts = sub.other_stats.quote_reposts || 0;
-                    const impressions = sub.views || 0;
-
-                    metrics.total_likes += likes;
-                    metrics.total_replies += replies;
-                    metrics.total_retweets += retweets;
-                    metrics.total_quote_reposts += quoteReposts;
-                    metrics.total_impressions += impressions;
-
-                    // Recalculate points according to brand's given metric weights
-                    const calculatedPoints =
-                      likes * metricWeights.likes +
-                      replies * metricWeights.comments +
-                      retweets * metricWeights.retweets +
-                      quoteReposts * metricWeights.quoteReposts +
-                      impressions * metricWeights.impressions;
-
-                    // Add manual points adjustment if any
-                    const manualAdjustment =
-                      sub.other_stats.manual_points_adjustment || 0;
-                    metrics.total_points += calculatedPoints + manualAdjustment;
+                    metrics.total_likes += sub.other_stats.likes || 0;
+                    metrics.total_replies += sub.other_stats.replies || 0;
+                    metrics.total_retweets += sub.other_stats.retweets || 0;
+                    metrics.total_quote_reposts +=
+                      sub.other_stats.quote_reposts || 0;
+                    metrics.total_impressions += sub.views || 0;
+                    metrics.total_points += sub.other_stats.points || 0;
                   }
                 });
 
