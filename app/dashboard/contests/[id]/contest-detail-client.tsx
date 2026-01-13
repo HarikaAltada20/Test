@@ -4467,6 +4467,1198 @@ export default function ContestDetailClient({
                     </div>
                   )}
 
+                {/* Points Configuration */}
+                {(() => {
+                  // Check for Twitter CPM points config
+                  const twitterPointsConfig =
+                    currentContest.contest_based_details?.twitter_campaign
+                      ?.points_config;
+                  // Check for CPM contest points config
+                  const cpmPointsConfig =
+                    currentContest.contest_based_details?.cpm_contest
+                      ?.points_config;
+                  
+                  const hasPointsConfig =
+                    (twitterPointsConfig &&
+                      Object.keys(twitterPointsConfig).length > 0) ||
+                    (cpmPointsConfig &&
+                      Object.keys(cpmPointsConfig).length > 0);
+
+                  if (!hasPointsConfig) return null;
+
+                  return (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-lg text-foreground">
+                        Points Configuration
+                      </h3>
+                      <div className="space-y-4">
+                        {/* Twitter CPM Points Config */}
+                        {twitterPointsConfig && (
+                          <div className="space-y-3">
+                            <h4 className="text-sm font-medium text-foreground/80">
+                              Base Weights
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {twitterPointsConfig.likes_weight != null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Likes Weight:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {typeof twitterPointsConfig.likes_weight ===
+                                    "number"
+                                      ? twitterPointsConfig.likes_weight.toFixed(
+                                          2
+                                        )
+                                      : twitterPointsConfig.likes_weight}
+                                  </span>
+                                </div>
+                              )}
+                              {twitterPointsConfig.comments_weight != null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Comments Weight:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {typeof twitterPointsConfig
+                                      .comments_weight === "object"
+                                      ? twitterPointsConfig.comments_weight
+                                          .base_weight?.toFixed(2) ||
+                                        "N/A"
+                                      : typeof twitterPointsConfig
+                                            .comments_weight === "number"
+                                        ? twitterPointsConfig.comments_weight.toFixed(
+                                            2
+                                          )
+                                        : twitterPointsConfig.comments_weight}
+                                  </span>
+                                </div>
+                              )}
+                              {twitterPointsConfig.retweets_weight != null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Retweets Weight:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {typeof twitterPointsConfig
+                                      .retweets_weight === "object"
+                                      ? twitterPointsConfig.retweets_weight
+                                          .base_weight?.toFixed(2) ||
+                                        "N/A"
+                                      : typeof twitterPointsConfig
+                                            .retweets_weight === "number"
+                                        ? twitterPointsConfig.retweets_weight.toFixed(
+                                            2
+                                          )
+                                        : twitterPointsConfig.retweets_weight}
+                                  </span>
+                                </div>
+                              )}
+                              {twitterPointsConfig.quote_reposts_weight !=
+                                null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Quote Reposts Weight:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {typeof twitterPointsConfig
+                                      .quote_reposts_weight === "object"
+                                      ? twitterPointsConfig.quote_reposts_weight
+                                          .base_weight?.toFixed(2) ||
+                                        "N/A"
+                                      : typeof twitterPointsConfig
+                                            .quote_reposts_weight === "number"
+                                        ? twitterPointsConfig.quote_reposts_weight.toFixed(
+                                            2
+                                          )
+                                        : twitterPointsConfig.quote_reposts_weight}
+                                  </span>
+                                </div>
+                              )}
+                              {twitterPointsConfig.impressions_weight !=
+                                null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Impressions Weight:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {typeof twitterPointsConfig
+                                      .impressions_weight === "number"
+                                      ? twitterPointsConfig.impressions_weight.toFixed(
+                                          2
+                                        )
+                                      : twitterPointsConfig.impressions_weight}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Engagement Multipliers */}
+                            {(() => {
+                              const commentsWeightObj =
+                                typeof twitterPointsConfig.comments_weight ===
+                                "object"
+                                  ? twitterPointsConfig.comments_weight
+                                  : null;
+                              const retweetsWeightObj =
+                                typeof twitterPointsConfig.retweets_weight ===
+                                "object"
+                                  ? twitterPointsConfig.retweets_weight
+                                  : null;
+                              const quoteRepostsWeightObj =
+                                typeof twitterPointsConfig.quote_reposts_weight ===
+                                "object"
+                                  ? twitterPointsConfig.quote_reposts_weight
+                                  : null;
+
+                              const hasMultipliers =
+                                (commentsWeightObj &&
+                                  Object.keys(commentsWeightObj).some(
+                                    (k) => k !== "base_weight"
+                                  )) ||
+                                (retweetsWeightObj &&
+                                  Object.keys(retweetsWeightObj).some(
+                                    (k) => k !== "base_weight"
+                                  )) ||
+                                (quoteRepostsWeightObj &&
+                                  Object.keys(quoteRepostsWeightObj).some(
+                                    (k) => k !== "base_weight"
+                                  ));
+
+                              if (!hasMultipliers) return null;
+
+                              return (
+                                <div className="space-y-3 mt-4">
+                                  <h4 className="text-sm font-medium text-foreground/80">
+                                    Engagement Multipliers
+                                  </h4>
+                                  
+                                  {/* Comment Multipliers */}
+                                  {commentsWeightObj &&
+                                    Object.keys(commentsWeightObj).some(
+                                      (k) => k !== "base_weight"
+                                    ) && (
+                                      <div className="space-y-2">
+                                        <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
+                                          Comment Engagement
+                                        </h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                          {commentsWeightObj.likes_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Likes:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {commentsWeightObj.likes_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {commentsWeightObj.replies_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Replies:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {commentsWeightObj.replies_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {commentsWeightObj.impressions_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Impressions:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {commentsWeightObj.impressions_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {commentsWeightObj.retweets_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Retweets:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {commentsWeightObj.retweets_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {commentsWeightObj.quote_reposts_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Quote Reposts:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {commentsWeightObj.quote_reposts_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                  {/* Retweet Multipliers */}
+                                  {retweetsWeightObj &&
+                                    Object.keys(retweetsWeightObj).some(
+                                      (k) => k !== "base_weight"
+                                    ) && (
+                                      <div className="space-y-2">
+                                        <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
+                                          Retweet Engagement
+                                        </h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                          {retweetsWeightObj.likes_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Likes:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {retweetsWeightObj.likes_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {retweetsWeightObj.replies_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Replies:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {retweetsWeightObj.replies_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {retweetsWeightObj.impressions_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Impressions:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {retweetsWeightObj.impressions_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {retweetsWeightObj.retweets_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Retweets:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {retweetsWeightObj.retweets_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {retweetsWeightObj.quote_reposts_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Quote Reposts:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {retweetsWeightObj.quote_reposts_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                  {/* Quote Repost Multipliers */}
+                                  {quoteRepostsWeightObj &&
+                                    Object.keys(quoteRepostsWeightObj).some(
+                                      (k) => k !== "base_weight"
+                                    ) && (
+                                      <div className="space-y-2">
+                                        <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
+                                          Quote Repost Engagement
+                                        </h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                          {quoteRepostsWeightObj.likes_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Likes:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {quoteRepostsWeightObj.likes_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {quoteRepostsWeightObj.replies_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Replies:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {quoteRepostsWeightObj.replies_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {quoteRepostsWeightObj.impressions_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Impressions:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {quoteRepostsWeightObj.impressions_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {quoteRepostsWeightObj.retweets_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Retweets:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {quoteRepostsWeightObj.retweets_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {quoteRepostsWeightObj.quote_reposts_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Quote Reposts:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {quoteRepostsWeightObj.quote_reposts_multiplier}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+
+                        {/* CPM Contest Points Config */}
+                        {cpmPointsConfig && (
+                          <div className="space-y-3">
+                            <h4 className="text-sm font-medium text-foreground/80">
+                              Base Points
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {cpmPointsConfig.comment_base_points != null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Comment Base Points:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {cpmPointsConfig.comment_base_points}
+                                  </span>
+                                </div>
+                              )}
+                              {cpmPointsConfig.retweet_base_points != null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Retweet Base Points:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {cpmPointsConfig.retweet_base_points}
+                                  </span>
+                                </div>
+                              )}
+                              {cpmPointsConfig.quote_repost_base_points !=
+                                null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Quote Repost Base Points:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {cpmPointsConfig.quote_repost_base_points}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Engagement Multipliers for CPM */}
+                            {(() => {
+                              const hasCommentMultipliers =
+                                cpmPointsConfig.comment_likes_multiplier !=
+                                  null ||
+                                cpmPointsConfig.comment_replies_multiplier !=
+                                  null ||
+                                cpmPointsConfig.comment_impressions_multiplier !=
+                                  null ||
+                                cpmPointsConfig.comment_retweets_multiplier !=
+                                  null ||
+                                cpmPointsConfig.comment_quote_reposts_multiplier !=
+                                  null;
+
+                              const hasRetweetMultipliers =
+                                cpmPointsConfig.retweet_likes_multiplier !=
+                                  null ||
+                                cpmPointsConfig.retweet_replies_multiplier !=
+                                  null ||
+                                cpmPointsConfig.retweet_impressions_multiplier !=
+                                  null ||
+                                cpmPointsConfig.retweet_retweets_multiplier !=
+                                  null ||
+                                cpmPointsConfig.retweet_quote_reposts_multiplier !=
+                                  null;
+
+                              const hasQuoteRepostMultipliers =
+                                cpmPointsConfig.quote_repost_likes_multiplier !=
+                                  null ||
+                                cpmPointsConfig.quote_repost_replies_multiplier !=
+                                  null ||
+                                cpmPointsConfig.quote_repost_impressions_multiplier !=
+                                  null ||
+                                cpmPointsConfig.quote_repost_retweets_multiplier !=
+                                  null ||
+                                cpmPointsConfig.quote_repost_quote_reposts_multiplier !=
+                                  null;
+
+                              if (
+                                !hasCommentMultipliers &&
+                                !hasRetweetMultipliers &&
+                                !hasQuoteRepostMultipliers
+                              )
+                                return null;
+
+                              return (
+                                <div className="space-y-3 mt-4">
+                                  <h4 className="text-sm font-medium text-foreground/80">
+                                    Engagement Multipliers
+                                  </h4>
+
+                                  {/* Comment Multipliers */}
+                                  {hasCommentMultipliers && (
+                                    <div className="space-y-2">
+                                      <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
+                                        Comment Engagement
+                                      </h5>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                        {cpmPointsConfig.comment_likes_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Likes:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.comment_likes_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.comment_replies_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Replies:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.comment_replies_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.comment_impressions_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Impressions:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.comment_impressions_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.comment_retweets_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Retweets:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.comment_retweets_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.comment_quote_reposts_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Quote Reposts:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.comment_quote_reposts_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Retweet Multipliers */}
+                                  {hasRetweetMultipliers && (
+                                    <div className="space-y-2">
+                                      <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
+                                        Retweet Engagement
+                                      </h5>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                        {cpmPointsConfig.retweet_likes_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Likes:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.retweet_likes_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.retweet_replies_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Replies:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.retweet_replies_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.retweet_impressions_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Impressions:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.retweet_impressions_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.retweet_retweets_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Retweets:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.retweet_retweets_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.retweet_quote_reposts_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Quote Reposts:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.retweet_quote_reposts_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Quote Repost Multipliers */}
+                                  {hasQuoteRepostMultipliers && (
+                                    <div className="space-y-2">
+                                      <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
+                                        Quote Repost Engagement
+                                      </h5>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                        {cpmPointsConfig.quote_repost_likes_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Likes:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.quote_repost_likes_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.quote_repost_replies_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Replies:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.quote_repost_replies_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.quote_repost_impressions_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Impressions:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.quote_repost_impressions_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.quote_repost_retweets_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Retweets:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.quote_repost_retweets_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.quote_repost_quote_reposts_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Quote Reposts:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {cpmPointsConfig.quote_repost_quote_reposts_multiplier}
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Payment Information */}
                 {(currentContest as any).payment_details && (
                   <div className="space-y-4">
