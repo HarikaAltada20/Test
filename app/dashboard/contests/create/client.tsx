@@ -2085,113 +2085,7 @@ export default function CreateContestPage({
           ...(flatFeeBonusCapCents && {
             flat_fee_bonus_cap: flatFeeBonusCapCents,
           }), // Only include if set
-          // CPM Points Configuration (for Twitter CPM contests)
-          // Build points_config - only include fields with valid (non-blank) values
-          ...(platform === "twitter" &&
-            (() => {
-              const pointsConfig: any = {};
-
-              // Only add fields if checkbox is checked AND value is valid
-              if (showCommentMultipliers) {
-                const commentLikes = getMultiplierValue(
-                  cpmPointsConfig.comment_likes_multiplier
-                );
-                const commentReplies = getMultiplierValue(
-                  cpmPointsConfig.comment_replies_multiplier
-                );
-                const commentImpressions = getMultiplierValue(
-                  cpmPointsConfig.comment_impressions_multiplier
-                );
-                const commentRetweets = getMultiplierValue(
-                  cpmPointsConfig.comment_retweets_multiplier
-                );
-                const commentQuoteReposts = getMultiplierValue(
-                  cpmPointsConfig.comment_quote_reposts_multiplier
-                );
-
-                if (commentLikes !== undefined)
-                  pointsConfig.comment_likes_multiplier = commentLikes;
-                if (commentReplies !== undefined)
-                  pointsConfig.comment_replies_multiplier = commentReplies;
-                if (commentImpressions !== undefined)
-                  pointsConfig.comment_impressions_multiplier =
-                    commentImpressions;
-                if (commentRetweets !== undefined)
-                  pointsConfig.comment_retweets_multiplier = commentRetweets;
-                if (commentQuoteReposts !== undefined)
-                  pointsConfig.comment_quote_reposts_multiplier =
-                    commentQuoteReposts;
-              }
-
-              if (showRetweetMultipliers) {
-                const retweetLikes = getMultiplierValue(
-                  cpmPointsConfig.retweet_likes_multiplier
-                );
-                const retweetReplies = getMultiplierValue(
-                  cpmPointsConfig.retweet_replies_multiplier
-                );
-                const retweetImpressions = getMultiplierValue(
-                  cpmPointsConfig.retweet_impressions_multiplier
-                );
-                const retweetRetweets = getMultiplierValue(
-                  cpmPointsConfig.retweet_retweets_multiplier
-                );
-                const retweetQuoteReposts = getMultiplierValue(
-                  cpmPointsConfig.retweet_quote_reposts_multiplier
-                );
-
-                if (retweetLikes !== undefined)
-                  pointsConfig.retweet_likes_multiplier = retweetLikes;
-                if (retweetReplies !== undefined)
-                  pointsConfig.retweet_replies_multiplier = retweetReplies;
-                if (retweetImpressions !== undefined)
-                  pointsConfig.retweet_impressions_multiplier =
-                    retweetImpressions;
-                if (retweetRetweets !== undefined)
-                  pointsConfig.retweet_retweets_multiplier = retweetRetweets;
-                if (retweetQuoteReposts !== undefined)
-                  pointsConfig.retweet_quote_reposts_multiplier =
-                    retweetQuoteReposts;
-              }
-
-              if (showQuoteRepostMultipliers) {
-                const quoteRepostLikes = getMultiplierValue(
-                  cpmPointsConfig.quote_repost_likes_multiplier
-                );
-                const quoteRepostReplies = getMultiplierValue(
-                  cpmPointsConfig.quote_repost_replies_multiplier
-                );
-                const quoteRepostImpressions = getMultiplierValue(
-                  cpmPointsConfig.quote_repost_impressions_multiplier
-                );
-                const quoteRepostRetweets = getMultiplierValue(
-                  cpmPointsConfig.quote_repost_retweets_multiplier
-                );
-                const quoteRepostQuoteReposts = getMultiplierValue(
-                  cpmPointsConfig.quote_repost_quote_reposts_multiplier
-                );
-
-                if (quoteRepostLikes !== undefined)
-                  pointsConfig.quote_repost_likes_multiplier = quoteRepostLikes;
-                if (quoteRepostReplies !== undefined)
-                  pointsConfig.quote_repost_replies_multiplier =
-                    quoteRepostReplies;
-                if (quoteRepostImpressions !== undefined)
-                  pointsConfig.quote_repost_impressions_multiplier =
-                    quoteRepostImpressions;
-                if (quoteRepostRetweets !== undefined)
-                  pointsConfig.quote_repost_retweets_multiplier =
-                    quoteRepostRetweets;
-                if (quoteRepostQuoteReposts !== undefined)
-                  pointsConfig.quote_repost_quote_reposts_multiplier =
-                    quoteRepostQuoteReposts;
-              }
-
-              // Only include points_config if there are valid values
-              return Object.keys(pointsConfig).length > 0
-                ? { points_config: pointsConfig }
-                : {};
-            })()),
+          // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
           // tiered_payouts: [] // Future use
         };
 
@@ -2250,13 +2144,154 @@ export default function CreateContestPage({
         const impressionsWeight =
           parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0;
 
-        twitterCampaign.points_config = {
+        // Build points_config with nested multipliers inside comments_weight, retweets_weight, quote_reposts_weight
+        const pointsConfig: any = {
           likes_weight: likesWeight,
-          comments_weight: commentsWeight,
-          retweets_weight: retweetsWeight,
-          quote_reposts_weight: quoteRepostsWeight,
-          impressions_weight: impressionsWeight, // optional "views" points
+          impressions_weight: impressionsWeight,
         };
+
+        // Add comments_weight - either as number or object with multipliers
+        if (showCommentMultipliers) {
+          const commentMultipliers: any = {};
+          const commentLikes = getMultiplierValue(
+            cpmPointsConfig.comment_likes_multiplier
+          );
+          const commentReplies = getMultiplierValue(
+            cpmPointsConfig.comment_replies_multiplier
+          );
+          const commentImpressions = getMultiplierValue(
+            cpmPointsConfig.comment_impressions_multiplier
+          );
+          const commentRetweets = getMultiplierValue(
+            cpmPointsConfig.comment_retweets_multiplier
+          );
+          const commentQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.comment_quote_reposts_multiplier
+          );
+
+          if (commentLikes !== undefined)
+            commentMultipliers.likes_multiplier = commentLikes;
+          if (commentReplies !== undefined)
+            commentMultipliers.replies_multiplier = commentReplies;
+          if (commentImpressions !== undefined)
+            commentMultipliers.impressions_multiplier = commentImpressions;
+          if (commentRetweets !== undefined)
+            commentMultipliers.retweets_multiplier = commentRetweets;
+          if (commentQuoteReposts !== undefined)
+            commentMultipliers.quote_reposts_multiplier = commentQuoteReposts;
+
+          if (Object.keys(commentMultipliers).length > 0) {
+            pointsConfig.comments_weight = {
+              ...(commentsWeight > 0 && { base_weight: commentsWeight }),
+              ...commentMultipliers,
+            };
+          } else {
+            // Checkbox is checked but all multipliers are blank - save empty object to preserve checkbox state
+            pointsConfig.comments_weight = {
+              ...(commentsWeight > 0 && { base_weight: commentsWeight }),
+            };
+          }
+        } else {
+          pointsConfig.comments_weight = commentsWeight;
+        }
+
+        // Add retweets_weight - either as number or object with multipliers
+        if (showRetweetMultipliers) {
+          const retweetMultipliers: any = {};
+          const retweetLikes = getMultiplierValue(
+            cpmPointsConfig.retweet_likes_multiplier
+          );
+          const retweetReplies = getMultiplierValue(
+            cpmPointsConfig.retweet_replies_multiplier
+          );
+          const retweetImpressions = getMultiplierValue(
+            cpmPointsConfig.retweet_impressions_multiplier
+          );
+          const retweetRetweets = getMultiplierValue(
+            cpmPointsConfig.retweet_retweets_multiplier
+          );
+          const retweetQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.retweet_quote_reposts_multiplier
+          );
+
+          if (retweetLikes !== undefined)
+            retweetMultipliers.likes_multiplier = retweetLikes;
+          if (retweetReplies !== undefined)
+            retweetMultipliers.replies_multiplier = retweetReplies;
+          if (retweetImpressions !== undefined)
+            retweetMultipliers.impressions_multiplier = retweetImpressions;
+          if (retweetRetweets !== undefined)
+            retweetMultipliers.retweets_multiplier = retweetRetweets;
+          if (retweetQuoteReposts !== undefined)
+            retweetMultipliers.quote_reposts_multiplier = retweetQuoteReposts;
+
+          if (Object.keys(retweetMultipliers).length > 0) {
+            pointsConfig.retweets_weight = {
+              ...(retweetsWeight > 0 && { base_weight: retweetsWeight }),
+              ...retweetMultipliers,
+            };
+          } else {
+            // Checkbox is checked but all multipliers are blank - save empty object to preserve checkbox state
+            pointsConfig.retweets_weight = {
+              ...(retweetsWeight > 0 && { base_weight: retweetsWeight }),
+            };
+          }
+        } else {
+          pointsConfig.retweets_weight = retweetsWeight;
+        }
+
+        // Add quote_reposts_weight - either as number or object with multipliers
+        if (showQuoteRepostMultipliers) {
+          const quoteRepostMultipliers: any = {};
+          const quoteRepostLikes = getMultiplierValue(
+            cpmPointsConfig.quote_repost_likes_multiplier
+          );
+          const quoteRepostReplies = getMultiplierValue(
+            cpmPointsConfig.quote_repost_replies_multiplier
+          );
+          const quoteRepostImpressions = getMultiplierValue(
+            cpmPointsConfig.quote_repost_impressions_multiplier
+          );
+          const quoteRepostRetweets = getMultiplierValue(
+            cpmPointsConfig.quote_repost_retweets_multiplier
+          );
+          const quoteRepostQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.quote_repost_quote_reposts_multiplier
+          );
+
+          if (quoteRepostLikes !== undefined)
+            quoteRepostMultipliers.likes_multiplier = quoteRepostLikes;
+          if (quoteRepostReplies !== undefined)
+            quoteRepostMultipliers.replies_multiplier = quoteRepostReplies;
+          if (quoteRepostImpressions !== undefined)
+            quoteRepostMultipliers.impressions_multiplier =
+              quoteRepostImpressions;
+          if (quoteRepostRetweets !== undefined)
+            quoteRepostMultipliers.retweets_multiplier = quoteRepostRetweets;
+          if (quoteRepostQuoteReposts !== undefined)
+            quoteRepostMultipliers.quote_reposts_multiplier =
+              quoteRepostQuoteReposts;
+
+          if (Object.keys(quoteRepostMultipliers).length > 0) {
+            pointsConfig.quote_reposts_weight = {
+              ...(quoteRepostsWeight > 0 && {
+                base_weight: quoteRepostsWeight,
+              }),
+              ...quoteRepostMultipliers,
+            };
+          } else {
+            // Checkbox is checked but all multipliers are blank - save empty object to preserve checkbox state
+            pointsConfig.quote_reposts_weight = {
+              ...(quoteRepostsWeight > 0 && {
+                base_weight: quoteRepostsWeight,
+              }),
+            };
+          }
+        } else {
+          pointsConfig.quote_reposts_weight = quoteRepostsWeight;
+        }
+
+        twitterCampaign.points_config = pointsConfig;
 
         if (contentType !== "raid") {
           if (keywordsRequirementMode) {
@@ -3220,13 +3255,154 @@ export default function CreateContestPage({
         const impressionsWeight =
           parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0;
 
-        twitterCampaign.points_config = {
+        // Build points_config with nested multipliers inside comments_weight, retweets_weight, quote_reposts_weight
+        const pointsConfig: any = {
           likes_weight: likesWeight,
-          comments_weight: commentsWeight,
-          retweets_weight: retweetsWeight,
-          quote_reposts_weight: quoteRepostsWeight,
           impressions_weight: impressionsWeight,
         };
+
+        // Add comments_weight - either as number or object with multipliers
+        if (showCommentMultipliers) {
+          const commentMultipliers: any = {};
+          const commentLikes = getMultiplierValue(
+            cpmPointsConfig.comment_likes_multiplier
+          );
+          const commentReplies = getMultiplierValue(
+            cpmPointsConfig.comment_replies_multiplier
+          );
+          const commentImpressions = getMultiplierValue(
+            cpmPointsConfig.comment_impressions_multiplier
+          );
+          const commentRetweets = getMultiplierValue(
+            cpmPointsConfig.comment_retweets_multiplier
+          );
+          const commentQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.comment_quote_reposts_multiplier
+          );
+
+          if (commentLikes !== undefined)
+            commentMultipliers.likes_multiplier = commentLikes;
+          if (commentReplies !== undefined)
+            commentMultipliers.replies_multiplier = commentReplies;
+          if (commentImpressions !== undefined)
+            commentMultipliers.impressions_multiplier = commentImpressions;
+          if (commentRetweets !== undefined)
+            commentMultipliers.retweets_multiplier = commentRetweets;
+          if (commentQuoteReposts !== undefined)
+            commentMultipliers.quote_reposts_multiplier = commentQuoteReposts;
+
+          if (Object.keys(commentMultipliers).length > 0) {
+            pointsConfig.comments_weight = {
+              ...(commentsWeight > 0 && { base_weight: commentsWeight }),
+              ...commentMultipliers,
+            };
+          } else {
+            // Checkbox is checked but all multipliers are blank - save empty object to preserve checkbox state
+            pointsConfig.comments_weight = {
+              ...(commentsWeight > 0 && { base_weight: commentsWeight }),
+            };
+          }
+        } else {
+          pointsConfig.comments_weight = commentsWeight;
+        }
+
+        // Add retweets_weight - either as number or object with multipliers
+        if (showRetweetMultipliers) {
+          const retweetMultipliers: any = {};
+          const retweetLikes = getMultiplierValue(
+            cpmPointsConfig.retweet_likes_multiplier
+          );
+          const retweetReplies = getMultiplierValue(
+            cpmPointsConfig.retweet_replies_multiplier
+          );
+          const retweetImpressions = getMultiplierValue(
+            cpmPointsConfig.retweet_impressions_multiplier
+          );
+          const retweetRetweets = getMultiplierValue(
+            cpmPointsConfig.retweet_retweets_multiplier
+          );
+          const retweetQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.retweet_quote_reposts_multiplier
+          );
+
+          if (retweetLikes !== undefined)
+            retweetMultipliers.likes_multiplier = retweetLikes;
+          if (retweetReplies !== undefined)
+            retweetMultipliers.replies_multiplier = retweetReplies;
+          if (retweetImpressions !== undefined)
+            retweetMultipliers.impressions_multiplier = retweetImpressions;
+          if (retweetRetweets !== undefined)
+            retweetMultipliers.retweets_multiplier = retweetRetweets;
+          if (retweetQuoteReposts !== undefined)
+            retweetMultipliers.quote_reposts_multiplier = retweetQuoteReposts;
+
+          if (Object.keys(retweetMultipliers).length > 0) {
+            pointsConfig.retweets_weight = {
+              ...(retweetsWeight > 0 && { base_weight: retweetsWeight }),
+              ...retweetMultipliers,
+            };
+          } else {
+            // Checkbox is checked but all multipliers are blank - save empty object to preserve checkbox state
+            pointsConfig.retweets_weight = {
+              ...(retweetsWeight > 0 && { base_weight: retweetsWeight }),
+            };
+          }
+        } else {
+          pointsConfig.retweets_weight = retweetsWeight;
+        }
+
+        // Add quote_reposts_weight - either as number or object with multipliers
+        if (showQuoteRepostMultipliers) {
+          const quoteRepostMultipliers: any = {};
+          const quoteRepostLikes = getMultiplierValue(
+            cpmPointsConfig.quote_repost_likes_multiplier
+          );
+          const quoteRepostReplies = getMultiplierValue(
+            cpmPointsConfig.quote_repost_replies_multiplier
+          );
+          const quoteRepostImpressions = getMultiplierValue(
+            cpmPointsConfig.quote_repost_impressions_multiplier
+          );
+          const quoteRepostRetweets = getMultiplierValue(
+            cpmPointsConfig.quote_repost_retweets_multiplier
+          );
+          const quoteRepostQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.quote_repost_quote_reposts_multiplier
+          );
+
+          if (quoteRepostLikes !== undefined)
+            quoteRepostMultipliers.likes_multiplier = quoteRepostLikes;
+          if (quoteRepostReplies !== undefined)
+            quoteRepostMultipliers.replies_multiplier = quoteRepostReplies;
+          if (quoteRepostImpressions !== undefined)
+            quoteRepostMultipliers.impressions_multiplier =
+              quoteRepostImpressions;
+          if (quoteRepostRetweets !== undefined)
+            quoteRepostMultipliers.retweets_multiplier = quoteRepostRetweets;
+          if (quoteRepostQuoteReposts !== undefined)
+            quoteRepostMultipliers.quote_reposts_multiplier =
+              quoteRepostQuoteReposts;
+
+          if (Object.keys(quoteRepostMultipliers).length > 0) {
+            pointsConfig.quote_reposts_weight = {
+              ...(quoteRepostsWeight > 0 && {
+                base_weight: quoteRepostsWeight,
+              }),
+              ...quoteRepostMultipliers,
+            };
+          } else {
+            // Checkbox is checked but all multipliers are blank - save empty object to preserve checkbox state
+            pointsConfig.quote_reposts_weight = {
+              ...(quoteRepostsWeight > 0 && {
+                base_weight: quoteRepostsWeight,
+              }),
+            };
+          }
+        } else {
+          pointsConfig.quote_reposts_weight = quoteRepostsWeight;
+        }
+
+        twitterCampaign.points_config = pointsConfig;
 
         if (contentType !== "raid") {
           if (keywordsRequirementMode) {
@@ -3387,13 +3563,37 @@ export default function CreateContestPage({
         contestFormat === "text_image" &&
         contestType === "cpm";
 
-      // Build CPM contest details with points config
+      // Update Twitter campaign points_config with multipliers
       if (isTwitterCpmContest && contestType === "cpm") {
-        // Build points_config - only include fields with valid (non-blank) values
-        const pointsConfig: any = {};
+        const existingTwitterCampaign = existingDetails.twitter_campaign || {};
+        const existingPointsConfig =
+          existingTwitterCampaign.points_config || {};
 
-        // Only add fields if checkbox is checked AND value is valid
+        // Get base weights from existing config or use defaults
+        const likesWeight = existingPointsConfig.likes_weight || 0;
+        const commentsWeight =
+          typeof existingPointsConfig.comments_weight === "object"
+            ? existingPointsConfig.comments_weight.base_weight || 0
+            : existingPointsConfig.comments_weight || 0;
+        const retweetsWeight =
+          typeof existingPointsConfig.retweets_weight === "object"
+            ? existingPointsConfig.retweets_weight.base_weight || 0
+            : existingPointsConfig.retweets_weight || 0;
+        const quoteRepostsWeight =
+          typeof existingPointsConfig.quote_reposts_weight === "object"
+            ? existingPointsConfig.quote_reposts_weight.base_weight || 0
+            : existingPointsConfig.quote_reposts_weight || 0;
+        const impressionsWeight = existingPointsConfig.impressions_weight || 0;
+
+        // Build points_config with nested multipliers inside comments_weight, retweets_weight, quote_reposts_weight
+        const pointsConfig: any = {
+          likes_weight: likesWeight,
+          impressions_weight: impressionsWeight,
+        };
+
+        // Add comments_weight - either as number or object with multipliers
         if (showCommentMultipliers) {
+          const commentMultipliers: any = {};
           const commentLikes = getMultiplierValue(
             cpmPointsConfig.comment_likes_multiplier
           );
@@ -3411,18 +3611,34 @@ export default function CreateContestPage({
           );
 
           if (commentLikes !== undefined)
-            pointsConfig.comment_likes_multiplier = commentLikes;
+            commentMultipliers.likes_multiplier = commentLikes;
           if (commentReplies !== undefined)
-            pointsConfig.comment_replies_multiplier = commentReplies;
+            commentMultipliers.replies_multiplier = commentReplies;
           if (commentImpressions !== undefined)
-            pointsConfig.comment_impressions_multiplier = commentImpressions;
+            commentMultipliers.impressions_multiplier = commentImpressions;
           if (commentRetweets !== undefined)
-            pointsConfig.comment_retweets_multiplier = commentRetweets;
+            commentMultipliers.retweets_multiplier = commentRetweets;
           if (commentQuoteReposts !== undefined)
-            pointsConfig.comment_quote_reposts_multiplier = commentQuoteReposts;
+            commentMultipliers.quote_reposts_multiplier = commentQuoteReposts;
+
+          if (Object.keys(commentMultipliers).length > 0) {
+            pointsConfig.comments_weight = {
+              ...(commentsWeight > 0 && { base_weight: commentsWeight }),
+              ...commentMultipliers,
+            };
+          } else {
+            // Checkbox is checked but all multipliers are blank - save empty object to preserve checkbox state
+            pointsConfig.comments_weight = {
+              ...(commentsWeight > 0 && { base_weight: commentsWeight }),
+            };
+          }
+        } else {
+          pointsConfig.comments_weight = commentsWeight;
         }
 
+        // Add retweets_weight - either as number or object with multipliers
         if (showRetweetMultipliers) {
+          const retweetMultipliers: any = {};
           const retweetLikes = getMultiplierValue(
             cpmPointsConfig.retweet_likes_multiplier
           );
@@ -3440,18 +3656,34 @@ export default function CreateContestPage({
           );
 
           if (retweetLikes !== undefined)
-            pointsConfig.retweet_likes_multiplier = retweetLikes;
+            retweetMultipliers.likes_multiplier = retweetLikes;
           if (retweetReplies !== undefined)
-            pointsConfig.retweet_replies_multiplier = retweetReplies;
+            retweetMultipliers.replies_multiplier = retweetReplies;
           if (retweetImpressions !== undefined)
-            pointsConfig.retweet_impressions_multiplier = retweetImpressions;
+            retweetMultipliers.impressions_multiplier = retweetImpressions;
           if (retweetRetweets !== undefined)
-            pointsConfig.retweet_retweets_multiplier = retweetRetweets;
+            retweetMultipliers.retweets_multiplier = retweetRetweets;
           if (retweetQuoteReposts !== undefined)
-            pointsConfig.retweet_quote_reposts_multiplier = retweetQuoteReposts;
+            retweetMultipliers.quote_reposts_multiplier = retweetQuoteReposts;
+
+          if (Object.keys(retweetMultipliers).length > 0) {
+            pointsConfig.retweets_weight = {
+              ...(retweetsWeight > 0 && { base_weight: retweetsWeight }),
+              ...retweetMultipliers,
+            };
+          } else {
+            // Checkbox is checked but all multipliers are blank - save empty object to preserve checkbox state
+            pointsConfig.retweets_weight = {
+              ...(retweetsWeight > 0 && { base_weight: retweetsWeight }),
+            };
+          }
+        } else {
+          pointsConfig.retweets_weight = retweetsWeight;
         }
 
+        // Add quote_reposts_weight - either as number or object with multipliers
         if (showQuoteRepostMultipliers) {
+          const quoteRepostMultipliers: any = {};
           const quoteRepostLikes = getMultiplierValue(
             cpmPointsConfig.quote_repost_likes_multiplier
           );
@@ -3469,34 +3701,46 @@ export default function CreateContestPage({
           );
 
           if (quoteRepostLikes !== undefined)
-            pointsConfig.quote_repost_likes_multiplier = quoteRepostLikes;
+            quoteRepostMultipliers.likes_multiplier = quoteRepostLikes;
           if (quoteRepostReplies !== undefined)
-            pointsConfig.quote_repost_replies_multiplier = quoteRepostReplies;
+            quoteRepostMultipliers.replies_multiplier = quoteRepostReplies;
           if (quoteRepostImpressions !== undefined)
-            pointsConfig.quote_repost_impressions_multiplier =
+            quoteRepostMultipliers.impressions_multiplier =
               quoteRepostImpressions;
           if (quoteRepostRetweets !== undefined)
-            pointsConfig.quote_repost_retweets_multiplier = quoteRepostRetweets;
+            quoteRepostMultipliers.retweets_multiplier = quoteRepostRetweets;
           if (quoteRepostQuoteReposts !== undefined)
-            pointsConfig.quote_repost_quote_reposts_multiplier =
+            quoteRepostMultipliers.quote_reposts_multiplier =
               quoteRepostQuoteReposts;
-        }
 
-        const cpmContestDetails: any = {
-          ...(existingDetails.cpm_contest || {}),
-        };
-
-        // Only set points_config if there are valid values, otherwise remove it
-        if (Object.keys(pointsConfig).length > 0) {
-          cpmContestDetails.points_config = pointsConfig;
+          if (Object.keys(quoteRepostMultipliers).length > 0) {
+            pointsConfig.quote_reposts_weight = {
+              ...(quoteRepostsWeight > 0 && {
+                base_weight: quoteRepostsWeight,
+              }),
+              ...quoteRepostMultipliers,
+            };
+          } else {
+            // Checkbox is checked but all multipliers are blank - save empty object to preserve checkbox state
+            pointsConfig.quote_reposts_weight = {
+              ...(quoteRepostsWeight > 0 && {
+                base_weight: quoteRepostsWeight,
+              }),
+            };
+          }
         } else {
-          // Remove points_config if all fields are blank
-          delete cpmContestDetails.points_config;
+          pointsConfig.quote_reposts_weight = quoteRepostsWeight;
         }
+
+        // Update twitter_campaign with new points_config
+        const updatedTwitterCampaign = {
+          ...existingTwitterCampaign,
+          points_config: pointsConfig,
+        };
 
         const updatedDetails = {
           ...existingDetails,
-          cpm_contest: cpmContestDetails,
+          twitter_campaign: updatedTwitterCampaign,
         };
 
         const { error } = await supabase
@@ -4137,118 +4381,167 @@ export default function CreateContestPage({
         setTermsConditions(cc.terms_conditions);
       }
 
-      // Load CPM Points Configuration if it exists
-      if (cc.points_config) {
-        const pc = cc.points_config;
-        // Only load values that exist - don't set defaults for missing fields
+      // Load CPM Points Configuration from twitter_campaign.points_config (multipliers are nested inside comments_weight, retweets_weight, quote_reposts_weight)
+      const twitterCampaign = draft.contest_based_details?.twitter_campaign;
+      if (twitterCampaign?.points_config) {
+        const pc = twitterCampaign.points_config;
+
+        // Extract multipliers from nested structure
+        const commentsWeight =
+          typeof pc.comments_weight === "object" ? pc.comments_weight : {};
+        const retweetsWeight =
+          typeof pc.retweets_weight === "object" ? pc.retweets_weight : {};
+        const quoteRepostsWeight =
+          typeof pc.quote_reposts_weight === "object"
+            ? pc.quote_reposts_weight
+            : {};
+
+        // Check if checkbox was checked (weight is an object) even if no multipliers were saved
+        const commentWeightIsObject = typeof pc.comments_weight === "object";
+        const retweetWeightIsObject = typeof pc.retweets_weight === "object";
+        const quoteRepostWeightIsObject =
+          typeof pc.quote_reposts_weight === "object";
+
+        // Load values from database
+        // If weight is an object (checkbox was checked), use empty string for missing values (user left them blank)
+        // If weight is a number (checkbox was unchecked or never configured), use defaults when checkbox is checked
         setCpmPointsConfig({
-          comment_base_points: pc.comment_base_points?.toString() ?? "1",
-          retweet_base_points: pc.retweet_base_points?.toString() ?? "5",
-          quote_repost_base_points:
-            pc.quote_repost_base_points?.toString() ?? "10",
+          comment_base_points: "1", // Default base points
+          retweet_base_points: "5", // Default base points
+          quote_repost_base_points: "10", // Default base points
           comment_likes_multiplier:
-            pc.comment_likes_multiplier !== undefined &&
-            pc.comment_likes_multiplier !== null
-              ? pc.comment_likes_multiplier.toString()
-              : "",
+            commentsWeight.likes_multiplier !== undefined &&
+            commentsWeight.likes_multiplier !== null
+              ? commentsWeight.likes_multiplier.toString()
+              : commentWeightIsObject
+              ? ""
+              : "0.1", // Empty if checkbox checked but no value, default if checkbox unchecked
           comment_replies_multiplier:
-            pc.comment_replies_multiplier !== undefined &&
-            pc.comment_replies_multiplier !== null
-              ? pc.comment_replies_multiplier.toString()
-              : "",
+            commentsWeight.replies_multiplier !== undefined &&
+            commentsWeight.replies_multiplier !== null
+              ? commentsWeight.replies_multiplier.toString()
+              : commentWeightIsObject
+              ? ""
+              : "1",
           comment_impressions_multiplier:
-            pc.comment_impressions_multiplier !== undefined &&
-            pc.comment_impressions_multiplier !== null
-              ? pc.comment_impressions_multiplier.toString()
-              : "",
+            commentsWeight.impressions_multiplier !== undefined &&
+            commentsWeight.impressions_multiplier !== null
+              ? commentsWeight.impressions_multiplier.toString()
+              : commentWeightIsObject
+              ? ""
+              : "0.001",
           comment_retweets_multiplier:
-            pc.comment_retweets_multiplier !== undefined &&
-            pc.comment_retweets_multiplier !== null
-              ? pc.comment_retweets_multiplier.toString()
-              : "",
+            commentsWeight.retweets_multiplier !== undefined &&
+            commentsWeight.retweets_multiplier !== null
+              ? commentsWeight.retweets_multiplier.toString()
+              : commentWeightIsObject
+              ? ""
+              : "0",
           comment_quote_reposts_multiplier:
-            pc.comment_quote_reposts_multiplier !== undefined &&
-            pc.comment_quote_reposts_multiplier !== null
-              ? pc.comment_quote_reposts_multiplier.toString()
-              : "",
+            commentsWeight.quote_reposts_multiplier !== undefined &&
+            commentsWeight.quote_reposts_multiplier !== null
+              ? commentsWeight.quote_reposts_multiplier.toString()
+              : commentWeightIsObject
+              ? ""
+              : "0",
           retweet_likes_multiplier:
-            pc.retweet_likes_multiplier !== undefined &&
-            pc.retweet_likes_multiplier !== null
-              ? pc.retweet_likes_multiplier.toString()
-              : "",
+            retweetsWeight.likes_multiplier !== undefined &&
+            retweetsWeight.likes_multiplier !== null
+              ? retweetsWeight.likes_multiplier.toString()
+              : retweetWeightIsObject
+              ? ""
+              : "0.05",
           retweet_replies_multiplier:
-            pc.retweet_replies_multiplier !== undefined &&
-            pc.retweet_replies_multiplier !== null
-              ? pc.retweet_replies_multiplier.toString()
-              : "",
+            retweetsWeight.replies_multiplier !== undefined &&
+            retweetsWeight.replies_multiplier !== null
+              ? retweetsWeight.replies_multiplier.toString()
+              : retweetWeightIsObject
+              ? ""
+              : "0.05",
           retweet_impressions_multiplier:
-            pc.retweet_impressions_multiplier !== undefined &&
-            pc.retweet_impressions_multiplier !== null
-              ? pc.retweet_impressions_multiplier.toString()
-              : "",
+            retweetsWeight.impressions_multiplier !== undefined &&
+            retweetsWeight.impressions_multiplier !== null
+              ? retweetsWeight.impressions_multiplier.toString()
+              : retweetWeightIsObject
+              ? ""
+              : "0.001",
           retweet_retweets_multiplier:
-            pc.retweet_retweets_multiplier !== undefined &&
-            pc.retweet_retweets_multiplier !== null
-              ? pc.retweet_retweets_multiplier.toString()
-              : "",
+            retweetsWeight.retweets_multiplier !== undefined &&
+            retweetsWeight.retweets_multiplier !== null
+              ? retweetsWeight.retweets_multiplier.toString()
+              : retweetWeightIsObject
+              ? ""
+              : "0.05",
           retweet_quote_reposts_multiplier:
-            pc.retweet_quote_reposts_multiplier !== undefined &&
-            pc.retweet_quote_reposts_multiplier !== null
-              ? pc.retweet_quote_reposts_multiplier.toString()
-              : "",
+            retweetsWeight.quote_reposts_multiplier !== undefined &&
+            retweetsWeight.quote_reposts_multiplier !== null
+              ? retweetsWeight.quote_reposts_multiplier.toString()
+              : retweetWeightIsObject
+              ? ""
+              : "0",
           quote_repost_likes_multiplier:
-            pc.quote_repost_likes_multiplier !== undefined &&
-            pc.quote_repost_likes_multiplier !== null
-              ? pc.quote_repost_likes_multiplier.toString()
-              : "",
+            quoteRepostsWeight.likes_multiplier !== undefined &&
+            quoteRepostsWeight.likes_multiplier !== null
+              ? quoteRepostsWeight.likes_multiplier.toString()
+              : quoteRepostWeightIsObject
+              ? ""
+              : "0.1",
           quote_repost_replies_multiplier:
-            pc.quote_repost_replies_multiplier !== undefined &&
-            pc.quote_repost_replies_multiplier !== null
-              ? pc.quote_repost_replies_multiplier.toString()
-              : "",
+            quoteRepostsWeight.replies_multiplier !== undefined &&
+            quoteRepostsWeight.replies_multiplier !== null
+              ? quoteRepostsWeight.replies_multiplier.toString()
+              : quoteRepostWeightIsObject
+              ? ""
+              : "0.1",
           quote_repost_impressions_multiplier:
-            pc.quote_repost_impressions_multiplier !== undefined &&
-            pc.quote_repost_impressions_multiplier !== null
-              ? pc.quote_repost_impressions_multiplier.toString()
-              : "",
+            quoteRepostsWeight.impressions_multiplier !== undefined &&
+            quoteRepostsWeight.impressions_multiplier !== null
+              ? quoteRepostsWeight.impressions_multiplier.toString()
+              : quoteRepostWeightIsObject
+              ? ""
+              : "0.001",
           quote_repost_retweets_multiplier:
-            pc.quote_repost_retweets_multiplier !== undefined &&
-            pc.quote_repost_retweets_multiplier !== null
-              ? pc.quote_repost_retweets_multiplier.toString()
-              : "",
+            quoteRepostsWeight.retweets_multiplier !== undefined &&
+            quoteRepostsWeight.retweets_multiplier !== null
+              ? quoteRepostsWeight.retweets_multiplier.toString()
+              : quoteRepostWeightIsObject
+              ? ""
+              : "0.1",
           quote_repost_quote_reposts_multiplier:
-            pc.quote_repost_quote_reposts_multiplier !== undefined &&
-            pc.quote_repost_quote_reposts_multiplier !== null
-              ? pc.quote_repost_quote_reposts_multiplier.toString()
-              : "",
+            quoteRepostsWeight.quote_reposts_multiplier !== undefined &&
+            quoteRepostsWeight.quote_reposts_multiplier !== null
+              ? quoteRepostsWeight.quote_reposts_multiplier.toString()
+              : quoteRepostWeightIsObject
+              ? ""
+              : "0.1",
         });
 
         // Set checkbox states based on existing multiplier data
         setShowCommentMultipliers(
           !!(
-            pc.comment_likes_multiplier ||
-            pc.comment_replies_multiplier ||
-            pc.comment_impressions_multiplier ||
-            pc.comment_retweets_multiplier ||
-            pc.comment_quote_reposts_multiplier
+            commentsWeight.likes_multiplier ||
+            commentsWeight.replies_multiplier ||
+            commentsWeight.impressions_multiplier ||
+            commentsWeight.retweets_multiplier ||
+            commentsWeight.quote_reposts_multiplier
           )
         );
         setShowRetweetMultipliers(
           !!(
-            pc.retweet_likes_multiplier ||
-            pc.retweet_replies_multiplier ||
-            pc.retweet_impressions_multiplier ||
-            pc.retweet_retweets_multiplier ||
-            pc.retweet_quote_reposts_multiplier
+            retweetsWeight.likes_multiplier ||
+            retweetsWeight.replies_multiplier ||
+            retweetsWeight.impressions_multiplier ||
+            retweetsWeight.retweets_multiplier ||
+            retweetsWeight.quote_reposts_multiplier
           )
         );
         setShowQuoteRepostMultipliers(
           !!(
-            pc.quote_repost_likes_multiplier ||
-            pc.quote_repost_replies_multiplier ||
-            pc.quote_repost_impressions_multiplier ||
-            pc.quote_repost_retweets_multiplier ||
-            pc.quote_repost_quote_reposts_multiplier
+            quoteRepostsWeight.likes_multiplier ||
+            quoteRepostsWeight.replies_multiplier ||
+            quoteRepostsWeight.impressions_multiplier ||
+            quoteRepostsWeight.retweets_multiplier ||
+            quoteRepostsWeight.quote_reposts_multiplier
           )
         );
       }
