@@ -2203,7 +2203,8 @@ export default function ContestDetailClient({
       currentContest.post_contest_status === "verification_complete" ||
       currentContest.post_contest_status === "payouts_processed";
     
-    const isDisabled = isRefreshingMetrics || !cooldownInfo.canRefresh || isLocked;
+    const isDisabled =
+      isRefreshingMetrics || !cooldownInfo.canRefresh || isLocked;
     
     let disabledReason = "";
     if (isRefreshingMetrics) {
@@ -2211,7 +2212,9 @@ export default function ContestDetailClient({
     } else if (isLocked) {
       disabledReason = "Metrics are locked after contest review begins";
     } else if (!cooldownInfo.canRefresh) {
-      disabledReason = `Please wait ${cooldownInfo.remainingMinutes} more minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`;
+      disabledReason = `Please wait ${
+        cooldownInfo.remainingMinutes
+      } more minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`;
     }
     
     return { isDisabled, disabledReason };
@@ -4565,13 +4568,13 @@ export default function ContestDetailClient({
                                     Comments Weight:
                                   </span>
                                   <span className="font-semibold text-sm text-foreground">
-                                    {typeof twitterPointsConfig
-                                      .comments_weight === "object"
-                                      ? twitterPointsConfig.comments_weight
-                                          .base_weight?.toFixed(2) ||
-                                        "N/A"
-                                      : typeof twitterPointsConfig
-                                            .comments_weight === "number"
+                                    {typeof twitterPointsConfig.comments_weight ===
+                                    "object"
+                                      ? twitterPointsConfig.comments_weight.base_weight?.toFixed(
+                                          2
+                                        ) || "N/A"
+                                      : typeof twitterPointsConfig.comments_weight ===
+                                        "number"
                                         ? twitterPointsConfig.comments_weight.toFixed(
                                             2
                                           )
@@ -4597,13 +4600,13 @@ export default function ContestDetailClient({
                                     Retweets Weight:
                                   </span>
                                   <span className="font-semibold text-sm text-foreground">
-                                    {typeof twitterPointsConfig
-                                      .retweets_weight === "object"
-                                      ? twitterPointsConfig.retweets_weight
-                                          .base_weight?.toFixed(2) ||
-                                        "N/A"
-                                      : typeof twitterPointsConfig
-                                            .retweets_weight === "number"
+                                    {typeof twitterPointsConfig.retweets_weight ===
+                                    "object"
+                                      ? twitterPointsConfig.retweets_weight.base_weight?.toFixed(
+                                          2
+                                        ) || "N/A"
+                                      : typeof twitterPointsConfig.retweets_weight ===
+                                        "number"
                                         ? twitterPointsConfig.retweets_weight.toFixed(
                                             2
                                           )
@@ -4630,13 +4633,13 @@ export default function ContestDetailClient({
                                     Quote Reposts Weight:
                                   </span>
                                   <span className="font-semibold text-sm text-foreground">
-                                    {typeof twitterPointsConfig
-                                      .quote_reposts_weight === "object"
-                                      ? twitterPointsConfig.quote_reposts_weight
-                                          .base_weight?.toFixed(2) ||
-                                        "N/A"
-                                      : typeof twitterPointsConfig
-                                            .quote_reposts_weight === "number"
+                                    {typeof twitterPointsConfig.quote_reposts_weight ===
+                                    "object"
+                                      ? twitterPointsConfig.quote_reposts_weight.base_weight?.toFixed(
+                                          2
+                                        ) || "N/A"
+                                      : typeof twitterPointsConfig.quote_reposts_weight ===
+                                        "number"
                                         ? twitterPointsConfig.quote_reposts_weight.toFixed(
                                             2
                                           )
@@ -4663,8 +4666,8 @@ export default function ContestDetailClient({
                                     Impressions Weight:
                                   </span>
                                   <span className="font-semibold text-sm text-foreground">
-                                    {typeof twitterPointsConfig
-                                      .impressions_weight === "number"
+                                    {typeof twitterPointsConfig.impressions_weight ===
+                                    "number"
                                       ? twitterPointsConfig.impressions_weight.toFixed(
                                           2
                                         )
@@ -4745,7 +4748,9 @@ export default function ContestDetailClient({
                                                 Likes:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {commentsWeightObj.likes_multiplier}
+                                                {
+                                                  commentsWeightObj.likes_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -4770,7 +4775,9 @@ export default function ContestDetailClient({
                                                 Replies:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {commentsWeightObj.replies_multiplier}
+                                                {
+                                                  commentsWeightObj.replies_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -4795,7 +4802,9 @@ export default function ContestDetailClient({
                                                 Impressions:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {commentsWeightObj.impressions_multiplier}
+                                                {
+                                                  commentsWeightObj.impressions_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -4820,7 +4829,9 @@ export default function ContestDetailClient({
                                                 Retweets:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {commentsWeightObj.retweets_multiplier}
+                                                {
+                                                  commentsWeightObj.retweets_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -4845,7 +4856,9 @@ export default function ContestDetailClient({
                                                 Quote Reposts:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {commentsWeightObj.quote_reposts_multiplier}
+                                                {
+                                                  commentsWeightObj.quote_reposts_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -4884,7 +4897,9 @@ export default function ContestDetailClient({
                                                 Likes:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {retweetsWeightObj.likes_multiplier}
+                                                {
+                                                  retweetsWeightObj.likes_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -4909,7 +4924,9 @@ export default function ContestDetailClient({
                                                 Replies:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {retweetsWeightObj.replies_multiplier}
+                                                {
+                                                  retweetsWeightObj.replies_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -4934,7 +4951,9 @@ export default function ContestDetailClient({
                                                 Impressions:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {retweetsWeightObj.impressions_multiplier}
+                                                {
+                                                  retweetsWeightObj.impressions_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -4959,7 +4978,9 @@ export default function ContestDetailClient({
                                                 Retweets:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {retweetsWeightObj.retweets_multiplier}
+                                                {
+                                                  retweetsWeightObj.retweets_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -4984,7 +5005,9 @@ export default function ContestDetailClient({
                                                 Quote Reposts:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {retweetsWeightObj.quote_reposts_multiplier}
+                                                {
+                                                  retweetsWeightObj.quote_reposts_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -5023,7 +5046,9 @@ export default function ContestDetailClient({
                                                 Likes:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {quoteRepostsWeightObj.likes_multiplier}
+                                                {
+                                                  quoteRepostsWeightObj.likes_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -5048,7 +5073,9 @@ export default function ContestDetailClient({
                                                 Replies:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {quoteRepostsWeightObj.replies_multiplier}
+                                                {
+                                                  quoteRepostsWeightObj.replies_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -5073,7 +5100,9 @@ export default function ContestDetailClient({
                                                 Impressions:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {quoteRepostsWeightObj.impressions_multiplier}
+                                                {
+                                                  quoteRepostsWeightObj.impressions_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -5098,7 +5127,9 @@ export default function ContestDetailClient({
                                                 Retweets:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {quoteRepostsWeightObj.retweets_multiplier}
+                                                {
+                                                  quoteRepostsWeightObj.retweets_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -5123,7 +5154,9 @@ export default function ContestDetailClient({
                                                 Quote Reposts:
                                               </span>
                                               <span className="font-medium text-xs text-foreground">
-                                                {quoteRepostsWeightObj.quote_reposts_multiplier}
+                                                {
+                                                  quoteRepostsWeightObj.quote_reposts_multiplier
+                                                }
                                               </span>
                                             </div>
                                           )}
@@ -5291,7 +5324,9 @@ export default function ContestDetailClient({
                                               Likes:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.comment_likes_multiplier}
+                                              {
+                                                cpmPointsConfig.comment_likes_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5316,7 +5351,9 @@ export default function ContestDetailClient({
                                               Replies:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.comment_replies_multiplier}
+                                              {
+                                                cpmPointsConfig.comment_replies_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5341,7 +5378,9 @@ export default function ContestDetailClient({
                                               Impressions:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.comment_impressions_multiplier}
+                                              {
+                                                cpmPointsConfig.comment_impressions_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5366,7 +5405,9 @@ export default function ContestDetailClient({
                                               Retweets:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.comment_retweets_multiplier}
+                                              {
+                                                cpmPointsConfig.comment_retweets_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5391,7 +5432,9 @@ export default function ContestDetailClient({
                                               Quote Reposts:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.comment_quote_reposts_multiplier}
+                                              {
+                                                cpmPointsConfig.comment_quote_reposts_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5427,7 +5470,9 @@ export default function ContestDetailClient({
                                               Likes:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.retweet_likes_multiplier}
+                                              {
+                                                cpmPointsConfig.retweet_likes_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5452,7 +5497,9 @@ export default function ContestDetailClient({
                                               Replies:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.retweet_replies_multiplier}
+                                              {
+                                                cpmPointsConfig.retweet_replies_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5477,7 +5524,9 @@ export default function ContestDetailClient({
                                               Impressions:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.retweet_impressions_multiplier}
+                                              {
+                                                cpmPointsConfig.retweet_impressions_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5502,7 +5551,9 @@ export default function ContestDetailClient({
                                               Retweets:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.retweet_retweets_multiplier}
+                                              {
+                                                cpmPointsConfig.retweet_retweets_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5527,7 +5578,9 @@ export default function ContestDetailClient({
                                               Quote Reposts:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.retweet_quote_reposts_multiplier}
+                                              {
+                                                cpmPointsConfig.retweet_quote_reposts_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5563,7 +5616,9 @@ export default function ContestDetailClient({
                                               Likes:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.quote_repost_likes_multiplier}
+                                              {
+                                                cpmPointsConfig.quote_repost_likes_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5588,7 +5643,9 @@ export default function ContestDetailClient({
                                               Replies:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.quote_repost_replies_multiplier}
+                                              {
+                                                cpmPointsConfig.quote_repost_replies_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5613,7 +5670,9 @@ export default function ContestDetailClient({
                                               Impressions:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.quote_repost_impressions_multiplier}
+                                              {
+                                                cpmPointsConfig.quote_repost_impressions_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5638,7 +5697,9 @@ export default function ContestDetailClient({
                                               Retweets:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.quote_repost_retweets_multiplier}
+                                              {
+                                                cpmPointsConfig.quote_repost_retweets_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -5663,7 +5724,9 @@ export default function ContestDetailClient({
                                               Quote Reposts:
                                             </span>
                                             <span className="font-medium text-xs text-foreground">
-                                              {cpmPointsConfig.quote_repost_quote_reposts_multiplier}
+                                              {
+                                                cpmPointsConfig.quote_repost_quote_reposts_multiplier
+                                              }
                                             </span>
                                           </div>
                                         )}
@@ -6399,6 +6462,46 @@ export default function ContestDetailClient({
                         verified submission, regardless of views or ranking!
                         Paid after the contest ends along with other earnings.
                       </p>
+                      {/* Flat Fee Bonus Cap (for CPM contests) */}
+                      {currentContest.contest_type === "cpm" &&
+                        (
+                          currentContest.contest_based_details
+                            ?.cpm_contest as any
+                        )?.flat_fee_bonus_cap && (
+                          <div
+                            className={cn(
+                              "mt-3 pt-3 border-t",
+                              isDark
+                                ? "border-green-700/50"
+                                : "border-green-200"
+                            )}
+                          >
+                            <p
+                              className={cn(
+                                "text-sm font-medium",
+                                isDark ? "text-green-200" : "text-green-800"
+                              )}
+                            >
+                              💰 Flat Fee Bonus Cap:{" "}
+                              {formatMoney(
+                                (
+                                  currentContest.contest_based_details
+                                    ?.cpm_contest as any
+                                )?.flat_fee_bonus_cap
+                              )}
+                            </p>
+                            <p
+                              className={cn(
+                                "text-xs mt-1",
+                                isDark ? "text-green-400" : "text-green-600"
+                              )}
+                            >
+                              Maximum total flat fee bonus to distribute across
+                              all creators. Once this cap is reached, no more
+                              flat fee bonuses will be given.
+                            </p>
+                          </div>
+                        )}
                     </div>
                   </div>
                 )}
@@ -7127,7 +7230,8 @@ export default function ContestDetailClient({
                       </div>
                       <div className="flex items-center gap-3">
                         {(() => {
-                          const { isDisabled, disabledReason } = getRefreshButtonState();
+                          const { isDisabled, disabledReason } =
+                            getRefreshButtonState();
                           return (
                             <button
                               onClick={handleRefreshMetrics}
@@ -7138,7 +7242,10 @@ export default function ContestDetailClient({
                                   ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
                                   : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]"
                               )}
-                              title={disabledReason || "Refresh metrics and leaderboard"}
+                              title={
+                                disabledReason ||
+                                "Refresh metrics and leaderboard"
+                              }
                             >
                               {isRefreshingMetrics ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -7539,7 +7646,9 @@ export default function ContestDetailClient({
                               <SelectTrigger
                                 className={cn(
                                   "h-12 w-full sm:w-[220px]",
-                                  isDark ? "border-gray-500" : "border-slate-300"
+                                  isDark
+                                    ? "border-gray-500"
+                                    : "border-slate-300"
                                 )}
                               >
                                 <SelectValue placeholder="Sort submissions" />
@@ -10813,11 +10922,22 @@ export default function ContestDetailClient({
                                     </h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
                                       {twitterMetrics.target_current_likes !==
-                                        null && (() => {
-                                          const current = twitterMetrics.target_current_likes || 0;
+                                        null &&
+                                        (() => {
+                                          const current =
+                                            twitterMetrics.target_current_likes ||
+                                            0;
                                           const target = targetLikes;
-                                          const isReached = target !== null && current >= target;
-                                          const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
+                                          const isReached =
+                                            target !== null &&
+                                            current >= target;
+                                          const progress =
+                                            target !== null && target > 0
+                                              ? Math.min(
+                                                  100,
+                                                  (current / target) * 100
+                                                )
+                                              : 0;
                                           
                                           return (
                                             <div
@@ -10867,16 +10987,20 @@ export default function ContestDetailClient({
                                                             : "text-slate-500"
                                                         )}
                                                       >
-                                                        of {target.toLocaleString()} target
+                                                        of{" "}
+                                                        {target.toLocaleString()}{" "}
+                                                        target
                                                       </p>
                                                     )}
                                                   </div>
-                                                  <div className={cn(
+                                                  <div
+                                                    className={cn(
                                                     "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                     isReached
                                                       ? "bg-gradient-to-br from-green-500 to-emerald-600"
                                                       : "bg-gradient-to-br from-pink-500 to-rose-600"
-                                                  )}>
+                                                    )}
+                                                  >
                                                     {isReached ? (
                                                       <CheckCircle2 className="h-7 w-7" />
                                                     ) : (
@@ -10884,12 +11008,17 @@ export default function ContestDetailClient({
                                                     )}
                                                   </div>
                                                 </div>
-                                                {target !== null && target > 0 && (
+                                                {target !== null &&
+                                                  target > 0 && (
                                                   <div className="mt-3">
-                                                    <div className={cn(
+                                                      <div
+                                                        className={cn(
                                                       "h-2 rounded-full overflow-hidden",
-                                                      isDark ? "bg-slate-700" : "bg-slate-200"
-                                                    )}>
+                                                          isDark
+                                                            ? "bg-slate-700"
+                                                            : "bg-slate-200"
+                                                        )}
+                                                      >
                                                       <div
                                                         className={cn(
                                                           "h-full transition-all duration-500",
@@ -10897,14 +11026,21 @@ export default function ContestDetailClient({
                                                             ? "bg-gradient-to-r from-green-500 to-emerald-600"
                                                             : "bg-gradient-to-r from-pink-500 to-rose-600"
                                                         )}
-                                                        style={{ width: `${progress}%` }}
+                                                          style={{
+                                                            width: `${progress}%`,
+                                                          }}
                                                       />
                                                     </div>
-                                                    <p className={cn(
+                                                      <p
+                                                        className={cn(
                                                       "text-xs mt-1 text-center",
-                                                      isDark ? "text-slate-400" : "text-slate-500"
-                                                    )}>
-                                                      {progress.toFixed(0)}% complete
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                        )}
+                                                      >
+                                                        {progress.toFixed(0)}%
+                                                        complete
                                                     </p>
                                                   </div>
                                                 )}
@@ -10913,11 +11049,22 @@ export default function ContestDetailClient({
                                           );
                                         })()}
                                       {twitterMetrics.target_current_comments !==
-                                        null && (() => {
-                                          const current = twitterMetrics.target_current_comments || 0;
+                                        null &&
+                                        (() => {
+                                          const current =
+                                            twitterMetrics.target_current_comments ||
+                                            0;
                                           const target = targetComments;
-                                          const isReached = target !== null && current >= target;
-                                          const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
+                                          const isReached =
+                                            target !== null &&
+                                            current >= target;
+                                          const progress =
+                                            target !== null && target > 0
+                                              ? Math.min(
+                                                  100,
+                                                  (current / target) * 100
+                                                )
+                                              : 0;
                                           
                                           return (
                                             <div
@@ -10967,16 +11114,20 @@ export default function ContestDetailClient({
                                                             : "text-slate-500"
                                                         )}
                                                       >
-                                                        of {target.toLocaleString()} target
+                                                        of{" "}
+                                                        {target.toLocaleString()}{" "}
+                                                        target
                                                       </p>
                                                     )}
                                                   </div>
-                                                  <div className={cn(
+                                                  <div
+                                                    className={cn(
                                                     "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                     isReached
                                                       ? "bg-gradient-to-br from-green-500 to-emerald-600"
                                                       : "bg-gradient-to-br from-orange-500 to-amber-600"
-                                                  )}>
+                                                    )}
+                                                  >
                                                     {isReached ? (
                                                       <CheckCircle2 className="h-7 w-7" />
                                                     ) : (
@@ -10984,12 +11135,17 @@ export default function ContestDetailClient({
                                                     )}
                                                   </div>
                                                 </div>
-                                                {target !== null && target > 0 && (
+                                                {target !== null &&
+                                                  target > 0 && (
                                                   <div className="mt-3">
-                                                    <div className={cn(
+                                                      <div
+                                                        className={cn(
                                                       "h-2 rounded-full overflow-hidden",
-                                                      isDark ? "bg-slate-700" : "bg-slate-200"
-                                                    )}>
+                                                          isDark
+                                                            ? "bg-slate-700"
+                                                            : "bg-slate-200"
+                                                        )}
+                                                      >
                                                       <div
                                                         className={cn(
                                                           "h-full transition-all duration-500",
@@ -10997,14 +11153,21 @@ export default function ContestDetailClient({
                                                             ? "bg-gradient-to-r from-green-500 to-emerald-600"
                                                             : "bg-gradient-to-r from-orange-500 to-amber-600"
                                                         )}
-                                                        style={{ width: `${progress}%` }}
+                                                          style={{
+                                                            width: `${progress}%`,
+                                                          }}
                                                       />
                                                     </div>
-                                                    <p className={cn(
+                                                      <p
+                                                        className={cn(
                                                       "text-xs mt-1 text-center",
-                                                      isDark ? "text-slate-400" : "text-slate-500"
-                                                    )}>
-                                                      {progress.toFixed(0)}% complete
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                        )}
+                                                      >
+                                                        {progress.toFixed(0)}%
+                                                        complete
                                                     </p>
                                                   </div>
                                                 )}
@@ -11013,11 +11176,22 @@ export default function ContestDetailClient({
                                           );
                                         })()}
                                       {twitterMetrics.target_current_retweets !==
-                                        null && (() => {
-                                          const current = twitterMetrics.target_current_retweets || 0;
+                                        null &&
+                                        (() => {
+                                          const current =
+                                            twitterMetrics.target_current_retweets ||
+                                            0;
                                           const target = targetRetweets;
-                                          const isReached = target !== null && current >= target;
-                                          const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
+                                          const isReached =
+                                            target !== null &&
+                                            current >= target;
+                                          const progress =
+                                            target !== null && target > 0
+                                              ? Math.min(
+                                                  100,
+                                                  (current / target) * 100
+                                                )
+                                              : 0;
                                           
                                           return (
                                             <div
@@ -11067,16 +11241,20 @@ export default function ContestDetailClient({
                                                             : "text-slate-500"
                                                         )}
                                                       >
-                                                        of {target.toLocaleString()} target
+                                                        of{" "}
+                                                        {target.toLocaleString()}{" "}
+                                                        target
                                                       </p>
                                                     )}
                                                   </div>
-                                                  <div className={cn(
+                                                  <div
+                                                    className={cn(
                                                     "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                     isReached
                                                       ? "bg-gradient-to-br from-green-500 to-emerald-600"
                                                       : "bg-gradient-to-br from-cyan-500 to-teal-600"
-                                                  )}>
+                                                    )}
+                                                  >
                                                     {isReached ? (
                                                       <CheckCircle2 className="h-7 w-7" />
                                                     ) : (
@@ -11084,12 +11262,17 @@ export default function ContestDetailClient({
                                                     )}
                                                   </div>
                                                 </div>
-                                                {target !== null && target > 0 && (
+                                                {target !== null &&
+                                                  target > 0 && (
                                                   <div className="mt-3">
-                                                    <div className={cn(
+                                                      <div
+                                                        className={cn(
                                                       "h-2 rounded-full overflow-hidden",
-                                                      isDark ? "bg-slate-700" : "bg-slate-200"
-                                                    )}>
+                                                          isDark
+                                                            ? "bg-slate-700"
+                                                            : "bg-slate-200"
+                                                        )}
+                                                      >
                                                       <div
                                                         className={cn(
                                                           "h-full transition-all duration-500",
@@ -11097,14 +11280,21 @@ export default function ContestDetailClient({
                                                             ? "bg-gradient-to-r from-green-500 to-emerald-600"
                                                             : "bg-gradient-to-r from-cyan-500 to-teal-600"
                                                         )}
-                                                        style={{ width: `${progress}%` }}
+                                                          style={{
+                                                            width: `${progress}%`,
+                                                          }}
                                                       />
                                                     </div>
-                                                    <p className={cn(
+                                                      <p
+                                                        className={cn(
                                                       "text-xs mt-1 text-center",
-                                                      isDark ? "text-slate-400" : "text-slate-500"
-                                                    )}>
-                                                      {progress.toFixed(0)}% complete
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                        )}
+                                                      >
+                                                        {progress.toFixed(0)}%
+                                                        complete
                                                     </p>
                                                   </div>
                                                 )}
@@ -11113,11 +11303,22 @@ export default function ContestDetailClient({
                                           );
                                         })()}
                                       {twitterMetrics.target_current_quote_reposts !==
-                                        null && (() => {
-                                          const current = twitterMetrics.target_current_quote_reposts || 0;
+                                        null &&
+                                        (() => {
+                                          const current =
+                                            twitterMetrics.target_current_quote_reposts ||
+                                            0;
                                           const target = targetQuoteReposts;
-                                          const isReached = target !== null && current >= target;
-                                          const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
+                                          const isReached =
+                                            target !== null &&
+                                            current >= target;
+                                          const progress =
+                                            target !== null && target > 0
+                                              ? Math.min(
+                                                  100,
+                                                  (current / target) * 100
+                                                )
+                                              : 0;
                                           
                                           return (
                                             <div
@@ -11167,16 +11368,20 @@ export default function ContestDetailClient({
                                                             : "text-slate-500"
                                                         )}
                                                       >
-                                                        of {target.toLocaleString()} target
+                                                        of{" "}
+                                                        {target.toLocaleString()}{" "}
+                                                        target
                                                       </p>
                                                     )}
                                                   </div>
-                                                  <div className={cn(
+                                                  <div
+                                                    className={cn(
                                                     "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                     isReached
                                                       ? "bg-gradient-to-br from-green-500 to-emerald-600"
                                                       : "bg-gradient-to-br from-indigo-500 to-violet-600"
-                                                  )}>
+                                                    )}
+                                                  >
                                                     {isReached ? (
                                                       <CheckCircle2 className="h-7 w-7" />
                                                     ) : (
@@ -11184,12 +11389,17 @@ export default function ContestDetailClient({
                                                     )}
                                                   </div>
                                                 </div>
-                                                {target !== null && target > 0 && (
+                                                {target !== null &&
+                                                  target > 0 && (
                                                   <div className="mt-3">
-                                                    <div className={cn(
+                                                      <div
+                                                        className={cn(
                                                       "h-2 rounded-full overflow-hidden",
-                                                      isDark ? "bg-slate-700" : "bg-slate-200"
-                                                    )}>
+                                                          isDark
+                                                            ? "bg-slate-700"
+                                                            : "bg-slate-200"
+                                                        )}
+                                                      >
                                                       <div
                                                         className={cn(
                                                           "h-full transition-all duration-500",
@@ -11197,14 +11407,21 @@ export default function ContestDetailClient({
                                                             ? "bg-gradient-to-r from-green-500 to-emerald-600"
                                                             : "bg-gradient-to-r from-indigo-500 to-violet-600"
                                                         )}
-                                                        style={{ width: `${progress}%` }}
+                                                          style={{
+                                                            width: `${progress}%`,
+                                                          }}
                                                       />
                                                     </div>
-                                                    <p className={cn(
+                                                      <p
+                                                        className={cn(
                                                       "text-xs mt-1 text-center",
-                                                      isDark ? "text-slate-400" : "text-slate-500"
-                                                    )}>
-                                                      {progress.toFixed(0)}% complete
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                        )}
+                                                      >
+                                                        {progress.toFixed(0)}%
+                                                        complete
                                                     </p>
                                                   </div>
                                                 )}

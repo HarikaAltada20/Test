@@ -596,7 +596,8 @@ export function ContestClientPage({
       contest.post_contest_status === "verification_complete" ||
       contest.post_contest_status === "payouts_processed";
 
-    const isDisabled = isRefreshingMetrics || !cooldownInfo.canRefresh || isLocked;
+    const isDisabled =
+      isRefreshingMetrics || !cooldownInfo.canRefresh || isLocked;
 
     let disabledReason = "";
     if (isRefreshingMetrics) {
@@ -604,7 +605,9 @@ export function ContestClientPage({
     } else if (isLocked) {
       disabledReason = "Metrics are locked after contest review begins";
     } else if (!cooldownInfo.canRefresh) {
-      disabledReason = `Please wait ${formatRemainingTime(cooldownInfo.remainingMs)}`;
+      disabledReason = `Please wait ${formatRemainingTime(
+        cooldownInfo.remainingMs
+      )}`;
     }
 
     return { isDisabled, disabledReason, cooldownInfo };
@@ -633,7 +636,7 @@ export function ContestClientPage({
           setContestType("leaderboard"); // Set dummy contest type
 
           // Mark as loaded only after successful fetch
-          const platform = contest?.platform || 'unknown';
+          const platform = contest?.platform || "unknown";
           const contestKey = `${contestId}-${platform}`;
           leaderboardLoadedRef.current = contestKey;
 
@@ -669,7 +672,7 @@ export function ContestClientPage({
 
         // Mark as loaded only after successful fetch (even if empty - that's a valid response)
         // Get platform from contest state (it should be available by the time this runs)
-        const platform = contest?.platform || 'unknown';
+        const platform = contest?.platform || "unknown";
         const contestKey = `${contestId}-${platform}`;
         leaderboardLoadedRef.current = contestKey;
       }
@@ -810,7 +813,7 @@ export function ContestClientPage({
           setMyLeaderboardEntry(null);
         }
         // Mark as fetched to prevent repeated calls
-        const platform = contest?.platform || 'unknown';
+        const platform = contest?.platform || "unknown";
         const contestKey = `${contestId}-${platform}`;
         myRankFetchedRef.current = contestKey;
       }
@@ -819,7 +822,7 @@ export function ContestClientPage({
       if (isMounted) {
         setMyLeaderboardEntry(null);
         // Mark as fetched even on error to prevent infinite retries
-        const platform = contest?.platform || 'unknown';
+        const platform = contest?.platform || "unknown";
         const contestKey = `${contestId}-${platform}`;
         myRankFetchedRef.current = contestKey;
       }
@@ -855,12 +858,15 @@ export function ContestClientPage({
         setContestType("leaderboard");
 
         // Mark as loaded only after successful fetch (even if empty - that's a valid response)
-        const platform = contest?.platform || 'twitter';
+        const platform = contest?.platform || "twitter";
         const contestKey = `${contestId}-${platform}`;
         leaderboardLoadedRef.current = contestKey;
 
         // If we got data, reset the empty refetch flag (in case data was cleared and refetched)
-        if ((data.leaderboard?.length || 0) > 0 || (data.totalEntries || 0) > 0) {
+        if (
+          (data.leaderboard?.length || 0) > 0 ||
+          (data.totalEntries || 0) > 0
+        ) {
           emptyDataRefetchAttemptedRef.current = null;
         }
       }
@@ -906,7 +912,7 @@ export function ContestClientPage({
           setMyLeaderboardEntry(null);
         }
         // Mark as fetched to prevent repeated calls
-        const platform = contest?.platform || 'twitter';
+        const platform = contest?.platform || "twitter";
         const contestKey = `${contestId}-${platform}`;
         myRankFetchedRef.current = contestKey;
       }
@@ -915,7 +921,7 @@ export function ContestClientPage({
       if (isMounted) {
         setMyLeaderboardEntry(null);
         // Mark as fetched even on error to prevent infinite retries
-        const platform = contest?.platform || 'twitter';
+        const platform = contest?.platform || "twitter";
         const contestKey = `${contestId}-${platform}`;
         myRankFetchedRef.current = contestKey;
       }
@@ -1243,7 +1249,9 @@ export function ContestClientPage({
         // Call leaderboard fetches after initial contest/user data attempt
         if (isMounted && contestData) {
           // Fetch leaderboard based on platform type
-          const isTwitterContest = contestData?.platform?.toLowerCase() === "twitter" || contestData?.platform?.toLowerCase() === "x";
+          const isTwitterContest =
+            contestData?.platform?.toLowerCase() === "twitter" ||
+            contestData?.platform?.toLowerCase() === "x";
           const contestKey = `${contestId}-${contestData.platform}`;
 
           if (isTwitterContest) {
@@ -1327,12 +1335,14 @@ export function ContestClientPage({
 
     if (activeTab !== "leaderboard") return;
 
-    const isTwitterContest = contest.platform?.toLowerCase() === "twitter" || contest.platform?.toLowerCase() === "x";
+    const isTwitterContest =
+      contest.platform?.toLowerCase() === "twitter" ||
+      contest.platform?.toLowerCase() === "x";
     const contestKey = `${contestId}-${contest.platform}`;
     const hasLoaded = leaderboardLoadedRef.current === contestKey;
 
     // Only fetch if we haven't loaded for this contest yet
-    // Don't check leaderboard.length, totalLeaderboardEntries, or loadingLeaderboard here 
+    // Don't check leaderboard.length, totalLeaderboardEntries, or loadingLeaderboard here
     // as they would cause infinite loops when state changes
     // The ref is set after successful fetch (even if empty), which prevents refetching
     const shouldFetch = !hasLoaded;
@@ -3139,70 +3149,102 @@ export function ContestClientPage({
                           ?.flat_fee_bonus && (
                           <div
                             className={cn(
-                              "flex items-center justify-between p-3 rounded-lg border transition-all duration-300",
+                              "p-3 rounded-lg border transition-all duration-300",
                               isDark
                                 ? "bg-gradient-to-r from-green-900/40 to-emerald-900/40 border-green-400/40"
                                 : "bg-gradient-to-r from-green-50 to-green-50 border-green-200"
                             )}
                           >
-                            <div className="flex items-center gap-3">
-                              <Gift
-                                className={cn(
-                                  "h-5 w-5",
-                                  isDark ? "text-green-400" : "text-green-600"
-                                )}
-                              />
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isDark ? "text-slate-100" : "text-slate-900"
-                                )}
-                              >
-                                Guaranteed Bonus
-                              </span>
-                              <div className="group relative">
-                                <Info
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Gift
                                   className={cn(
-                                    "h-4 w-4 cursor-help",
+                                    "h-5 w-5",
                                     isDark ? "text-green-400" : "text-green-600"
                                   )}
                                 />
-                                <div
+                                <span
                                   className={cn(
-                                    "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center",
-                                    isDark
-                                      ? "bg-slate-800 text-slate-100"
-                                      : "bg-slate-900 text-white"
+                                    "font-medium",
+                                    isDark ? "text-slate-100" : "text-slate-900"
                                   )}
                                 >
-                                  Every submission that gets verified will
-                                  receive this guaranteed bonus amount. Your
-                                  submission will only get verified if you
-                                  follow the brief and rules & guidelines.
+                                  Guaranteed Bonus
+                                </span>
+                                <div className="group relative">
+                                  <Info
+                                    className={cn(
+                                      "h-4 w-4 cursor-help",
+                                      isDark
+                                        ? "text-green-400"
+                                        : "text-green-600"
+                                    )}
+                                  />
+                                  <div
+                                    className={cn(
+                                      "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center",
+                                      isDark
+                                        ? "bg-slate-800 text-slate-100"
+                                        : "bg-slate-900 text-white"
+                                    )}
+                                  >
+                                    Every submission that gets verified will
+                                    receive this guaranteed bonus amount. Your
+                                    submission will only get verified if you
+                                    follow the brief and rules & guidelines.
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div
+                                  className={cn(
+                                    "text-lg font-bold",
+                                    isDark ? "text-green-100" : "text-green-900"
+                                  )}
+                                >
+                                  {formatMoney(
+                                    contest.contest_based_details.cpm_contest
+                                      .flat_fee_bonus
+                                  )}
+                                </div>
+                                <div
+                                  className={cn(
+                                    "text-xs",
+                                    isDark ? "text-green-300" : "text-green-700"
+                                  )}
+                                >
+                                  per verified submission
                                 </div>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <div
-                                className={cn(
-                                  "text-lg font-bold",
-                                  isDark ? "text-green-100" : "text-green-900"
-                                )}
-                              >
-                                {formatMoney(
-                                  contest.contest_based_details.cpm_contest
-                                    .flat_fee_bonus
-                                )}
+                            {/* Flat Fee Bonus Cap (for CPM contests) */}
+                            {contest.contest_based_details?.cpm_contest
+                              ?.flat_fee_bonus_cap && (
+                              <div className="mt-3">
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-green-200" : "text-green-800"
+                                  )}
+                                >
+                                  💰 Flat Fee Bonus Cap:{" "}
+                                  {formatMoney(
+                                    contest.contest_based_details.cpm_contest
+                                      .flat_fee_bonus_cap
+                                  )}
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-xs mt-2",
+                                    isDark ? "text-green-400" : "text-green-600"
+                                  )}
+                                >
+                                  Maximum total flat fee bonus to distribute
+                                  across all creators. Once this cap is reached,
+                                  no more flat fee bonuses will be given.
+                                </p>
                               </div>
-                              <div
-                                className={cn(
-                                  "text-xs",
-                                  isDark ? "text-green-300" : "text-green-700"
-                                )}
-                              >
-                                per verified submission
-                              </div>
-                            </div>
+                            )}
                           </div>
                         )}
 
@@ -5267,7 +5309,6 @@ export function ContestClientPage({
                   </div>
                 ) : (
                   <>
-
                     {/* Earnings View Mode Toggle - Show for both CPM and leaderboard contests with bonus */}
                     {/* Only show if contest is ended and payouts are processed */}
                     {(contest?.contest_type === "leaderboard" ||
@@ -5333,14 +5374,15 @@ export function ContestClientPage({
                               }
                               size="sm"
                               onClick={() => setLeaderboardViewMode("simple")}
-                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardViewMode === "simple"
-                                ? isDark
-                                  ? "bg-purple-600 text-white"
-                                  : "bg-purple-500 text-white"
-                                : isDark
+                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
+                                leaderboardViewMode === "simple"
+                                  ? isDark
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-500 text-white"
+                                  : isDark
                                   ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
                                   : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                                }`}
+                              }`}
                             >
                               <span className="flex items-center gap-1.5">
                                 <div className="w-2 h-2 rounded-full bg-current opacity-60" />
@@ -5355,14 +5397,15 @@ export function ContestClientPage({
                               }
                               size="sm"
                               onClick={() => setLeaderboardViewMode("detailed")}
-                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardViewMode === "detailed"
-                                ? isDark
-                                  ? "bg-purple-600 text-white"
-                                  : "bg-purple-500 text-white"
-                                : isDark
+                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
+                                leaderboardViewMode === "detailed"
+                                  ? isDark
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-500 text-white"
+                                  : isDark
                                   ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
                                   : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                                }`}
+                              }`}
                             >
                               <span className="flex items-center gap-1.5">
                                 <div className="w-2 h-2 rounded-full bg-current opacity-60" />
@@ -5432,14 +5475,15 @@ export function ContestClientPage({
                               onClick={() =>
                                 setLeaderboardDisplayMode("submission")
                               }
-                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardDisplayMode === "submission"
-                                ? isDark
-                                  ? "bg-purple-600 text-white"
-                                  : "bg-purple-500 text-white"
-                                : isDark
+                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
+                                leaderboardDisplayMode === "submission"
+                                  ? isDark
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-500 text-white"
+                                  : isDark
                                   ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
                                   : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                                }`}
+                              }`}
                             >
                               <span className="flex items-center gap-1.5">
                                 <div className="w-2 h-2 rounded-full bg-current opacity-60" />
@@ -5453,15 +5497,18 @@ export function ContestClientPage({
                                   : "ghost"
                               }
                               size="sm"
-                              onClick={() => setLeaderboardDisplayMode("creator")}
-                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardDisplayMode === "creator"
-                                ? isDark
-                                  ? "bg-purple-600 text-white"
-                                  : "bg-purple-500 text-white"
-                                : isDark
+                              onClick={() =>
+                                setLeaderboardDisplayMode("creator")
+                              }
+                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
+                                leaderboardDisplayMode === "creator"
+                                  ? isDark
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-purple-500 text-white"
+                                  : isDark
                                   ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
                                   : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                                }`}
+                              }`}
                             >
                               <span className="flex items-center gap-1.5">
                                 <div className="w-2 h-2 rounded-full bg-current opacity-60" />
@@ -5512,7 +5559,8 @@ export function ContestClientPage({
                                   </div>
                                   {bestSubmission &&
                                     myLeaderboardEntry &&
-                                    bestSubmission.id !== myLeaderboardEntry.id && (
+                                    bestSubmission.id !==
+                                      myLeaderboardEntry.id && (
                                       <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/15 text-primary">
                                         Best
                                       </span>
@@ -5529,8 +5577,9 @@ export function ContestClientPage({
                                       }
                                       alt={
                                         contest?.platform === "twitter"
-                                          ? (displayEntry as any).app_username ||
-                                          displayEntry.user_platform_username
+                                          ? (displayEntry as any)
+                                              .app_username ||
+                                            displayEntry.user_platform_username
                                           : displayEntry.user_platform_username
                                       }
                                     />
@@ -5541,9 +5590,8 @@ export function ContestClientPage({
                                       )}
                                     >
                                       {(contest?.platform === "twitter"
-                                        ? ((displayEntry as any).app_username as
-                                          | string
-                                          | undefined)
+                                        ? ((displayEntry as any)
+                                            .app_username as string | undefined)
                                         : displayEntry.user_platform_username)?.[0]?.toUpperCase() ||
                                         "U"}
                                     </AvatarFallback>
@@ -5554,25 +5602,29 @@ export function ContestClientPage({
                                       <p
                                         className={cn(
                                           "text-sm sm:text-base font-semibold truncate",
-                                          isDark ? "text-white" : "text-gray-700"
+                                          isDark
+                                            ? "text-white"
+                                            : "text-gray-700"
                                         )}
                                         title={
                                           contest?.platform === "twitter"
-                                            ? (displayEntry as any).app_username ||
-                                            displayEntry.user_platform_username
+                                            ? (displayEntry as any)
+                                                .app_username ||
+                                              displayEntry.user_platform_username
                                             : displayEntry.user_platform_username
                                         }
                                       >
                                         {(contest?.platform === "twitter"
-                                          ? (displayEntry as any).app_username ||
-                                          displayEntry.user_platform_username
+                                          ? (displayEntry as any)
+                                              .app_username ||
+                                            displayEntry.user_platform_username
                                           : displayEntry.user_platform_username) +
                                           " "}
                                         (You)
                                         {bestSubmission &&
                                           myLeaderboardEntry &&
                                           bestSubmission.id !==
-                                          myLeaderboardEntry.id && (
+                                            myLeaderboardEntry.id && (
                                             <span className="text-xs text-primary/70 ml-2">
                                               • Best Performance
                                             </span>
@@ -5583,8 +5635,8 @@ export function ContestClientPage({
                                       )}
                                       {/* Show rejected badge for Twitter entries */}
                                       {contest?.platform === "twitter" &&
-                                        (displayEntry as any).moderation_status ===
-                                        "rejected" && (
+                                        (displayEntry as any)
+                                          .moderation_status === "rejected" && (
                                           <Badge
                                             className="ml-2 bg-red-500 text-white text-xs"
                                             variant="destructive"
@@ -5595,9 +5647,10 @@ export function ContestClientPage({
                                     </div>
                                     {/* Show rejection reason if available - compact UI */}
                                     {contest?.platform === "twitter" &&
-                                      (displayEntry as any).moderation_status ===
-                                      "rejected" &&
-                                      (displayEntry as any).rejection_reason && (
+                                      (displayEntry as any)
+                                        .moderation_status === "rejected" &&
+                                      (displayEntry as any)
+                                        .rejection_reason && (
                                         <div className="flex items-center gap-2 mt-1 mb-2">
                                           <AlertCircle
                                             className={cn(
@@ -5618,44 +5671,48 @@ export function ContestClientPage({
                                             <span className="font-medium">
                                               Rejection Reason:
                                             </span>{" "}
-                                            {(displayEntry as any).rejection_reason
-                                              .length > 50
+                                            {(displayEntry as any)
+                                              .rejection_reason.length > 50
                                               ? `${(
-                                                displayEntry as any
-                                              ).rejection_reason.substring(
-                                                0,
-                                                50
-                                              )}...`
+                                                  displayEntry as any
+                                                ).rejection_reason.substring(
+                                                  0,
+                                                  50
+                                                )}...`
                                               : (displayEntry as any)
-                                                .rejection_reason}
+                                                  .rejection_reason}
                                           </p>
-                                          {(displayEntry as any).rejection_reason
-                                            .length > 50 && (
-                                              <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                                onClick={() => {
-                                                  setRejectionReasonModalOpen(true);
-                                                  setRejectionReasonText(
-                                                    (displayEntry as any)
-                                                      .rejection_reason
-                                                  );
-                                                }}
-                                              >
-                                                More
-                                              </Button>
-                                            )}
+                                          {(displayEntry as any)
+                                            .rejection_reason.length > 50 && (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                              onClick={() => {
+                                                setRejectionReasonModalOpen(
+                                                  true
+                                                );
+                                                setRejectionReasonText(
+                                                  (displayEntry as any)
+                                                    .rejection_reason
+                                                );
+                                              }}
+                                            >
+                                              More
+                                            </Button>
+                                          )}
                                         </div>
                                       )}
                                     {/* Show explanation for rejected entries */}
                                     {contest?.platform === "twitter" &&
-                                      (displayEntry as any).moderation_status ===
-                                      "rejected" && (
+                                      (displayEntry as any)
+                                        .moderation_status === "rejected" && (
                                         <p
                                           className={cn(
                                             "text-xs mb-2",
-                                            isDark ? "text-red-300" : "text-red-600"
+                                            isDark
+                                              ? "text-red-300"
+                                              : "text-red-600"
                                           )}
                                         >
                                           Your entry has been rejected.
@@ -5663,28 +5720,28 @@ export function ContestClientPage({
                                       )}
                                     {!(
                                       contest?.platform === "twitter" &&
-                                      (displayEntry as any).moderation_status ===
-                                      "rejected"
+                                      (displayEntry as any)
+                                        .moderation_status === "rejected"
                                     ) && (
-                                        <p
-                                          className={cn(
-                                            "text-xs mb-2",
-                                            isDark
-                                              ? "text-gray-300"
-                                              : "text-slate-500"
-                                          )}
-                                        >
-                                          Submitted:{" "}
-                                          {formatTimeAgo(displayEntry.created_at)}
-                                        </p>
-                                      )}
+                                      <p
+                                        className={cn(
+                                          "text-xs mb-2",
+                                          isDark
+                                            ? "text-gray-300"
+                                            : "text-slate-500"
+                                        )}
+                                      >
+                                        Submitted:{" "}
+                                        {formatTimeAgo(displayEntry.created_at)}
+                                      </p>
+                                    )}
                                     {/* Twitter Metrics - Horizontal Layout - Hide for rejected entries */}
                                     {contest?.platform === "twitter" &&
                                       (displayEntry as any)
                                         .total_eligible_tweets !== undefined &&
                                       !(
-                                        (displayEntry as any).moderation_status ===
-                                        "rejected"
+                                        (displayEntry as any)
+                                          .moderation_status === "rejected"
                                       ) && (
                                         <div className="flex flex-wrap items-center gap-3 mt-1">
                                           <div className="flex items-center gap-1">
@@ -5705,7 +5762,8 @@ export function ContestClientPage({
                                               )}
                                             >
                                               {(displayEntry as any)
-                                                .total_eligible_tweets || 0}{" "}
+                                                .total_eligible_tweets ||
+                                                0}{" "}
                                               tweets
                                             </span>
                                           </div>
@@ -5743,8 +5801,8 @@ export function ContestClientPage({
                                                   : "text-gray-700"
                                               )}
                                             >
-                                              {(displayEntry as any).total_likes ||
-                                                0}
+                                              {(displayEntry as any)
+                                                .total_likes || 0}
                                             </span>
                                           </div>
                                           <div className="flex items-center gap-1">
@@ -5801,8 +5859,8 @@ export function ContestClientPage({
                                         {typeof (displayEntry as any)
                                           .total_points === "number"
                                           ? (
-                                            displayEntry as any
-                                          ).total_points.toLocaleString()
+                                              displayEntry as any
+                                            ).total_points.toLocaleString()
                                           : "0"}{" "}
                                         points
                                       </>
@@ -5838,7 +5896,7 @@ export function ContestClientPage({
                                   if (
                                     contest?.platform === "twitter" &&
                                     (displayEntry as any).moderation_status ===
-                                    "rejected"
+                                      "rejected"
                                   ) {
                                     return null;
                                   }
@@ -5857,11 +5915,13 @@ export function ContestClientPage({
                                     if (leaderboardViewMode === "detailed") {
                                       const flatFeeBonus =
                                         contestType === "cpm"
-                                          ? (contest.contest_based_details as any)
-                                            ?.cpm_contest?.flat_fee_bonus || 0
-                                          : (contest.contest_based_details as any)
-                                            ?.leaderboard_contest
-                                            ?.flat_fee_bonus || 0;
+                                          ? (
+                                              contest.contest_based_details as any
+                                            )?.cpm_contest?.flat_fee_bonus || 0
+                                          : (
+                                              contest.contest_based_details as any
+                                            )?.leaderboard_contest
+                                              ?.flat_fee_bonus || 0;
 
                                       if (flatFeeBonus > 0) {
                                         const totalEarnings =
@@ -5875,7 +5935,9 @@ export function ContestClientPage({
                                             <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
                                               <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                                               <span className="whitespace-nowrap">
-                                                {formatMoney(displayEntry.earnings)}{" "}
+                                                {formatMoney(
+                                                  displayEntry.earnings
+                                                )}{" "}
                                                 {contestType === "cpm"
                                                   ? "CPM"
                                                   : "Prize"}
@@ -5884,7 +5946,8 @@ export function ContestClientPage({
                                                 +
                                               </span>
                                               <span className="whitespace-nowrap">
-                                                {formatMoney(flatFeeBonus)} Bonus
+                                                {formatMoney(flatFeeBonus)}{" "}
+                                                Bonus
                                               </span>
                                             </div>
                                           </div>
@@ -5901,11 +5964,13 @@ export function ContestClientPage({
                                       // Simple view - show total earnings if bonus exists
                                       const flatFeeBonus =
                                         contestType === "cpm"
-                                          ? (contest.contest_based_details as any)
-                                            ?.cpm_contest?.flat_fee_bonus || 0
-                                          : (contest.contest_based_details as any)
-                                            ?.leaderboard_contest
-                                            ?.flat_fee_bonus || 0;
+                                          ? (
+                                              contest.contest_based_details as any
+                                            )?.cpm_contest?.flat_fee_bonus || 0
+                                          : (
+                                              contest.contest_based_details as any
+                                            )?.leaderboard_contest
+                                              ?.flat_fee_bonus || 0;
 
                                       const totalEarnings =
                                         displayEntry.earnings + flatFeeBonus;
@@ -5926,9 +5991,11 @@ export function ContestClientPage({
                                   ) {
                                     const prizeInfo = (
                                       contest.contest_based_details
-                                        .leaderboard_contest.prizes as PrizeInfo[]
+                                        .leaderboard_contest
+                                        .prizes as PrizeInfo[]
                                     ).find(
-                                      (p) => p.position === myLeaderboardEntry?.rank
+                                      (p) =>
+                                        p.position === myLeaderboardEntry?.rank
                                     );
                                     if (prizeInfo) {
                                       const prizeText =
@@ -5940,8 +6007,8 @@ export function ContestClientPage({
                                       if (leaderboardViewMode === "detailed") {
                                         const flatFeeBonus =
                                           (contest.contest_based_details as any)
-                                            ?.leaderboard_contest?.flat_fee_bonus ||
-                                          0;
+                                            ?.leaderboard_contest
+                                            ?.flat_fee_bonus || 0;
 
                                         if (flatFeeBonus > 0) {
                                           const totalEarnings =
@@ -5955,9 +6022,13 @@ export function ContestClientPage({
                                                   {formatMoney(totalEarnings)}
                                                 </div>
                                                 <div className="text-xs text-amber-600 dark:text-amber-500">
-                                                  ({formatMoney(prizeInfo.amount)}{" "}
+                                                  (
+                                                  {formatMoney(
+                                                    prizeInfo.amount
+                                                  )}{" "}
                                                   Prize +{" "}
-                                                  {formatMoney(flatFeeBonus)} Bonus)
+                                                  {formatMoney(flatFeeBonus)}{" "}
+                                                  Bonus)
                                                 </div>
                                               </div>
                                             </div>
@@ -5975,8 +6046,8 @@ export function ContestClientPage({
                                         // Simple view - show total if bonus exists
                                         const flatFeeBonus =
                                           (contest.contest_based_details as any)
-                                            ?.leaderboard_contest?.flat_fee_bonus ||
-                                          0;
+                                            ?.leaderboard_contest
+                                            ?.flat_fee_bonus || 0;
                                         const totalEarnings =
                                           prizeInfo.amount + flatFeeBonus;
 
@@ -6034,12 +6105,14 @@ export function ContestClientPage({
                                       </DialogTitle>
 
                                       {/* View Mode Toggle for Modal */}
-                                      {(contest?.contest_type === "leaderboard" ||
+                                      {(contest?.contest_type ===
+                                        "leaderboard" ||
                                         contest?.contest_type === "cpm") &&
                                         (contest.contest_based_details
-                                          ?.leaderboard_contest?.flat_fee_bonus ||
-                                          contest.contest_based_details?.cpm_contest
-                                            ?.flat_fee_bonus ||
+                                          ?.leaderboard_contest
+                                          ?.flat_fee_bonus ||
+                                          contest.contest_based_details
+                                            ?.cpm_contest?.flat_fee_bonus ||
                                           (contest as any).bonus_details
                                             ?.description_html) && (
                                           <div className="flex justify-center mt-4">
@@ -6061,14 +6134,15 @@ export function ContestClientPage({
                                                 onClick={() =>
                                                   setModalViewMode("simple")
                                                 }
-                                                className={`text-xs px-3 py-1.5 transition-all duration-200 ${modalViewMode === "simple"
-                                                  ? isDark
-                                                    ? "bg-purple-600 text-white"
-                                                    : "bg-purple-500 text-white"
-                                                  : isDark
+                                                className={`text-xs px-3 py-1.5 transition-all duration-200 ${
+                                                  modalViewMode === "simple"
+                                                    ? isDark
+                                                      ? "bg-purple-600 text-white"
+                                                      : "bg-purple-500 text-white"
+                                                    : isDark
                                                     ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
                                                     : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                                                  }`}
+                                                }`}
                                               >
                                                 Simple
                                               </Button>
@@ -6082,14 +6156,15 @@ export function ContestClientPage({
                                                 onClick={() =>
                                                   setModalViewMode("detailed")
                                                 }
-                                                className={`text-xs px-3 py-1.5 transition-all duration-200 ${modalViewMode === "detailed"
-                                                  ? isDark
-                                                    ? "bg-purple-600 text-white"
-                                                    : "bg-purple-500 text-white"
-                                                  : isDark
+                                                className={`text-xs px-3 py-1.5 transition-all duration-200 ${
+                                                  modalViewMode === "detailed"
+                                                    ? isDark
+                                                      ? "bg-purple-600 text-white"
+                                                      : "bg-purple-500 text-white"
+                                                    : isDark
                                                     ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
                                                     : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                                                  }`}
+                                                }`}
                                               >
                                                 Detailed
                                               </Button>
@@ -6119,7 +6194,7 @@ export function ContestClientPage({
                                             getUserSubmissions();
                                           const totalPages = Math.ceil(
                                             userSubmissions.length /
-                                            modalItemsPerPage
+                                              modalItemsPerPage
                                           );
                                           const startIndex =
                                             (modalCurrentPage - 1) *
@@ -6147,29 +6222,33 @@ export function ContestClientPage({
                                                   if (submission.earnings > 0) {
                                                     const isEarned =
                                                       submission.status ===
-                                                      "verified" ||
-                                                      submission.status === "paid";
-                                                    const earningsLabel = isEarned
-                                                      ? "Earned"
-                                                      : "Expected";
+                                                        "verified" ||
+                                                      submission.status ===
+                                                        "paid";
+                                                    const earningsLabel =
+                                                      isEarned
+                                                        ? "Earned"
+                                                        : "Expected";
 
                                                     const flatFeeBonus =
                                                       contestType === "cpm"
                                                         ? (
-                                                          contest.contest_based_details as any
-                                                        )?.cpm_contest
-                                                          ?.flat_fee_bonus || 0
+                                                            contest.contest_based_details as any
+                                                          )?.cpm_contest
+                                                            ?.flat_fee_bonus ||
+                                                          0
                                                         : (
-                                                          contest.contest_based_details as any
-                                                        )?.leaderboard_contest
-                                                          ?.flat_fee_bonus || 0;
+                                                            contest.contest_based_details as any
+                                                          )?.leaderboard_contest
+                                                            ?.flat_fee_bonus ||
+                                                          0;
                                                     const totalEarnings =
                                                       submission.earnings +
                                                       flatFeeBonus;
 
                                                     if (
                                                       modalViewMode ===
-                                                      "detailed" &&
+                                                        "detailed" &&
                                                       flatFeeBonus > 0
                                                     ) {
                                                       prizeDisplay = (
@@ -6207,7 +6286,8 @@ export function ContestClientPage({
                                                               {formatMoney(
                                                                 submission.earnings
                                                               )}{" "}
-                                                              {contestType === "cpm"
+                                                              {contestType ===
+                                                              "cpm"
                                                                 ? "CPM"
                                                                 : "Prize"}
                                                             </span>
@@ -6294,11 +6374,12 @@ export function ContestClientPage({
                                                               )}
                                                             >
                                                               {contest?.platform ===
-                                                                "twitter"
+                                                              "twitter"
                                                                 ? (
-                                                                  submission as any
-                                                                ).app_username ||
-                                                                submission.user_platform_username
+                                                                    submission as any
+                                                                  )
+                                                                    .app_username ||
+                                                                  submission.user_platform_username
                                                                 : submission.user_platform_username}{" "}
                                                               {actualRank ===
                                                                 myLeaderboardEntry?.rank &&
@@ -6368,10 +6449,11 @@ export function ContestClientPage({
                                                   getUserSubmissions();
                                                 const totalPages = Math.ceil(
                                                   userSubmissions.length /
-                                                  modalItemsPerPage
+                                                    modalItemsPerPage
                                                 );
 
-                                                if (totalPages <= 1) return null;
+                                                if (totalPages <= 1)
+                                                  return null;
 
                                                 return (
                                                   <div className="flex items-center justify-center gap-2 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
@@ -6381,7 +6463,10 @@ export function ContestClientPage({
                                                       onClick={() =>
                                                         setModalCurrentPage(
                                                           (prev) =>
-                                                            Math.max(1, prev - 1)
+                                                            Math.max(
+                                                              1,
+                                                              prev - 1
+                                                            )
                                                         )
                                                       }
                                                       disabled={
@@ -6406,7 +6491,8 @@ export function ContestClientPage({
                                                           if (totalPages <= 5) {
                                                             pageNum = i + 1;
                                                           } else if (
-                                                            modalCurrentPage <= 3
+                                                            modalCurrentPage <=
+                                                            3
                                                           ) {
                                                             pageNum = i + 1;
                                                           } else if (
@@ -6414,7 +6500,9 @@ export function ContestClientPage({
                                                             totalPages - 2
                                                           ) {
                                                             pageNum =
-                                                              totalPages - 4 + i;
+                                                              totalPages -
+                                                              4 +
+                                                              i;
                                                           } else {
                                                             pageNum =
                                                               modalCurrentPage -
@@ -6427,7 +6515,7 @@ export function ContestClientPage({
                                                               key={pageNum}
                                                               variant={
                                                                 modalCurrentPage ===
-                                                                  pageNum
+                                                                pageNum
                                                                   ? "default"
                                                                   : "outline"
                                                               }
@@ -6486,36 +6574,47 @@ export function ContestClientPage({
 
                     {/* Leaderboard Metrics - Moved after user's rank card for better UX */}
                     {(() => {
-                      const { isDisabled, disabledReason, cooldownInfo } = getRefreshButtonState();
+                      const { isDisabled, disabledReason, cooldownInfo } =
+                        getRefreshButtonState();
                       return (
-                        <div className={cn(
-                          "flex items-center justify-between p-4 rounded-xl border shadow-sm mb-4",
-                          isDark
-                            ? "bg-[#180438] border-gray-700"
-                            : "bg-white border-gray-300"
-                        )}>
+                        <div
+                          className={cn(
+                            "flex items-center justify-between p-4 rounded-xl border shadow-sm mb-4",
+                            isDark
+                              ? "bg-[#180438] border-gray-700"
+                              : "bg-white border-gray-300"
+                          )}
+                        >
                           <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "p-2 rounded-lg",
-                              isDark
-                                ? "bg-purple-900/30 text-purple-400"
-                                : "bg-purple-100 text-purple-600"
-                            )}>
+                            <div
+                              className={cn(
+                                "p-2 rounded-lg",
+                                isDark
+                                  ? "bg-purple-900/30 text-purple-400"
+                                  : "bg-purple-100 text-purple-600"
+                              )}
+                            >
                               <RefreshCw className="h-5 w-5" />
                             </div>
                             <div>
-                              <h3 className={cn(
-                                "text-lg font-semibold",
-                                isDark ? "text-white" : "text-gray-900"
-                              )}>
+                              <h3
+                                className={cn(
+                                  "text-lg font-semibold",
+                                  isDark ? "text-white" : "text-gray-900"
+                                )}
+                              >
                                 Leaderboard Metrics
                               </h3>
-                              <p className={cn(
-                                "text-sm",
-                                isDark ? "text-gray-400" : "text-gray-600"
-                              )}>
+                              <p
+                                className={cn(
+                                  "text-sm",
+                                  isDark ? "text-gray-400" : "text-gray-600"
+                                )}
+                              >
                                 {contest?.last_metrics_updated
-                                  ? `Last updated: ${formatTimeAgo(contest.last_metrics_updated)}`
+                                  ? `Last updated: ${formatTimeAgo(
+                                      contest.last_metrics_updated
+                                    )}`
                                   : "Metrics not yet updated"}
                               </p>
                             </div>
@@ -6530,10 +6629,13 @@ export function ContestClientPage({
                               isDisabled
                                 ? "opacity-60 cursor-not-allowed"
                                 : isDark
-                                  ? "border-purple-600 text-purple-300 hover:bg-purple-900/30"
-                                  : "border-purple-500 text-purple-600 hover:bg-purple-50"
+                                ? "border-purple-600 text-purple-300 hover:bg-purple-900/30"
+                                : "border-purple-500 text-purple-600 hover:bg-purple-50"
                             )}
-                            title={disabledReason || "Refresh metrics and leaderboard"}
+                            title={
+                              disabledReason ||
+                              "Refresh metrics and leaderboard"
+                            }
                           >
                             {isRefreshingMetrics ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -6544,15 +6646,15 @@ export function ContestClientPage({
                               {isRefreshingMetrics
                                 ? "Updating..."
                                 : !cooldownInfo?.canRefresh
-                                  ? `Wait ${cooldownInfo?.remainingMinutes}m`
-                                  : "Refresh Metrics"}
+                                ? `Wait ${cooldownInfo?.remainingMinutes}m`
+                                : "Refresh Metrics"}
                             </span>
                             <span className="sm:hidden">
                               {isRefreshingMetrics
                                 ? "Updating..."
                                 : !cooldownInfo?.canRefresh
-                                  ? `${cooldownInfo?.remainingMinutes}m`
-                                  : "Refresh"}
+                                ? `${cooldownInfo?.remainingMinutes}m`
+                                : "Refresh"}
                             </span>
                           </Button>
                         </div>
@@ -6577,7 +6679,8 @@ export function ContestClientPage({
                             {(() => {
                               const creatorGroup =
                                 groupedLeaderboardByCreator?.find(
-                                  (group) => group.creator_id === selectedCreatorId
+                                  (group) =>
+                                    group.creator_id === selectedCreatorId
                                 );
                               return creatorGroup
                                 ? `All Videos by ${creatorGroup.creator_username} (${getCreatorVideos.length})`
@@ -6602,7 +6705,8 @@ export function ContestClientPage({
                           ) : (
                             (() => {
                               const totalPages = Math.ceil(
-                                getCreatorVideos.length / creatorVideosItemsPerPage
+                                getCreatorVideos.length /
+                                  creatorVideosItemsPerPage
                               );
                               const startIndex =
                                 (creatorVideosCurrentPage - 1) *
@@ -6615,7 +6719,8 @@ export function ContestClientPage({
                               );
                               const creatorGroup =
                                 groupedLeaderboardByCreator?.find(
-                                  (group) => group.creator_id === selectedCreatorId
+                                  (group) =>
+                                    group.creator_id === selectedCreatorId
                                 );
 
                               return (
@@ -6662,13 +6767,15 @@ export function ContestClientPage({
                                               <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
                                                 <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                                                 <span className="whitespace-nowrap">
-                                                  {formatMoney(video.earnings)} CPM
+                                                  {formatMoney(video.earnings)}{" "}
+                                                  CPM
                                                 </span>
                                                 <span className="text-green-600 dark:text-green-400">
                                                   +
                                                 </span>
                                                 <span className="whitespace-nowrap">
-                                                  {formatMoney(flatFeeBonus)} Bonus
+                                                  {formatMoney(flatFeeBonus)}{" "}
+                                                  Bonus
                                                 </span>
                                               </div>
                                             </div>
@@ -6689,8 +6796,9 @@ export function ContestClientPage({
                                         ) {
                                           // Check for flat fee bonus in leaderboard contests
                                           const flatFeeBonus =
-                                            (contest.contest_based_details as any)
-                                              ?.leaderboard_contest
+                                            (
+                                              contest.contest_based_details as any
+                                            )?.leaderboard_contest
                                               ?.flat_fee_bonus || 0;
 
                                           if (flatFeeBonus > 0) {
@@ -6712,7 +6820,9 @@ export function ContestClientPage({
                                                 <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
                                                   <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                                                   <span className="whitespace-nowrap">
-                                                    {formatMoney(video.earnings)}{" "}
+                                                    {formatMoney(
+                                                      video.earnings
+                                                    )}{" "}
                                                     Prize
                                                   </span>
                                                   <span className="text-green-600 dark:text-green-400">
@@ -6737,7 +6847,8 @@ export function ContestClientPage({
                                           // Simple view for leaderboard or non-CPM contests
                                           prizeDisplay = (
                                             <span className="font-semibold text-green-600 dark:text-green-400">
-                                              Earned: {formatMoney(video.earnings)}
+                                              Earned:{" "}
+                                              {formatMoney(video.earnings)}
                                             </span>
                                           );
                                         }
@@ -6751,10 +6862,12 @@ export function ContestClientPage({
                                     ) {
                                       const prizeInfo = actualRank
                                         ? (
-                                          contest.contest_based_details
-                                            .leaderboard_contest
-                                            .prizes as PrizeInfo[]
-                                        ).find((p) => p.position === actualRank)
+                                            contest.contest_based_details
+                                              .leaderboard_contest
+                                              .prizes as PrizeInfo[]
+                                          ).find(
+                                            (p) => p.position === actualRank
+                                          )
                                         : null;
                                       if (prizeInfo) {
                                         const prizeText =
@@ -6763,10 +6876,13 @@ export function ContestClientPage({
                                             : "Prize";
 
                                         // In detailed mode, show bonus information if available
-                                        if (leaderboardViewMode === "detailed") {
+                                        if (
+                                          leaderboardViewMode === "detailed"
+                                        ) {
                                           const flatFeeBonus =
-                                            (contest.contest_based_details as any)
-                                              ?.leaderboard_contest
+                                            (
+                                              contest.contest_based_details as any
+                                            )?.leaderboard_contest
                                               ?.flat_fee_bonus || 0;
 
                                           if (flatFeeBonus > 0) {
@@ -6781,7 +6897,10 @@ export function ContestClientPage({
                                                     {formatMoney(totalEarnings)}
                                                   </div>
                                                   <div className="text-xs text-amber-600 dark:text-amber-500">
-                                                    ({formatMoney(prizeInfo.amount)}{" "}
+                                                    (
+                                                    {formatMoney(
+                                                      prizeInfo.amount
+                                                    )}{" "}
                                                     Prize +{" "}
                                                     {formatMoney(flatFeeBonus)}{" "}
                                                     Bonus)
@@ -6828,7 +6947,9 @@ export function ContestClientPage({
                                                   video.creator_pfp_url ??
                                                   undefined
                                                 }
-                                                alt={video.user_platform_username}
+                                                alt={
+                                                  video.user_platform_username
+                                                }
                                               />
                                               <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
                                                 {video.user_platform_username?.[0]?.toUpperCase() ||
@@ -6846,9 +6967,11 @@ export function ContestClientPage({
                                                       : "text-gray-700"
                                                   )}
                                                 >
-                                                  {contest?.platform === "twitter"
-                                                    ? (video as any).app_username ||
-                                                    video.user_platform_username
+                                                  {contest?.platform ===
+                                                  "twitter"
+                                                    ? (video as any)
+                                                        .app_username ||
+                                                      video.user_platform_username
                                                     : video.user_platform_username}
                                                 </p>
                                                 {renderVerificationBadges(
@@ -6864,7 +6987,9 @@ export function ContestClientPage({
                                                 )}
                                               >
                                                 Submitted:{" "}
-                                                {formatTimeAgo(video.created_at)}
+                                                {formatTimeAgo(
+                                                  video.created_at
+                                                )}
                                               </p>
                                             </div>
                                           </div>
@@ -6887,7 +7012,7 @@ export function ContestClientPage({
                                                 (contest?.status?.toLowerCase() ===
                                                   "ended" ||
                                                   contest?.status?.toLowerCase() ===
-                                                  "completed") && (
+                                                    "completed") && (
                                                   <Button
                                                     variant="ghost"
                                                     size="icon"
@@ -6932,7 +7057,9 @@ export function ContestClientPage({
                                             Math.max(1, prev - 1)
                                           )
                                         }
-                                        disabled={creatorVideosCurrentPage === 1}
+                                        disabled={
+                                          creatorVideosCurrentPage === 1
+                                        }
                                         className="flex items-center gap-1"
                                       >
                                         <ChevronLeft className="h-4 w-4" />
@@ -6959,7 +7086,9 @@ export function ContestClientPage({
                                               pageNum = totalPages - 4 + i;
                                             } else {
                                               pageNum =
-                                                creatorVideosCurrentPage - 2 + i;
+                                                creatorVideosCurrentPage -
+                                                2 +
+                                                i;
                                             }
 
                                             return (
@@ -6967,7 +7096,7 @@ export function ContestClientPage({
                                                 key={pageNum}
                                                 variant={
                                                   creatorVideosCurrentPage ===
-                                                    pageNum
+                                                  pageNum
                                                     ? "default"
                                                     : "outline"
                                                 }
@@ -6995,7 +7124,8 @@ export function ContestClientPage({
                                           )
                                         }
                                         disabled={
-                                          creatorVideosCurrentPage === totalPages
+                                          creatorVideosCurrentPage ===
+                                          totalPages
                                         }
                                         className="flex items-center gap-1"
                                       >
@@ -7056,7 +7186,8 @@ export function ContestClientPage({
                                   " Currently viewing by creator (all submissions grouped)."}
                               </p>
                               {contest?.live_submission_count !== null &&
-                                contest?.live_submission_count !== undefined && (
+                                contest?.live_submission_count !==
+                                  undefined && (
                                   <div className="flex items-center gap-2 mt-2">
                                     <span className="font-medium">
                                       Submissions:
@@ -7066,44 +7197,44 @@ export function ContestClientPage({
                                     </span>
                                     {contest.live_submission_count !==
                                       totalLeaderboardEntries && (
-                                        <>
-                                          <span
-                                            className={cn(
-                                              "text-blue-600",
-                                              isDark
-                                                ? "text-gray-400"
-                                                : "text-blue-700"
-                                            )}
-                                          >
-                                            |
-                                          </span>
-                                          <span className="text-red-700 font-semibold">
-                                            {contest.live_submission_count -
-                                              totalLeaderboardEntries}{" "}
-                                            rejected
-                                          </span>
-                                          <span
-                                            className={cn(
-                                              "text-blue-600",
-                                              isDark
-                                                ? "text-gray-400"
-                                                : "text-blue-700"
-                                            )}
-                                          >
-                                            |
-                                          </span>
-                                          <span
-                                            className={cn(
-                                              "text-blue-700",
-                                              isDark
-                                                ? "text-gray-400"
-                                                : "text-blue-700"
-                                            )}
-                                          >
-                                            {contest.live_submission_count} total
-                                          </span>
-                                        </>
-                                      )}
+                                      <>
+                                        <span
+                                          className={cn(
+                                            "text-blue-600",
+                                            isDark
+                                              ? "text-gray-400"
+                                              : "text-blue-700"
+                                          )}
+                                        >
+                                          |
+                                        </span>
+                                        <span className="text-red-700 font-semibold">
+                                          {contest.live_submission_count -
+                                            totalLeaderboardEntries}{" "}
+                                          rejected
+                                        </span>
+                                        <span
+                                          className={cn(
+                                            "text-blue-600",
+                                            isDark
+                                              ? "text-gray-400"
+                                              : "text-blue-700"
+                                          )}
+                                        >
+                                          |
+                                        </span>
+                                        <span
+                                          className={cn(
+                                            "text-blue-700",
+                                            isDark
+                                              ? "text-gray-400"
+                                              : "text-blue-700"
+                                          )}
+                                        >
+                                          {contest.live_submission_count} total
+                                        </span>
+                                      </>
+                                    )}
                                   </div>
                                 )}
                             </div>
@@ -7113,435 +7244,415 @@ export function ContestClientPage({
                     )}
                     {/* Render leaderboard based on display mode */}
                     {leaderboardDisplayMode === "creator" &&
-                      groupedLeaderboardByCreator
+                    groupedLeaderboardByCreator
                       ? // Creator-wise display
-                      groupedLeaderboardByCreator.map((creatorGroup, index) => {
-                        // For Twitter, use current_rank from API; for others, calculate from pagination
-                        const rank =
-                          contest?.platform === "twitter" &&
-                            (creatorGroup as any).best_rank
-                            ? (creatorGroup as any).best_rank
-                            : (leaderboardCurrentPage - 1) *
-                            leaderboardItemsPerPage +
-                            index +
-                            1;
-                        let prizeDisplay = null;
+                        groupedLeaderboardByCreator.map(
+                          (creatorGroup, index) => {
+                            // For Twitter, use current_rank from API; for others, calculate from pagination
+                            const rank =
+                              contest?.platform === "twitter" &&
+                              (creatorGroup as any).best_rank
+                                ? (creatorGroup as any).best_rank
+                                : (leaderboardCurrentPage - 1) *
+                                    leaderboardItemsPerPage +
+                                  index +
+                                  1;
+                            let prizeDisplay = null;
 
-                        // Calculate total earnings including bonuses
-                        const flatFeeBonus =
-                          contestType === "cpm"
-                            ? (contest.contest_based_details as any)?.cpm_contest
-                              ?.flat_fee_bonus || 0
-                            : (contest.contest_based_details as any)
-                              ?.leaderboard_contest?.flat_fee_bonus || 0;
+                            // Calculate total earnings including bonuses
+                            const flatFeeBonus =
+                              contestType === "cpm"
+                                ? (contest.contest_based_details as any)
+                                    ?.cpm_contest?.flat_fee_bonus || 0
+                                : (contest.contest_based_details as any)
+                                    ?.leaderboard_contest?.flat_fee_bonus || 0;
 
-                        const totalEarnings =
-                          creatorGroup.total_earnings +
-                          flatFeeBonus * creatorGroup.submission_count;
-
-                        if (creatorGroup.total_earnings > 0 || flatFeeBonus > 0) {
-                          if (
-                            leaderboardViewMode === "detailed" &&
-                            flatFeeBonus > 0
-                          ) {
-                            prizeDisplay = (
-                              <div className="space-y-1">
-                                <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                  Total Earned: {formatMoney(totalEarnings)}
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                                  <span className="whitespace-nowrap">
-                                    {formatMoney(creatorGroup.total_earnings)}{" "}
-                                    {contestType === "cpm" ? "CPM" : "Prize"}
-                                  </span>
-                                  <span className="text-green-600 dark:text-green-400">
-                                    +
-                                  </span>
-                                  <span className="whitespace-nowrap">
-                                    {formatMoney(
-                                      flatFeeBonus * creatorGroup.submission_count
-                                    )}{" "}
-                                    Bonus ({creatorGroup.submission_count} sub.)
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          } else {
-                            prizeDisplay = (
-                              <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                Total Earned: {formatMoney(totalEarnings)}
-                              </div>
-                            );
-                          }
-                        } else if (
-                          contest.contest_type === "leaderboard" &&
-                          Array.isArray(
-                            contest.contest_based_details?.leaderboard_contest
-                              ?.prizes
-                          )
-                        ) {
-                          const prizeInfo = (
-                            contest.contest_based_details.leaderboard_contest
-                              .prizes as PrizeInfo[]
-                          ).find((p) => p.position === creatorGroup.best_rank);
-                          if (prizeInfo) {
-                            const prizeText =
-                              contest.status === "active"
-                                ? "Winning Zone"
-                                : "Prize";
-                            const totalPrize =
-                              prizeInfo.amount +
+                            const totalEarnings =
+                              creatorGroup.total_earnings +
                               flatFeeBonus * creatorGroup.submission_count;
 
                             if (
-                              leaderboardViewMode === "detailed" &&
+                              creatorGroup.total_earnings > 0 ||
                               flatFeeBonus > 0
                             ) {
-                              prizeDisplay = (
-                                <div className="space-y-1">
-                                  <div className="font-semibold text-amber-500 dark:text-amber-400 text-base flex items-center">
-                                    <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                    {prizeText}: {formatMoney(totalPrize)}
-                                  </div>
-                                  <div className="text-xs text-amber-600 dark:text-amber-500">
-                                    ({formatMoney(prizeInfo.amount)} Prize +{" "}
-                                    {formatMoney(
-                                      flatFeeBonus * creatorGroup.submission_count
-                                    )}{" "}
-                                    Bonus)
-                                  </div>
-                                </div>
-                              );
-                            } else {
-                              prizeDisplay = (
-                                <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                                  <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                  {prizeText}: {formatMoney(totalPrize)}
-                                </span>
-                              );
-                            }
-                          }
-                        }
-
-                        return (
-                          <div
-                            key={creatorGroup.creator_id}
-                            className="border border-[#D1B7F9] rounded-xl overflow-hidden"
-                          >
-                            <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
-                              <div className="flex items-center space-x-3 md:space-x-4">
-                                <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
-                                  {contest?.platform === "twitter"
-                                    ? `#${rank}`
-                                    : rank}
-                                </h2>
-                                <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
-                                  <AvatarImage
-                                    src={
-                                      creatorGroup.user_platform_pfp_url ??
-                                      creatorGroup.creator_pfp_url ??
-                                      undefined
-                                    }
-                                    alt={creatorGroup.creator_username}
-                                  />
-                                  <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
-                                    {creatorGroup.creator_username?.[0]?.toUpperCase() ||
-                                      "U"}
-                                  </AvatarFallback>
-                                </Avatar>
-
-                                <div className="flex-grow min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <p
-                                      className={cn(
-                                        "text-sm sm:text-base font-semibold truncate",
-                                        isDark ? "text-white" : "text-gray-700"
-                                      )}
-                                    >
-                                      {contest?.platform === "twitter"
-                                        ? (creatorGroup as any).app_full_name ||
-                                        (creatorGroup as any).app_username ||
-                                        creatorGroup.creator_username
-                                        : creatorGroup.creator_username}
-                                    </p>
-                                  </div>
-                                  {contest?.platform === "twitter" ? (
-                                    <div className="flex flex-wrap items-center gap-3 mt-1.5">
-                                      <div className="flex items-center gap-1">
-                                        <FileText
-                                          className={cn(
-                                            "h-3.5 w-3.5",
-                                            isDark
-                                              ? "text-gray-400"
-                                              : "text-slate-500"
-                                          )}
-                                        />
-                                        <span
-                                          className={cn(
-                                            "text-xs",
-                                            isDark
-                                              ? "text-gray-400"
-                                              : "text-slate-600"
-                                          )}
-                                        >
-                                          {(creatorGroup as any)
-                                            .total_eligible_tweets || 0}{" "}
-                                          tweets
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        <Eye
-                                          className={cn(
-                                            "h-3.5 w-3.5",
-                                            isDark
-                                              ? "text-gray-400"
-                                              : "text-slate-500"
-                                          )}
-                                        />
-                                        <span
-                                          className={cn(
-                                            "text-xs",
-                                            isDark
-                                              ? "text-gray-400"
-                                              : "text-slate-600"
-                                          )}
-                                        >
-                                          {(
-                                            (creatorGroup as any)
-                                              .total_impressions || 0
-                                          ).toLocaleString()}{" "}
-                                          impressions
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        <ThumbsUp className="h-3.5 w-3.5 text-pink-500" />
-                                        <span
-                                          className={cn(
-                                            "text-xs",
-                                            isDark
-                                              ? "text-gray-300"
-                                              : "text-gray-700"
-                                          )}
-                                        >
-                                          {(creatorGroup as any).total_likes || 0}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        <RefreshCw className="h-3.5 w-3.5 text-green-500" />
-                                        <span
-                                          className={cn(
-                                            "text-xs",
-                                            isDark
-                                              ? "text-gray-300"
-                                              : "text-gray-700"
-                                          )}
-                                        >
-                                          {(creatorGroup as any).total_retweets ||
-                                            0}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        <MessageCircle
-                                          className={cn(
-                                            "h-3.5 w-3.5",
-                                            isDark
-                                              ? "text-gray-400"
-                                              : "text-gray-600"
-                                          )}
-                                        />
-                                        <span
-                                          className={cn(
-                                            "text-xs",
-                                            isDark
-                                              ? "text-gray-300"
-                                              : "text-gray-700"
-                                          )}
-                                        >
-                                          {(creatorGroup as any).total_replies ||
-                                            0}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-1 mt-1.5">
-                                      <Video
-                                        className={cn(
-                                          "h-4 w-4",
-                                          isDark
-                                            ? "text-gray-400"
-                                            : "text-slate-500"
-                                        )}
-                                      />
-                                      <p
-                                        className={cn(
-                                          "text-xs",
-                                          isDark
-                                            ? "text-gray-400"
-                                            : "text-slate-700"
-                                        )}
-                                      >
-                                        {creatorGroup.submission_count}{" "}
-                                        {creatorGroup.submission_count === 1
-                                          ? "submission"
-                                          : "submissions"}
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
-                                {contest?.platform === "twitter" ? (
-                                  <div className="flex items-center space-x-2">
-                                    <p
-                                      className={cn(
-                                        "text-base sm:text-lg font-bold",
-                                        isDark ? "text-white" : "text-gray-700"
-                                      )}
-                                    >
-                                      {typeof (creatorGroup as any)
-                                        .total_points === "number"
-                                        ? (
-                                          creatorGroup as any
-                                        ).total_points.toLocaleString()
-                                        : "0"}{" "}
-                                      points
-                                    </p>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <div className="flex items-center space-x-2">
-                                      <p
-                                        className={cn(
-                                          "text-base sm:text-lg font-bold",
-                                          isDark ? "text-white" : "text-gray-700"
-                                        )}
-                                      >
-                                        {creatorGroup.total_views.toLocaleString()}{" "}
-                                        views
-                                      </p>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => {
-                                          setSelectedCreatorId(
-                                            creatorGroup.creator_id
-                                          );
-                                          setShowCreatorVideosModal(true);
-                                          setCreatorVideosCurrentPage(1);
-                                        }}
-                                        className="h-6 w-6 p-0"
-                                        title="View all videos"
-                                      >
-                                        <Eye
-                                          className={cn(
-                                            "h-4 w-4",
-                                            isDark
-                                              ? "text-gray-400"
-                                              : "text-gray-600"
-                                          )}
-                                        />
-                                      </Button>
-                                    </div>
-                                  </>
-                                )}
-                                {prizeDisplay && (
-                                  <div className="text-xs sm:text-sm mt-2">
-                                    {prizeDisplay}
-                                  </div>
-                                )}
-                              </div>
-                            </CardContent>
-                          </div>
-                        );
-                      })
-                      : // Submission-wise display (original)
-                      leaderboard.map((entry, index) => {
-                        const rank =
-                          (leaderboardCurrentPage - 1) * leaderboardItemsPerPage +
-                          index +
-                          1;
-                        let prizeDisplay = null;
-
-                        if (entry.earnings > 0) {
-                          // For CPM contests, show Expected vs Earned based on verification/paid status
-                          if (contestType === "cpm") {
-                            const isEarned =
-                              entry.status === "verified" ||
-                              entry.status === "paid";
-                            const earningsLabel = isEarned
-                              ? "Earned"
-                              : "Expected";
-
-                            // Check if there's a flat fee bonus
-                            const flatFeeBonus =
-                              (contest.contest_based_details as any)?.cpm_contest
-                                ?.flat_fee_bonus || 0;
-
-                            // Calculate total earnings (CPM + Bonus if applicable)
-                            const totalEarnings = entry.earnings + flatFeeBonus;
-
-                            // Show detailed breakdown if in detailed mode and bonus exists
-                            if (
-                              leaderboardViewMode === "detailed" &&
-                              flatFeeBonus > 0
-                            ) {
-                              prizeDisplay = (
-                                <div className="space-y-1">
-                                  <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                    {earningsLabel}: {formatMoney(totalEarnings)}
-                                  </div>
-                                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                                    <span className="whitespace-nowrap">
-                                      {formatMoney(entry.earnings)} CPM
-                                    </span>
-                                    <span className="text-green-600 dark:text-green-400">
-                                      +
-                                    </span>
-                                    <span className="whitespace-nowrap">
-                                      {formatMoney(flatFeeBonus)} Bonus
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            } else {
-                              prizeDisplay = (
-                                <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                  {earningsLabel}: {formatMoney(totalEarnings)}
-                                </div>
-                              );
-                            }
-                          } else {
-                            // For leaderboard contests with earnings
-                            if (
-                              contestType === "leaderboard" &&
-                              leaderboardViewMode === "detailed"
-                            ) {
-                              // Check for flat fee bonus in leaderboard contests
-                              const flatFeeBonus =
-                                (contest.contest_based_details as any)
-                                  ?.leaderboard_contest?.flat_fee_bonus || 0;
-
-                              if (flatFeeBonus > 0) {
-                                const totalEarnings =
-                                  entry.earnings + flatFeeBonus;
+                              if (
+                                leaderboardViewMode === "detailed" &&
+                                flatFeeBonus > 0
+                              ) {
                                 prizeDisplay = (
                                   <div className="space-y-1">
-                                    <div
-                                      className={cn(
-                                        "font-semibold text-base",
-                                        isDark
-                                          ? "text-green-300"
-                                          : "text-green-600"
-                                      )}
-                                    >
-                                      Earned: {formatMoney(totalEarnings)}
+                                    <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                      Total Earned: {formatMoney(totalEarnings)}
                                     </div>
                                     <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
                                       <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                                       <span className="whitespace-nowrap">
-                                        {formatMoney(entry.earnings)} Prize
+                                        {formatMoney(
+                                          creatorGroup.total_earnings
+                                        )}{" "}
+                                        {contestType === "cpm"
+                                          ? "CPM"
+                                          : "Prize"}
+                                      </span>
+                                      <span className="text-green-600 dark:text-green-400">
+                                        +
+                                      </span>
+                                      <span className="whitespace-nowrap">
+                                        {formatMoney(
+                                          flatFeeBonus *
+                                            creatorGroup.submission_count
+                                        )}{" "}
+                                        Bonus ({creatorGroup.submission_count}{" "}
+                                        sub.)
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              } else {
+                                prizeDisplay = (
+                                  <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                    Total Earned: {formatMoney(totalEarnings)}
+                                  </div>
+                                );
+                              }
+                            } else if (
+                              contest.contest_type === "leaderboard" &&
+                              Array.isArray(
+                                contest.contest_based_details
+                                  ?.leaderboard_contest?.prizes
+                              )
+                            ) {
+                              const prizeInfo = (
+                                contest.contest_based_details
+                                  .leaderboard_contest.prizes as PrizeInfo[]
+                              ).find(
+                                (p) => p.position === creatorGroup.best_rank
+                              );
+                              if (prizeInfo) {
+                                const prizeText =
+                                  contest.status === "active"
+                                    ? "Winning Zone"
+                                    : "Prize";
+                                const totalPrize =
+                                  prizeInfo.amount +
+                                  flatFeeBonus * creatorGroup.submission_count;
+
+                                if (
+                                  leaderboardViewMode === "detailed" &&
+                                  flatFeeBonus > 0
+                                ) {
+                                  prizeDisplay = (
+                                    <div className="space-y-1">
+                                      <div className="font-semibold text-amber-500 dark:text-amber-400 text-base flex items-center">
+                                        <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                        {prizeText}: {formatMoney(totalPrize)}
+                                      </div>
+                                      <div className="text-xs text-amber-600 dark:text-amber-500">
+                                        ({formatMoney(prizeInfo.amount)} Prize +{" "}
+                                        {formatMoney(
+                                          flatFeeBonus *
+                                            creatorGroup.submission_count
+                                        )}{" "}
+                                        Bonus)
+                                      </div>
+                                    </div>
+                                  );
+                                } else {
+                                  prizeDisplay = (
+                                    <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                      <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                      {prizeText}: {formatMoney(totalPrize)}
+                                    </span>
+                                  );
+                                }
+                              }
+                            }
+
+                            return (
+                              <div
+                                key={creatorGroup.creator_id}
+                                className="border border-[#D1B7F9] rounded-xl overflow-hidden"
+                              >
+                                <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
+                                  <div className="flex items-center space-x-3 md:space-x-4">
+                                    <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
+                                      {contest?.platform === "twitter"
+                                        ? `#${rank}`
+                                        : rank}
+                                    </h2>
+                                    <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
+                                      <AvatarImage
+                                        src={
+                                          creatorGroup.user_platform_pfp_url ??
+                                          creatorGroup.creator_pfp_url ??
+                                          undefined
+                                        }
+                                        alt={creatorGroup.creator_username}
+                                      />
+                                      <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
+                                        {creatorGroup.creator_username?.[0]?.toUpperCase() ||
+                                          "U"}
+                                      </AvatarFallback>
+                                    </Avatar>
+
+                                    <div className="flex-grow min-w-0">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <p
+                                          className={cn(
+                                            "text-sm sm:text-base font-semibold truncate",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-gray-700"
+                                          )}
+                                        >
+                                          {contest?.platform === "twitter"
+                                            ? (creatorGroup as any)
+                                                .app_full_name ||
+                                              (creatorGroup as any)
+                                                .app_username ||
+                                              creatorGroup.creator_username
+                                            : creatorGroup.creator_username}
+                                        </p>
+                                      </div>
+                                      {contest?.platform === "twitter" ? (
+                                        <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                                          <div className="flex items-center gap-1">
+                                            <FileText
+                                              className={cn(
+                                                "h-3.5 w-3.5",
+                                                isDark
+                                                  ? "text-gray-400"
+                                                  : "text-slate-500"
+                                              )}
+                                            />
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-400"
+                                                  : "text-slate-600"
+                                              )}
+                                            >
+                                              {(creatorGroup as any)
+                                                .total_eligible_tweets ||
+                                                0}{" "}
+                                              tweets
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <Eye
+                                              className={cn(
+                                                "h-3.5 w-3.5",
+                                                isDark
+                                                  ? "text-gray-400"
+                                                  : "text-slate-500"
+                                              )}
+                                            />
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-400"
+                                                  : "text-slate-600"
+                                              )}
+                                            >
+                                              {(
+                                                (creatorGroup as any)
+                                                  .total_impressions || 0
+                                              ).toLocaleString()}{" "}
+                                              impressions
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <ThumbsUp className="h-3.5 w-3.5 text-pink-500" />
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              {(creatorGroup as any)
+                                                .total_likes || 0}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <RefreshCw className="h-3.5 w-3.5 text-green-500" />
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              {(creatorGroup as any)
+                                                .total_retweets || 0}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <MessageCircle
+                                              className={cn(
+                                                "h-3.5 w-3.5",
+                                                isDark
+                                                  ? "text-gray-400"
+                                                  : "text-gray-600"
+                                              )}
+                                            />
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              {(creatorGroup as any)
+                                                .total_replies || 0}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-1 mt-1.5">
+                                          <Video
+                                            className={cn(
+                                              "h-4 w-4",
+                                              isDark
+                                                ? "text-gray-400"
+                                                : "text-slate-500"
+                                            )}
+                                          />
+                                          <p
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-gray-400"
+                                                : "text-slate-700"
+                                            )}
+                                          >
+                                            {creatorGroup.submission_count}{" "}
+                                            {creatorGroup.submission_count === 1
+                                              ? "submission"
+                                              : "submissions"}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
+                                    {contest?.platform === "twitter" ? (
+                                      <div className="flex items-center space-x-2">
+                                        <p
+                                          className={cn(
+                                            "text-base sm:text-lg font-bold",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-gray-700"
+                                          )}
+                                        >
+                                          {typeof (creatorGroup as any)
+                                            .total_points === "number"
+                                            ? (
+                                                creatorGroup as any
+                                              ).total_points.toLocaleString()
+                                            : "0"}{" "}
+                                          points
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <div className="flex items-center space-x-2">
+                                          <p
+                                            className={cn(
+                                              "text-base sm:text-lg font-bold",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-gray-700"
+                                            )}
+                                          >
+                                            {creatorGroup.total_views.toLocaleString()}{" "}
+                                            views
+                                          </p>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => {
+                                              setSelectedCreatorId(
+                                                creatorGroup.creator_id
+                                              );
+                                              setShowCreatorVideosModal(true);
+                                              setCreatorVideosCurrentPage(1);
+                                            }}
+                                            className="h-6 w-6 p-0"
+                                            title="View all videos"
+                                          >
+                                            <Eye
+                                              className={cn(
+                                                "h-4 w-4",
+                                                isDark
+                                                  ? "text-gray-400"
+                                                  : "text-gray-600"
+                                              )}
+                                            />
+                                          </Button>
+                                        </div>
+                                      </>
+                                    )}
+                                    {prizeDisplay && (
+                                      <div className="text-xs sm:text-sm mt-2">
+                                        {prizeDisplay}
+                                      </div>
+                                    )}
+                                  </div>
+                                </CardContent>
+                              </div>
+                            );
+                          }
+                        )
+                      : // Submission-wise display (original)
+                        leaderboard.map((entry, index) => {
+                          const rank =
+                            (leaderboardCurrentPage - 1) *
+                              leaderboardItemsPerPage +
+                            index +
+                            1;
+                          let prizeDisplay = null;
+
+                          if (entry.earnings > 0) {
+                            // For CPM contests, show Expected vs Earned based on verification/paid status
+                            if (contestType === "cpm") {
+                              const isEarned =
+                                entry.status === "verified" ||
+                                entry.status === "paid";
+                              const earningsLabel = isEarned
+                                ? "Earned"
+                                : "Expected";
+
+                              // Check if there's a flat fee bonus
+                              const flatFeeBonus =
+                                (contest.contest_based_details as any)
+                                  ?.cpm_contest?.flat_fee_bonus || 0;
+
+                              // Calculate total earnings (CPM + Bonus if applicable)
+                              const totalEarnings =
+                                entry.earnings + flatFeeBonus;
+
+                              // Show detailed breakdown if in detailed mode and bonus exists
+                              if (
+                                leaderboardViewMode === "detailed" &&
+                                flatFeeBonus > 0
+                              ) {
+                                prizeDisplay = (
+                                  <div className="space-y-1">
+                                    <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                      {earningsLabel}:{" "}
+                                      {formatMoney(totalEarnings)}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                      <span className="whitespace-nowrap">
+                                        {formatMoney(entry.earnings)} CPM
                                       </span>
                                       <span className="text-green-600 dark:text-green-400">
                                         +
@@ -7555,60 +7666,119 @@ export function ContestClientPage({
                               } else {
                                 prizeDisplay = (
                                   <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                    Earned: {formatMoney(entry.earnings)}
+                                    {earningsLabel}:{" "}
+                                    {formatMoney(totalEarnings)}
                                   </div>
                                 );
                               }
                             } else {
-                              // Simple view for leaderboard or non-CPM contests
-                              prizeDisplay = (
-                                <span className="font-semibold text-green-600 dark:text-green-400">
-                                  Earned: {formatMoney(entry.earnings)}
-                                </span>
-                              );
-                            }
-                          }
-                        } else if (
-                          contest.contest_type === "leaderboard" &&
-                          Array.isArray(
-                            contest.contest_based_details?.leaderboard_contest
-                              ?.prizes
-                          )
-                        ) {
-                          const prizeInfo = (
-                            contest.contest_based_details.leaderboard_contest
-                              .prizes as PrizeInfo[]
-                          ).find((p) => p.position === rank);
-                          if (prizeInfo) {
-                            const prizeText =
-                              contest.status === "active"
-                                ? "Winning Zone"
-                                : "Prize";
+                              // For leaderboard contests with earnings
+                              if (
+                                contestType === "leaderboard" &&
+                                leaderboardViewMode === "detailed"
+                              ) {
+                                // Check for flat fee bonus in leaderboard contests
+                                const flatFeeBonus =
+                                  (contest.contest_based_details as any)
+                                    ?.leaderboard_contest?.flat_fee_bonus || 0;
 
-                            // In detailed mode, show bonus information if available
-                            if (leaderboardViewMode === "detailed") {
-                              const flatFeeBonus =
-                                (contest.contest_based_details as any)
-                                  ?.leaderboard_contest?.flat_fee_bonus || 0;
-
-                              if (flatFeeBonus > 0) {
-                                const totalEarnings =
-                                  prizeInfo.amount + flatFeeBonus;
-                                prizeDisplay = (
-                                  <div className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                                    <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                    <div>
-                                      <div>
-                                        {prizeText}: {formatMoney(totalEarnings)}
+                                if (flatFeeBonus > 0) {
+                                  const totalEarnings =
+                                    entry.earnings + flatFeeBonus;
+                                  prizeDisplay = (
+                                    <div className="space-y-1">
+                                      <div
+                                        className={cn(
+                                          "font-semibold text-base",
+                                          isDark
+                                            ? "text-green-300"
+                                            : "text-green-600"
+                                        )}
+                                      >
+                                        Earned: {formatMoney(totalEarnings)}
                                       </div>
-                                      <div className="text-xs text-amber-600 dark:text-amber-500">
-                                        ({formatMoney(prizeInfo.amount)} Prize +{" "}
-                                        {formatMoney(flatFeeBonus)} Bonus)
+                                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                        <span className="whitespace-nowrap">
+                                          {formatMoney(entry.earnings)} Prize
+                                        </span>
+                                        <span className="text-green-600 dark:text-green-400">
+                                          +
+                                        </span>
+                                        <span className="whitespace-nowrap">
+                                          {formatMoney(flatFeeBonus)} Bonus
+                                        </span>
                                       </div>
                                     </div>
-                                  </div>
-                                );
+                                  );
+                                } else {
+                                  prizeDisplay = (
+                                    <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                      Earned: {formatMoney(entry.earnings)}
+                                    </div>
+                                  );
+                                }
                               } else {
+                                // Simple view for leaderboard or non-CPM contests
+                                prizeDisplay = (
+                                  <span className="font-semibold text-green-600 dark:text-green-400">
+                                    Earned: {formatMoney(entry.earnings)}
+                                  </span>
+                                );
+                              }
+                            }
+                          } else if (
+                            contest.contest_type === "leaderboard" &&
+                            Array.isArray(
+                              contest.contest_based_details?.leaderboard_contest
+                                ?.prizes
+                            )
+                          ) {
+                            const prizeInfo = (
+                              contest.contest_based_details.leaderboard_contest
+                                .prizes as PrizeInfo[]
+                            ).find((p) => p.position === rank);
+                            if (prizeInfo) {
+                              const prizeText =
+                                contest.status === "active"
+                                  ? "Winning Zone"
+                                  : "Prize";
+
+                              // In detailed mode, show bonus information if available
+                              if (leaderboardViewMode === "detailed") {
+                                const flatFeeBonus =
+                                  (contest.contest_based_details as any)
+                                    ?.leaderboard_contest?.flat_fee_bonus || 0;
+
+                                if (flatFeeBonus > 0) {
+                                  const totalEarnings =
+                                    prizeInfo.amount + flatFeeBonus;
+                                  prizeDisplay = (
+                                    <div className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                      <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                      <div>
+                                        <div>
+                                          {prizeText}:{" "}
+                                          {formatMoney(totalEarnings)}
+                                        </div>
+                                        <div className="text-xs text-amber-600 dark:text-amber-500">
+                                          ({formatMoney(prizeInfo.amount)} Prize
+                                          + {formatMoney(flatFeeBonus)} Bonus)
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                } else {
+                                  prizeDisplay = (
+                                    <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                      <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                      {prizeText}:{" "}
+                                      {formatMoney(prizeInfo.amount)}
+                                    </span>
+                                  );
+                                }
+                              } else {
+                                // Simple view
                                 prizeDisplay = (
                                   <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
                                     <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
@@ -7616,137 +7786,134 @@ export function ContestClientPage({
                                   </span>
                                 );
                               }
-                            } else {
-                              // Simple view
-                              prizeDisplay = (
-                                <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                                  <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                  {prizeText}: {formatMoney(prizeInfo.amount)}
-                                </span>
-                              );
                             }
                           }
-                        }
 
-                        return (
-                          <div
-                            key={entry.id}
-                            className="border border-[#D1B7F9] rounded-xl overflow-hidden"
-                          >
-                            <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
-                              <div className="flex items-center space-x-3 md:space-x-4">
-                                <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
-                                  {rank}
-                                </h2>
-                                <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
-                                  <AvatarImage
-                                    src={
-                                      entry.user_platform_pfp_url ??
-                                      entry.creator_pfp_url ??
-                                      undefined
-                                    }
-                                    alt={
-                                      contest?.platform === "twitter"
-                                        ? (entry as any).app_username ||
-                                        entry.user_platform_username
-                                        : entry.user_platform_username
-                                    }
-                                  />
-                                  <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
-                                    {(contest?.platform === "twitter"
-                                      ? ((entry as any).app_username as
-                                        | string
-                                        | undefined)
-                                      : entry.user_platform_username)?.[0]?.toUpperCase() ||
-                                      "U"}
-                                  </AvatarFallback>
-                                </Avatar>
+                          return (
+                            <div
+                              key={entry.id}
+                              className="border border-[#D1B7F9] rounded-xl overflow-hidden"
+                            >
+                              <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
+                                <div className="flex items-center space-x-3 md:space-x-4">
+                                  <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
+                                    {rank}
+                                  </h2>
+                                  <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
+                                    <AvatarImage
+                                      src={
+                                        entry.user_platform_pfp_url ??
+                                        entry.creator_pfp_url ??
+                                        undefined
+                                      }
+                                      alt={
+                                        contest?.platform === "twitter"
+                                          ? (entry as any).app_username ||
+                                            entry.user_platform_username
+                                          : entry.user_platform_username
+                                      }
+                                    />
+                                    <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
+                                      {(contest?.platform === "twitter"
+                                        ? ((entry as any).app_username as
+                                            | string
+                                            | undefined)
+                                        : entry.user_platform_username)?.[0]?.toUpperCase() ||
+                                        "U"}
+                                    </AvatarFallback>
+                                  </Avatar>
 
-                                <div className="flex-grow min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
+                                  <div className="flex-grow min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <p
+                                        className={cn(
+                                          "text-sm sm:text-base font-semibold truncate",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-gray-700"
+                                        )}
+                                      >
+                                        {entry.user_platform_username}
+                                      </p>
+                                      {renderVerificationBadges(entry.status)}
+                                    </div>
                                     <p
                                       className={cn(
-                                        "text-sm sm:text-base font-semibold truncate",
+                                        "text-xs",
+                                        isDark
+                                          ? "text-gray-300"
+                                          : "text-slate-500"
+                                      )}
+                                    >
+                                      Submitted:{" "}
+                                      {formatTimeAgo(entry.created_at)}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
+                                  <div className="flex items-center space-x-2">
+                                    <p
+                                      className={cn(
+                                        "text-base sm:text-lg font-bold",
                                         isDark ? "text-white" : "text-gray-700"
                                       )}
                                     >
-                                      {entry.user_platform_username}
+                                      {contest?.platform === "twitter" ? (
+                                        <>
+                                          {typeof (entry as any)
+                                            .total_points === "number"
+                                            ? (
+                                                entry as any
+                                              ).total_points.toLocaleString()
+                                            : "0"}{" "}
+                                          points
+                                        </>
+                                      ) : (
+                                        <>
+                                          {entry.views
+                                            ? entry.views.toLocaleString()
+                                            : "0"}{" "}
+                                          views
+                                        </>
+                                      )}
                                     </p>
-                                    {renderVerificationBadges(entry.status)}
-                                  </div>
-                                  <p
-                                    className={cn(
-                                      "text-xs",
-                                      isDark ? "text-gray-300" : "text-slate-500"
-                                    )}
-                                  >
-                                    Submitted: {formatTimeAgo(entry.created_at)}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
-                                <div className="flex items-center space-x-2">
-                                  <p
-                                    className={cn(
-                                      "text-base sm:text-lg font-bold",
-                                      isDark ? "text-white" : "text-gray-700"
-                                    )}
-                                  >
-                                    {contest?.platform === "twitter" ? (
-                                      <>
-                                        {typeof (entry as any).total_points ===
-                                          "number"
-                                          ? (
-                                            entry as any
-                                          ).total_points.toLocaleString()
-                                          : "0"}{" "}
-                                        points
-                                      </>
-                                    ) : (
-                                      <>
-                                        {entry.views
-                                          ? entry.views.toLocaleString()
-                                          : "0"}{" "}
-                                        views
-                                      </>
-                                    )}
-                                  </p>
-                                  {entry.content_link &&
-                                    (contest?.status?.toLowerCase() === "ended" ||
-                                      contest?.status?.toLowerCase() ===
-                                      "completed") && (
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className={cn(
-                                          "h-7 w-7 sm:h-8 sm:w-8",
-                                          isDark
-                                            ? "text-gray-300"
-                                            : "text-slate-500"
-                                        )}
-                                        asChild
-                                      >
-                                        <Link
-                                          href={entry.content_link}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          title="View Content"
+                                    {entry.content_link &&
+                                      (contest?.status?.toLowerCase() ===
+                                        "ended" ||
+                                        contest?.status?.toLowerCase() ===
+                                          "completed") && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className={cn(
+                                            "h-7 w-7 sm:h-8 sm:w-8",
+                                            isDark
+                                              ? "text-gray-300"
+                                              : "text-slate-500"
+                                          )}
+                                          asChild
                                         >
-                                          <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
-                                        </Link>
-                                      </Button>
-                                    )}
-                                </div>
-                                {prizeDisplay && (
-                                  <div className="text-xs sm:text-sm">
-                                    {prizeDisplay}
+                                          <Link
+                                            href={entry.content_link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            title="View Content"
+                                          >
+                                            <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                                          </Link>
+                                        </Button>
+                                      )}
                                   </div>
-                                )}
-                              </div>
-                            </CardContent>
-                          </div>
-                        );
-                      })}
+                                  {prizeDisplay && (
+                                    <div className="text-xs sm:text-sm">
+                                      {prizeDisplay}
+                                    </div>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </div>
+                          );
+                        })}
 
                     {/* Pagination Controls */}
                     {totalLeaderboardPages > 1 && (
@@ -7767,7 +7934,8 @@ export function ContestClientPage({
                             isDark ? "text-gray-300" : "text-slate-500"
                           )}
                         >
-                          Page {leaderboardCurrentPage} of {totalLeaderboardPages}
+                          Page {leaderboardCurrentPage} of{" "}
+                          {totalLeaderboardPages}
                         </span>
                         <Button
                           variant="outline"
@@ -7775,7 +7943,9 @@ export function ContestClientPage({
                           onClick={() =>
                             fetchLeaderboard(leaderboardCurrentPage + 1)
                           }
-                          disabled={leaderboardCurrentPage >= totalLeaderboardPages}
+                          disabled={
+                            leaderboardCurrentPage >= totalLeaderboardPages
+                          }
                         >
                           Next
                         </Button>
@@ -8342,11 +8512,22 @@ export function ContestClientPage({
                                       </h3>
                                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
                                         {twitterMetrics.target_current_likes !==
-                                          null && (() => {
-                                            const current = twitterMetrics.target_current_likes || 0;
+                                          null &&
+                                          (() => {
+                                            const current =
+                                              twitterMetrics.target_current_likes ||
+                                              0;
                                             const target = targetLikes;
-                                            const isReached = target !== null && current >= target;
-                                            const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
+                                            const isReached =
+                                              target !== null &&
+                                              current >= target;
+                                            const progress =
+                                              target !== null && target > 0
+                                                ? Math.min(
+                                                    100,
+                                                    (current / target) * 100
+                                                  )
+                                                : 0;
 
                                             return (
                                               <div
@@ -8396,16 +8577,20 @@ export function ContestClientPage({
                                                               : "text-slate-500"
                                                           )}
                                                         >
-                                                          of {target.toLocaleString()} target
+                                                          of{" "}
+                                                          {target.toLocaleString()}{" "}
+                                                          target
                                                         </p>
                                                       )}
                                                     </div>
-                                                    <div className={cn(
-                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
-                                                      isReached
-                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                        : "bg-gradient-to-br from-pink-500 to-rose-600"
-                                                    )}>
+                                                    <div
+                                                      className={cn(
+                                                        "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                        isReached
+                                                          ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                          : "bg-gradient-to-br from-pink-500 to-rose-600"
+                                                      )}
+                                                    >
                                                       {isReached ? (
                                                         <CheckCircle2 className="h-7 w-7" />
                                                       ) : (
@@ -8413,40 +8598,63 @@ export function ContestClientPage({
                                                       )}
                                                     </div>
                                                   </div>
-                                                  {target !== null && target > 0 && (
-                                                    <div className="mt-3">
-                                                      <div className={cn(
-                                                        "h-2 rounded-full overflow-hidden",
-                                                        isDark ? "bg-slate-700" : "bg-slate-200"
-                                                      )}>
+                                                  {target !== null &&
+                                                    target > 0 && (
+                                                      <div className="mt-3">
                                                         <div
                                                           className={cn(
-                                                            "h-full transition-all duration-500",
-                                                            isReached
-                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                              : "bg-gradient-to-r from-pink-500 to-rose-600"
+                                                            "h-2 rounded-full overflow-hidden",
+                                                            isDark
+                                                              ? "bg-slate-700"
+                                                              : "bg-slate-200"
                                                           )}
-                                                          style={{ width: `${progress}%` }}
-                                                        />
+                                                        >
+                                                          <div
+                                                            className={cn(
+                                                              "h-full transition-all duration-500",
+                                                              isReached
+                                                                ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                                : "bg-gradient-to-r from-pink-500 to-rose-600"
+                                                            )}
+                                                            style={{
+                                                              width: `${progress}%`,
+                                                            }}
+                                                          />
+                                                        </div>
+                                                        <p
+                                                          className={cn(
+                                                            "text-xs mt-1 text-center",
+                                                            isDark
+                                                              ? "text-slate-400"
+                                                              : "text-slate-500"
+                                                          )}
+                                                        >
+                                                          {progress.toFixed(0)}%
+                                                          complete
+                                                        </p>
                                                       </div>
-                                                      <p className={cn(
-                                                        "text-xs mt-1 text-center",
-                                                        isDark ? "text-slate-400" : "text-slate-500"
-                                                      )}>
-                                                        {progress.toFixed(0)}% complete
-                                                      </p>
-                                                    </div>
-                                                  )}
+                                                    )}
                                                 </CardContent>
                                               </div>
                                             );
                                           })()}
                                         {twitterMetrics.target_current_comments !==
-                                          null && (() => {
-                                            const current = twitterMetrics.target_current_comments || 0;
+                                          null &&
+                                          (() => {
+                                            const current =
+                                              twitterMetrics.target_current_comments ||
+                                              0;
                                             const target = targetComments;
-                                            const isReached = target !== null && current >= target;
-                                            const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
+                                            const isReached =
+                                              target !== null &&
+                                              current >= target;
+                                            const progress =
+                                              target !== null && target > 0
+                                                ? Math.min(
+                                                    100,
+                                                    (current / target) * 100
+                                                  )
+                                                : 0;
 
                                             return (
                                               <div
@@ -8496,16 +8704,20 @@ export function ContestClientPage({
                                                               : "text-slate-500"
                                                           )}
                                                         >
-                                                          of {target.toLocaleString()} target
+                                                          of{" "}
+                                                          {target.toLocaleString()}{" "}
+                                                          target
                                                         </p>
                                                       )}
                                                     </div>
-                                                    <div className={cn(
-                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
-                                                      isReached
-                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                        : "bg-gradient-to-br from-orange-500 to-amber-600"
-                                                    )}>
+                                                    <div
+                                                      className={cn(
+                                                        "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                        isReached
+                                                          ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                          : "bg-gradient-to-br from-orange-500 to-amber-600"
+                                                      )}
+                                                    >
                                                       {isReached ? (
                                                         <CheckCircle2 className="h-7 w-7" />
                                                       ) : (
@@ -8513,40 +8725,63 @@ export function ContestClientPage({
                                                       )}
                                                     </div>
                                                   </div>
-                                                  {target !== null && target > 0 && (
-                                                    <div className="mt-3">
-                                                      <div className={cn(
-                                                        "h-2 rounded-full overflow-hidden",
-                                                        isDark ? "bg-slate-700" : "bg-slate-200"
-                                                      )}>
+                                                  {target !== null &&
+                                                    target > 0 && (
+                                                      <div className="mt-3">
                                                         <div
                                                           className={cn(
-                                                            "h-full transition-all duration-500",
-                                                            isReached
-                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                              : "bg-gradient-to-r from-orange-500 to-amber-600"
+                                                            "h-2 rounded-full overflow-hidden",
+                                                            isDark
+                                                              ? "bg-slate-700"
+                                                              : "bg-slate-200"
                                                           )}
-                                                          style={{ width: `${progress}%` }}
-                                                        />
+                                                        >
+                                                          <div
+                                                            className={cn(
+                                                              "h-full transition-all duration-500",
+                                                              isReached
+                                                                ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                                : "bg-gradient-to-r from-orange-500 to-amber-600"
+                                                            )}
+                                                            style={{
+                                                              width: `${progress}%`,
+                                                            }}
+                                                          />
+                                                        </div>
+                                                        <p
+                                                          className={cn(
+                                                            "text-xs mt-1 text-center",
+                                                            isDark
+                                                              ? "text-slate-400"
+                                                              : "text-slate-500"
+                                                          )}
+                                                        >
+                                                          {progress.toFixed(0)}%
+                                                          complete
+                                                        </p>
                                                       </div>
-                                                      <p className={cn(
-                                                        "text-xs mt-1 text-center",
-                                                        isDark ? "text-slate-400" : "text-slate-500"
-                                                      )}>
-                                                        {progress.toFixed(0)}% complete
-                                                      </p>
-                                                    </div>
-                                                  )}
+                                                    )}
                                                 </CardContent>
                                               </div>
                                             );
                                           })()}
                                         {twitterMetrics.target_current_retweets !==
-                                          null && (() => {
-                                            const current = twitterMetrics.target_current_retweets || 0;
+                                          null &&
+                                          (() => {
+                                            const current =
+                                              twitterMetrics.target_current_retweets ||
+                                              0;
                                             const target = targetRetweets;
-                                            const isReached = target !== null && current >= target;
-                                            const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
+                                            const isReached =
+                                              target !== null &&
+                                              current >= target;
+                                            const progress =
+                                              target !== null && target > 0
+                                                ? Math.min(
+                                                    100,
+                                                    (current / target) * 100
+                                                  )
+                                                : 0;
 
                                             return (
                                               <div
@@ -8596,16 +8831,20 @@ export function ContestClientPage({
                                                               : "text-slate-500"
                                                           )}
                                                         >
-                                                          of {target.toLocaleString()} target
+                                                          of{" "}
+                                                          {target.toLocaleString()}{" "}
+                                                          target
                                                         </p>
                                                       )}
                                                     </div>
-                                                    <div className={cn(
-                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
-                                                      isReached
-                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                        : "bg-gradient-to-br from-cyan-500 to-teal-600"
-                                                    )}>
+                                                    <div
+                                                      className={cn(
+                                                        "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                        isReached
+                                                          ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                          : "bg-gradient-to-br from-cyan-500 to-teal-600"
+                                                      )}
+                                                    >
                                                       {isReached ? (
                                                         <CheckCircle2 className="h-7 w-7" />
                                                       ) : (
@@ -8613,40 +8852,63 @@ export function ContestClientPage({
                                                       )}
                                                     </div>
                                                   </div>
-                                                  {target !== null && target > 0 && (
-                                                    <div className="mt-3">
-                                                      <div className={cn(
-                                                        "h-2 rounded-full overflow-hidden",
-                                                        isDark ? "bg-slate-700" : "bg-slate-200"
-                                                      )}>
+                                                  {target !== null &&
+                                                    target > 0 && (
+                                                      <div className="mt-3">
                                                         <div
                                                           className={cn(
-                                                            "h-full transition-all duration-500",
-                                                            isReached
-                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                              : "bg-gradient-to-r from-cyan-500 to-teal-600"
+                                                            "h-2 rounded-full overflow-hidden",
+                                                            isDark
+                                                              ? "bg-slate-700"
+                                                              : "bg-slate-200"
                                                           )}
-                                                          style={{ width: `${progress}%` }}
-                                                        />
+                                                        >
+                                                          <div
+                                                            className={cn(
+                                                              "h-full transition-all duration-500",
+                                                              isReached
+                                                                ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                                : "bg-gradient-to-r from-cyan-500 to-teal-600"
+                                                            )}
+                                                            style={{
+                                                              width: `${progress}%`,
+                                                            }}
+                                                          />
+                                                        </div>
+                                                        <p
+                                                          className={cn(
+                                                            "text-xs mt-1 text-center",
+                                                            isDark
+                                                              ? "text-slate-400"
+                                                              : "text-slate-500"
+                                                          )}
+                                                        >
+                                                          {progress.toFixed(0)}%
+                                                          complete
+                                                        </p>
                                                       </div>
-                                                      <p className={cn(
-                                                        "text-xs mt-1 text-center",
-                                                        isDark ? "text-slate-400" : "text-slate-500"
-                                                      )}>
-                                                        {progress.toFixed(0)}% complete
-                                                      </p>
-                                                    </div>
-                                                  )}
+                                                    )}
                                                 </CardContent>
                                               </div>
                                             );
                                           })()}
                                         {twitterMetrics.target_current_quote_reposts !==
-                                          null && (() => {
-                                            const current = twitterMetrics.target_current_quote_reposts || 0;
+                                          null &&
+                                          (() => {
+                                            const current =
+                                              twitterMetrics.target_current_quote_reposts ||
+                                              0;
                                             const target = targetQuoteReposts;
-                                            const isReached = target !== null && current >= target;
-                                            const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
+                                            const isReached =
+                                              target !== null &&
+                                              current >= target;
+                                            const progress =
+                                              target !== null && target > 0
+                                                ? Math.min(
+                                                    100,
+                                                    (current / target) * 100
+                                                  )
+                                                : 0;
 
                                             return (
                                               <div
@@ -8696,16 +8958,20 @@ export function ContestClientPage({
                                                               : "text-slate-500"
                                                           )}
                                                         >
-                                                          of {target.toLocaleString()} target
+                                                          of{" "}
+                                                          {target.toLocaleString()}{" "}
+                                                          target
                                                         </p>
                                                       )}
                                                     </div>
-                                                    <div className={cn(
-                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
-                                                      isReached
-                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                        : "bg-gradient-to-br from-indigo-500 to-violet-600"
-                                                    )}>
+                                                    <div
+                                                      className={cn(
+                                                        "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                        isReached
+                                                          ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                          : "bg-gradient-to-br from-indigo-500 to-violet-600"
+                                                      )}
+                                                    >
                                                       {isReached ? (
                                                         <CheckCircle2 className="h-7 w-7" />
                                                       ) : (
@@ -8713,30 +8979,42 @@ export function ContestClientPage({
                                                       )}
                                                     </div>
                                                   </div>
-                                                  {target !== null && target > 0 && (
-                                                    <div className="mt-3">
-                                                      <div className={cn(
-                                                        "h-2 rounded-full overflow-hidden",
-                                                        isDark ? "bg-slate-700" : "bg-slate-200"
-                                                      )}>
+                                                  {target !== null &&
+                                                    target > 0 && (
+                                                      <div className="mt-3">
                                                         <div
                                                           className={cn(
-                                                            "h-full transition-all duration-500",
-                                                            isReached
-                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                              : "bg-gradient-to-r from-indigo-500 to-violet-600"
+                                                            "h-2 rounded-full overflow-hidden",
+                                                            isDark
+                                                              ? "bg-slate-700"
+                                                              : "bg-slate-200"
                                                           )}
-                                                          style={{ width: `${progress}%` }}
-                                                        />
+                                                        >
+                                                          <div
+                                                            className={cn(
+                                                              "h-full transition-all duration-500",
+                                                              isReached
+                                                                ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                                : "bg-gradient-to-r from-indigo-500 to-violet-600"
+                                                            )}
+                                                            style={{
+                                                              width: `${progress}%`,
+                                                            }}
+                                                          />
+                                                        </div>
+                                                        <p
+                                                          className={cn(
+                                                            "text-xs mt-1 text-center",
+                                                            isDark
+                                                              ? "text-slate-400"
+                                                              : "text-slate-500"
+                                                          )}
+                                                        >
+                                                          {progress.toFixed(0)}%
+                                                          complete
+                                                        </p>
                                                       </div>
-                                                      <p className={cn(
-                                                        "text-xs mt-1 text-center",
-                                                        isDark ? "text-slate-400" : "text-slate-500"
-                                                      )}>
-                                                        {progress.toFixed(0)}% complete
-                                                      </p>
-                                                    </div>
-                                                  )}
+                                                    )}
                                                 </CardContent>
                                               </div>
                                             );
