@@ -102,10 +102,10 @@ export async function POST(
       );
     }
 
-    // 3. Get all participants for this contest
+    // 3. Get all participants for this contest (including join date)
     const { data: participants, error: participantsError } = await supabase
       .from("twitter_campaign_participants")
-      .select("creator_id, twitter_username")
+      .select("creator_id, twitter_username, joined_at")
       .eq("contest_id", contestId)
       .eq("is_active", true);
 
@@ -145,12 +145,16 @@ export async function POST(
       });
     }
 
-    // Create map of username -> creator_id for quick lookup (only for non-rejected creators)
+    // Create map of username -> creator_id and join date for quick lookup (only for non-rejected creators)
     const participantMap = new Map<string, string>();
+    const participantJoinDateMap = new Map<string, Date>(); // Map username -> join date
     activeParticipants.forEach((p) => {
       if (p.twitter_username) {
         const cleanUsername = p.twitter_username.replace("@", "").toLowerCase();
         participantMap.set(cleanUsername, p.creator_id);
+        if (p.joined_at) {
+          participantJoinDateMap.set(cleanUsername, new Date(p.joined_at));
+        }
       }
     });
 
@@ -215,29 +219,59 @@ export async function POST(
 
     // 4b. Fetch engagements (replies, retweets, quote reposts) using latest_replies.php
     // This endpoint returns ALL engagements (replies, retweets, quote reposts) on the target tweet
+    // IMPORTANT: We use pagination to fetch ALL engagements up to join dates
     const allEngagementTweets: any[] = [];
     
     try {
-      const repliesOptions = {
-        method: "GET",
-        url: `https://${rapidApiHost}/latest_replies.php`,
-        params: {
-          id: targetTweetId, // Get all engagements on this specific tweet
-        },
-        headers: {
-          "x-rapidapi-key": rapidApiKey,
-          "x-rapidapi-host": rapidApiHost,
-        },
-      };
+      // Fetch ALL engagements using pagination
+      let allEngagements: any[] = [];
+      let cursor: string | null = null;
+      let hasMorePages = true;
+      let pageCount = 0;
+      const MAX_PAGES = 50; // Safety limit
+      
+      while (hasMorePages && pageCount < MAX_PAGES) {
+        const repliesOptions: any = {
+          method: "GET",
+          url: `https://${rapidApiHost}/latest_replies.php`,
+          params: {
+            id: targetTweetId, // Get all engagements on this specific tweet
+          },
+          headers: {
+            "x-rapidapi-key": rapidApiKey,
+            "x-rapidapi-host": rapidApiHost,
+          },
+        };
+        
+        // Add cursor for pagination (if not first page)
+        if (cursor) {
+          repliesOptions.params.cursor = cursor;
+        }
 
-      const repliesResponse = await axios.request(repliesOptions);
-      const repliesData = repliesResponse.data;
+        const repliesResponse = await axios.request(repliesOptions);
+        const repliesData = repliesResponse.data;
+        
+        // The latest_replies.php endpoint returns engagements in a timeline array
+        const pageEngagements = Array.isArray(repliesData?.timeline) ? repliesData.timeline : 
+                              Array.isArray(repliesData) ? repliesData : [];
+        
+        // Add engagements from this page
+        allEngagements.push(...pageEngagements);
+        
+        // Check for next cursor
+        const nextCursor = repliesData?.next_cursor;
+        if (!nextCursor || nextCursor === "0" || nextCursor === 0) {
+          hasMorePages = false;
+        } else {
+          cursor = nextCursor;
+          pageCount++;
+          console.log(
+            `[fetch-raid-engagements] Fetched page ${pageCount} from latest_replies.php, total engagements so far: ${allEngagements.length}, next cursor: ${cursor}`
+          );
+        }
+      }
       
-      // The latest_replies.php endpoint returns engagements in a timeline array
-      const allEngagements = Array.isArray(repliesData?.timeline) ? repliesData.timeline : 
-                            Array.isArray(repliesData) ? repliesData : [];
-      
-      console.log(`[fetch-raid-engagements] Found ${allEngagements.length} total engagements from latest_replies.php`);
+      console.log(`[fetch-raid-engagements] Found ${allEngagements.length} total engagements from latest_replies.php across ${pageCount + 1} pages`);
       
       // Process all engagements - identify replies, retweets, and quote reposts
       for (const engagement of allEngagements) {
@@ -381,22 +415,70 @@ export async function POST(
           console.log(`[fetch-raid-engagements] Retweet is user object (${username}), fetching their timeline to find retweet`);
           
           try {
-            // Fetch user's timeline to find their retweet of the target tweet
-            const userTimelineOptions = {
-              method: "GET",
-              url: `https://${rapidApiHost}/replies.php`,
-              params: {
-                screenname: username,
-              },
-              headers: {
-                "x-rapidapi-key": rapidApiKey,
-                "x-rapidapi-host": rapidApiHost,
-              },
-            };
+            // Get join date for this participant
+            const participantData = activeParticipants.find(p => p.twitter_username?.replace("@", "").toLowerCase() === username.toLowerCase());
+            const joinDate = participantData?.joined_at ? new Date(participantData.joined_at) : null;
             
-            const userTimelineResponse = await axios.request(userTimelineOptions);
-            const userTimelineData = userTimelineResponse.data;
-            const userTimeline = Array.isArray(userTimelineData?.timeline) ? userTimelineData.timeline : [];
+            // Fetch ALL tweets up to join date using pagination
+            let allUserTimelineTweets: any[] = [];
+            let cursor: string | null = null;
+            let hasMorePages = true;
+            let pageCount = 0;
+            const MAX_PAGES = 50; // Safety limit
+            
+            while (hasMorePages && pageCount < MAX_PAGES) {
+              const userTimelineOptions: any = {
+                method: "GET",
+                url: `https://${rapidApiHost}/replies.php`,
+                params: {
+                  screenname: username,
+                },
+                headers: {
+                  "x-rapidapi-key": rapidApiKey,
+                  "x-rapidapi-host": rapidApiHost,
+                },
+              };
+              
+              // Add cursor for pagination (if not first page)
+              if (cursor) {
+                userTimelineOptions.params.cursor = cursor;
+              }
+              
+              const userTimelineResponse = await axios.request(userTimelineOptions);
+              const userTimelineData = userTimelineResponse.data;
+              const pageTimeline = Array.isArray(userTimelineData?.timeline) ? userTimelineData.timeline : [];
+              
+              // Add tweets from this page
+              allUserTimelineTweets.push(...pageTimeline);
+              
+              // Check if we've reached the join date
+              if (joinDate && pageTimeline.length > 0) {
+                const oldestTweet = pageTimeline[pageTimeline.length - 1];
+                const oldestTweetDate = oldestTweet?.created_at 
+                  ? new Date(oldestTweet.created_at) 
+                  : null;
+                
+                // If oldest tweet in this page is before join date, we've fetched enough
+                if (oldestTweetDate && oldestTweetDate < joinDate) {
+                  console.log(
+                    `[fetch-raid-engagements] Reached join date for ${username}. Oldest tweet: ${oldestTweetDate.toISOString()}, Join date: ${joinDate.toISOString()}`
+                  );
+                  hasMorePages = false;
+                  break;
+                }
+              }
+              
+              // Check for next cursor
+              const nextCursor = userTimelineData?.next_cursor;
+              if (!nextCursor || nextCursor === "0" || nextCursor === 0) {
+                hasMorePages = false;
+              } else {
+                cursor = nextCursor;
+                pageCount++;
+              }
+            }
+            
+            const userTimeline = allUserTimelineTweets;
             
             // Find the retweet in their timeline
             for (const tweet of userTimeline) {
@@ -471,28 +553,89 @@ export async function POST(
     
     // 4d. Search participant timelines for quote reposts (if not already found in latest_replies.php)
     // Quote reposts might not be in latest_replies.php, so we'll check each participant's timeline
+    // IMPORTANT: We fetch ALL tweets up to join date using pagination
     console.log(`[fetch-raid-engagements] Checking participant timelines for quote reposts...`);
-    for (const participant of participants) {
+    for (const participant of activeParticipants) {
       const username = participant.twitter_username?.replace("@", "");
       if (!username) continue;
       
       try {
-        // Fetch participant's timeline
-        const userTimelineOptions = {
-          method: "GET",
-          url: `https://${rapidApiHost}/replies.php`,
-          params: {
-            screenname: username,
-          },
-          headers: {
-            "x-rapidapi-key": rapidApiKey,
-            "x-rapidapi-host": rapidApiHost,
-          },
-        };
+        // Get join date for this participant
+        const joinDate = participant.joined_at ? new Date(participant.joined_at) : null;
         
-        const userTimelineResponse = await axios.request(userTimelineOptions);
-        const userTimelineData = userTimelineResponse.data;
-        const userTimeline = Array.isArray(userTimelineData?.timeline) ? userTimelineData.timeline : [];
+        // Fetch ALL tweets up to join date using pagination
+        let allUserTimelineTweets: any[] = [];
+        let cursor: string | null = null;
+        let hasMorePages = true;
+        let pageCount = 0;
+        const MAX_PAGES = 50; // Safety limit
+        
+        while (hasMorePages && pageCount < MAX_PAGES) {
+          const userTimelineOptions: any = {
+            method: "GET",
+            url: `https://${rapidApiHost}/replies.php`,
+            params: {
+              screenname: username,
+            },
+            headers: {
+              "x-rapidapi-key": rapidApiKey,
+              "x-rapidapi-host": rapidApiHost,
+            },
+          };
+          
+          // Add cursor for pagination (if not first page)
+          if (cursor) {
+            userTimelineOptions.params.cursor = cursor;
+          }
+          
+          const userTimelineResponse = await axios.request(userTimelineOptions);
+          const userTimelineData = userTimelineResponse.data;
+          const pageTimeline = Array.isArray(userTimelineData?.timeline) ? userTimelineData.timeline : [];
+          
+          // Add tweets from this page
+          allUserTimelineTweets.push(...pageTimeline);
+          
+          // Check if we've reached the join date
+          if (joinDate && pageTimeline.length > 0) {
+            const oldestTweet = pageTimeline[pageTimeline.length - 1];
+            const oldestTweetDate = oldestTweet?.created_at 
+              ? new Date(oldestTweet.created_at) 
+              : null;
+            
+            // If oldest tweet in this page is before join date, we've fetched enough
+            if (oldestTweetDate && oldestTweetDate < joinDate) {
+              console.log(
+                `[fetch-raid-engagements] Reached join date for ${username} (quote reposts). Oldest tweet: ${oldestTweetDate.toISOString()}, Join date: ${joinDate.toISOString()}`
+              );
+              hasMorePages = false;
+              break;
+            }
+          }
+          
+          // Check for next cursor
+          const nextCursor = userTimelineData?.next_cursor;
+          if (!nextCursor || nextCursor === "0" || nextCursor === 0) {
+            hasMorePages = false;
+          } else {
+            cursor = nextCursor;
+            pageCount++;
+          }
+        }
+        
+        // Filter tweets to only include those created on or after join date
+        const filteredTimeline = joinDate 
+          ? allUserTimelineTweets.filter((tweet: any) => {
+              const tweetDate = tweet.created_at ? new Date(tweet.created_at) : null;
+              if (!tweetDate) return false;
+              return tweetDate >= joinDate;
+            })
+          : allUserTimelineTweets;
+        
+        console.log(
+          `[fetch-raid-engagements] Fetched ${allUserTimelineTweets.length} tweets (${filteredTimeline.length} after join date filter) for ${username} across ${pageCount + 1} pages`
+        );
+        
+        const userTimeline = filteredTimeline;
         
         // Check for quote reposts of the target tweet
         for (const tweet of userTimeline) {
@@ -778,7 +921,17 @@ export async function POST(
         continue; // Not a participant, skip
       }
 
-      // Filter by campaign start date (only count engagements after campaign started)
+      // Filter by participant's join date (only count engagements after they joined)
+      const participantJoinDate = participantJoinDateMap.get(authorUsername);
+      if (participantJoinDate) {
+        const tweetDate = new Date(tweet.created_at || tweet.created_at_iso || new Date());
+        if (tweetDate < participantJoinDate) {
+          console.log(`[fetch-raid-engagements] Skipping tweet ${tweet.tweet_id || tweet.id}: Created before participant join date (${tweetDate.toISOString()} < ${participantJoinDate.toISOString()})`);
+          continue;
+        }
+      }
+
+      // Also filter by campaign start date (only count engagements after campaign started)
       if (campaignStartDate) {
         const tweetDate = new Date(tweet.created_at || tweet.created_at_iso || new Date());
         if (tweetDate < campaignStartDate) {
@@ -928,18 +1081,22 @@ export async function POST(
     }
 
     // ============================================================================
-    // HANDLE DELETED ENGAGEMENTS (those that were in DB but not in fresh API response)
+    // MARK ENGAGEMENTS AS DELETED IF THEY'RE NOT IN FRESH API RESPONSE
+    // Since we now fetch ALL tweets up to join date via pagination for participant timelines,
+    // and latest_replies.php should return all engagements, if an engagement is not found,
+    // it means it's actually deleted (or was never eligible)
     // ============================================================================
-    console.log(`[fetch-raid-engagements] Processing deleted/edited engagements...`);
+    console.log(`[fetch-raid-engagements] Processing deleted engagements (we fetched all tweets up to join date, so missing = deleted)`);
     
     // Find engagements that were in DB but not in fresh API response
+    // Since we paginated through all tweets up to join date, missing engagements are truly deleted
     const engagementsToMarkAsDeleted = Array.from(existingEngagementsMap.keys()).filter(
       (tweetId) => !freshEngagementIds.has(tweetId)
     );
 
     if (engagementsToMarkAsDeleted.length > 0) {
       console.log(
-        `[fetch-raid-engagements] Marking ${engagementsToMarkAsDeleted.length} engagements as deleted/ineligible`
+        `[fetch-raid-engagements] Marking ${engagementsToMarkAsDeleted.length} engagements as deleted (not found in complete paginated fetch)`
       );
 
       // Batch update deleted engagements (chunks of 100 for performance)
@@ -948,13 +1105,17 @@ export async function POST(
         const batch = engagementsToMarkAsDeleted.slice(i, i + BATCH_SIZE);
         
         // Mark as deleted/ineligible, but PRESERVE moderation status
+        const deletionTimestamp = new Date().toISOString();
         const { error: updateError } = await supabaseAdmin
           .from("twitter_campaign_tweets")
           .update({
             is_eligible: false,
             filter_status: "deleted",
+            is_deleted: true,
+            deleted_at: deletionTimestamp,
+            deletion_detected_at: deletionTimestamp,
             eligibility_reason:
-              "Engagement no longer found in API response or no longer matches campaign rules",
+              "Engagement not found in complete paginated fetch up to join date - likely deleted from Twitter",
             // DO NOT update moderation_status - preserve it!
             // DO NOT update manual_points_adjustment - preserve it!
             // DO NOT update manual_points_reason - preserve it!
@@ -973,6 +1134,8 @@ export async function POST(
           );
         }
       }
+    } else {
+      console.log(`[fetch-raid-engagements] No engagements to mark as deleted - all existing engagements found in fresh fetch`);
     }
 
     // 8. Calculate total_* metrics from all participant engagements

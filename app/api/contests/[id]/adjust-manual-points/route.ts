@@ -203,6 +203,14 @@ async function recalculateTwitterLeaderboard(
   const leaderboardManualAdjustment = existingLeaderboard?.manual_points_adjustment || 0;
   totalPoints += leaderboardManualAdjustment;
 
+  // Get existing entry to preserve refresh_count
+  const { data: existingEntry } = await supabaseAdmin
+    .from("twitter_campaign_leaderboard")
+    .select("refresh_count")
+    .eq("contest_id", contestId)
+    .eq("creator_id", creatorId)
+    .maybeSingle();
+
   // Update or create leaderboard entry
   await supabaseAdmin
     .from("twitter_campaign_leaderboard")
@@ -213,6 +221,8 @@ async function recalculateTwitterLeaderboard(
         total_points: totalPoints,
         total_eligible_tweets: totalEligibleTweets,
         last_refreshed_at: new Date().toISOString(),
+        // Preserve refresh_count if it exists, otherwise default to 0
+        refresh_count: existingEntry?.refresh_count ?? 0,
       },
       {
         onConflict: "contest_id,creator_id",
