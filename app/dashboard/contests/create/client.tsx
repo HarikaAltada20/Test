@@ -6365,7 +6365,7 @@ export default function CreateContestPage({
                               htmlFor="showCommentMultipliers"
                               className="text-sm cursor-pointer"
                             >
-                              Configure Comment Engagement Multipliers
+                              Gives points when a creator’s comment drives more interaction
                             </Label>
                           </div>
                           {showCommentMultipliers && (
@@ -6549,7 +6549,7 @@ export default function CreateContestPage({
                               htmlFor="showRetweetMultipliers"
                               className="text-sm cursor-pointer"
                             >
-                              Configure Retweet Engagement Multipliers
+                              Gives points when a creator’s retweet generates additional interaction
                             </Label>
                           </div>
                           {showRetweetMultipliers && (
@@ -6696,7 +6696,7 @@ export default function CreateContestPage({
                         <div className="space-y-2">
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
                             <label className="flex items-center gap-2 text-sm">
-                              <span>Reposts / Quotes Base Points</span>
+                              <span>Reposts / Quotes</span>
                             </label>
                             <div className="sm:col-span-2">
                               <Input
@@ -6733,7 +6733,7 @@ export default function CreateContestPage({
                               htmlFor="showQuoteRepostMultipliers"
                               className="text-sm cursor-pointer"
                             >
-                              Configure Quote Repost Engagement Multipliers
+                              Gives points when a creator’s quote repost creates higher interaction
                             </Label>
                           </div>
                           {showQuoteRepostMultipliers && (
