@@ -880,28 +880,49 @@ export default function ContestDetailClient({
         const cpmConfig = (currentContest?.contest_based_details as any)
           ?.cpm_contest;
         if (cpmConfig?.cpm_rate_usd) {
-          let effectiveViews = submission.views || 0;
+          // For Twitter CPM contests, use total points
+          // For other platforms, use views
+          const isTwitterCpm =
+            isTwitterTweet &&
+            (currentContest.platform?.toLowerCase() === "twitter" ||
+              currentContest.platform?.toLowerCase() === "x") &&
+            currentContest.contest_format === "text_image";
 
-          // Apply min_views threshold
-          if (
-            cpmConfig.min_views != null &&
-            effectiveViews < cpmConfig.min_views
-          ) {
-            effectiveViews = 0;
+          if (isTwitterCpm) {
+            // Calculate total points: base_points + manual_points_adjustment
+            const totalPoints =
+              (submission.other_stats?.base_points || 0) +
+              ((submission as any).manual_points_adjustment || 0);
+
+            // Calculate earnings: (total points * CPM rate) / 1000, convert to cents
+            const calculatedEarnings =
+              (totalPoints * cpmConfig.cpm_rate_usd * 100) / 1000;
+            expectedEarnings = Math.round(calculatedEarnings);
+          } else {
+            // For non-Twitter CPM contests, use views
+            let effectiveViews = submission.views || 0;
+
+            // Apply min_views threshold
+            if (
+              cpmConfig.min_views != null &&
+              effectiveViews < cpmConfig.min_views
+            ) {
+              effectiveViews = 0;
+            }
+
+            // Apply max_views cap
+            if (
+              cpmConfig.max_views != null &&
+              effectiveViews > cpmConfig.max_views
+            ) {
+              effectiveViews = cpmConfig.max_views;
+            }
+
+            // Calculate earnings: (views * CPM rate) / 1000, convert to cents
+            const calculatedEarnings =
+              (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
+            expectedEarnings = Math.round(calculatedEarnings);
           }
-
-          // Apply max_views cap
-          if (
-            cpmConfig.max_views != null &&
-            effectiveViews > cpmConfig.max_views
-          ) {
-            effectiveViews = cpmConfig.max_views;
-          }
-
-          // Calculate earnings: (views * CPM rate) / 1000, convert to cents
-          const calculatedEarnings =
-            (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
-          expectedEarnings = Math.round(calculatedEarnings);
         }
       }
 
@@ -2198,14 +2219,14 @@ export default function ContestDetailClient({
 
   // Helper function to determine if refresh should be disabled and why
   const getRefreshButtonState = () => {
-    const isLocked = 
+    const isLocked =
       currentContest.post_contest_status === "in_review" ||
       currentContest.post_contest_status === "verification_complete" ||
       currentContest.post_contest_status === "payouts_processed";
-    
+
     const isDisabled =
       isRefreshingMetrics || !cooldownInfo.canRefresh || isLocked;
-    
+
     let disabledReason = "";
     if (isRefreshingMetrics) {
       disabledReason = "Refreshing metrics...";
@@ -2216,7 +2237,7 @@ export default function ContestDetailClient({
         cooldownInfo.remainingMinutes
       } more minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`;
     }
-    
+
     return { isDisabled, disabledReason };
   };
 
@@ -4501,7 +4522,7 @@ export default function ContestDetailClient({
                   const cpmPointsConfig =
                     currentContest.contest_based_details?.cpm_contest
                       ?.points_config;
-                  
+
                   const hasPointsConfig =
                     (twitterPointsConfig &&
                       Object.keys(twitterPointsConfig).length > 0) ||
@@ -4575,10 +4596,10 @@ export default function ContestDetailClient({
                                         ) || "N/A"
                                       : typeof twitterPointsConfig.comments_weight ===
                                         "number"
-                                        ? twitterPointsConfig.comments_weight.toFixed(
-                                            2
-                                          )
-                                        : twitterPointsConfig.comments_weight}
+                                      ? twitterPointsConfig.comments_weight.toFixed(
+                                          2
+                                        )
+                                      : twitterPointsConfig.comments_weight}
                                   </span>
                                 </div>
                               )}
@@ -4607,10 +4628,10 @@ export default function ContestDetailClient({
                                         ) || "N/A"
                                       : typeof twitterPointsConfig.retweets_weight ===
                                         "number"
-                                        ? twitterPointsConfig.retweets_weight.toFixed(
-                                            2
-                                          )
-                                        : twitterPointsConfig.retweets_weight}
+                                      ? twitterPointsConfig.retweets_weight.toFixed(
+                                          2
+                                        )
+                                      : twitterPointsConfig.retweets_weight}
                                   </span>
                                 </div>
                               )}
@@ -4640,10 +4661,10 @@ export default function ContestDetailClient({
                                         ) || "N/A"
                                       : typeof twitterPointsConfig.quote_reposts_weight ===
                                         "number"
-                                        ? twitterPointsConfig.quote_reposts_weight.toFixed(
-                                            2
-                                          )
-                                        : twitterPointsConfig.quote_reposts_weight}
+                                      ? twitterPointsConfig.quote_reposts_weight.toFixed(
+                                          2
+                                        )
+                                      : twitterPointsConfig.quote_reposts_weight}
                                   </span>
                                 </div>
                               )}
@@ -4716,7 +4737,7 @@ export default function ContestDetailClient({
                                   <h4 className="text-sm font-medium text-foreground/80">
                                     Engagement Multipliers
                                   </h4>
-                                  
+
                                   {/* Comment Multipliers */}
                                   {commentsWeightObj &&
                                     Object.keys(commentsWeightObj).some(
@@ -7769,7 +7790,7 @@ export default function ContestDetailClient({
                                   {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
                                 </>
                               )}
-                              {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
+                              {/* Show reward columns for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
                               {!(
                                 (currentContest.platform?.toLowerCase() ===
                                   "twitter" ||
@@ -7783,7 +7804,8 @@ export default function ContestDetailClient({
                                   currentContest.platform?.toLowerCase() ===
                                     "x") &&
                                 currentContest.contest_format ===
-                                  "text_image") ? (
+                                  "text_image") ||
+                              currentContest.contest_type === "cpm" ? (
                                 <>
                                   <TableHead className="text-center">
                                     Expected Reward
@@ -7897,29 +7919,61 @@ export default function ContestDetailClient({
                                   const cpmConfig =
                                     currentContest.contest_based_details
                                       ?.cpm_contest;
-                                  const views = submission.views || 0;
                                   if (cpmConfig?.cpm_rate_usd) {
-                                    let effectiveViews = views;
-                                    if (
-                                      cpmConfig.min_views != null &&
-                                      views < cpmConfig.min_views
-                                    ) {
-                                      effectiveViews = 0;
-                                    } else if (
-                                      cpmConfig.max_views != null &&
-                                      views > cpmConfig.max_views
-                                    ) {
-                                      effectiveViews = cpmConfig.max_views;
+                                    // For Twitter CPM contests, use total points
+                                    // For other platforms, use views
+                                    const isTwitterCpm =
+                                      isTwitterTweet &&
+                                      (currentContest.platform?.toLowerCase() ===
+                                        "twitter" ||
+                                        currentContest.platform?.toLowerCase() ===
+                                          "x") &&
+                                      currentContest.contest_format ===
+                                        "text_image";
+
+                                    if (isTwitterCpm) {
+                                      // Calculate total points: base_points + manual_points_adjustment
+                                      const totalPoints =
+                                        (submission.other_stats?.base_points ||
+                                          0) +
+                                        ((submission as any)
+                                          .manual_points_adjustment || 0);
+                                      // Calculate expected reward: total points * cpm rate / 1000
+                                      const calculatedEarnings =
+                                        (totalPoints * cpmConfig.cpm_rate_usd) /
+                                        1000;
+                                      return {
+                                        amount: calculatedEarnings,
+                                        label: "Expected",
+                                        className:
+                                          "text-slate-700 font-semibold",
+                                      };
+                                    } else {
+                                      // For non-Twitter CPM contests, use views
+                                      const views = submission.views || 0;
+                                      let effectiveViews = views;
+                                      if (
+                                        cpmConfig.min_views != null &&
+                                        views < cpmConfig.min_views
+                                      ) {
+                                        effectiveViews = 0;
+                                      } else if (
+                                        cpmConfig.max_views != null &&
+                                        views > cpmConfig.max_views
+                                      ) {
+                                        effectiveViews = cpmConfig.max_views;
+                                      }
+                                      const calculatedEarnings =
+                                        (effectiveViews *
+                                          cpmConfig.cpm_rate_usd) /
+                                        1000;
+                                      return {
+                                        amount: calculatedEarnings,
+                                        label: "Expected",
+                                        className:
+                                          "text-slate-700 font-semibold",
+                                      };
                                     }
-                                    const calculatedEarnings =
-                                      (effectiveViews *
-                                        cpmConfig.cpm_rate_usd) /
-                                      1000;
-                                    return {
-                                      amount: calculatedEarnings,
-                                      label: "Expected",
-                                      className: "text-slate-700 font-semibold",
-                                    };
                                   }
                                   return {
                                     amount: 0,
@@ -8722,7 +8776,7 @@ export default function ContestDetailClient({
                                                                         </TableCell> */}
                                     </>
                                   )}
-                                  {/* Show reward cells for leaderboard contests, hide for Twitter CPM campaigns */}
+                                  {/* Show reward cells for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
                                   {!(
                                     (currentContest.platform?.toLowerCase() ===
                                       "twitter" ||
@@ -8738,7 +8792,8 @@ export default function ContestDetailClient({
                                       currentContest.platform?.toLowerCase() ===
                                         "x") &&
                                     currentContest.contest_format ===
-                                      "text_image") ? (
+                                      "text_image") ||
+                                  currentContest.contest_type === "cpm" ? (
                                     <>
                                       <TableCell className="text-center">
                                         <div className="flex flex-col items-center">
@@ -9354,7 +9409,7 @@ export default function ContestDetailClient({
                                       )}
                                     </>
                                   )}
-                                  {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
+                                  {/* Show reward columns for leaderboard and CPM contests */}
                                   {!(
                                     (currentContest.platform?.toLowerCase() ===
                                       "twitter" ||
@@ -9363,8 +9418,9 @@ export default function ContestDetailClient({
                                     currentContest.contest_format ===
                                       "text_image"
                                   ) ||
-                                  (currentContest.contest_type ===
-                                    "leaderboard" &&
+                                  ((currentContest.contest_type ===
+                                    "leaderboard" ||
+                                    currentContest.contest_type === "cpm") &&
                                     (currentContest.platform?.toLowerCase() ===
                                       "twitter" ||
                                       currentContest.platform?.toLowerCase() ===
@@ -9401,15 +9457,17 @@ export default function ContestDetailClient({
                                       </TableHead>
                                     </>
                                   )}
-                                  {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard campaigns */}
+                                  {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard and CPM campaigns */}
                                   {(currentContest.platform?.toLowerCase() ===
                                     "twitter" ||
                                     currentContest.platform?.toLowerCase() ===
                                       "x") &&
                                     currentContest.contest_format ===
                                       "text_image" &&
-                                    currentContest.contest_type ===
-                                      "leaderboard" && (
+                                    (currentContest.contest_type ===
+                                      "leaderboard" ||
+                                      currentContest.contest_type ===
+                                        "cpm") && (
                                       <>
                                         <TableHead className="text-center">
                                           Manual Points Adjustment
@@ -9816,7 +9874,7 @@ export default function ContestDetailClient({
                                               )}
                                             </>
                                           )}
-                                          {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
+                                          {/* Show reward columns for leaderboard and CPM contests */}
                                           {!(
                                             (currentContest.platform?.toLowerCase() ===
                                               "twitter" ||
@@ -9825,8 +9883,10 @@ export default function ContestDetailClient({
                                             currentContest.contest_format ===
                                               "text_image"
                                           ) ||
-                                          (currentContest.contest_type ===
-                                            "leaderboard" &&
+                                          ((currentContest.contest_type ===
+                                            "leaderboard" ||
+                                            currentContest.contest_type ===
+                                              "cpm") &&
                                             (currentContest.platform?.toLowerCase() ===
                                               "twitter" ||
                                               currentContest.platform?.toLowerCase() ===
@@ -9886,15 +9946,17 @@ export default function ContestDetailClient({
                                               </TableCell>
                                             </>
                                           )}
-                                          {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard campaigns */}
+                                          {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard and CPM campaigns */}
                                           {(currentContest.platform?.toLowerCase() ===
                                             "twitter" ||
                                             currentContest.platform?.toLowerCase() ===
                                               "x") &&
                                             currentContest.contest_format ===
                                               "text_image" &&
-                                            currentContest.contest_type ===
-                                              "leaderboard" && (
+                                            (currentContest.contest_type ===
+                                              "leaderboard" ||
+                                              currentContest.contest_type ===
+                                                "cpm") && (
                                               <>
                                                 <TableCell className="text-center">
                                                   <div className="flex flex-col items-center">
@@ -10938,7 +11000,7 @@ export default function ContestDetailClient({
                                                   (current / target) * 100
                                                 )
                                               : 0;
-                                          
+
                                           return (
                                             <div
                                               className={cn(
@@ -10995,10 +11057,10 @@ export default function ContestDetailClient({
                                                   </div>
                                                   <div
                                                     className={cn(
-                                                    "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
-                                                    isReached
-                                                      ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                      : "bg-gradient-to-br from-pink-500 to-rose-600"
+                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                      isReached
+                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                        : "bg-gradient-to-br from-pink-500 to-rose-600"
                                                     )}
                                                   >
                                                     {isReached ? (
@@ -11010,30 +11072,30 @@ export default function ContestDetailClient({
                                                 </div>
                                                 {target !== null &&
                                                   target > 0 && (
-                                                  <div className="mt-3">
+                                                    <div className="mt-3">
                                                       <div
                                                         className={cn(
-                                                      "h-2 rounded-full overflow-hidden",
+                                                          "h-2 rounded-full overflow-hidden",
                                                           isDark
                                                             ? "bg-slate-700"
                                                             : "bg-slate-200"
                                                         )}
                                                       >
-                                                      <div
-                                                        className={cn(
-                                                          "h-full transition-all duration-500",
-                                                          isReached
-                                                            ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                            : "bg-gradient-to-r from-pink-500 to-rose-600"
-                                                        )}
+                                                        <div
+                                                          className={cn(
+                                                            "h-full transition-all duration-500",
+                                                            isReached
+                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                              : "bg-gradient-to-r from-pink-500 to-rose-600"
+                                                          )}
                                                           style={{
                                                             width: `${progress}%`,
                                                           }}
-                                                      />
-                                                    </div>
+                                                        />
+                                                      </div>
                                                       <p
                                                         className={cn(
-                                                      "text-xs mt-1 text-center",
+                                                          "text-xs mt-1 text-center",
                                                           isDark
                                                             ? "text-slate-400"
                                                             : "text-slate-500"
@@ -11041,9 +11103,9 @@ export default function ContestDetailClient({
                                                       >
                                                         {progress.toFixed(0)}%
                                                         complete
-                                                    </p>
-                                                  </div>
-                                                )}
+                                                      </p>
+                                                    </div>
+                                                  )}
                                               </CardContent>
                                             </div>
                                           );
@@ -11065,7 +11127,7 @@ export default function ContestDetailClient({
                                                   (current / target) * 100
                                                 )
                                               : 0;
-                                          
+
                                           return (
                                             <div
                                               className={cn(
@@ -11122,10 +11184,10 @@ export default function ContestDetailClient({
                                                   </div>
                                                   <div
                                                     className={cn(
-                                                    "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
-                                                    isReached
-                                                      ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                      : "bg-gradient-to-br from-orange-500 to-amber-600"
+                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                      isReached
+                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                        : "bg-gradient-to-br from-orange-500 to-amber-600"
                                                     )}
                                                   >
                                                     {isReached ? (
@@ -11137,30 +11199,30 @@ export default function ContestDetailClient({
                                                 </div>
                                                 {target !== null &&
                                                   target > 0 && (
-                                                  <div className="mt-3">
+                                                    <div className="mt-3">
                                                       <div
                                                         className={cn(
-                                                      "h-2 rounded-full overflow-hidden",
+                                                          "h-2 rounded-full overflow-hidden",
                                                           isDark
                                                             ? "bg-slate-700"
                                                             : "bg-slate-200"
                                                         )}
                                                       >
-                                                      <div
-                                                        className={cn(
-                                                          "h-full transition-all duration-500",
-                                                          isReached
-                                                            ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                            : "bg-gradient-to-r from-orange-500 to-amber-600"
-                                                        )}
+                                                        <div
+                                                          className={cn(
+                                                            "h-full transition-all duration-500",
+                                                            isReached
+                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                              : "bg-gradient-to-r from-orange-500 to-amber-600"
+                                                          )}
                                                           style={{
                                                             width: `${progress}%`,
                                                           }}
-                                                      />
-                                                    </div>
+                                                        />
+                                                      </div>
                                                       <p
                                                         className={cn(
-                                                      "text-xs mt-1 text-center",
+                                                          "text-xs mt-1 text-center",
                                                           isDark
                                                             ? "text-slate-400"
                                                             : "text-slate-500"
@@ -11168,9 +11230,9 @@ export default function ContestDetailClient({
                                                       >
                                                         {progress.toFixed(0)}%
                                                         complete
-                                                    </p>
-                                                  </div>
-                                                )}
+                                                      </p>
+                                                    </div>
+                                                  )}
                                               </CardContent>
                                             </div>
                                           );
@@ -11192,7 +11254,7 @@ export default function ContestDetailClient({
                                                   (current / target) * 100
                                                 )
                                               : 0;
-                                          
+
                                           return (
                                             <div
                                               className={cn(
@@ -11249,10 +11311,10 @@ export default function ContestDetailClient({
                                                   </div>
                                                   <div
                                                     className={cn(
-                                                    "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
-                                                    isReached
-                                                      ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                      : "bg-gradient-to-br from-cyan-500 to-teal-600"
+                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                      isReached
+                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                        : "bg-gradient-to-br from-cyan-500 to-teal-600"
                                                     )}
                                                   >
                                                     {isReached ? (
@@ -11264,30 +11326,30 @@ export default function ContestDetailClient({
                                                 </div>
                                                 {target !== null &&
                                                   target > 0 && (
-                                                  <div className="mt-3">
+                                                    <div className="mt-3">
                                                       <div
                                                         className={cn(
-                                                      "h-2 rounded-full overflow-hidden",
+                                                          "h-2 rounded-full overflow-hidden",
                                                           isDark
                                                             ? "bg-slate-700"
                                                             : "bg-slate-200"
                                                         )}
                                                       >
-                                                      <div
-                                                        className={cn(
-                                                          "h-full transition-all duration-500",
-                                                          isReached
-                                                            ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                            : "bg-gradient-to-r from-cyan-500 to-teal-600"
-                                                        )}
+                                                        <div
+                                                          className={cn(
+                                                            "h-full transition-all duration-500",
+                                                            isReached
+                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                              : "bg-gradient-to-r from-cyan-500 to-teal-600"
+                                                          )}
                                                           style={{
                                                             width: `${progress}%`,
                                                           }}
-                                                      />
-                                                    </div>
+                                                        />
+                                                      </div>
                                                       <p
                                                         className={cn(
-                                                      "text-xs mt-1 text-center",
+                                                          "text-xs mt-1 text-center",
                                                           isDark
                                                             ? "text-slate-400"
                                                             : "text-slate-500"
@@ -11295,9 +11357,9 @@ export default function ContestDetailClient({
                                                       >
                                                         {progress.toFixed(0)}%
                                                         complete
-                                                    </p>
-                                                  </div>
-                                                )}
+                                                      </p>
+                                                    </div>
+                                                  )}
                                               </CardContent>
                                             </div>
                                           );
@@ -11319,7 +11381,7 @@ export default function ContestDetailClient({
                                                   (current / target) * 100
                                                 )
                                               : 0;
-                                          
+
                                           return (
                                             <div
                                               className={cn(
@@ -11376,10 +11438,10 @@ export default function ContestDetailClient({
                                                   </div>
                                                   <div
                                                     className={cn(
-                                                    "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
-                                                    isReached
-                                                      ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                      : "bg-gradient-to-br from-indigo-500 to-violet-600"
+                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                      isReached
+                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                        : "bg-gradient-to-br from-indigo-500 to-violet-600"
                                                     )}
                                                   >
                                                     {isReached ? (
@@ -11391,30 +11453,30 @@ export default function ContestDetailClient({
                                                 </div>
                                                 {target !== null &&
                                                   target > 0 && (
-                                                  <div className="mt-3">
+                                                    <div className="mt-3">
                                                       <div
                                                         className={cn(
-                                                      "h-2 rounded-full overflow-hidden",
+                                                          "h-2 rounded-full overflow-hidden",
                                                           isDark
                                                             ? "bg-slate-700"
                                                             : "bg-slate-200"
                                                         )}
                                                       >
-                                                      <div
-                                                        className={cn(
-                                                          "h-full transition-all duration-500",
-                                                          isReached
-                                                            ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                            : "bg-gradient-to-r from-indigo-500 to-violet-600"
-                                                        )}
+                                                        <div
+                                                          className={cn(
+                                                            "h-full transition-all duration-500",
+                                                            isReached
+                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                              : "bg-gradient-to-r from-indigo-500 to-violet-600"
+                                                          )}
                                                           style={{
                                                             width: `${progress}%`,
                                                           }}
-                                                      />
-                                                    </div>
+                                                        />
+                                                      </div>
                                                       <p
                                                         className={cn(
-                                                      "text-xs mt-1 text-center",
+                                                          "text-xs mt-1 text-center",
                                                           isDark
                                                             ? "text-slate-400"
                                                             : "text-slate-500"
@@ -11422,9 +11484,9 @@ export default function ContestDetailClient({
                                                       >
                                                         {progress.toFixed(0)}%
                                                         complete
-                                                    </p>
-                                                  </div>
-                                                )}
+                                                      </p>
+                                                    </div>
+                                                  )}
                                               </CardContent>
                                             </div>
                                           );

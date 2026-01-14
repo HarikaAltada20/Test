@@ -109,7 +109,7 @@ export async function POST(
       // No JSON body provided; ignore
     }
 
-    // Load contest Twitter campaign config to determine points calculation for CPM-style contests
+    // Load contest Twitter campaign config to determine points calculation
     let metricWeights = {
       likes: 1,
       comments: 1,
@@ -118,32 +118,193 @@ export async function POST(
       impressions: 0, // optional "views" points
     };
 
+    // CPM engagement multipliers (for CPM Twitter contests only)
+    let cpmEngagementMultipliers: {
+      comment?: {
+        likes?: number;
+        replies?: number;
+        impressions?: number;
+        retweets?: number;
+        quote_reposts?: number;
+      };
+      retweet?: {
+        likes?: number;
+        replies?: number;
+        impressions?: number;
+        retweets?: number;
+        quote_reposts?: number;
+      };
+      quote_repost?: {
+        likes?: number;
+        replies?: number;
+        impressions?: number;
+        retweets?: number;
+        quote_reposts?: number;
+      };
+    } = {};
+
+    let isCpmContest = false;
+
     try {
       const { data: contestConfig } = await supabaseAdmin
         .from("contests")
-        .select("contest_based_details")
+        .select("contest_type, contest_based_details")
         .eq("id", contestId)
         .maybeSingle();
+
+      isCpmContest = contestConfig?.contest_type === "cpm";
 
       const twitterCampaign =
         contestConfig?.contest_based_details?.twitter_campaign;
       const pointsConfig = twitterCampaign?.points_config || {};
 
-      // Only override defaults if valid numeric weights are provided
-      if (typeof pointsConfig.likes_weight === "number") {
-        metricWeights.likes = pointsConfig.likes_weight;
-      }
-      if (typeof pointsConfig.comments_weight === "number") {
-        metricWeights.comments = pointsConfig.comments_weight;
-      }
-      if (typeof pointsConfig.retweets_weight === "number") {
-        metricWeights.retweets = pointsConfig.retweets_weight;
-      }
-      if (typeof pointsConfig.quote_reposts_weight === "number") {
-        metricWeights.quoteReposts = pointsConfig.quote_reposts_weight;
-      }
-      if (typeof pointsConfig.impressions_weight === "number") {
-        metricWeights.impressions = pointsConfig.impressions_weight;
+      if (isCpmContest) {
+        // For CPM contests, load engagement multipliers based on tweet type
+        // These multipliers are used when calculating points for comments, retweets, and quote reposts
+        if (pointsConfig.comment_likes_multiplier != null) {
+          if (!cpmEngagementMultipliers.comment)
+            cpmEngagementMultipliers.comment = {};
+          cpmEngagementMultipliers.comment.likes =
+            typeof pointsConfig.comment_likes_multiplier === "number"
+              ? pointsConfig.comment_likes_multiplier
+              : parseFloat(pointsConfig.comment_likes_multiplier) || 0;
+        }
+        if (pointsConfig.comment_replies_multiplier != null) {
+          if (!cpmEngagementMultipliers.comment)
+            cpmEngagementMultipliers.comment = {};
+          cpmEngagementMultipliers.comment.replies =
+            typeof pointsConfig.comment_replies_multiplier === "number"
+              ? pointsConfig.comment_replies_multiplier
+              : parseFloat(pointsConfig.comment_replies_multiplier) || 0;
+        }
+        if (pointsConfig.comment_impressions_multiplier != null) {
+          if (!cpmEngagementMultipliers.comment)
+            cpmEngagementMultipliers.comment = {};
+          cpmEngagementMultipliers.comment.impressions =
+            typeof pointsConfig.comment_impressions_multiplier === "number"
+              ? pointsConfig.comment_impressions_multiplier
+              : parseFloat(pointsConfig.comment_impressions_multiplier) || 0;
+        }
+        if (pointsConfig.comment_retweets_multiplier != null) {
+          if (!cpmEngagementMultipliers.comment)
+            cpmEngagementMultipliers.comment = {};
+          cpmEngagementMultipliers.comment.retweets =
+            typeof pointsConfig.comment_retweets_multiplier === "number"
+              ? pointsConfig.comment_retweets_multiplier
+              : parseFloat(pointsConfig.comment_retweets_multiplier) || 0;
+        }
+        if (pointsConfig.comment_quote_reposts_multiplier != null) {
+          if (!cpmEngagementMultipliers.comment)
+            cpmEngagementMultipliers.comment = {};
+          cpmEngagementMultipliers.comment.quote_reposts =
+            typeof pointsConfig.comment_quote_reposts_multiplier === "number"
+              ? pointsConfig.comment_quote_reposts_multiplier
+              : parseFloat(pointsConfig.comment_quote_reposts_multiplier) || 0;
+        }
+
+        if (pointsConfig.retweet_likes_multiplier != null) {
+          if (!cpmEngagementMultipliers.retweet)
+            cpmEngagementMultipliers.retweet = {};
+          cpmEngagementMultipliers.retweet.likes =
+            typeof pointsConfig.retweet_likes_multiplier === "number"
+              ? pointsConfig.retweet_likes_multiplier
+              : parseFloat(pointsConfig.retweet_likes_multiplier) || 0;
+        }
+        if (pointsConfig.retweet_replies_multiplier != null) {
+          if (!cpmEngagementMultipliers.retweet)
+            cpmEngagementMultipliers.retweet = {};
+          cpmEngagementMultipliers.retweet.replies =
+            typeof pointsConfig.retweet_replies_multiplier === "number"
+              ? pointsConfig.retweet_replies_multiplier
+              : parseFloat(pointsConfig.retweet_replies_multiplier) || 0;
+        }
+        if (pointsConfig.retweet_impressions_multiplier != null) {
+          if (!cpmEngagementMultipliers.retweet)
+            cpmEngagementMultipliers.retweet = {};
+          cpmEngagementMultipliers.retweet.impressions =
+            typeof pointsConfig.retweet_impressions_multiplier === "number"
+              ? pointsConfig.retweet_impressions_multiplier
+              : parseFloat(pointsConfig.retweet_impressions_multiplier) || 0;
+        }
+        if (pointsConfig.retweet_retweets_multiplier != null) {
+          if (!cpmEngagementMultipliers.retweet)
+            cpmEngagementMultipliers.retweet = {};
+          cpmEngagementMultipliers.retweet.retweets =
+            typeof pointsConfig.retweet_retweets_multiplier === "number"
+              ? pointsConfig.retweet_retweets_multiplier
+              : parseFloat(pointsConfig.retweet_retweets_multiplier) || 0;
+        }
+        if (pointsConfig.retweet_quote_reposts_multiplier != null) {
+          if (!cpmEngagementMultipliers.retweet)
+            cpmEngagementMultipliers.retweet = {};
+          cpmEngagementMultipliers.retweet.quote_reposts =
+            typeof pointsConfig.retweet_quote_reposts_multiplier === "number"
+              ? pointsConfig.retweet_quote_reposts_multiplier
+              : parseFloat(pointsConfig.retweet_quote_reposts_multiplier) || 0;
+        }
+
+        if (pointsConfig.quote_repost_likes_multiplier != null) {
+          if (!cpmEngagementMultipliers.quote_repost)
+            cpmEngagementMultipliers.quote_repost = {};
+          cpmEngagementMultipliers.quote_repost.likes =
+            typeof pointsConfig.quote_repost_likes_multiplier === "number"
+              ? pointsConfig.quote_repost_likes_multiplier
+              : parseFloat(pointsConfig.quote_repost_likes_multiplier) || 0;
+        }
+        if (pointsConfig.quote_repost_replies_multiplier != null) {
+          if (!cpmEngagementMultipliers.quote_repost)
+            cpmEngagementMultipliers.quote_repost = {};
+          cpmEngagementMultipliers.quote_repost.replies =
+            typeof pointsConfig.quote_repost_replies_multiplier === "number"
+              ? pointsConfig.quote_repost_replies_multiplier
+              : parseFloat(pointsConfig.quote_repost_replies_multiplier) || 0;
+        }
+        if (pointsConfig.quote_repost_impressions_multiplier != null) {
+          if (!cpmEngagementMultipliers.quote_repost)
+            cpmEngagementMultipliers.quote_repost = {};
+          cpmEngagementMultipliers.quote_repost.impressions =
+            typeof pointsConfig.quote_repost_impressions_multiplier === "number"
+              ? pointsConfig.quote_repost_impressions_multiplier
+              : parseFloat(pointsConfig.quote_repost_impressions_multiplier) ||
+                0;
+        }
+        if (pointsConfig.quote_repost_retweets_multiplier != null) {
+          if (!cpmEngagementMultipliers.quote_repost)
+            cpmEngagementMultipliers.quote_repost = {};
+          cpmEngagementMultipliers.quote_repost.retweets =
+            typeof pointsConfig.quote_repost_retweets_multiplier === "number"
+              ? pointsConfig.quote_repost_retweets_multiplier
+              : parseFloat(pointsConfig.quote_repost_retweets_multiplier) || 0;
+        }
+        if (pointsConfig.quote_repost_quote_reposts_multiplier != null) {
+          if (!cpmEngagementMultipliers.quote_repost)
+            cpmEngagementMultipliers.quote_repost = {};
+          cpmEngagementMultipliers.quote_repost.quote_reposts =
+            typeof pointsConfig.quote_repost_quote_reposts_multiplier ===
+            "number"
+              ? pointsConfig.quote_repost_quote_reposts_multiplier
+              : parseFloat(
+                  pointsConfig.quote_repost_quote_reposts_multiplier
+                ) || 0;
+        }
+      } else {
+        // For leaderboard contests, use simple metric weights (no changes)
+        // Only override defaults if valid numeric weights are provided
+        if (typeof pointsConfig.likes_weight === "number") {
+          metricWeights.likes = pointsConfig.likes_weight;
+        }
+        if (typeof pointsConfig.comments_weight === "number") {
+          metricWeights.comments = pointsConfig.comments_weight;
+        }
+        if (typeof pointsConfig.retweets_weight === "number") {
+          metricWeights.retweets = pointsConfig.retweets_weight;
+        }
+        if (typeof pointsConfig.quote_reposts_weight === "number") {
+          metricWeights.quoteReposts = pointsConfig.quote_reposts_weight;
+        }
+        if (typeof pointsConfig.impressions_weight === "number") {
+          metricWeights.impressions = pointsConfig.impressions_weight;
+        }
       }
     } catch (configError) {
       console.error(
@@ -416,135 +577,150 @@ export async function POST(
         // Remove @ if present to get a clean screen name
         const cleanUsername = username.replace("@", "");
 
-      // Get join date for this participant
-      const joinDate = participant.joined_at ? new Date(participant.joined_at) : null;
-      console.log(
-        `[twitter-refresh-tweets] Fetching tweets via RapidAPI replies.php for user ${cleanUsername}${joinDate ? ` (joined: ${joinDate.toISOString()})` : ''}`
-      );
+        // Get join date for this participant
+        const joinDate = participant.joined_at
+          ? new Date(participant.joined_at)
+          : null;
+        console.log(
+          `[twitter-refresh-tweets] Fetching tweets via RapidAPI replies.php for user ${cleanUsername}${
+            joinDate ? ` (joined: ${joinDate.toISOString()})` : ""
+          }`
+        );
 
-      // Fetch ALL tweets up to join date using pagination
-      let allTimelineTweets: any[] = [];
-      let cursor: string | null = null;
-      let hasMorePages = true;
-      let pageCount = 0;
-      const MAX_PAGES = 50; // Safety limit to prevent infinite loops
+        // Fetch ALL tweets up to join date using pagination
+        let allTimelineTweets: any[] = [];
+        let cursor: string | null = null;
+        let hasMorePages = true;
+        let pageCount = 0;
+        const MAX_PAGES = 50; // Safety limit to prevent infinite loops
 
-      while (hasMorePages && pageCount < MAX_PAGES) {
-        try {
-          const options: any = {
-            method: "GET",
-            url: `https://${rapidApiHost}/replies.php`,
-            params: {
-              screenname: cleanUsername,
-            },
-            headers: {
-              "x-rapidapi-key": rapidApiKey,
-              "x-rapidapi-host": rapidApiHost,
-            },
-          };
+        while (hasMorePages && pageCount < MAX_PAGES) {
+          try {
+            const options: any = {
+              method: "GET",
+              url: `https://${rapidApiHost}/replies.php`,
+              params: {
+                screenname: cleanUsername,
+              },
+              headers: {
+                "x-rapidapi-key": rapidApiKey,
+                "x-rapidapi-host": rapidApiHost,
+              },
+            };
 
-          // Add cursor for pagination (if not first page)
-          if (cursor) {
-            options.params.cursor = cursor;
-          }
+            // Add cursor for pagination (if not first page)
+            if (cursor) {
+              options.params.cursor = cursor;
+            }
 
-          const res = await axios.request(options);
-          const pageData = res.data;
-          
-          const pageTimeline: any[] = Array.isArray(pageData?.timeline)
-            ? pageData.timeline
-            : [];
+            const res = await axios.request(options);
+            const pageData = res.data;
 
-          // Add tweets from this page
-          allTimelineTweets.push(...pageTimeline);
+            const pageTimeline: any[] = Array.isArray(pageData?.timeline)
+              ? pageData.timeline
+              : [];
 
-          // Check if we've reached the join date
-          if (joinDate && pageTimeline.length > 0) {
-            const oldestTweet = pageTimeline[pageTimeline.length - 1];
-            const oldestTweetDate = oldestTweet?.created_at 
-              ? new Date(oldestTweet.created_at) 
-              : null;
-            
-            // If oldest tweet in this page is before join date, we've fetched enough
-            if (oldestTweetDate && oldestTweetDate < joinDate) {
+            // Add tweets from this page
+            allTimelineTweets.push(...pageTimeline);
+
+            // Check if we've reached the join date
+            if (joinDate && pageTimeline.length > 0) {
+              const oldestTweet = pageTimeline[pageTimeline.length - 1];
+              const oldestTweetDate = oldestTweet?.created_at
+                ? new Date(oldestTweet.created_at)
+                : null;
+
+              // If oldest tweet in this page is before join date, we've fetched enough
+              if (oldestTweetDate && oldestTweetDate < joinDate) {
+                console.log(
+                  `[twitter-refresh-tweets] Reached join date for ${cleanUsername}. Oldest tweet: ${oldestTweetDate.toISOString()}, Join date: ${joinDate.toISOString()}`
+                );
+                hasMorePages = false;
+                break;
+              }
+            }
+
+            // Check for next cursor
+            const nextCursor = pageData?.next_cursor;
+            if (!nextCursor || nextCursor === "0" || nextCursor === 0) {
+              hasMorePages = false;
+            } else {
+              cursor = nextCursor;
+              pageCount++;
               console.log(
-                `[twitter-refresh-tweets] Reached join date for ${cleanUsername}. Oldest tweet: ${oldestTweetDate.toISOString()}, Join date: ${joinDate.toISOString()}`
+                `[twitter-refresh-tweets] Fetched page ${pageCount} for ${cleanUsername}, total tweets so far: ${allTimelineTweets.length}, next cursor: ${cursor}`
+              );
+            }
+          } catch (err) {
+            console.error(
+              `[twitter-refresh-tweets] Error calling RapidAPI replies.php for ${cleanUsername} (page ${
+                pageCount + 1
+              }):`,
+              err
+            );
+            // If first page fails, return error. If later page fails, use what we have
+            if (pageCount === 0) {
+              return {
+                username: cleanUsername,
+                participant,
+                rawCount: 0,
+                normalizedCount: 0,
+                filteredCount: 0,
+                filteredTweets: [],
+                error:
+                  "Error calling RapidAPI replies.php. Check server logs for details.",
+                totalFetched: 0,
+                totalFiltered: 0,
+              };
+            } else {
+              // Use what we've fetched so far
+              console.log(
+                `[twitter-refresh-tweets] Error on page ${
+                  pageCount + 1
+                } for ${cleanUsername}, using ${
+                  allTimelineTweets.length
+                } tweets fetched so far`
               );
               hasMorePages = false;
-              break;
             }
           }
-
-          // Check for next cursor
-          const nextCursor = pageData?.next_cursor;
-          if (!nextCursor || nextCursor === "0" || nextCursor === 0) {
-            hasMorePages = false;
-          } else {
-            cursor = nextCursor;
-            pageCount++;
-            console.log(
-              `[twitter-refresh-tweets] Fetched page ${pageCount} for ${cleanUsername}, total tweets so far: ${allTimelineTweets.length}, next cursor: ${cursor}`
-            );
-          }
-        } catch (err) {
-          console.error(
-            `[twitter-refresh-tweets] Error calling RapidAPI replies.php for ${cleanUsername} (page ${pageCount + 1}):`,
-            err
-          );
-          // If first page fails, return error. If later page fails, use what we have
-          if (pageCount === 0) {
-            return {
-              username: cleanUsername,
-              participant,
-              rawCount: 0,
-              normalizedCount: 0,
-              filteredCount: 0,
-              filteredTweets: [],
-              error: "Error calling RapidAPI replies.php. Check server logs for details.",
-              totalFetched: 0,
-              totalFiltered: 0,
-            };
-          } else {
-            // Use what we've fetched so far
-            console.log(
-              `[twitter-refresh-tweets] Error on page ${pageCount + 1} for ${cleanUsername}, using ${allTimelineTweets.length} tweets fetched so far`
-            );
-            hasMorePages = false;
-          }
         }
-      }
 
-      if (pageCount >= MAX_PAGES) {
-        console.warn(
-          `[twitter-refresh-tweets] Reached MAX_PAGES limit (${MAX_PAGES}) for ${cleanUsername}, stopping pagination`
+        if (pageCount >= MAX_PAGES) {
+          console.warn(
+            `[twitter-refresh-tweets] Reached MAX_PAGES limit (${MAX_PAGES}) for ${cleanUsername}, stopping pagination`
+          );
+        }
+
+        console.log(
+          `[twitter-refresh-tweets] Completed pagination for ${cleanUsername}: ${
+            allTimelineTweets.length
+          } total tweets across ${pageCount + 1} pages`
         );
-      }
 
-      console.log(
-        `[twitter-refresh-tweets] Completed pagination for ${cleanUsername}: ${allTimelineTweets.length} total tweets across ${pageCount + 1} pages`
-      );
+        const timeline = allTimelineTweets;
 
-      const timeline = allTimelineTweets;
+        // Filter tweets to only include those created on or after join date
+        const filteredTimeline = joinDate
+          ? timeline.filter((tweet: any) => {
+              const tweetDate = tweet.created_at
+                ? new Date(tweet.created_at)
+                : null;
+              if (!tweetDate) return false;
+              return tweetDate >= joinDate;
+            })
+          : timeline;
 
-      // Filter tweets to only include those created on or after join date
-      const filteredTimeline = joinDate 
-        ? timeline.filter((tweet: any) => {
-            const tweetDate = tweet.created_at ? new Date(tweet.created_at) : null;
-            if (!tweetDate) return false;
-            return tweetDate >= joinDate;
-          })
-        : timeline;
+        console.log(
+          `[twitter-refresh-tweets] Filtered ${timeline.length} tweets to ${filteredTimeline.length} tweets on/after join date for ${cleanUsername}`
+        );
 
-      console.log(
-        `[twitter-refresh-tweets] Filtered ${timeline.length} tweets to ${filteredTimeline.length} tweets on/after join date for ${cleanUsername}`
-      );
-
-      const mappedTweets = filteredTimeline.map((tweet: any) => {
-        const inferredType = tweet.retweeted_tweet
-          ? "retweet"
-          : tweet.quoted
-          ? "quote"
-          : "tweet";
+        const mappedTweets = filteredTimeline.map((tweet: any) => {
+          const inferredType = tweet.retweeted_tweet
+            ? "retweet"
+            : tweet.quoted
+            ? "quote"
+            : "tweet";
 
           return {
             tweet_id: tweet.tweet_id || tweet.id_str || tweet.id || "",
@@ -696,13 +872,60 @@ export async function POST(
             const quoteReposts = t.quotes || 0; // Use quotes from API response for quote reposts
             const impressions = Number(t.views) || 0;
 
-            // Configurable scoring: brand selects which metrics count towards points
-            const points =
-              likes * metricWeights.likes +
-              replies * metricWeights.comments +
-              retweets * metricWeights.retweets +
-              quoteReposts * metricWeights.quoteReposts +
-              impressions * metricWeights.impressions;
+            // Calculate points based on contest type and tweet type
+            let points = 0;
+            const tweetType = (t.type || "tweet").toLowerCase();
+
+            if (isCpmContest) {
+              // For CPM contests, use engagement multipliers based on tweet type
+              if (tweetType === "reply" || tweetType === "comment") {
+                // Comment/Reply engagement: use comment multipliers
+                const multipliers = cpmEngagementMultipliers.comment || {};
+                points =
+                  likes * (multipliers.likes || 0) +
+                  replies * (multipliers.replies || 0) +
+                  impressions * (multipliers.impressions || 0) +
+                  retweets * (multipliers.retweets || 0) +
+                  quoteReposts * (multipliers.quote_reposts || 0);
+              } else if (tweetType === "retweet") {
+                // Retweet engagement: use retweet multipliers
+                const multipliers = cpmEngagementMultipliers.retweet || {};
+                points =
+                  likes * (multipliers.likes || 0) +
+                  replies * (multipliers.replies || 0) +
+                  impressions * (multipliers.impressions || 0) +
+                  retweets * (multipliers.retweets || 0) +
+                  quoteReposts * (multipliers.quote_reposts || 0);
+              } else if (
+                tweetType === "quote" ||
+                tweetType === "quote_repost"
+              ) {
+                // Quote repost engagement: use quote_repost multipliers
+                const multipliers = cpmEngagementMultipliers.quote_repost || {};
+                points =
+                  likes * (multipliers.likes || 0) +
+                  replies * (multipliers.replies || 0) +
+                  impressions * (multipliers.impressions || 0) +
+                  retweets * (multipliers.retweets || 0) +
+                  quoteReposts * (multipliers.quote_reposts || 0);
+              } else {
+                // Regular tweet: use default metric weights (fallback)
+                points =
+                  likes * metricWeights.likes +
+                  replies * metricWeights.comments +
+                  retweets * metricWeights.retweets +
+                  quoteReposts * metricWeights.quoteReposts +
+                  impressions * metricWeights.impressions;
+              }
+            } else {
+              // For leaderboard contests, use simple metric weights (no changes)
+              points =
+                likes * metricWeights.likes +
+                replies * metricWeights.comments +
+                retweets * metricWeights.retweets +
+                quoteReposts * metricWeights.quoteReposts +
+                impressions * metricWeights.impressions;
+            }
 
             // Get existing moderation data if tweet exists
             const existingModeration = existingTweetsMap.get(t.tweet_id);
@@ -879,15 +1102,17 @@ export async function POST(
     // 1. API rate limits or temporary issues preventing complete fetch
     // 2. Edge cases where tweets exist but aren't returned by the API
     // 3. Tweets that were filtered out but still exist on Twitter
-    // 
+    //
     // We'll keep existing tweets as-is if they're not found, rather than marking as deleted
     // ============================================================================
-    console.log(`[twitter-refresh-tweets] Skipping deletion marking - keeping existing tweets as-is even if not found`);
-    
-    // Log tweets that weren't found for debugging, but don't mark as deleted
-    const tweetsNotInFreshResponse = Array.from(existingTweetsMap.keys()).filter(
-      (tweetId) => !freshTweetIds.has(tweetId)
+    console.log(
+      `[twitter-refresh-tweets] Skipping deletion marking - keeping existing tweets as-is even if not found`
     );
+
+    // Log tweets that weren't found for debugging, but don't mark as deleted
+    const tweetsNotInFreshResponse = Array.from(
+      existingTweetsMap.keys()
+    ).filter((tweetId) => !freshTweetIds.has(tweetId));
 
     if (tweetsNotInFreshResponse.length > 0) {
       console.log(
@@ -898,7 +1123,9 @@ export async function POST(
     // NOTE: We also skip marking tweets as "filtered_out" if they're not in fresh response
     // because the same reasons apply - not found doesn't mean they don't match rules
     // They might just not be in the current API response due to pagination/limits
-    console.log(`[twitter-refresh-tweets] Skipping filtered_out marking - tweets not in response may still be valid`);
+    console.log(
+      `[twitter-refresh-tweets] Skipping filtered_out marking - tweets not in response may still be valid`
+    );
 
     // After saving filtered tweets, aggregate per-creator stats into twitter_campaign_leaderboard
     console.log(
@@ -1026,7 +1253,8 @@ export async function POST(
       }
 
       const upsertPayload = leaderboardEntries.map((entry, index) => {
-        const leaderboardManualAdjustment = leaderboardManualAdjustments.get(entry.creatorId) || 0;
+        const leaderboardManualAdjustment =
+          leaderboardManualAdjustments.get(entry.creatorId) || 0;
         const refreshCount = refreshCountMap.get(entry.creatorId) || 1; // Default to 1 for new entries
         return {
           contest_id: contestId,
@@ -1146,37 +1374,43 @@ export async function POST(
       .eq("is_eligible", true);
 
     // Fast in-memory aggregation (sufficiently fast for 10,000+ rows)
-    const totalLikes = allTweets?.reduce((sum, t) => sum + (t.likes || 0), 0) || 0;
-    const totalReplies = allTweets?.reduce((sum, t) => sum + (t.replies || 0), 0) || 0;
-    const totalRetweets = allTweets?.reduce((sum, t) => sum + (t.retweets || 0), 0) || 0;
-    const totalQuoteReposts = allTweets?.reduce((sum, t) => sum + (t.quote_reposts || 0), 0) || 0;
-    const totalImpressions = allTweets?.reduce((sum, t) => sum + (Number(t.impressions) || 0), 0) || 0;
-    const totalPoints = allTweets?.reduce((sum, t) => sum + (t.points || 0), 0) || 0;
+    const totalLikes =
+      allTweets?.reduce((sum, t) => sum + (t.likes || 0), 0) || 0;
+    const totalReplies =
+      allTweets?.reduce((sum, t) => sum + (t.replies || 0), 0) || 0;
+    const totalRetweets =
+      allTweets?.reduce((sum, t) => sum + (t.retweets || 0), 0) || 0;
+    const totalQuoteReposts =
+      allTweets?.reduce((sum, t) => sum + (t.quote_reposts || 0), 0) || 0;
+    const totalImpressions =
+      allTweets?.reduce((sum, t) => sum + (Number(t.impressions) || 0), 0) || 0;
+    const totalPoints =
+      allTweets?.reduce((sum, t) => sum + (t.points || 0), 0) || 0;
 
     // Get campaign_type from contest data (already fetched earlier)
-    const campaignType = contestData?.contest_based_details?.twitter_campaign?.campaign_type || "awareness";
+    const campaignType =
+      contestData?.contest_based_details?.twitter_campaign?.campaign_type ||
+      "awareness";
 
     // Update metrics table
-    await supabaseAdmin
-      .from("twitter_campaign_metrics")
-      .upsert(
-        {
-          contest_id: contestId,
-          campaign_type: campaignType, // Required field - set to "awareness" or "raid" based on contest config
-          total_filtered_tweets: totalFilteredTweets || 0,
-          total_participants: totalParticipants || 0,
-          total_likes: totalLikes,
-          total_replies: totalReplies,
-          total_retweets: totalRetweets,
-          total_quote_reposts: totalQuoteReposts,
-          total_impressions: totalImpressions,
-          total_points: totalPoints,
-          last_updated_at: currentTime,
-        },
-        {
-          onConflict: "contest_id",
-        }
-      );
+    await supabaseAdmin.from("twitter_campaign_metrics").upsert(
+      {
+        contest_id: contestId,
+        campaign_type: campaignType, // Required field - set to "awareness" or "raid" based on contest config
+        total_filtered_tweets: totalFilteredTweets || 0,
+        total_participants: totalParticipants || 0,
+        total_likes: totalLikes,
+        total_replies: totalReplies,
+        total_retweets: totalRetweets,
+        total_quote_reposts: totalQuoteReposts,
+        total_impressions: totalImpressions,
+        total_points: totalPoints,
+        last_updated_at: currentTime,
+      },
+      {
+        onConflict: "contest_id",
+      }
+    );
 
     return NextResponse.json({
       success: true,
