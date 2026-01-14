@@ -200,6 +200,7 @@ export async function POST(
     // Twitter CPM awareness points configuration (same model as raid)
     let isTwitterCpmContest = false;
     let twitterAwarenessPointsConfig: any = null;
+    let rawTwitterPointsConfig: any = null; // Store raw points_config for tweet type calculations
 
     // Always fetch from contest data (JSONB) to get complete config including allowed_tweet_types
     const { data: contestData, error: contestError } = await supabase
@@ -252,6 +253,11 @@ export async function POST(
         contestType === "cpm" &&
         isTwitterPlatform &&
         twitterCampaign?.campaign_type === "awareness";
+
+      // Store raw points_config for tweet type calculations (if available)
+      if (isTwitterCpmContest && twitterCampaign?.points_config) {
+        rawTwitterPointsConfig = twitterCampaign.points_config || {};
+      }
 
       // Build points configuration for Twitter CPM awareness campaigns
       if (isTwitterCpmContest && twitterCampaign?.points_config) {
@@ -1022,7 +1028,7 @@ export async function POST(
             let points: number;
 
             // For Twitter CPM awareness campaigns, calculate points using points_config
-            if (isTwitterCpmContest && twitterAwarenessPointsConfig) {
+            if (isTwitterCpmContest) {
               const rawType = (t.type || "tweet").toLowerCase();
               let engagementType:
                 | "comment"
@@ -1038,7 +1044,8 @@ export async function POST(
                 engagementType = "quote_repost";
               }
 
-              if (engagementType) {
+              // For reply/retweet/quote types, use multiplier-based calculation
+              if (engagementType && twitterAwarenessPointsConfig) {
                 const tweetForPoints: any = {
                   likes,
                   replies,
@@ -1058,8 +1065,65 @@ export async function POST(
                 );
 
                 points = Math.round(basePoints + bonusPoints);
+              } else if (rawType === "tweet" && rawTwitterPointsConfig) {
+                // For tweet_type = tweet, use brand-defined base points formula
+                // Total Points = (Likes × Likes Base Points) + (Replies × Replies Base Points) + 
+                //                (Retweets × Retweets Base Points) + (Quote Reposts × Quote Reposts Base Points) + 
+                //                (Impressions × Impressions Base Points)
+                // Extract base points from points_config
+                const likesBasePoints = rawTwitterPointsConfig.likes_weight || 0;
+                
+                // Replies base points from comments_weight (can be object with base_weight or number)
+                let repliesBasePoints = 0;
+                if (rawTwitterPointsConfig.comments_weight != null) {
+                  if (typeof rawTwitterPointsConfig.comments_weight === "object" && 
+                      rawTwitterPointsConfig.comments_weight.base_weight != null) {
+                    repliesBasePoints = typeof rawTwitterPointsConfig.comments_weight.base_weight === "number"
+                      ? rawTwitterPointsConfig.comments_weight.base_weight
+                      : parseFloat(rawTwitterPointsConfig.comments_weight.base_weight) || 0;
+                  } else if (typeof rawTwitterPointsConfig.comments_weight === "number") {
+                    repliesBasePoints = rawTwitterPointsConfig.comments_weight;
+                  }
+                }
+                
+                // Retweets base points from retweets_weight (can be object with base_weight or number)
+                let retweetsBasePoints = 0;
+                if (rawTwitterPointsConfig.retweets_weight != null) {
+                  if (typeof rawTwitterPointsConfig.retweets_weight === "object" && 
+                      rawTwitterPointsConfig.retweets_weight.base_weight != null) {
+                    retweetsBasePoints = typeof rawTwitterPointsConfig.retweets_weight.base_weight === "number"
+                      ? rawTwitterPointsConfig.retweets_weight.base_weight
+                      : parseFloat(rawTwitterPointsConfig.retweets_weight.base_weight) || 0;
+                  } else if (typeof rawTwitterPointsConfig.retweets_weight === "number") {
+                    retweetsBasePoints = rawTwitterPointsConfig.retweets_weight;
+                  }
+                }
+                
+                // Quote reposts base points from quote_reposts_weight (can be object with base_weight or number)
+                let quoteRepostsBasePoints = 0;
+                if (rawTwitterPointsConfig.quote_reposts_weight != null) {
+                  if (typeof rawTwitterPointsConfig.quote_reposts_weight === "object" && 
+                      rawTwitterPointsConfig.quote_reposts_weight.base_weight != null) {
+                    quoteRepostsBasePoints = typeof rawTwitterPointsConfig.quote_reposts_weight.base_weight === "number"
+                      ? rawTwitterPointsConfig.quote_reposts_weight.base_weight
+                      : parseFloat(rawTwitterPointsConfig.quote_reposts_weight.base_weight) || 0;
+                  } else if (typeof rawTwitterPointsConfig.quote_reposts_weight === "number") {
+                    quoteRepostsBasePoints = rawTwitterPointsConfig.quote_reposts_weight;
+                  }
+                }
+                
+                const impressionsBasePoints = rawTwitterPointsConfig.impressions_weight || 0;
+                
+                // Calculate total points using brand-defined base points
+                points = Math.round(
+                  (likes * likesBasePoints) +
+                  (replies * repliesBasePoints) +
+                  (retweets * retweetsBasePoints) +
+                  (quoteReposts * quoteRepostsBasePoints) +
+                  (impressions * impressionsBasePoints)
+                );
               } else {
-                // Fallback for plain tweets: simple scoring
+                // Fallback if points_config is not available or tweet type is not handled
                 points =
                   likes + replies + retweets + quoteReposts + impressions;
               }
