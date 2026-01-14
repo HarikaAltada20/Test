@@ -3934,10 +3934,32 @@ export default function EditContestPage({
           }
         } else {
           // For non-raid campaigns, check all metrics including likes and impressions
-          const likesWeight =
-            parseFloat(twitterPointsConfig.likesWeight.toString()) || 0;
-          const impressionsWeight =
-            parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0;
+          // Validate that Twitter points fields are not empty - must be 0 or a positive number
+          const likesWeightStr = twitterPointsConfig.likesWeight
+            .toString()
+            .trim();
+          const impressionsWeightStr = twitterPointsConfig.impressionsWeight
+            .toString()
+            .trim();
+
+          if (
+            likesWeightStr === "" ||
+            likesWeightStr === null ||
+            likesWeightStr === undefined
+          ) {
+            return "Likes points cannot be empty. Please enter a value (use 0 if you don't want likes to count towards points).";
+          }
+
+          if (
+            impressionsWeightStr === "" ||
+            impressionsWeightStr === null ||
+            impressionsWeightStr === undefined
+          ) {
+            return "Views points cannot be empty. Please enter a value (use 0 if you don't want views to count towards points).";
+          }
+
+          const likesWeight = parseFloat(likesWeightStr) || 0;
+          const impressionsWeight = parseFloat(impressionsWeightStr) || 0;
 
           if (
             likesWeight <= 0 &&
@@ -3947,6 +3969,93 @@ export default function EditContestPage({
             impressionsWeight <= 0
           ) {
             return "For Twitter CPM contests, please enable at least one metric (likes, comments/replies, retweets, quote reposts, or views) to count towards points and payout.";
+          }
+
+          // Validate engagement multipliers when checkboxes are checked
+          // Comment Engagement Multipliers validation
+          if (showCommentMultipliers) {
+            const commentLikesStr = cpmPointsConfig.comment_likes_multiplier
+              .toString()
+              .trim();
+            const commentRepliesStr = cpmPointsConfig.comment_replies_multiplier
+              .toString()
+              .trim();
+            const commentImpressionsStr =
+              cpmPointsConfig.comment_impressions_multiplier.toString().trim();
+            const commentRetweetsStr =
+              cpmPointsConfig.comment_retweets_multiplier.toString().trim();
+            const commentQuoteRepostsStr =
+              cpmPointsConfig.comment_quote_reposts_multiplier
+                .toString()
+                .trim();
+
+            if (
+              commentLikesStr === "" ||
+              commentRepliesStr === "" ||
+              commentImpressionsStr === "" ||
+              commentRetweetsStr === "" ||
+              commentQuoteRepostsStr === ""
+            ) {
+              return "Comment Engagement Multipliers cannot be empty. Please enter a value for each field (use 0 if you don't want a metric to add points).";
+            }
+          }
+
+          // Retweet Engagement Multipliers validation
+          if (showRetweetMultipliers) {
+            const retweetLikesStr = cpmPointsConfig.retweet_likes_multiplier
+              .toString()
+              .trim();
+            const retweetRepliesStr = cpmPointsConfig.retweet_replies_multiplier
+              .toString()
+              .trim();
+            const retweetImpressionsStr =
+              cpmPointsConfig.retweet_impressions_multiplier.toString().trim();
+            const retweetRetweetsStr =
+              cpmPointsConfig.retweet_retweets_multiplier.toString().trim();
+            const retweetQuoteRepostsStr =
+              cpmPointsConfig.retweet_quote_reposts_multiplier
+                .toString()
+                .trim();
+
+            if (
+              retweetLikesStr === "" ||
+              retweetRepliesStr === "" ||
+              retweetImpressionsStr === "" ||
+              retweetRetweetsStr === "" ||
+              retweetQuoteRepostsStr === ""
+            ) {
+              return "Retweet Engagement Multipliers cannot be empty. Please enter a value for each field (use 0 if you don't want a metric to add points).";
+            }
+          }
+
+          // Quote Repost Engagement Multipliers validation
+          if (showQuoteRepostMultipliers) {
+            const quoteRepostLikesStr =
+              cpmPointsConfig.quote_repost_likes_multiplier.toString().trim();
+            const quoteRepostRepliesStr =
+              cpmPointsConfig.quote_repost_replies_multiplier.toString().trim();
+            const quoteRepostImpressionsStr =
+              cpmPointsConfig.quote_repost_impressions_multiplier
+                .toString()
+                .trim();
+            const quoteRepostRetweetsStr =
+              cpmPointsConfig.quote_repost_retweets_multiplier
+                .toString()
+                .trim();
+            const quoteRepostQuoteRepostsStr =
+              cpmPointsConfig.quote_repost_quote_reposts_multiplier
+                .toString()
+                .trim();
+
+            if (
+              quoteRepostLikesStr === "" ||
+              quoteRepostRepliesStr === "" ||
+              quoteRepostImpressionsStr === "" ||
+              quoteRepostRetweetsStr === "" ||
+              quoteRepostQuoteRepostsStr === ""
+            ) {
+              return "Quote Repost Engagement Multipliers cannot be empty. Please enter a value for each field (use 0 if you don't want a metric to add points).";
+            }
           }
         }
       }

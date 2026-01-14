@@ -1694,10 +1694,107 @@ export default function CreateContestPage({
             }
           } else {
             // For non-raid campaigns, check all metrics including likes and impressions
-            const likesWeight =
-              parseFloat(twitterPointsConfig.likesWeight.toString()) || 0;
-            const impressionsWeight =
-              parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0;
+            // Validate that Twitter points fields are not empty - must be 0 or a positive number
+            const likesWeightStr = twitterPointsConfig.likesWeight
+              .toString()
+              .trim();
+            const impressionsWeightStr = twitterPointsConfig.impressionsWeight
+              .toString()
+              .trim();
+
+            if (
+              likesWeightStr === "" ||
+              likesWeightStr === null ||
+              likesWeightStr === undefined
+            ) {
+              return {
+                isValid: false,
+                error:
+                  "Likes points cannot be empty. Please enter a value (use 0 if you don't want likes to count towards points).",
+              };
+            }
+
+            if (
+              impressionsWeightStr === "" ||
+              impressionsWeightStr === null ||
+              impressionsWeightStr === undefined
+            ) {
+              return {
+                isValid: false,
+                error:
+                  "Views points cannot be empty. Please enter a value (use 0 if you don't want views to count towards points).",
+              };
+            }
+
+            // When engagement multiplier sections are enabled, all multiplier fields must be filled (0 allowed)
+            if (showCommentMultipliers) {
+              const requiredCommentFields = [
+                cpmPointsConfig.comment_likes_multiplier,
+                cpmPointsConfig.comment_replies_multiplier,
+                cpmPointsConfig.comment_impressions_multiplier,
+                cpmPointsConfig.comment_retweets_multiplier,
+                cpmPointsConfig.comment_quote_reposts_multiplier,
+              ];
+
+              const hasEmptyCommentMultiplier = requiredCommentFields.some(
+                (v) => v?.toString().trim() === ""
+              );
+
+              if (hasEmptyCommentMultiplier) {
+                return {
+                  isValid: false,
+                  error:
+                    "Comment Engagement Multipliers cannot be empty. Please enter a value for each field (use 0 if you don't want a metric to add points).",
+                };
+              }
+            }
+
+            if (showRetweetMultipliers) {
+              const requiredRetweetFields = [
+                cpmPointsConfig.retweet_likes_multiplier,
+                cpmPointsConfig.retweet_replies_multiplier,
+                cpmPointsConfig.retweet_impressions_multiplier,
+                cpmPointsConfig.retweet_retweets_multiplier,
+                cpmPointsConfig.retweet_quote_reposts_multiplier,
+              ];
+
+              const hasEmptyRetweetMultiplier = requiredRetweetFields.some(
+                (v) => v?.toString().trim() === ""
+              );
+
+              if (hasEmptyRetweetMultiplier) {
+                return {
+                  isValid: false,
+                  error:
+                    "Retweet Engagement Multipliers cannot be empty. Please enter a value for each field (use 0 if you don't want a metric to add points).",
+                };
+              }
+            }
+
+            if (showQuoteRepostMultipliers) {
+              const requiredQuoteFields = [
+                cpmPointsConfig.quote_repost_likes_multiplier,
+                cpmPointsConfig.quote_repost_replies_multiplier,
+                cpmPointsConfig.quote_repost_impressions_multiplier,
+                cpmPointsConfig.quote_repost_retweets_multiplier,
+                cpmPointsConfig.quote_repost_quote_reposts_multiplier,
+              ];
+
+              const hasEmptyQuoteMultiplier = requiredQuoteFields.some(
+                (v) => v?.toString().trim() === ""
+              );
+
+              if (hasEmptyQuoteMultiplier) {
+                return {
+                  isValid: false,
+                  error:
+                    "Quote Repost Engagement Multipliers cannot be empty. Please enter a value for each field (use 0 if you don't want a metric to add points).",
+                };
+              }
+            }
+
+            const likesWeight = parseFloat(likesWeightStr) || 0;
+            const impressionsWeight = parseFloat(impressionsWeightStr) || 0;
 
             if (
               likesWeight <= 0 &&
@@ -2163,10 +2260,46 @@ export default function CreateContestPage({
         // For raid campaigns, don't save likes_weight and impressions_weight
         const pointsConfig: any = {};
         if (contentType !== "raid") {
-          const likesWeight =
-            parseFloat(twitterPointsConfig.likesWeight.toString()) || 0;
-          const impressionsWeight =
-            parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0;
+          // Validate that Twitter points fields are not empty - must be 0 or a positive number
+          const likesWeightStr = twitterPointsConfig.likesWeight
+            .toString()
+            .trim();
+          const impressionsWeightStr = twitterPointsConfig.impressionsWeight
+            .toString()
+            .trim();
+
+          if (!isDraft) {
+            if (
+              likesWeightStr === "" ||
+              likesWeightStr === null ||
+              likesWeightStr === undefined
+            ) {
+              setFormFeedback(
+                "Likes points cannot be empty. Please enter a value (use 0 if you don't want likes to count towards points)."
+              );
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+
+            if (
+              impressionsWeightStr === "" ||
+              impressionsWeightStr === null ||
+              impressionsWeightStr === undefined
+            ) {
+              setFormFeedback(
+                "Views points cannot be empty. Please enter a value (use 0 if you don't want views to count towards points)."
+              );
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+          }
+
+          const likesWeight = parseFloat(likesWeightStr) || 0;
+          const impressionsWeight = parseFloat(impressionsWeightStr) || 0;
           pointsConfig.likes_weight = likesWeight;
           pointsConfig.impressions_weight = impressionsWeight;
         }

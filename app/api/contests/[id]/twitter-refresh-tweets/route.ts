@@ -109,210 +109,6 @@ export async function POST(
       // No JSON body provided; ignore
     }
 
-    // Load contest Twitter campaign config to determine points calculation
-    let metricWeights = {
-      likes: 1,
-      comments: 1,
-      retweets: 1,
-      quoteReposts: 1,
-      impressions: 0, // optional "views" points
-    };
-
-    // CPM engagement multipliers (for CPM Twitter contests only)
-    let cpmEngagementMultipliers: {
-      comment?: {
-        likes?: number;
-        replies?: number;
-        impressions?: number;
-        retweets?: number;
-        quote_reposts?: number;
-      };
-      retweet?: {
-        likes?: number;
-        replies?: number;
-        impressions?: number;
-        retweets?: number;
-        quote_reposts?: number;
-      };
-      quote_repost?: {
-        likes?: number;
-        replies?: number;
-        impressions?: number;
-        retweets?: number;
-        quote_reposts?: number;
-      };
-    } = {};
-
-    let isCpmContest = false;
-
-    try {
-      const { data: contestConfig } = await supabaseAdmin
-        .from("contests")
-        .select("contest_type, contest_based_details")
-        .eq("id", contestId)
-        .maybeSingle();
-
-      isCpmContest = contestConfig?.contest_type === "cpm";
-
-      const twitterCampaign =
-        contestConfig?.contest_based_details?.twitter_campaign;
-      const pointsConfig = twitterCampaign?.points_config || {};
-
-      if (isCpmContest) {
-        // For CPM contests, load engagement multipliers based on tweet type
-        // These multipliers are used when calculating points for comments, retweets, and quote reposts
-        if (pointsConfig.comment_likes_multiplier != null) {
-          if (!cpmEngagementMultipliers.comment)
-            cpmEngagementMultipliers.comment = {};
-          cpmEngagementMultipliers.comment.likes =
-            typeof pointsConfig.comment_likes_multiplier === "number"
-              ? pointsConfig.comment_likes_multiplier
-              : parseFloat(pointsConfig.comment_likes_multiplier) || 0;
-        }
-        if (pointsConfig.comment_replies_multiplier != null) {
-          if (!cpmEngagementMultipliers.comment)
-            cpmEngagementMultipliers.comment = {};
-          cpmEngagementMultipliers.comment.replies =
-            typeof pointsConfig.comment_replies_multiplier === "number"
-              ? pointsConfig.comment_replies_multiplier
-              : parseFloat(pointsConfig.comment_replies_multiplier) || 0;
-        }
-        if (pointsConfig.comment_impressions_multiplier != null) {
-          if (!cpmEngagementMultipliers.comment)
-            cpmEngagementMultipliers.comment = {};
-          cpmEngagementMultipliers.comment.impressions =
-            typeof pointsConfig.comment_impressions_multiplier === "number"
-              ? pointsConfig.comment_impressions_multiplier
-              : parseFloat(pointsConfig.comment_impressions_multiplier) || 0;
-        }
-        if (pointsConfig.comment_retweets_multiplier != null) {
-          if (!cpmEngagementMultipliers.comment)
-            cpmEngagementMultipliers.comment = {};
-          cpmEngagementMultipliers.comment.retweets =
-            typeof pointsConfig.comment_retweets_multiplier === "number"
-              ? pointsConfig.comment_retweets_multiplier
-              : parseFloat(pointsConfig.comment_retweets_multiplier) || 0;
-        }
-        if (pointsConfig.comment_quote_reposts_multiplier != null) {
-          if (!cpmEngagementMultipliers.comment)
-            cpmEngagementMultipliers.comment = {};
-          cpmEngagementMultipliers.comment.quote_reposts =
-            typeof pointsConfig.comment_quote_reposts_multiplier === "number"
-              ? pointsConfig.comment_quote_reposts_multiplier
-              : parseFloat(pointsConfig.comment_quote_reposts_multiplier) || 0;
-        }
-
-        if (pointsConfig.retweet_likes_multiplier != null) {
-          if (!cpmEngagementMultipliers.retweet)
-            cpmEngagementMultipliers.retweet = {};
-          cpmEngagementMultipliers.retweet.likes =
-            typeof pointsConfig.retweet_likes_multiplier === "number"
-              ? pointsConfig.retweet_likes_multiplier
-              : parseFloat(pointsConfig.retweet_likes_multiplier) || 0;
-        }
-        if (pointsConfig.retweet_replies_multiplier != null) {
-          if (!cpmEngagementMultipliers.retweet)
-            cpmEngagementMultipliers.retweet = {};
-          cpmEngagementMultipliers.retweet.replies =
-            typeof pointsConfig.retweet_replies_multiplier === "number"
-              ? pointsConfig.retweet_replies_multiplier
-              : parseFloat(pointsConfig.retweet_replies_multiplier) || 0;
-        }
-        if (pointsConfig.retweet_impressions_multiplier != null) {
-          if (!cpmEngagementMultipliers.retweet)
-            cpmEngagementMultipliers.retweet = {};
-          cpmEngagementMultipliers.retweet.impressions =
-            typeof pointsConfig.retweet_impressions_multiplier === "number"
-              ? pointsConfig.retweet_impressions_multiplier
-              : parseFloat(pointsConfig.retweet_impressions_multiplier) || 0;
-        }
-        if (pointsConfig.retweet_retweets_multiplier != null) {
-          if (!cpmEngagementMultipliers.retweet)
-            cpmEngagementMultipliers.retweet = {};
-          cpmEngagementMultipliers.retweet.retweets =
-            typeof pointsConfig.retweet_retweets_multiplier === "number"
-              ? pointsConfig.retweet_retweets_multiplier
-              : parseFloat(pointsConfig.retweet_retweets_multiplier) || 0;
-        }
-        if (pointsConfig.retweet_quote_reposts_multiplier != null) {
-          if (!cpmEngagementMultipliers.retweet)
-            cpmEngagementMultipliers.retweet = {};
-          cpmEngagementMultipliers.retweet.quote_reposts =
-            typeof pointsConfig.retweet_quote_reposts_multiplier === "number"
-              ? pointsConfig.retweet_quote_reposts_multiplier
-              : parseFloat(pointsConfig.retweet_quote_reposts_multiplier) || 0;
-        }
-
-        if (pointsConfig.quote_repost_likes_multiplier != null) {
-          if (!cpmEngagementMultipliers.quote_repost)
-            cpmEngagementMultipliers.quote_repost = {};
-          cpmEngagementMultipliers.quote_repost.likes =
-            typeof pointsConfig.quote_repost_likes_multiplier === "number"
-              ? pointsConfig.quote_repost_likes_multiplier
-              : parseFloat(pointsConfig.quote_repost_likes_multiplier) || 0;
-        }
-        if (pointsConfig.quote_repost_replies_multiplier != null) {
-          if (!cpmEngagementMultipliers.quote_repost)
-            cpmEngagementMultipliers.quote_repost = {};
-          cpmEngagementMultipliers.quote_repost.replies =
-            typeof pointsConfig.quote_repost_replies_multiplier === "number"
-              ? pointsConfig.quote_repost_replies_multiplier
-              : parseFloat(pointsConfig.quote_repost_replies_multiplier) || 0;
-        }
-        if (pointsConfig.quote_repost_impressions_multiplier != null) {
-          if (!cpmEngagementMultipliers.quote_repost)
-            cpmEngagementMultipliers.quote_repost = {};
-          cpmEngagementMultipliers.quote_repost.impressions =
-            typeof pointsConfig.quote_repost_impressions_multiplier === "number"
-              ? pointsConfig.quote_repost_impressions_multiplier
-              : parseFloat(pointsConfig.quote_repost_impressions_multiplier) ||
-                0;
-        }
-        if (pointsConfig.quote_repost_retweets_multiplier != null) {
-          if (!cpmEngagementMultipliers.quote_repost)
-            cpmEngagementMultipliers.quote_repost = {};
-          cpmEngagementMultipliers.quote_repost.retweets =
-            typeof pointsConfig.quote_repost_retweets_multiplier === "number"
-              ? pointsConfig.quote_repost_retweets_multiplier
-              : parseFloat(pointsConfig.quote_repost_retweets_multiplier) || 0;
-        }
-        if (pointsConfig.quote_repost_quote_reposts_multiplier != null) {
-          if (!cpmEngagementMultipliers.quote_repost)
-            cpmEngagementMultipliers.quote_repost = {};
-          cpmEngagementMultipliers.quote_repost.quote_reposts =
-            typeof pointsConfig.quote_repost_quote_reposts_multiplier ===
-            "number"
-              ? pointsConfig.quote_repost_quote_reposts_multiplier
-              : parseFloat(
-                  pointsConfig.quote_repost_quote_reposts_multiplier
-                ) || 0;
-        }
-      } else {
-        // For leaderboard contests, use simple metric weights (no changes)
-        // Only override defaults if valid numeric weights are provided
-        if (typeof pointsConfig.likes_weight === "number") {
-          metricWeights.likes = pointsConfig.likes_weight;
-        }
-        if (typeof pointsConfig.comments_weight === "number") {
-          metricWeights.comments = pointsConfig.comments_weight;
-        }
-        if (typeof pointsConfig.retweets_weight === "number") {
-          metricWeights.retweets = pointsConfig.retweets_weight;
-        }
-        if (typeof pointsConfig.quote_reposts_weight === "number") {
-          metricWeights.quoteReposts = pointsConfig.quote_reposts_weight;
-        }
-        if (typeof pointsConfig.impressions_weight === "number") {
-          metricWeights.impressions = pointsConfig.impressions_weight;
-        }
-      }
-    } catch (configError) {
-      console.error(
-        "[twitter-refresh-tweets] Error loading Twitter points_config, using defaults:",
-        configError
-      );
-    }
-
     if (!contestId) {
       return NextResponse.json(
         { error: "Contest ID is required" },
@@ -401,10 +197,14 @@ export async function POST(
     let keywordsRequirementMode: "all" | "any" = "any"; // Default: any keyword matches
     let mentionsRequirementMode: "all" | "any" = "any"; // Default: any mention matches
 
+    // Twitter CPM awareness points configuration (same model as raid)
+    let isTwitterCpmContest = false;
+    let twitterAwarenessPointsConfig: any = null;
+
     // Always fetch from contest data (JSONB) to get complete config including allowed_tweet_types
     const { data: contestData, error: contestError } = await supabase
       .from("contests")
-      .select("contest_based_details")
+      .select("contest_based_details, contest_type, platform")
       .eq("id", contestId)
       .maybeSingle();
 
@@ -438,6 +238,353 @@ export async function POST(
         twitterCampaign?.mentions_requirement_mode === "any"
       ) {
         mentionsRequirementMode = twitterCampaign.mentions_requirement_mode;
+      }
+
+      // Detect Twitter CPM contests
+      const contestType = (contestData as any).contest_type;
+      const platform = (contestData as any).platform;
+      const isTwitterPlatform =
+        typeof platform === "string" &&
+        (platform.toLowerCase() === "twitter" ||
+          platform.toLowerCase() === "x");
+
+      isTwitterCpmContest =
+        contestType === "cpm" &&
+        isTwitterPlatform &&
+        twitterCampaign?.campaign_type === "awareness";
+
+      // Build points configuration for Twitter CPM awareness campaigns
+      if (isTwitterCpmContest && twitterCampaign?.points_config) {
+        const pointsConfig = twitterCampaign.points_config || {};
+
+        // Base config - mirror RAID_POINTS_CONFIG defaults
+        const baseConfig = {
+          // BASE POINTS
+          comment_base_points: 1,
+          retweet_base_points: 5,
+          quote_repost_base_points: 10,
+
+          // COMMENT MULTIPLIERS
+          comment_likes_multiplier: 0.1,
+          comment_replies_multiplier: 1,
+          comment_impressions_multiplier: 0.001,
+          comment_retweets_multiplier: 0,
+          comment_quote_reposts_multiplier: 0,
+
+          // RETWEET MULTIPLIERS
+          retweet_likes_multiplier: 0.05,
+          retweet_replies_multiplier: 0.05,
+          retweet_impressions_multiplier: 0.001,
+          retweet_retweets_multiplier: 0.05,
+          retweet_quote_reposts_multiplier: 0,
+
+          // QUOTE REPOST MULTIPLIERS
+          quote_repost_likes_multiplier: 0.1,
+          quote_repost_replies_multiplier: 0.1,
+          quote_repost_impressions_multiplier: 0.001,
+          quote_repost_retweets_multiplier: 0.1,
+          quote_repost_quote_reposts_multiplier: 0.1,
+        };
+
+        const cfg: any = { ...baseConfig };
+
+        // =============================
+        // Base points from points_config
+        // =============================
+        if (
+          pointsConfig.comments_weight != null &&
+          typeof pointsConfig.comments_weight === "object" &&
+          pointsConfig.comments_weight.base_weight != null
+        ) {
+          cfg.comment_base_points =
+            typeof pointsConfig.comments_weight.base_weight === "number"
+              ? pointsConfig.comments_weight.base_weight
+              : parseFloat(pointsConfig.comments_weight.base_weight) || 1;
+        } else if (pointsConfig.comment_base_points != null) {
+          cfg.comment_base_points =
+            typeof pointsConfig.comment_base_points === "number"
+              ? pointsConfig.comment_base_points
+              : parseFloat(pointsConfig.comment_base_points) || 1;
+        } else if (typeof pointsConfig.comments_weight === "number") {
+          cfg.comment_base_points = pointsConfig.comments_weight;
+        }
+
+        if (
+          pointsConfig.retweets_weight != null &&
+          typeof pointsConfig.retweets_weight === "object" &&
+          pointsConfig.retweets_weight.base_weight != null
+        ) {
+          cfg.retweet_base_points =
+            typeof pointsConfig.retweets_weight.base_weight === "number"
+              ? pointsConfig.retweets_weight.base_weight
+              : parseFloat(pointsConfig.retweets_weight.base_weight) || 5;
+        } else if (pointsConfig.retweet_base_points != null) {
+          cfg.retweet_base_points =
+            typeof pointsConfig.retweet_base_points === "number"
+              ? pointsConfig.retweet_base_points
+              : parseFloat(pointsConfig.retweet_base_points) || 5;
+        } else if (typeof pointsConfig.retweets_weight === "number") {
+          cfg.retweet_base_points = pointsConfig.retweets_weight;
+        }
+
+        if (
+          pointsConfig.quote_reposts_weight != null &&
+          typeof pointsConfig.quote_reposts_weight === "object" &&
+          pointsConfig.quote_reposts_weight.base_weight != null
+        ) {
+          cfg.quote_repost_base_points =
+            typeof pointsConfig.quote_reposts_weight.base_weight === "number"
+              ? pointsConfig.quote_reposts_weight.base_weight
+              : parseFloat(pointsConfig.quote_reposts_weight.base_weight) || 10;
+        } else if (pointsConfig.quote_repost_base_points != null) {
+          cfg.quote_repost_base_points =
+            typeof pointsConfig.quote_repost_base_points === "number"
+              ? pointsConfig.quote_repost_base_points
+              : parseFloat(pointsConfig.quote_repost_base_points) || 10;
+        } else if (typeof pointsConfig.quote_reposts_weight === "number") {
+          cfg.quote_repost_base_points = pointsConfig.quote_reposts_weight;
+        }
+
+        // =============================
+        // Comment multipliers
+        // =============================
+        const commentsWeightObj =
+          pointsConfig.comments_weight &&
+          typeof pointsConfig.comments_weight === "object"
+            ? pointsConfig.comments_weight
+            : null;
+
+        if (
+          commentsWeightObj?.likes_multiplier != null ||
+          pointsConfig.comment_likes_multiplier != null
+        ) {
+          cfg.comment_likes_multiplier =
+            commentsWeightObj?.likes_multiplier != null
+              ? typeof commentsWeightObj.likes_multiplier === "number"
+                ? commentsWeightObj.likes_multiplier
+                : parseFloat(commentsWeightObj.likes_multiplier) || 0.1
+              : typeof pointsConfig.comment_likes_multiplier === "number"
+              ? pointsConfig.comment_likes_multiplier
+              : parseFloat(pointsConfig.comment_likes_multiplier) || 0.1;
+        }
+        if (
+          commentsWeightObj?.replies_multiplier != null ||
+          pointsConfig.comment_replies_multiplier != null
+        ) {
+          cfg.comment_replies_multiplier =
+            commentsWeightObj?.replies_multiplier != null
+              ? typeof commentsWeightObj.replies_multiplier === "number"
+                ? commentsWeightObj.replies_multiplier
+                : parseFloat(commentsWeightObj.replies_multiplier) || 1
+              : typeof pointsConfig.comment_replies_multiplier === "number"
+              ? pointsConfig.comment_replies_multiplier
+              : parseFloat(pointsConfig.comment_replies_multiplier) || 1;
+        }
+        if (
+          commentsWeightObj?.impressions_multiplier != null ||
+          pointsConfig.comment_impressions_multiplier != null
+        ) {
+          cfg.comment_impressions_multiplier =
+            commentsWeightObj?.impressions_multiplier != null
+              ? typeof commentsWeightObj.impressions_multiplier === "number"
+                ? commentsWeightObj.impressions_multiplier
+                : parseFloat(commentsWeightObj.impressions_multiplier) || 0.001
+              : typeof pointsConfig.comment_impressions_multiplier === "number"
+              ? pointsConfig.comment_impressions_multiplier
+              : parseFloat(pointsConfig.comment_impressions_multiplier) ||
+                0.001;
+        }
+        if (
+          commentsWeightObj?.retweets_multiplier != null ||
+          pointsConfig.comment_retweets_multiplier != null
+        ) {
+          cfg.comment_retweets_multiplier =
+            commentsWeightObj?.retweets_multiplier != null
+              ? typeof commentsWeightObj.retweets_multiplier === "number"
+                ? commentsWeightObj.retweets_multiplier
+                : parseFloat(commentsWeightObj.retweets_multiplier) || 0
+              : typeof pointsConfig.comment_retweets_multiplier === "number"
+              ? pointsConfig.comment_retweets_multiplier
+              : parseFloat(pointsConfig.comment_retweets_multiplier) || 0;
+        }
+        if (
+          commentsWeightObj?.quote_reposts_multiplier != null ||
+          pointsConfig.comment_quote_reposts_multiplier != null
+        ) {
+          cfg.comment_quote_reposts_multiplier =
+            commentsWeightObj?.quote_reposts_multiplier != null
+              ? typeof commentsWeightObj.quote_reposts_multiplier === "number"
+                ? commentsWeightObj.quote_reposts_multiplier
+                : parseFloat(commentsWeightObj.quote_reposts_multiplier) || 0
+              : typeof pointsConfig.comment_quote_reposts_multiplier ===
+                "number"
+              ? pointsConfig.comment_quote_reposts_multiplier
+              : parseFloat(pointsConfig.comment_quote_reposts_multiplier) || 0;
+        }
+
+        // =============================
+        // Retweet multipliers
+        // =============================
+        const retweetsWeightObj =
+          pointsConfig.retweets_weight &&
+          typeof pointsConfig.retweets_weight === "object"
+            ? pointsConfig.retweets_weight
+            : null;
+
+        if (
+          retweetsWeightObj?.likes_multiplier != null ||
+          pointsConfig.retweet_likes_multiplier != null
+        ) {
+          cfg.retweet_likes_multiplier =
+            retweetsWeightObj?.likes_multiplier != null
+              ? typeof retweetsWeightObj.likes_multiplier === "number"
+                ? retweetsWeightObj.likes_multiplier
+                : parseFloat(retweetsWeightObj.likes_multiplier) || 0.05
+              : typeof pointsConfig.retweet_likes_multiplier === "number"
+              ? pointsConfig.retweet_likes_multiplier
+              : parseFloat(pointsConfig.retweet_likes_multiplier) || 0.05;
+        }
+        if (
+          retweetsWeightObj?.replies_multiplier != null ||
+          pointsConfig.retweet_replies_multiplier != null
+        ) {
+          cfg.retweet_replies_multiplier =
+            retweetsWeightObj?.replies_multiplier != null
+              ? typeof retweetsWeightObj.replies_multiplier === "number"
+                ? retweetsWeightObj.replies_multiplier
+                : parseFloat(retweetsWeightObj.replies_multiplier) || 0.05
+              : typeof pointsConfig.retweet_replies_multiplier === "number"
+              ? pointsConfig.retweet_replies_multiplier
+              : parseFloat(pointsConfig.retweet_replies_multiplier) || 0.05;
+        }
+        if (
+          retweetsWeightObj?.impressions_multiplier != null ||
+          pointsConfig.retweet_impressions_multiplier != null
+        ) {
+          cfg.retweet_impressions_multiplier =
+            retweetsWeightObj?.impressions_multiplier != null
+              ? typeof retweetsWeightObj.impressions_multiplier === "number"
+                ? retweetsWeightObj.impressions_multiplier
+                : parseFloat(retweetsWeightObj.impressions_multiplier) || 0.001
+              : typeof pointsConfig.retweet_impressions_multiplier === "number"
+              ? pointsConfig.retweet_impressions_multiplier
+              : parseFloat(pointsConfig.retweet_impressions_multiplier) ||
+                0.001;
+        }
+        if (
+          retweetsWeightObj?.retweets_multiplier != null ||
+          pointsConfig.retweet_retweets_multiplier != null
+        ) {
+          cfg.retweet_retweets_multiplier =
+            retweetsWeightObj?.retweets_multiplier != null
+              ? typeof retweetsWeightObj.retweets_multiplier === "number"
+                ? retweetsWeightObj.retweets_multiplier
+                : parseFloat(retweetsWeightObj.retweets_multiplier) || 0.05
+              : typeof pointsConfig.retweet_retweets_multiplier === "number"
+              ? pointsConfig.retweet_retweets_multiplier
+              : parseFloat(pointsConfig.retweet_retweets_multiplier) || 0.05;
+        }
+        if (
+          retweetsWeightObj?.quote_reposts_multiplier != null ||
+          pointsConfig.retweet_quote_reposts_multiplier != null
+        ) {
+          cfg.retweet_quote_reposts_multiplier =
+            retweetsWeightObj?.quote_reposts_multiplier != null
+              ? typeof retweetsWeightObj.quote_reposts_multiplier === "number"
+                ? retweetsWeightObj.quote_reposts_multiplier
+                : parseFloat(retweetsWeightObj.quote_reposts_multiplier) || 0
+              : typeof pointsConfig.retweet_quote_reposts_multiplier ===
+                "number"
+              ? pointsConfig.retweet_quote_reposts_multiplier
+              : parseFloat(pointsConfig.retweet_quote_reposts_multiplier) || 0;
+        }
+
+        // =============================
+        // Quote repost multipliers
+        // =============================
+        const quoteRepostsWeightObj =
+          pointsConfig.quote_reposts_weight &&
+          typeof pointsConfig.quote_reposts_weight === "object"
+            ? pointsConfig.quote_reposts_weight
+            : null;
+
+        if (
+          quoteRepostsWeightObj?.likes_multiplier != null ||
+          pointsConfig.quote_repost_likes_multiplier != null
+        ) {
+          cfg.quote_repost_likes_multiplier =
+            quoteRepostsWeightObj?.likes_multiplier != null
+              ? typeof quoteRepostsWeightObj.likes_multiplier === "number"
+                ? quoteRepostsWeightObj.likes_multiplier
+                : parseFloat(quoteRepostsWeightObj.likes_multiplier) || 0.1
+              : typeof pointsConfig.quote_repost_likes_multiplier === "number"
+              ? pointsConfig.quote_repost_likes_multiplier
+              : parseFloat(pointsConfig.quote_repost_likes_multiplier) || 0.1;
+        }
+        if (
+          quoteRepostsWeightObj?.replies_multiplier != null ||
+          pointsConfig.quote_repost_replies_multiplier != null
+        ) {
+          cfg.quote_repost_replies_multiplier =
+            quoteRepostsWeightObj?.replies_multiplier != null
+              ? typeof quoteRepostsWeightObj.replies_multiplier === "number"
+                ? quoteRepostsWeightObj.replies_multiplier
+                : parseFloat(quoteRepostsWeightObj.replies_multiplier) || 0.1
+              : typeof pointsConfig.quote_repost_replies_multiplier === "number"
+              ? pointsConfig.quote_repost_replies_multiplier
+              : parseFloat(pointsConfig.quote_repost_replies_multiplier) || 0.1;
+        }
+        if (
+          quoteRepostsWeightObj?.impressions_multiplier != null ||
+          pointsConfig.quote_repost_impressions_multiplier != null
+        ) {
+          cfg.quote_repost_impressions_multiplier =
+            quoteRepostsWeightObj?.impressions_multiplier != null
+              ? typeof quoteRepostsWeightObj.impressions_multiplier === "number"
+                ? quoteRepostsWeightObj.impressions_multiplier
+                : parseFloat(quoteRepostsWeightObj.impressions_multiplier) ||
+                  0.001
+              : typeof pointsConfig.quote_repost_impressions_multiplier ===
+                "number"
+              ? pointsConfig.quote_repost_impressions_multiplier
+              : parseFloat(pointsConfig.quote_repost_impressions_multiplier) ||
+                0.001;
+        }
+        if (
+          quoteRepostsWeightObj?.retweets_multiplier != null ||
+          pointsConfig.quote_repost_retweets_multiplier != null
+        ) {
+          cfg.quote_repost_retweets_multiplier =
+            quoteRepostsWeightObj?.retweets_multiplier != null
+              ? typeof quoteRepostsWeightObj.retweets_multiplier === "number"
+                ? quoteRepostsWeightObj.retweets_multiplier
+                : parseFloat(quoteRepostsWeightObj.retweets_multiplier) || 0.1
+              : typeof pointsConfig.quote_repost_retweets_multiplier ===
+                "number"
+              ? pointsConfig.quote_repost_retweets_multiplier
+              : parseFloat(pointsConfig.quote_repost_retweets_multiplier) ||
+                0.1;
+        }
+        if (
+          quoteRepostsWeightObj?.quote_reposts_multiplier != null ||
+          pointsConfig.quote_repost_quote_reposts_multiplier != null
+        ) {
+          cfg.quote_repost_quote_reposts_multiplier =
+            quoteRepostsWeightObj?.quote_reposts_multiplier != null
+              ? typeof quoteRepostsWeightObj.quote_reposts_multiplier ===
+                "number"
+                ? quoteRepostsWeightObj.quote_reposts_multiplier
+                : parseFloat(quoteRepostsWeightObj.quote_reposts_multiplier) ||
+                  0.1
+              : typeof pointsConfig.quote_repost_quote_reposts_multiplier ===
+                "number"
+              ? pointsConfig.quote_repost_quote_reposts_multiplier
+              : parseFloat(
+                  pointsConfig.quote_repost_quote_reposts_multiplier
+                ) || 0.1;
+        }
+
+        twitterAwarenessPointsConfig = cfg;
       }
     }
 
@@ -872,59 +1019,53 @@ export async function POST(
             const quoteReposts = t.quotes || 0; // Use quotes from API response for quote reposts
             const impressions = Number(t.views) || 0;
 
-            // Calculate points based on contest type and tweet type
-            let points = 0;
-            const tweetType = (t.type || "tweet").toLowerCase();
+            let points: number;
 
-            if (isCpmContest) {
-              // For CPM contests, use engagement multipliers based on tweet type
-              if (tweetType === "reply" || tweetType === "comment") {
-                // Comment/Reply engagement: use comment multipliers
-                const multipliers = cpmEngagementMultipliers.comment || {};
-                points =
-                  likes * (multipliers.likes || 0) +
-                  replies * (multipliers.replies || 0) +
-                  impressions * (multipliers.impressions || 0) +
-                  retweets * (multipliers.retweets || 0) +
-                  quoteReposts * (multipliers.quote_reposts || 0);
-              } else if (tweetType === "retweet") {
-                // Retweet engagement: use retweet multipliers
-                const multipliers = cpmEngagementMultipliers.retweet || {};
-                points =
-                  likes * (multipliers.likes || 0) +
-                  replies * (multipliers.replies || 0) +
-                  impressions * (multipliers.impressions || 0) +
-                  retweets * (multipliers.retweets || 0) +
-                  quoteReposts * (multipliers.quote_reposts || 0);
-              } else if (
-                tweetType === "quote" ||
-                tweetType === "quote_repost"
-              ) {
-                // Quote repost engagement: use quote_repost multipliers
-                const multipliers = cpmEngagementMultipliers.quote_repost || {};
-                points =
-                  likes * (multipliers.likes || 0) +
-                  replies * (multipliers.replies || 0) +
-                  impressions * (multipliers.impressions || 0) +
-                  retweets * (multipliers.retweets || 0) +
-                  quoteReposts * (multipliers.quote_reposts || 0);
+            // For Twitter CPM awareness campaigns, calculate points using points_config
+            if (isTwitterCpmContest && twitterAwarenessPointsConfig) {
+              const rawType = (t.type || "tweet").toLowerCase();
+              let engagementType:
+                | "comment"
+                | "retweet"
+                | "quote_repost"
+                | null = null;
+
+              if (rawType === "reply") {
+                engagementType = "comment";
+              } else if (rawType === "retweet") {
+                engagementType = "retweet";
+              } else if (rawType === "quote") {
+                engagementType = "quote_repost";
+              }
+
+              if (engagementType) {
+                const tweetForPoints: any = {
+                  likes,
+                  replies,
+                  retweets,
+                  quotes: quoteReposts,
+                  views: impressions,
+                };
+
+                const basePoints = calculateAwarenessBasePoints(
+                  engagementType,
+                  twitterAwarenessPointsConfig
+                );
+                const bonusPoints = calculateAwarenessEngagementBonusPoints(
+                  tweetForPoints,
+                  engagementType,
+                  twitterAwarenessPointsConfig
+                );
+
+                points = Math.round(basePoints + bonusPoints);
               } else {
-                // Regular tweet: use default metric weights (fallback)
+                // Fallback for plain tweets: simple scoring
                 points =
-                  likes * metricWeights.likes +
-                  replies * metricWeights.comments +
-                  retweets * metricWeights.retweets +
-                  quoteReposts * metricWeights.quoteReposts +
-                  impressions * metricWeights.impressions;
+                  likes + replies + retweets + quoteReposts + impressions;
               }
             } else {
-              // For leaderboard contests, use simple metric weights (no changes)
-              points =
-                likes * metricWeights.likes +
-                replies * metricWeights.comments +
-                retweets * metricWeights.retweets +
-                quoteReposts * metricWeights.quoteReposts +
-                impressions * metricWeights.impressions;
+              // Non-CPM or non-Twitter campaigns: keep existing simple scoring
+              points = likes + replies + retweets + quoteReposts + impressions;
             }
 
             // Get existing moderation data if tweet exists
@@ -950,7 +1091,7 @@ export async function POST(
               retweets,
               quote_reposts: quoteReposts,
               impressions,
-              points, // Recalculate based on fresh metrics and campaign config
+              points, // Recalculate based on fresh metrics
               points_calculated_at: new Date().toISOString(),
 
               // Eligibility - re-check based on current text (passed filter, so eligible)
@@ -1429,4 +1570,58 @@ export async function POST(
       { status: 500 }
     );
   }
+}
+
+// Helper function to calculate base points for awareness tweets
+function calculateAwarenessBasePoints(
+  engagementType: "comment" | "retweet" | "quote_repost",
+  pointsConfig: any
+): number {
+  const config = {
+    comment: pointsConfig.comment_base_points,
+    retweet: pointsConfig.retweet_base_points,
+    quote_repost: pointsConfig.quote_repost_base_points,
+  };
+  return config[engagementType] || 0;
+}
+
+// Helper function to calculate bonus points from engagement metrics
+function calculateAwarenessEngagementBonusPoints(
+  tweet: any,
+  engagementType: "comment" | "retweet" | "quote_repost",
+  pointsConfig: any
+): number {
+  const likes = tweet.likes || tweet.favorites || tweet.favorite_count || 0;
+  const replies = tweet.replies || tweet.reply_count || 0;
+  const impressions = parseInt(tweet.views || tweet.view_count || "0", 10);
+  const retweets = tweet.retweets || tweet.retweet_count || 0;
+  const quotes = tweet.quotes || tweet.quote_count || 0;
+
+  if (engagementType === "comment") {
+    return (
+      likes * pointsConfig.comment_likes_multiplier +
+      replies * pointsConfig.comment_replies_multiplier +
+      impressions * pointsConfig.comment_impressions_multiplier +
+      retweets * pointsConfig.comment_retweets_multiplier +
+      0 * pointsConfig.comment_quote_reposts_multiplier
+    );
+  } else if (engagementType === "retweet") {
+    return (
+      likes * pointsConfig.retweet_likes_multiplier +
+      replies * pointsConfig.retweet_replies_multiplier +
+      impressions * pointsConfig.retweet_impressions_multiplier +
+      retweets * pointsConfig.retweet_retweets_multiplier +
+      quotes * pointsConfig.retweet_quote_reposts_multiplier
+    );
+  } else if (engagementType === "quote_repost") {
+    return (
+      likes * pointsConfig.quote_repost_likes_multiplier +
+      replies * pointsConfig.quote_repost_replies_multiplier +
+      impressions * pointsConfig.quote_repost_impressions_multiplier +
+      retweets * pointsConfig.quote_repost_retweets_multiplier +
+      quotes * pointsConfig.quote_repost_quote_reposts_multiplier
+    );
+  }
+
+  return 0;
 }
