@@ -8008,6 +8008,17 @@ export function ContestClientPage({
                   total_points: 0,
                 };
 
+                // Identify if this is a points-based Twitter contest (leaderboard or CPM)
+                const isTwitterPointsContest =
+                  (contest?.platform?.toLowerCase() === "twitter" ||
+                    contest?.platform?.toLowerCase() === "x") &&
+                  contest?.contest_format === "text_image" &&
+                  (contest?.contest_type === "leaderboard" ||
+                    contest?.contest_type === "cpm");
+
+                // Track creator ids that match the active analytics filter
+                const filteredCreatorIds = new Set<string>();
+
                 filteredAnalyticsSubmissions.forEach((sub: any) => {
                   if (sub.is_twitter_tweet && sub.other_stats) {
                     metrics.total_tweets += 1;
@@ -8017,9 +8028,58 @@ export function ContestClientPage({
                     metrics.total_quote_reposts +=
                       sub.other_stats.quote_reposts || 0;
                     metrics.total_impressions += sub.views || 0;
-                    metrics.total_points += sub.other_stats.points || 0;
+
+                    // Calculate points as base_points + manual adjustment (avoid double counting)
+                    const basePoints =
+                      typeof sub.other_stats.base_points === "number"
+                        ? sub.other_stats.base_points
+                        : sub.other_stats.points || 0;
+                    const manualPoints =
+                      typeof sub.other_stats.manual_points_adjustment ===
+                      "number"
+                        ? sub.other_stats.manual_points_adjustment
+                        : 0;
+                    metrics.total_points += basePoints + manualPoints;
+
+                    if (sub.creator_id) {
+                      filteredCreatorIds.add(sub.creator_id);
+                    }
                   }
                 });
+
+                // If we have leaderboard data (already includes creator-level manual adjustments),
+                // prefer it for total_points so analytics matches the leaderboard view.
+                if (isTwitterPointsContest && leaderboard.length > 0) {
+                  let leaderboardPointsTotal = 0;
+                  let hasLeaderboardPoints = false;
+
+                  leaderboard.forEach((entry: any) => {
+                    const creatorId = entry.creator_id;
+                    if (!creatorId) return;
+
+                    // When a filter is active, only include creators present in the filtered submissions
+                    if (
+                      activeAnalyticsTab !== "all" &&
+                      filteredCreatorIds.size > 0 &&
+                      !filteredCreatorIds.has(creatorId)
+                    ) {
+                      return;
+                    }
+
+                    const entryPoints =
+                      typeof entry.total_points === "number"
+                        ? entry.total_points
+                        : null;
+                    if (entryPoints !== null) {
+                      leaderboardPointsTotal += entryPoints;
+                      hasLeaderboardPoints = true;
+                    }
+                  });
+
+                  if (hasLeaderboardPoints) {
+                    metrics.total_points = leaderboardPointsTotal;
+                  }
+                }
 
                 return metrics;
               };

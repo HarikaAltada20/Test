@@ -769,8 +769,12 @@ export default function ContestDetailClient({
             impressions: 0,
             points: 0,
             base_points: 0,
-            manual_points_adjustment: 0,
-            manual_points_reason: null as string | null,
+            // Seed manual points from creator-level moderation (e.g. Twitter leaderboard / CPM adjustments)
+            // Per-submission manual adjustments will be accumulated on top of this.
+            manual_points_adjustment:
+              creatorModeration.manual_points_adjustment || 0,
+            manual_points_reason:
+              creatorModeration.manual_points_reason || (null as string | null),
           },
           earnings: { expected: 0, granted: 0 },
           earningsBeforeCap: 0,
@@ -1028,6 +1032,21 @@ export default function ContestDetailClient({
           group.earnings.expected = maxEarnings;
         }
         // Do NOT cap granted earnings - it already reflects actual paid amounts from database
+      });
+    }
+
+    // Calculate total points (base + manual) for Twitter contests (CPM and leaderboard)
+    const isTwitterContest =
+      (currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+      currentContest?.contest_format === "text_image";
+
+    if (isTwitterContest) {
+      Object.values(grouped).forEach((group: any) => {
+        // Calculate total points: base_points + manual_points_adjustment
+        group.metrics.points =
+          (group.metrics.base_points || 0) +
+          (group.metrics.manual_points_adjustment || 0);
       });
     }
 
@@ -9039,24 +9058,6 @@ export default function ContestDetailClient({
                                               <Star className="h-4 w-4 mr-2" />
                                               Adjust Tweet Points
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                              disabled={isLoading}
-                                              onClick={() => {
-                                                setPendingManualPointsSubmission(
-                                                  {
-                                                    id: submission.id,
-                                                    type: "leaderboard",
-                                                    creatorId:
-                                                      submission.creator_id ||
-                                                      undefined,
-                                                  }
-                                                );
-                                                setManualPointsModalOpen(true);
-                                              }}
-                                            >
-                                              <Users className="h-4 w-4 mr-2" />
-                                              Adjust Creator Points (All Tweets)
-                                            </DropdownMenuItem>
                                           </>
                                         ) : (
                                           <>
@@ -10189,6 +10190,35 @@ export default function ContestDetailClient({
                                                             Approve Creator
                                                           </DropdownMenuItem>
                                                         )}
+
+                                                        <DropdownMenuItem
+                                                          onClick={() => {
+                                                            const firstSubmission =
+                                                              group
+                                                                .submissions?.[0];
+                                                            if (
+                                                              !firstSubmission
+                                                            )
+                                                              return;
+
+                                                            setPendingManualPointsSubmission(
+                                                              {
+                                                                id: firstSubmission.id,
+                                                                type: "leaderboard",
+                                                                creatorId:
+                                                                  group.creator
+                                                                    .id,
+                                                              }
+                                                            );
+                                                            setManualPointsModalOpen(
+                                                              true
+                                                            );
+                                                          }}
+                                                        >
+                                                          <Users className="h-4 w-4 mr-2" />
+                                                          Adjust Creator Points
+                                                        </DropdownMenuItem>
+
                                                         <DropdownMenuItem
                                                           onClick={() => {
                                                             if (group.paid) {
@@ -10633,6 +10663,18 @@ export default function ContestDetailClient({
                         total_points: 0,
                       };
 
+                      // Determine if this contest uses points-based payouts (leaderboard or CPM)
+                      const isTwitterPointsContest =
+                        (currentContest?.platform?.toLowerCase() ===
+                          "twitter" ||
+                          currentContest?.platform?.toLowerCase() === "x") &&
+                        currentContest?.contest_format === "text_image" &&
+                        (currentContest?.contest_type === "leaderboard" ||
+                          currentContest?.contest_type === "cpm");
+
+                      // Track creator ids present in the filtered submissions
+                      const filteredCreatorIds = new Set<string>();
+
                       filteredAnalyticsSubmissions.forEach((sub: any) => {
                         const isTwitterTweet =
                           sub.is_twitter_tweet === true ||
@@ -10646,11 +10688,55 @@ export default function ContestDetailClient({
                           metrics.total_quote_reposts +=
                             sub.other_stats.quote_reposts || 0;
                           metrics.total_impressions += sub.views || 0;
-                          metrics.total_points +=
-                            (sub.other_stats.points || 0) +
-                            (sub.other_stats.manual_points_adjustment || 0);
+
+                          // Calculate points as base_points + manual adjustment (avoid double counting)
+                          const basePoints =
+                            typeof sub.other_stats.base_points === "number"
+                              ? sub.other_stats.base_points
+                              : sub.other_stats.points || 0;
+                          const manualPoints =
+                            typeof sub.other_stats.manual_points_adjustment ===
+                            "number"
+                              ? sub.other_stats.manual_points_adjustment
+                              : 0;
+                          metrics.total_points += basePoints + manualPoints;
+
+                          if (sub.creator_id) {
+                            filteredCreatorIds.add(sub.creator_id);
+                          }
                         }
                       });
+
+                      // Prefer leaderboard totals (which already include creator-level manual adjustments)
+                      if (isTwitterPointsContest) {
+                        let leaderboardPointsTotal = 0;
+                        let hasLeaderboardPoints = false;
+
+                        Object.entries(creatorModerationData || {}).forEach(
+                          ([creatorId, data]) => {
+                            if (
+                              activeAnalyticsTab !== "all" &&
+                              filteredCreatorIds.size > 0 &&
+                              !filteredCreatorIds.has(creatorId)
+                            ) {
+                              return;
+                            }
+
+                            const entryPoints =
+                              typeof data.total_points === "number"
+                                ? data.total_points
+                                : null;
+                            if (entryPoints !== null) {
+                              leaderboardPointsTotal += entryPoints;
+                              hasLeaderboardPoints = true;
+                            }
+                          }
+                        );
+
+                        if (hasLeaderboardPoints) {
+                          metrics.total_points = leaderboardPointsTotal;
+                        }
+                      }
 
                       return metrics;
                     };
@@ -12116,6 +12202,252 @@ export default function ContestDetailClient({
                       </div>
                     </div>
                   </div>
+
+                  {/* Twitter Points Statistics - For Twitter contests */}
+                  {(currentContest?.platform?.toLowerCase() === "twitter" ||
+                    currentContest?.platform?.toLowerCase() === "x") &&
+                    currentContest?.contest_format === "text_image" && (
+                      <div className="mt-8">
+                        <h3 className="font-medium mb-4">Points Statistics</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                          {/* Total Points */}
+                          <div
+                            className={cn(
+                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              isDark
+                                ? "bg-[#170337] border border-[#D1B7F9]"
+                                : "bg-white"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-600"
+                                  )}
+                                >
+                                  Total Points
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-2xl font-bold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {(() => {
+                                    // Correct calculation:
+                                    // - Sum base points from all tweets
+                                    // - Add creator-wise manual adjustment ONCE per creator (if present)
+                                    // - Add tweet-level manual adjustments (sum across tweets)
+
+                                    const twitterSubs = (
+                                      filteredAnalyticsSubmissions || []
+                                    ).filter(
+                                      (s) =>
+                                        (s as any).is_twitter_tweet === true
+                                    );
+
+                                    const baseTotal = twitterSubs.reduce(
+                                      (sum, s) =>
+                                        sum + (s.other_stats?.base_points || 0),
+                                      0
+                                    );
+
+                                    const tweetManualTotal = twitterSubs.reduce(
+                                      (sum, s) =>
+                                        sum +
+                                        ((s as any).manual_points_adjustment ||
+                                          0),
+                                      0
+                                    );
+
+                                    const creatorIds = new Set<string>();
+                                    twitterSubs.forEach((s) => {
+                                      if (s.creator_id)
+                                        creatorIds.add(s.creator_id);
+                                    });
+
+                                    const creatorManualTotal = Array.from(
+                                      creatorIds
+                                    ).reduce(
+                                      (sum, creatorId) =>
+                                        sum +
+                                        (creatorModerationData?.[creatorId]
+                                          ?.manual_points_adjustment || 0),
+                                      0
+                                    );
+
+                                    const totalPoints =
+                                      baseTotal +
+                                      tweetManualTotal +
+                                      creatorManualTotal;
+
+                                    return totalPoints.toLocaleString();
+                                  })()}
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-xs text-gray-500 mt-1",
+                                    isDark ? "text-white" : "text-gray-500"
+                                  )}
+                                >
+                                  Base + Manual Adjustments
+                                </p>
+                              </div>
+                              <div
+                                className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark
+                                    ? "bg-purple-900/50 text-purple-300"
+                                    : "bg-purple-100 text-purple-600"
+                                )}
+                              >
+                                <Trophy className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Base Points */}
+                          <div
+                            className={cn(
+                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              isDark
+                                ? "bg-[#170337] border border-[#D1B7F9]"
+                                : "bg-white"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-600"
+                                  )}
+                                >
+                                  Base Points
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-2xl font-bold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {filteredAnalyticsSubmissions
+                                    ?.reduce((sum, s) => {
+                                      const isTwitterTweet =
+                                        (s as any).is_twitter_tweet === true;
+                                      if (!isTwitterTweet) return sum;
+                                      return (
+                                        sum + (s.other_stats?.base_points || 0)
+                                      );
+                                    }, 0)
+                                    .toLocaleString() || 0}
+                                </p>
+                              </div>
+                              <div
+                                className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark
+                                    ? "bg-blue-900/50 text-blue-300"
+                                    : "bg-blue-100 text-blue-600"
+                                )}
+                              >
+                                <Star className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Manual Adjustments */}
+                          <div
+                            className={cn(
+                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              isDark
+                                ? "bg-[#170337] border border-[#D1B7F9]"
+                                : "bg-white"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-600"
+                                  )}
+                                >
+                                  Manual Adjustments
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-2xl font-bold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {(() => {
+                                    // Calculate total manual adjustments
+                                    // For creator-wise adjustments, sum from creatorModerationData
+                                    // For submission-level adjustments, sum from submissions
+                                    const twitterSubs = (
+                                      filteredAnalyticsSubmissions || []
+                                    ).filter(
+                                      (s) =>
+                                        (s as any).is_twitter_tweet === true
+                                    );
+
+                                    const creatorIds = new Set<string>();
+                                    twitterSubs.forEach((s) => {
+                                      if (s.creator_id)
+                                        creatorIds.add(s.creator_id);
+                                    });
+
+                                    const creatorManualTotal = Array.from(
+                                      creatorIds
+                                    ).reduce(
+                                      (sum, creatorId) =>
+                                        sum +
+                                        (creatorModerationData?.[creatorId]
+                                          ?.manual_points_adjustment || 0),
+                                      0
+                                    );
+
+                                    const tweetManualTotal = twitterSubs.reduce(
+                                      (sum, s) =>
+                                        sum +
+                                        ((s as any).manual_points_adjustment ||
+                                          0),
+                                      0
+                                    );
+
+                                    const totalManual =
+                                      creatorManualTotal + tweetManualTotal;
+
+                                    return totalManual.toLocaleString();
+                                  })()}
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-xs text-gray-500 mt-1",
+                                    isDark ? "text-white" : "text-gray-500"
+                                  )}
+                                >
+                                  Creator-wise + Tweet-level
+                                </p>
+                              </div>
+                              <div
+                                className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark
+                                    ? "bg-green-900/50 text-green-400"
+                                    : "bg-green-100 text-green-600"
+                                )}
+                              >
+                                <Edit className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                   {/* ROI/Benefit Analysis - Collapsible Section */}
                   <div className="mt-8">
