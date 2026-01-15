@@ -10145,7 +10145,7 @@ export default function EditContestPage({
                             htmlFor="showCommentMultipliers"
                             className="text-sm cursor-pointer"
                           >
-                            Gives points when a creator’s comment drives more interaction
+                            Keep all values set to 0 if you do not want to award points for comment engagement.
                           </Label>
                         </div>
                         {showCommentMultipliers && (
@@ -10156,7 +10156,7 @@ export default function EditContestPage({
                             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                               <div className="space-y-2">
                                 <Label htmlFor="commentLikesMultiplier">
-                                  Likes Multiplier
+                                  Likes 
                                 </Label>
                                 <Input
                                   id="commentLikesMultiplier"
@@ -10181,7 +10181,7 @@ export default function EditContestPage({
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="commentRepliesMultiplier">
-                                  Replies Multiplier
+                                  Replies 
                                 </Label>
                                 <Input
                                   id="commentRepliesMultiplier"
@@ -10207,7 +10207,7 @@ export default function EditContestPage({
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="commentImpressionsMultiplier">
-                                  Impressions Multiplier
+                                  Impressions 
                                 </Label>
                                 <Input
                                   id="commentImpressionsMultiplier"
@@ -10233,7 +10233,7 @@ export default function EditContestPage({
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="commentRetweetsMultiplier">
-                                  Retweets Multiplier
+                                  Retweets 
                                 </Label>
                                 <Input
                                   id="commentRetweetsMultiplier"
@@ -10259,7 +10259,7 @@ export default function EditContestPage({
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="commentQuoteRepostsMultiplier">
-                                  Quote Reposts Multiplier
+                                  Quote Reposts 
                                 </Label>
                                 <Input
                                   id="commentQuoteRepostsMultiplier"
@@ -10326,7 +10326,7 @@ export default function EditContestPage({
                             htmlFor="showRetweetMultipliers"
                             className="text-sm cursor-pointer"
                           >
-                            Gives points when a creator’s retweet generates additional interaction
+                          Keep all values set to 0 if you do not want to award points for retweet engagement
                           </Label>
                         </div>
                         {showRetweetMultipliers && (
@@ -10337,7 +10337,7 @@ export default function EditContestPage({
                             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                               <div className="space-y-2">
                                 <Label htmlFor="retweetLikesMultiplier">
-                                  Likes Multiplier
+                                  Likes 
                                 </Label>
                                 <Input
                                   id="retweetLikesMultiplier"
@@ -10362,7 +10362,7 @@ export default function EditContestPage({
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="retweetRepliesMultiplier">
-                                  Replies Multiplier
+                                  Replies 
                                 </Label>
                                 <Input
                                   id="retweetRepliesMultiplier"
@@ -10388,7 +10388,7 @@ export default function EditContestPage({
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="retweetImpressionsMultiplier">
-                                  Impressions Multiplier
+                                  Impressions 
                                 </Label>
                                 <Input
                                   id="retweetImpressionsMultiplier"
@@ -10414,7 +10414,7 @@ export default function EditContestPage({
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="retweetRetweetsMultiplier">
-                                  Retweets Multiplier
+                                  Retweets 
                                 </Label>
                                 <Input
                                   id="retweetRetweetsMultiplier"
@@ -10440,7 +10440,7 @@ export default function EditContestPage({
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="retweetQuoteRepostsMultiplier">
-                                  Quote Reposts Multiplier
+                                  Quote Reposts
                                 </Label>
                                 <Input
                                   id="retweetQuoteRepostsMultiplier"
@@ -10507,7 +10507,7 @@ export default function EditContestPage({
                             htmlFor="showQuoteRepostMultipliers"
                             className="text-sm cursor-pointer"
                           >
-                           Gives points when a creator’s quote repost creates higher interaction
+                           Keep all values set to 0 if you do not want to award points for quote repost engagement.
                           </Label>
                         </div>
                         {showQuoteRepostMultipliers && (
@@ -10518,7 +10518,7 @@ export default function EditContestPage({
                             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                               <div className="space-y-2">
                                 <Label htmlFor="quoteRepostLikesMultiplier">
-                                  Likes Multiplier
+                                  Likes 
                                 </Label>
                                 <Input
                                   id="quoteRepostLikesMultiplier"
@@ -10544,7 +10544,7 @@ export default function EditContestPage({
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="quoteRepostRepliesMultiplier">
-                                  Replies Multiplier
+                                  Replies
                                 </Label>
                                 <Input
                                   id="quoteRepostRepliesMultiplier"
@@ -10570,7 +10570,7 @@ export default function EditContestPage({
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="quoteRepostImpressionsMultiplier">
-                                  Impressions Multiplier
+                                  Impressions 
                                 </Label>
                                 <Input
                                   id="quoteRepostImpressionsMultiplier"
@@ -10596,7 +10596,7 @@ export default function EditContestPage({
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="quoteRepostRetweetsMultiplier">
-                                  Retweets Multiplier
+                                  Retweets
                                 </Label>
                                 <Input
                                   id="quoteRepostRetweetsMultiplier"
@@ -10622,7 +10622,7 @@ export default function EditContestPage({
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="quoteRepostQuoteRepostsMultiplier">
-                                  Quote Reposts Multiplier
+                                  Quote Reposts 
                                 </Label>
                                 <Input
                                   id="quoteRepostQuoteRepostsMultiplier"

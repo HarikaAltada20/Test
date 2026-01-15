@@ -842,9 +842,15 @@ export default function ContestDetailClient({
         group.metrics.base_points =
           (group.metrics.base_points || 0) +
           (submission.other_stats?.base_points || 0);
-        group.metrics.manual_points_adjustment =
-          (group.metrics.manual_points_adjustment || 0) +
-          ((submission as any).manual_points_adjustment || 0);
+        
+        // For CPM contests, don't accumulate submission-level manual adjustments
+        // Only use creator-level manual adjustments (like leaderboard contests)
+        const isCpmContest = currentContest?.contest_type === "cpm";
+        if (!isCpmContest) {
+          group.metrics.manual_points_adjustment =
+            (group.metrics.manual_points_adjustment || 0) +
+            ((submission as any).manual_points_adjustment || 0);
+        }
         // Store manual points reason (use the latest one if multiple)
         if ((submission as any).manual_points_reason) {
           group.metrics.manual_points_reason = (
