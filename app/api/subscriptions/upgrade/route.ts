@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body - updated to use new parameter names
     const body = await request.json();
-    const { targetProductId, targetPriceId, upgradeType = 'immediate', scheduledDate } = body;
+    const { targetProductId, targetPriceId, upgradeType = 'immediate', scheduledDate, trialDays } = body;
 
 
     // Validate required fields
@@ -195,6 +195,7 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           productId: targetProductId,
           priceId: targetPriceId,
+          trialDays,
           upgradeOptions: {
             upgradeType: 'immediate', // This is an immediate upgrade/downgrade
 
@@ -248,6 +249,7 @@ export async function POST(request: NextRequest) {
             userId: user.id,
             productId: targetProductId,
             priceId: targetPriceId,
+            trialDays,
             upgradeOptions: {
               upgradeType: 'immediate'
             }
