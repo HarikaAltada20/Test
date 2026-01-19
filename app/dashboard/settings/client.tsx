@@ -364,9 +364,9 @@ export default function SettingsPage({
       setProfile((prev) =>
         prev
           ? {
-              ...prev,
-              instagram_account: updatedInstagramAccount as SocialAccount,
-            }
+            ...prev,
+            instagram_account: updatedInstagramAccount as SocialAccount,
+          }
           : null
       );
       console.log("Instagram token refreshed successfully");
@@ -741,14 +741,23 @@ export default function SettingsPage({
     setIsLoading(true);
     try {
       const instagramRedirectUri = `${appBaseUrl}/api/instagram/callback`;
+
+      // Instagram API with Instagram Login scopes (as of 2025)
+      // Note: Instagram Basic Display API was deprecated Dec 4, 2024
+      // These scopes work with Instagram API with Instagram Login (Professional accounts only)
+      // The deprecated parameters enable_fb_login and force_authentication have been removed (deprecated June 14, 2025)
       const scopes = [
         "instagram_business_basic",
         "instagram_business_manage_insights",
       ].join(",");
 
+      // Instagram API with Instagram Login OAuth endpoint (Business Login for Instagram)
+      // Uses api.instagram.com (not Facebook Login endpoint)
+      // force_reauth parameter is recommended (introduced June 14, 2025) to fix broken login experience
+      // Especially important for mobile devices - forces reauthentication even if user is already logged in
       const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(
         instagramRedirectUri
-      )}&scope=${scopes}&response_type=code&enable_fb_login=0&force_authentication=1`;
+      )}&scope=${scopes}&response_type=code&force_reauth=1`;
 
       // Set a timeout to reset loading state if redirect doesn't happen
       const timeoutId = setTimeout(() => {
@@ -2493,367 +2502,73 @@ export default function SettingsPage({
 
       {/* Connect Twitter Modal */}
       <Dialog
-          open={isTwitterModalOpen}
-          onOpenChange={(open) => {
-            setIsTwitterModalOpen(open);
-            if (!open) {
-              setTwitterFetchState("idle");
-            }
-          }}
-          isdark={isDark}
-        >
-          <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle
-                className={cn(isDark ? "text-white" : "text-gray-900")}
+        open={isTwitterModalOpen}
+        onOpenChange={(open) => {
+          setIsTwitterModalOpen(open);
+          if (!open) {
+            setTwitterFetchState("idle");
+          }
+        }}
+        isdark={isDark}
+      >
+        <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-900")}
+            >
+              Connect Twitter (X)
+            </DialogTitle>
+            <DialogDescription
+              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            >
+              Enter your Twitter (X) username. Make sure your Game Of Creators
+              username is added in your X bio before fetching.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-2">
+            <Alert className="bg-[#D9C0FF26] border-[#7F39EC]">
+              <AlertDescription
+                className={cn(isDark ? "text-gray-200" : "text-gray-700")}
               >
-                Connect Twitter (X)
-              </DialogTitle>
-              <DialogDescription
-                className={cn(isDark ? "text-gray-300" : "text-gray-600")}
-              >
-                Enter your Twitter (X) username. Make sure your Game Of Creators
-                username is added in your X bio before fetching.
-              </DialogDescription>
-            </DialogHeader>
+                Before fetching your X profile, please add your{" "}
+                <strong className="font-semibold">
+                  Game Of Creators username {username ? `(${username})` : ""}
+                </strong>
+                &nbsp;to your X bio.
+              </AlertDescription>
+            </Alert>
 
-            <div className="space-y-4 mt-2">
-              <Alert className="bg-[#D9C0FF26] border-[#7F39EC]">
-                <AlertDescription
-                  className={cn(isDark ? "text-gray-200" : "text-gray-700")}
-                >
-                  Before fetching your X profile, please add your{" "}
-                  <strong className="font-semibold">
-                    Game Of Creators username {username ? `(${username})` : ""}
-                  </strong>
-                  &nbsp;to your X bio.
-                </AlertDescription>
-              </Alert>
-
-              {twitterFetchState !== "success" && (
-                <>
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="twitter-username"
-                      className={cn(isDark ? "text-white" : "text-gray-900")}
-                    >
-                      X Username
-                    </Label>
-                    <Input
-                      id="twitter-username"
-                      placeholder="Enter your X username (without @)"
-                      value={twitterUsername}
-                      onChange={(e) => setTwitterUsername(e.target.value)}
-                      className={cn(
-                        isDark
-                          ? "bg-[#06021d] border border-gray-600 text-white"
-                          : "bg-white text-gray-900"
-                      )}
-                    />
-                  </div>
-
-                  <div className="flex flex-col items-stretch gap-2 pt-1">
-                    <Button
-                      type="button"
-                      className="w-full bg-[#6C43D0] text-white"
-                      disabled={
-                        !twitterUsername.trim() ||
-                        twitterFetchState === "loading"
-                      }
-                      onClick={async () => {
-                        if (!twitterUsername.trim()) return;
-                        try {
-                          setTwitterFetchState("loading");
-                          setTwitterProfile(null);
-
-                          const response = await fetch(
-                            "/api/twitter-apis/fetch-profile",
-                            {
-                              method: "POST",
-                              headers: {
-                                "Content-Type": "application/json",
-                              },
-                              body: JSON.stringify({
-                                screenname: twitterUsername.trim(),
-                              }),
-                            }
-                          );
-
-                          const data = await response.json();
-
-                          if (
-                            !response.ok ||
-                            !data ||
-                            data.status !== "active"
-                          ) {
-                            throw new Error(
-                              data?.error || "Unable to fetch active X profile."
-                            );
-                          }
-
-                          setTwitterProfile(data);
-                          setTwitterFetchState("success");
-                          toast({
-                            title: "Profile fetched",
-                            description:
-                              "We have fetched your public X profile details.",
-                          });
-                        } catch (error: any) {
-                          setTwitterFetchState("error");
-                          toast({
-                            title: "Error",
-                            description:
-                              error?.message ||
-                              "Failed to fetch your X profile. Please try again.",
-                            variant: "destructive",
-                          });
-                        }
-                      }}
-                    >
-                      {twitterFetchState === "loading" ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                          <span>Fetching...</span>
-                        </div>
-                      ) : (
-                        "Fetch"
-                      )}
-                    </Button>
-                  </div>
-                </>
-              )}
-
-              {twitterFetchState === "success" && (
-                <div className="mt-2 space-y-3">
-                  <p
-                    className={cn(
-                      "text-xs text-green-600",
-                      isDark && "text-green-400"
-                    )}
+            {twitterFetchState !== "success" && (
+              <>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="twitter-username"
+                    className={cn(isDark ? "text-white" : "text-gray-900")}
                   >
-                    Profile fetched successfully.
-                  </p>
-                  {twitterProfile && (
-                    <div
-                      className={cn(
-                        "flex items-start gap-3 rounded-lg border p-3",
-                        isDark
-                          ? "border-gray-700 bg-[#06021d]"
-                          : "border-gray-200 bg-white"
-                      )}
-                    >
-                      {twitterProfile.avatar && (
-                        <img
-                          src={twitterProfile.avatar}
-                          alt={twitterProfile.name || twitterProfile.profile}
-                          className="h-10 w-10 rounded-full object-cover"
-                        />
-                      )}
-                      <div className="space-y-1 text-xs">
-                        <div className="font-semibold">
-                          {twitterProfile.name || "Unnamed"}
-                          {twitterProfile.profile && (
-                            <span className="ml-1 text-gray-500">
-                              @{twitterProfile.profile}
-                            </span>
-                          )}
-                        </div>
-                        {twitterProfile.desc && (
-                          <p className="text-[11px] text-gray-600 dark:text-gray-300">
-                            {highlightUsernameInBio(twitterProfile.desc)}
-                          </p>
-                        )}
-                        <div className="flex flex-wrap gap-3 mt-1">
-                          <span className="text-[11px] text-gray-500">
-                            Following:{" "}
-                            <strong>{twitterProfile.friends || 0}</strong>
-                          </span>
-                          <span className="text-[11px] text-gray-500">
-                            Followers:{" "}
-                            <strong>{twitterProfile.sub_count || 0}</strong>
-                          </span>
-                          <span className="text-[11px] text-gray-500">
-                            Tweets:{" "}
-                            <strong>
-                              {twitterProfile.statuses_count || 0}
-                            </strong>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {twitterProfile && (
-                    <div className="flex flex-col items-end mt-3 space-y-2">
-                      <div className="flex flex-row items-center gap-2">
-                        {!isUsernameInBio(twitterProfile.desc) && (
-                          <Button
-                            type="button"
-                            className="bg-[#4A00BE] text-white"
-                            onClick={async () => {
-                              if (!twitterUsername.trim()) return;
-                              try {
-                                setTwitterFetchState("loading");
-                                setTwitterProfile(null);
-
-                                const response = await fetch(
-                                  "/api/twitter-apis/fetch-profile",
-                                  {
-                                    method: "POST",
-                                    headers: {
-                                      "Content-Type": "application/json",
-                                    },
-                                    body: JSON.stringify({
-                                      screenname: twitterUsername.trim(),
-                                    }),
-                                  }
-                                );
-
-                                const data = await response.json();
-
-                                if (
-                                  !response.ok ||
-                                  !data ||
-                                  data.status !== "active"
-                                ) {
-                                  throw new Error(
-                                    data?.error ||
-                                      "Unable to fetch active X profile."
-                                  );
-                                }
-
-                                setTwitterProfile(data);
-                                setTwitterFetchState("success");
-                                toast({
-                                  title: "Profile fetched",
-                                  description:
-                                    "We have fetched your public X profile details.",
-                                });
-                              } catch (error: any) {
-                                console.error("Error refreshing X profile", error);
-                                setTwitterFetchState("error");
-                                toast({
-                                  title: "Error",
-                                  description:
-                                    error?.message ||
-                                    "Unable to refresh your X profile. Please try again.",
-                                  variant: "destructive",
-                                });
-                              }
-                            }}
-                          >
-                            Refresh profile
-                          </Button>
-                        )}
-                        <Button
-                          type="button"
-                          className="bg-[#4A00BE] text-white"
-                          disabled={
-                            !isUsernameInBio(twitterProfile.desc) ||
-                            isSavingTwitter
-                          }
-                          onClick={async () => {
-                            if (!isUsernameInBio(twitterProfile.desc)) return;
-                            try {
-                              setIsSavingTwitter(true);
-                              const response = await fetch(
-                                "/api/twitter-apis/save-profile",
-                                {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type": "application/json",
-                                  },
-                                  body: JSON.stringify({
-                                    twitterProfile,
-                                  }),
-                                }
-                              );
-
-                              const result = await response.json();
-
-                              if (!response.ok || !result?.success) {
-                                throw new Error(
-                                  result?.error ||
-                                    "Failed to save Twitter profile. Please try again."
-                                );
-                              }
-
-                              toast({
-                                title: "Saved & Connected",
-                                description:
-                                  "Twitter (X) profile has been linked. You can now use it for campaigns.",
-                              });
-
-                              // Refresh connected state and close dialog so UI updates in real time
-                              try {
-                                const checkResponse = await fetch(
-                                  "/api/twitter-apis/get-profile",
-                                  {
-                                    method: "GET",
-                                    headers: {
-                                      "Content-Type": "application/json",
-                                    },
-                                  }
-                                );
-
-                                if (checkResponse.ok) {
-                                  const checkResult = await checkResponse.json();
-                                  setTwitterAccount(
-                                    checkResult.twitterAccount || null
-                                  );
-                                  setTwitterConnected(
-                                    !!checkResult.twitterAccount
-                                  );
-                                }
-                              } catch (e) {
-                                console.error(
-                                  "Failed to refresh Twitter account after save",
-                                  e
-                                );
-                              }
-
-                              setIsTwitterModalOpen(false);
-                            } catch (error: any) {
-                              toast({
-                                title: "Error",
-                                description:
-                                  error?.message ||
-                                  "Failed to save Twitter profile. Please try again.",
-                                variant: "destructive",
-                              });
-                            } finally {
-                              setIsSavingTwitter(false);
-                            }
-                          }}
-                        >
-                          {isSavingTwitter ? "Saving..." : "Save & Connect"}
-                        </Button>
-                      </div>
-                      {!isUsernameInBio(twitterProfile.desc) && (
-                        <p className="text-[11px] text-red-600 text-right dark:text-red-400">
-                          You have not added your Game Of Creators username in
-                          your X bio yet. Until then, you cannot connect
-                          Twitter.
-                        </p>
-                      )}
-                    </div>
-                  )}
+                    X Username
+                  </Label>
+                  <Input
+                    id="twitter-username"
+                    placeholder="Enter your X username (without @)"
+                    value={twitterUsername}
+                    onChange={(e) => setTwitterUsername(e.target.value)}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021d] border border-gray-600 text-white"
+                        : "bg-white text-gray-900"
+                    )}
+                  />
                 </div>
-              )}
-              {twitterFetchState === "error" && (
-                <div className="mt-2 space-y-2">
-                  <p
-                    className={cn(
-                      "text-xs",
-                      isDark ? "text-red-400" : "text-red-600"
-                    )}
-                  >
-                    Something went wrong while fetching your profile. If this
-                    continues, please try again after some time.
-                  </p>
+
+                <div className="flex flex-col items-stretch gap-2 pt-1">
                   <Button
                     type="button"
-                    variant="outline"
-                    className="h-7 px-3 text-[11px]"
+                    className="w-full bg-[#6C43D0] text-white"
+                    disabled={
+                      !twitterUsername.trim() ||
+                      twitterFetchState === "loading"
+                    }
                     onClick={async () => {
                       if (!twitterUsername.trim()) return;
                       try {
@@ -2875,7 +2590,11 @@ export default function SettingsPage({
 
                         const data = await response.json();
 
-                        if (!response.ok || !data || data.status !== "active") {
+                        if (
+                          !response.ok ||
+                          !data ||
+                          data.status !== "active"
+                        ) {
                           throw new Error(
                             data?.error || "Unable to fetch active X profile."
                           );
@@ -2900,335 +2619,625 @@ export default function SettingsPage({
                       }
                     }}
                   >
-                    Try again
+                    {twitterFetchState === "loading" ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <span>Fetching...</span>
+                      </div>
+                    ) : (
+                      "Fetch"
+                    )}
                   </Button>
                 </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-        {/* Change Password Modal */}
-        <Dialog
-          open={isPasswordModalOpen}
-          onOpenChange={setIsPasswordModalOpen}
-          isdark={isDark}
-        >
-          <DialogContent className="sm:max-w-[550px] w-[95vw] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle
-                className={cn(isDark ? "text-white" : "text-gray-900")}
-              >
-                Change Password
-              </DialogTitle>
-              <DialogDescription
-                className={cn(isDark ? "text-gray-300" : "text-gray-600")}
-              >
-                Update your account password
-              </DialogDescription>
-            </DialogHeader>
-            {hasPassword && (
-              <Alert className="mb-4 bg-[#D9C0FF26] border-[#7F39EC]">
-                <AlertDescription>
-                  <strong>Multiple Sign-in Methods:</strong> You can sign in
-                  with both Google and email/password.
-                </AlertDescription>
-              </Alert>
+              </>
             )}
 
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const success = await handlePasswordChange();
-                // Only close modal on success; on error, keep it open so user can fix input
-                if (success) {
-                  setTimeout(() => {
-                    setIsPasswordModalOpen(false);
-                  }, 1000);
-                }
-              }}
-              className="space-y-4"
-            >
-              {hasPassword && (
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="modal-current-password"
-                    className={cn(isDark ? "text-white" : "text-gray-900")}
+            {twitterFetchState === "success" && (
+              <div className="mt-2 space-y-3">
+                <p
+                  className={cn(
+                    "text-xs text-green-600",
+                    isDark && "text-green-400"
+                  )}
+                >
+                  Profile fetched successfully.
+                </p>
+                {twitterProfile && (
+                  <div
+                    className={cn(
+                      "flex items-start gap-3 rounded-lg border p-3",
+                      isDark
+                        ? "border-gray-700 bg-[#06021d]"
+                        : "border-gray-200 bg-white"
+                    )}
                   >
-                    Current Password
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="modal-current-password"
-                      type={showCurrentPassword ? "text" : "password"}
-                      autoComplete="current-password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      className={cn(
-                        "pr-10",
-                        isDark
-                          ? "bg-[#06021d] border border-gray-600 text-white"
-                          : "bg-white text-gray-900"
+                    {twitterProfile.avatar && (
+                      <img
+                        src={twitterProfile.avatar}
+                        alt={twitterProfile.name || twitterProfile.profile}
+                        className="h-10 w-10 rounded-full object-cover"
+                      />
+                    )}
+                    <div className="space-y-1 text-xs">
+                      <div className="font-semibold">
+                        {twitterProfile.name || "Unnamed"}
+                        {twitterProfile.profile && (
+                          <span className="ml-1 text-gray-500">
+                            @{twitterProfile.profile}
+                          </span>
+                        )}
+                      </div>
+                      {twitterProfile.desc && (
+                        <p className="text-[11px] text-gray-600 dark:text-gray-300">
+                          {highlightUsernameInBio(twitterProfile.desc)}
+                        </p>
                       )}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowCurrentPassword(!showCurrentPassword)
-                      }
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                    >
-                      {showCurrentPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
+                      <div className="flex flex-wrap gap-3 mt-1">
+                        <span className="text-[11px] text-gray-500">
+                          Following:{" "}
+                          <strong>{twitterProfile.friends || 0}</strong>
+                        </span>
+                        <span className="text-[11px] text-gray-500">
+                          Followers:{" "}
+                          <strong>{twitterProfile.sub_count || 0}</strong>
+                        </span>
+                        <span className="text-[11px] text-gray-500">
+                          Tweets:{" "}
+                          <strong>
+                            {twitterProfile.statuses_count || 0}
+                          </strong>
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+                {twitterProfile && (
+                  <div className="flex flex-col items-end mt-3 space-y-2">
+                    <div className="flex flex-row items-center gap-2">
+                      {!isUsernameInBio(twitterProfile.desc) && (
+                        <Button
+                          type="button"
+                          className="bg-[#4A00BE] text-white"
+                          onClick={async () => {
+                            if (!twitterUsername.trim()) return;
+                            try {
+                              setTwitterFetchState("loading");
+                              setTwitterProfile(null);
 
-              <div className="space-y-2">
-                <Label
-                  htmlFor="modal-new-password"
-                  className={cn(isDark ? "text-white" : "text-gray-900")}
-                >
-                  New Password
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="modal-new-password"
-                    type={showNewPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Minimum 8 characters"
-                    className={cn(
-                      "pr-10",
-                      isDark
-                        ? "bg-[#06021d] border border-gray-600 text-white"
-                        : "bg-white text-gray-900"
-                    )}
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    {showNewPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
+                              const response = await fetch(
+                                "/api/twitter-apis/fetch-profile",
+                                {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify({
+                                    screenname: twitterUsername.trim(),
+                                  }),
+                                }
+                              );
 
-                <PasswordStrengthMeter
-                  password={newPassword}
-                  className="mt-3"
-                  showRequirements={true}
-                />
+                              const data = await response.json();
+
+                              if (
+                                !response.ok ||
+                                !data ||
+                                data.status !== "active"
+                              ) {
+                                throw new Error(
+                                  data?.error ||
+                                  "Unable to fetch active X profile."
+                                );
+                              }
+
+                              setTwitterProfile(data);
+                              setTwitterFetchState("success");
+                              toast({
+                                title: "Profile fetched",
+                                description:
+                                  "We have fetched your public X profile details.",
+                              });
+                            } catch (error: any) {
+                              console.error("Error refreshing X profile", error);
+                              setTwitterFetchState("error");
+                              toast({
+                                title: "Error",
+                                description:
+                                  error?.message ||
+                                  "Unable to refresh your X profile. Please try again.",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                        >
+                          Refresh profile
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        className="bg-[#4A00BE] text-white"
+                        disabled={
+                          !isUsernameInBio(twitterProfile.desc) ||
+                          isSavingTwitter
+                        }
+                        onClick={async () => {
+                          if (!isUsernameInBio(twitterProfile.desc)) return;
+                          try {
+                            setIsSavingTwitter(true);
+                            const response = await fetch(
+                              "/api/twitter-apis/save-profile",
+                              {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                },
+                                body: JSON.stringify({
+                                  twitterProfile,
+                                }),
+                              }
+                            );
+
+                            const result = await response.json();
+
+                            if (!response.ok || !result?.success) {
+                              throw new Error(
+                                result?.error ||
+                                "Failed to save Twitter profile. Please try again."
+                              );
+                            }
+
+                            toast({
+                              title: "Saved & Connected",
+                              description:
+                                "Twitter (X) profile has been linked. You can now use it for campaigns.",
+                            });
+
+                            // Refresh connected state and close dialog so UI updates in real time
+                            try {
+                              const checkResponse = await fetch(
+                                "/api/twitter-apis/get-profile",
+                                {
+                                  method: "GET",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                }
+                              );
+
+                              if (checkResponse.ok) {
+                                const checkResult = await checkResponse.json();
+                                setTwitterAccount(
+                                  checkResult.twitterAccount || null
+                                );
+                                setTwitterConnected(
+                                  !!checkResult.twitterAccount
+                                );
+                              }
+                            } catch (e) {
+                              console.error(
+                                "Failed to refresh Twitter account after save",
+                                e
+                              );
+                            }
+
+                            setIsTwitterModalOpen(false);
+                          } catch (error: any) {
+                            toast({
+                              title: "Error",
+                              description:
+                                error?.message ||
+                                "Failed to save Twitter profile. Please try again.",
+                              variant: "destructive",
+                            });
+                          } finally {
+                            setIsSavingTwitter(false);
+                          }
+                        }}
+                      >
+                        {isSavingTwitter ? "Saving..." : "Save & Connect"}
+                      </Button>
+                    </div>
+                    {!isUsernameInBio(twitterProfile.desc) && (
+                      <p className="text-[11px] text-red-600 text-right dark:text-red-400">
+                        You have not added your Game Of Creators username in
+                        your X bio yet. Until then, you cannot connect
+                        Twitter.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="modal-confirm-password"
-                  className={cn(isDark ? "text-white" : "text-gray-900")}
+            )}
+            {twitterFetchState === "error" && (
+              <div className="mt-2 space-y-2">
+                <p
+                  className={cn(
+                    "text-xs",
+                    isDark ? "text-red-400" : "text-red-600"
+                  )}
                 >
-                  Confirm New Password
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="modal-confirm-password"
-                    type={showConfirmPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm new password"
-                    className={cn(
-                      "pr-10",
-                      isDark
-                        ? "bg-[#06021d] border border-gray-600 text-white"
-                        : "bg-white text-gray-900"
-                    )}
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
+                  Something went wrong while fetching your profile. If this
+                  continues, please try again after some time.
+                </p>
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsPasswordModalOpen(false)}
-                  className={cn(
-                    "flex-1 bg-white border border-red-500 text-red-500",
-                    isDark ? "bg-[#06021d]" : "bg-white"
-                  )}
+                  className="h-7 px-3 text-[11px]"
+                  onClick={async () => {
+                    if (!twitterUsername.trim()) return;
+                    try {
+                      setTwitterFetchState("loading");
+                      setTwitterProfile(null);
+
+                      const response = await fetch(
+                        "/api/twitter-apis/fetch-profile",
+                        {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({
+                            screenname: twitterUsername.trim(),
+                          }),
+                        }
+                      );
+
+                      const data = await response.json();
+
+                      if (!response.ok || !data || data.status !== "active") {
+                        throw new Error(
+                          data?.error || "Unable to fetch active X profile."
+                        );
+                      }
+
+                      setTwitterProfile(data);
+                      setTwitterFetchState("success");
+                      toast({
+                        title: "Profile fetched",
+                        description:
+                          "We have fetched your public X profile details.",
+                      });
+                    } catch (error: any) {
+                      setTwitterFetchState("error");
+                      toast({
+                        title: "Error",
+                        description:
+                          error?.message ||
+                          "Failed to fetch your X profile. Please try again.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
                 >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  className="flex-1 bg-[#6C43D0] text-white"
-                  disabled={
-                    passwordChangeLoading || !newPassword || !confirmPassword
-                  }
-                >
-                  {passwordChangeLoading ? "Updating..." : "Update Password"}
+                  Try again
                 </Button>
               </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Change Password Modal */}
+      <Dialog
+        open={isPasswordModalOpen}
+        onOpenChange={setIsPasswordModalOpen}
+        isdark={isDark}
+      >
+        <DialogContent className="sm:max-w-[550px] w-[95vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-900")}
+            >
+              Change Password
+            </DialogTitle>
+            <DialogDescription
+              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            >
+              Update your account password
+            </DialogDescription>
+          </DialogHeader>
+          {hasPassword && (
+            <Alert className="mb-4 bg-[#D9C0FF26] border-[#7F39EC]">
+              <AlertDescription>
+                <strong>Multiple Sign-in Methods:</strong> You can sign in
+                with both Google and email/password.
+              </AlertDescription>
+            </Alert>
+          )}
 
-        {/* Share Referral Links Modal */}
-        <Dialog
-          open={isReferralModalOpen}
-          onOpenChange={setIsReferralModalOpen}
-          isdark={isDark}
-        >
-          <DialogContent
-            className="sm:max-w-[550px] w-[95vw] max-h-[90vh] overflow-y-auto"
-            onOpenAutoFocus={(e) => e.preventDefault()}
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const success = await handlePasswordChange();
+              // Only close modal on success; on error, keep it open so user can fix input
+              if (success) {
+                setTimeout(() => {
+                  setIsPasswordModalOpen(false);
+                }, 1000);
+              }
+            }}
+            className="space-y-4"
           >
-            <DialogHeader>
-              <DialogTitle
+            {hasPassword && (
+              <div className="space-y-2">
+                <Label
+                  htmlFor="modal-current-password"
+                  className={cn(isDark ? "text-white" : "text-gray-900")}
+                >
+                  Current Password
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="modal-current-password"
+                    type={showCurrentPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className={cn(
+                      "pr-10",
+                      isDark
+                        ? "bg-[#06021d] border border-gray-600 text-white"
+                        : "bg-white text-gray-900"
+                    )}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowCurrentPassword(!showCurrentPassword)
+                    }
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showCurrentPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label
+                htmlFor="modal-new-password"
                 className={cn(isDark ? "text-white" : "text-gray-900")}
               >
-                Share Your Referral Links
-              </DialogTitle>
-              <DialogDescription
-                className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+                New Password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="modal-new-password"
+                  type={showNewPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Minimum 8 characters"
+                  className={cn(
+                    "pr-10",
+                    isDark
+                      ? "bg-[#06021d] border border-gray-600 text-white"
+                      : "bg-white text-gray-900"
+                  )}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  {showNewPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+
+              <PasswordStrengthMeter
+                password={newPassword}
+                className="mt-3"
+                showRequirements={true}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label
+                htmlFor="modal-confirm-password"
+                className={cn(isDark ? "text-white" : "text-gray-900")}
               >
-                Invite others with your referral code embedded. Choose the right
-                landing page.
-              </DialogDescription>
-            </DialogHeader>
-            {username ? (
-              <div className="space-y-4">
-                {(() => {
-                  const links = buildReferralLinks();
-                  return (
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label
+                Confirm New Password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="modal-confirm-password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  className={cn(
+                    "pr-10",
+                    isDark
+                      ? "bg-[#06021d] border border-gray-600 text-white"
+                      : "bg-white text-gray-900"
+                  )}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsPasswordModalOpen(false)}
+                className={cn(
+                  "flex-1 bg-white border border-red-500 text-red-500",
+                  isDark ? "bg-[#06021d]" : "bg-white"
+                )}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1 bg-[#6C43D0] text-white"
+                disabled={
+                  passwordChangeLoading || !newPassword || !confirmPassword
+                }
+              >
+                {passwordChangeLoading ? "Updating..." : "Update Password"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Share Referral Links Modal */}
+      <Dialog
+        open={isReferralModalOpen}
+        onOpenChange={setIsReferralModalOpen}
+        isdark={isDark}
+      >
+        <DialogContent
+          className="sm:max-w-[550px] w-[95vw] max-h-[90vh] overflow-y-auto"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-900")}
+            >
+              Share Your Referral Links
+            </DialogTitle>
+            <DialogDescription
+              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            >
+              Invite others with your referral code embedded. Choose the right
+              landing page.
+            </DialogDescription>
+          </DialogHeader>
+          {username ? (
+            <div className="space-y-4">
+              {(() => {
+                const links = buildReferralLinks();
+                return (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label
+                        className={cn(
+                          isDark ? "text-white" : "text-gray-900"
+                        )}
+                      >
+                        General Link
+                      </Label>
+                      <div className="flex gap-2">
+                        <Input
+                          readOnly
+                          value={links.general}
                           className={cn(
-                            isDark ? "text-white" : "text-gray-900"
+                            isDark
+                              ? "bg-[#06021d] border border-gray-600 text-white"
+                              : "bg-white text-gray-900"
                           )}
+                          onFocus={(e) =>
+                            (e.target as HTMLInputElement).select()
+                          }
+                          onClick={(e) =>
+                            (e.target as HTMLInputElement).select()
+                          }
+                        />
+                        <Button
+                          type="button"
+                          className="bg-[#4A00BE] text-white"
+                          variant="outline"
+                          onClick={() => copyToClipboard(links.general)}
                         >
-                          General Link
-                        </Label>
-                        <div className="flex gap-2">
-                          <Input
-                            readOnly
-                            value={links.general}
-                            className={cn(
-                              isDark
-                                ? "bg-[#06021d] border border-gray-600 text-white"
-                                : "bg-white text-gray-900"
-                            )}
-                            onFocus={(e) =>
-                              (e.target as HTMLInputElement).select()
-                            }
-                            onClick={(e) =>
-                              (e.target as HTMLInputElement).select()
-                            }
-                          />
-                          <Button
-                            type="button"
-                            className="bg-[#4A00BE] text-white"
-                            variant="outline"
-                            onClick={() => copyToClipboard(links.general)}
-                          >
-                            <Copy className="h-4 w-4 mr-1" />
-                            Copy General
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label
-                          className={cn(
-                            isDark ? "text-white" : "text-gray-900"
-                          )}
-                        >
-                          Creators Link
-                        </Label>
-                        <div className="flex gap-2">
-                          <Input
-                            readOnly
-                            value={links.creators}
-                            className={cn(
-                              isDark
-                                ? "bg-[#06021d] border border-gray-600 text-white"
-                                : "bg-white text-gray-900"
-                            )}
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="bg-[#4A00BE] text-white"
-                            onClick={() => copyToClipboard(links.creators)}
-                          >
-                            <Copy className="h-4 w-4 mr-1" />
-                            Copy Creators
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label
-                          className={cn(
-                            isDark ? "text-white" : "text-gray-900"
-                          )}
-                        >
-                          Brands Link
-                        </Label>
-                        <div className="flex gap-2">
-                          <Input
-                            readOnly
-                            value={links.brands}
-                            className={cn(
-                              isDark
-                                ? "bg-[#06021d] border border-gray-600 text-white"
-                                : "bg-white text-gray-900"
-                            )}
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="bg-[#4A00BE] text-white"
-                            onClick={() => copyToClipboard(links.brands)}
-                          >
-                            <Copy className="h-4 w-4 mr-1" />
-                            Copy Brands
-                          </Button>
-                        </div>
+                          <Copy className="h-4 w-4 mr-1" />
+                          Copy General
+                        </Button>
                       </div>
                     </div>
-                  );
-                })()}
-              </div>
-            ) : (
-              <Alert className="bg-yellow-50 border-yellow-200">
-                <AlertDescription className="text-yellow-800">
-                  <strong>Note:</strong> You need to set up a username to
-                  generate referral links. Please set up your username first.
-                </AlertDescription>
-              </Alert>
-            )}
-            {/* <div className="flex justify-end pt-2">
+                    <div className="space-y-2">
+                      <Label
+                        className={cn(
+                          isDark ? "text-white" : "text-gray-900"
+                        )}
+                      >
+                        Creators Link
+                      </Label>
+                      <div className="flex gap-2">
+                        <Input
+                          readOnly
+                          value={links.creators}
+                          className={cn(
+                            isDark
+                              ? "bg-[#06021d] border border-gray-600 text-white"
+                              : "bg-white text-gray-900"
+                          )}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="bg-[#4A00BE] text-white"
+                          onClick={() => copyToClipboard(links.creators)}
+                        >
+                          <Copy className="h-4 w-4 mr-1" />
+                          Copy Creators
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label
+                        className={cn(
+                          isDark ? "text-white" : "text-gray-900"
+                        )}
+                      >
+                        Brands Link
+                      </Label>
+                      <div className="flex gap-2">
+                        <Input
+                          readOnly
+                          value={links.brands}
+                          className={cn(
+                            isDark
+                              ? "bg-[#06021d] border border-gray-600 text-white"
+                              : "bg-white text-gray-900"
+                          )}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="bg-[#4A00BE] text-white"
+                          onClick={() => copyToClipboard(links.brands)}
+                        >
+                          <Copy className="h-4 w-4 mr-1" />
+                          Copy Brands
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <Alert className="bg-yellow-50 border-yellow-200">
+              <AlertDescription className="text-yellow-800">
+                <strong>Note:</strong> You need to set up a username to
+                generate referral links. Please set up your username first.
+              </AlertDescription>
+            </Alert>
+          )}
+          {/* <div className="flex justify-end pt-2">
               <Button
                 type="button"
                 onClick={() => setIsReferralModalOpen(false)}
@@ -3237,342 +3246,342 @@ export default function SettingsPage({
                 Close
               </Button>
             </div> */}
-          </DialogContent>
-        </Dialog>
+        </DialogContent>
+      </Dialog>
 
-        {/* Subscription and Billing Modal */}
-        <Dialog
-          open={isBillingModalOpen}
-          onOpenChange={handleBillingModalOpen}
-          isdark={isDark}
-        >
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle
-                className={cn(isDark ? "text-white" : "text-gray-900")}
-              >
-                Subscription and Billing
-              </DialogTitle>
-              <DialogDescription
-                className={cn(isDark ? "text-gray-300" : "text-gray-600")}
-              >
-                View your current subscription plan and billing details
-              </DialogDescription>
-            </DialogHeader>
+      {/* Subscription and Billing Modal */}
+      <Dialog
+        open={isBillingModalOpen}
+        onOpenChange={handleBillingModalOpen}
+        isdark={isDark}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-900")}
+            >
+              Subscription and Billing
+            </DialogTitle>
+            <DialogDescription
+              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            >
+              View your current subscription plan and billing details
+            </DialogDescription>
+          </DialogHeader>
 
-            {billingLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
-              </div>
-            ) : billingData?.billingDetails ? (
-              <div className="space-y-6">
-                {/* Current Plan Details */}
-                {(() => {
-                  // Get product_id from profile subscription_info
-                  const productId =
-                    (profile as AdvertiserProfile)?.subscription_info
-                      ?.product_id || "";
+          {billingLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
+            </div>
+          ) : billingData?.billingDetails ? (
+            <div className="space-y-6">
+              {/* Current Plan Details */}
+              {(() => {
+                // Get product_id from profile subscription_info
+                const productId =
+                  (profile as AdvertiserProfile)?.subscription_info
+                    ?.product_id || "";
 
-                  const plan = productId
-                    ? getSubscriptionPlanById(productId)
-                    : null;
+                const plan = productId
+                  ? getSubscriptionPlanById(productId)
+                  : null;
 
-                  return (
-                    <div className="space-y-4">
-                      <div
-                        className={cn(
-                          "border rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4",
-                          isDark
-                            ? "border-gray-700 bg-[#06021d]"
-                            : "border-gray-400 bg-white"
-                        )}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div
-                            className={`p-4 rounded-xl bg-gradient-to-r ${getPlanColor(
-                              plan?.name || "EXPLORER"
-                            )} text-white shadow-lg`}
-                          >
-                            {getPlanIcon(plan?.name || "EXPLORER")}
-                          </div>
-                          <div>
-                            <h3
-                              className={cn(
-                                "text-xl font-bold",
-                                isDark ? "text-white" : "text-black"
-                              )}
-                            >
-                              {plan?.displayName || plan?.name || "N/A"}
-                            </h3>
-                            <p
-                              className={cn(
-                                "text-lg font-medium",
-                                isDark ? "text-purple-400" : "text-purple-600"
-                              )}
-                            >
-                              {formatCurrencyFromCents(plan?.price || 0)}
-                              {(plan?.price || 0) > 0 ? "/month" : ""}
-                            </p>
-                          </div>
+                return (
+                  <div className="space-y-4">
+                    <div
+                      className={cn(
+                        "border rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4",
+                        isDark
+                          ? "border-gray-700 bg-[#06021d]"
+                          : "border-gray-400 bg-white"
+                      )}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div
+                          className={`p-4 rounded-xl bg-gradient-to-r ${getPlanColor(
+                            plan?.name || "EXPLORER"
+                          )} text-white shadow-lg`}
+                        >
+                          {getPlanIcon(plan?.name || "EXPLORER")}
                         </div>
-
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                          {getStatusBadge(
-                            billingData.billingDetails.status,
-                            billingData.billingDetails.cancelAtPeriodEnd
-                          )}
-                          {/* View Invoice Button - Show if user has a subscription and invoice URL exists */}
-                          {billingData.billingDetails.latestInvoiceUrl &&
-                            plan?.name !== "EXPLORER" && (
-                              <Button
-                                onClick={() => {
-                                  window.open(
-                                    billingData.billingDetails.latestInvoiceUrl,
-                                    "_blank"
-                                  );
-                                }}
-                                variant="outline"
-                                className={cn(
-                                  "px-4 py-2",
-                                  isDark
-                                    ? "border-purple-500 text-purple-400 hover:bg-purple-900/30"
-                                    : "border-purple-500 text-purple-600 hover:bg-purple-50"
-                                )}
-                              >
-                                <FileText className="h-4 w-4" />
-                                View Invoice
-                              </Button>
-                            )}
-                          {/* Subscribe Button for Explorer Plan */}
-                          {plan?.name === "EXPLORER" && (
-                            <Button
-                              onClick={() => {
-                                router.push(
-                                  "/dashboard/billing?tab=subscription"
-                                );
-                                setIsBillingModalOpen(false);
-                              }}
-                              className="bg-[#6C43D0] text-white hover:bg-[#5A36B8] px-6 py-2"
-                            >
-                              Subscribe
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Billing Period Information */}
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                          <CalendarDays
+                        <div>
+                          <h3
                             className={cn(
-                              "h-5 w-5",
-                              isDark ? "text-white" : "text-gray-900"
-                            )}
-                          />
-                          <span
-                            className={cn(
-                              "font-semibold text-lg",
+                              "text-xl font-bold",
                               isDark ? "text-white" : "text-black"
                             )}
                           >
-                            Billing Period
-                          </span>
+                            {plan?.displayName || plan?.name || "N/A"}
+                          </h3>
+                          <p
+                            className={cn(
+                              "text-lg font-medium",
+                              isDark ? "text-purple-400" : "text-purple-600"
+                            )}
+                          >
+                            {formatCurrencyFromCents(plan?.price || 0)}
+                            {(plan?.price || 0) > 0 ? "/month" : ""}
+                          </p>
                         </div>
+                      </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div
-                            className={cn(
-                              "rounded-2xl p-4 shadow-sm border",
-                              isDark
-                                ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                                : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
-                            )}
-                          >
-                            <p className="text-sm mb-1">Current Period</p>
-                            <p className="font-semibold">
-                              {formatDateRange(
-                                billingData.billingDetails.currentPeriodStart,
-                                billingData.billingDetails.currentPeriodEnd
-                              )}
-                            </p>
-                          </div>
-                          <div
-                            className={cn(
-                              "rounded-2xl p-4 shadow-sm border",
-                              isDark
-                                ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                                : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
-                            )}
-                          >
-                            <p className="text-sm mb-1">Next Billing Date</p>
-                            <p className="font-semibold">
-                              {formatDate(
-                                billingData.billingDetails.nextBillingDate
-                              )}
-                            </p>
-                          </div>
-                          <div
-                            className={cn(
-                              "rounded-2xl p-4 shadow-sm border",
-                              isDark
-                                ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                                : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
-                            )}
-                          >
-                            <p className="text-sm mb-1">
-                              Days Until Next Billing
-                            </p>
-                            <p className="font-semibold">
-                              {billingData.billingDetails.daysUntilNextBilling}{" "}
-                              days
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Plan Status Information */}
-                        {billingData.billingDetails.cancelAtPeriodEnd && (
-                          <Alert
-                            className={cn(
-                              "border",
-                              isDark
-                                ? "border-red-600/40 bg-red-900/30 text-red-100"
-                                : "border-red-200 bg-red-50 text-red-900"
-                            )}
-                          >
-                            <AlertTriangle
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        {getStatusBadge(
+                          billingData.billingDetails.status,
+                          billingData.billingDetails.cancelAtPeriodEnd
+                        )}
+                        {/* View Invoice Button - Show if user has a subscription and invoice URL exists */}
+                        {billingData.billingDetails.latestInvoiceUrl &&
+                          plan?.name !== "EXPLORER" && (
+                            <Button
+                              onClick={() => {
+                                window.open(
+                                  billingData.billingDetails.latestInvoiceUrl,
+                                  "_blank"
+                                );
+                              }}
+                              variant="outline"
                               className={cn(
-                                "h-4 w-4",
-                                isDark ? "text-red-300" : "text-red-600"
-                              )}
-                            />
-                            <AlertDescription
-                              className={cn(
-                                isDark ? "text-red-100" : "text-red-900"
+                                "px-4 py-2",
+                                isDark
+                                  ? "border-purple-500 text-purple-400 hover:bg-purple-900/30"
+                                  : "border-purple-500 text-purple-600 hover:bg-purple-50"
                               )}
                             >
-                              <strong>Subscription Ending:</strong> Your
-                              subscription will be canceled on{" "}
-                              {formatDate(
-                                billingData.billingDetails.nextBillingDate
-                              )}
-                              . You'll lose access to premium features after
-                              this date.
-                            </AlertDescription>
-                          </Alert>
+                              <FileText className="h-4 w-4" />
+                              View Invoice
+                            </Button>
+                          )}
+                        {/* Subscribe Button for Explorer Plan */}
+                        {plan?.name === "EXPLORER" && (
+                          <Button
+                            onClick={() => {
+                              router.push(
+                                "/dashboard/billing?tab=subscription"
+                              );
+                              setIsBillingModalOpen(false);
+                            }}
+                            className="bg-[#6C43D0] text-white hover:bg-[#5A36B8] px-6 py-2"
+                          >
+                            Subscribe
+                          </Button>
                         )}
+                      </div>
+                    </div>
 
-                        {/* Plan Features */}
-                        <div className="space-y-2">
-                          <h4
+                    {/* Billing Period Information */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <CalendarDays
+                          className={cn(
+                            "h-5 w-5",
+                            isDark ? "text-white" : "text-gray-900"
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            "font-semibold text-lg",
+                            isDark ? "text-white" : "text-black"
+                          )}
+                        >
+                          Billing Period
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div
+                          className={cn(
+                            "rounded-2xl p-4 shadow-sm border",
+                            isDark
+                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                              : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
+                          )}
+                        >
+                          <p className="text-sm mb-1">Current Period</p>
+                          <p className="font-semibold">
+                            {formatDateRange(
+                              billingData.billingDetails.currentPeriodStart,
+                              billingData.billingDetails.currentPeriodEnd
+                            )}
+                          </p>
+                        </div>
+                        <div
+                          className={cn(
+                            "rounded-2xl p-4 shadow-sm border",
+                            isDark
+                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                              : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
+                          )}
+                        >
+                          <p className="text-sm mb-1">Next Billing Date</p>
+                          <p className="font-semibold">
+                            {formatDate(
+                              billingData.billingDetails.nextBillingDate
+                            )}
+                          </p>
+                        </div>
+                        <div
+                          className={cn(
+                            "rounded-2xl p-4 shadow-sm border",
+                            isDark
+                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                              : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
+                          )}
+                        >
+                          <p className="text-sm mb-1">
+                            Days Until Next Billing
+                          </p>
+                          <p className="font-semibold">
+                            {billingData.billingDetails.daysUntilNextBilling}{" "}
+                            days
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Plan Status Information */}
+                      {billingData.billingDetails.cancelAtPeriodEnd && (
+                        <Alert
+                          className={cn(
+                            "border",
+                            isDark
+                              ? "border-red-600/40 bg-red-900/30 text-red-100"
+                              : "border-red-200 bg-red-50 text-red-900"
+                          )}
+                        >
+                          <AlertTriangle
                             className={cn(
-                              "font-semibold text-lg",
-                              isDark ? "text-white" : "text-gray-900"
+                              "h-4 w-4",
+                              isDark ? "text-red-300" : "text-red-600"
+                            )}
+                          />
+                          <AlertDescription
+                            className={cn(
+                              isDark ? "text-red-100" : "text-red-900"
                             )}
                           >
-                            Plan Features
-                          </h4>
-                          <div
-                            className={cn(
-                              "rounded-xl p-4 border",
-                              isDark
-                                ? "bg-[#180438] border-gray-700"
-                                : "border-gray-300"
+                            <strong>Subscription Ending:</strong> Your
+                            subscription will be canceled on{" "}
+                            {formatDate(
+                              billingData.billingDetails.nextBillingDate
                             )}
-                          >
-                            <ul className="grid grid-cols-2 gap-3 text-md">
-                              <li
-                                className={cn(
-                                  "flex items-center gap-2",
-                                  isDark ? "text-gray-300" : "text-gray-800"
-                                )}
-                              >
-                                <span className="text-green-600">✓</span>
-                                {plan?.features.maxActiveContests || 0} active
-                                contests
-                              </li>
-                              <li
-                                className={cn(
-                                  "flex items-center gap-2",
-                                  isDark ? "text-gray-300" : "text-gray-800"
-                                )}
-                              >
-                                <span className="text-green-600">✓</span>
-                                {plan?.features.commissionPercentage || 0}%
-                                commission
-                              </li>
-                              <li
-                                className={cn(
-                                  "flex items-center gap-2",
-                                  isDark ? "text-gray-300" : "text-gray-800"
-                                )}
-                              >
-                                <span className="text-green-600">✓</span>
-                                Up to {plan?.features.maxWinnersPerContest ||
-                                  0}{" "}
-                                winners per contest
-                              </li>
-                              <li
-                                className={cn(
-                                  "flex items-center gap-2",
-                                  isDark ? "text-gray-300" : "text-gray-800"
-                                )}
-                              >
-                                <span className="text-green-600">✓</span>
-                                {plan?.features.analytics || "N/A"} analytics
-                              </li>
-                              <li
-                                className={cn(
-                                  "flex items-center gap-2",
-                                  isDark ? "text-gray-300" : "text-gray-800"
-                                )}
-                              >
-                                <span className="text-green-600">✓</span>
-                                {plan?.features.support || "N/A"} support
-                              </li>
-                            </ul>
-                          </div>
+                            . You'll lose access to premium features after
+                            this date.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {/* Plan Features */}
+                      <div className="space-y-2">
+                        <h4
+                          className={cn(
+                            "font-semibold text-lg",
+                            isDark ? "text-white" : "text-gray-900"
+                          )}
+                        >
+                          Plan Features
+                        </h4>
+                        <div
+                          className={cn(
+                            "rounded-xl p-4 border",
+                            isDark
+                              ? "bg-[#180438] border-gray-700"
+                              : "border-gray-300"
+                          )}
+                        >
+                          <ul className="grid grid-cols-2 gap-3 text-md">
+                            <li
+                              className={cn(
+                                "flex items-center gap-2",
+                                isDark ? "text-gray-300" : "text-gray-800"
+                              )}
+                            >
+                              <span className="text-green-600">✓</span>
+                              {plan?.features.maxActiveContests || 0} active
+                              contests
+                            </li>
+                            <li
+                              className={cn(
+                                "flex items-center gap-2",
+                                isDark ? "text-gray-300" : "text-gray-800"
+                              )}
+                            >
+                              <span className="text-green-600">✓</span>
+                              {plan?.features.commissionPercentage || 0}%
+                              commission
+                            </li>
+                            <li
+                              className={cn(
+                                "flex items-center gap-2",
+                                isDark ? "text-gray-300" : "text-gray-800"
+                              )}
+                            >
+                              <span className="text-green-600">✓</span>
+                              Up to {plan?.features.maxWinnersPerContest ||
+                                0}{" "}
+                              winners per contest
+                            </li>
+                            <li
+                              className={cn(
+                                "flex items-center gap-2",
+                                isDark ? "text-gray-300" : "text-gray-800"
+                              )}
+                            >
+                              <span className="text-green-600">✓</span>
+                              {plan?.features.analytics || "N/A"} analytics
+                            </li>
+                            <li
+                              className={cn(
+                                "flex items-center gap-2",
+                                isDark ? "text-gray-300" : "text-gray-800"
+                              )}
+                            >
+                              <span className="text-green-600">✓</span>
+                              {plan?.features.support || "N/A"} support
+                            </li>
+                          </ul>
                         </div>
                       </div>
                     </div>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : billingData?.message ? (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>{billingData.message}</AlertDescription>
+            </Alert>
+          ) : !billingLoading && !billingData ? (
+            <div className="space-y-4">
+              {/* Check if user is on Explorer Plan from profile */}
+              {(() => {
+                const productId =
+                  (profile as AdvertiserProfile)?.subscription_info
+                    ?.product_id || "";
+                const plan = productId
+                  ? getSubscriptionPlanById(productId)
+                  : null;
+                if (plan?.name === "EXPLORER") {
+                  return (
+                    <div className="flex justify-center pt-2">
+                      <Button
+                        onClick={() => {
+                          router.push("/dashboard/billing");
+                          setIsBillingModalOpen(false);
+                        }}
+                        className="bg-[#6C43D0] text-white hover:bg-[#5A36B8] px-6 py-2"
+                      >
+                        Subscribe
+                      </Button>
+                    </div>
                   );
-                })()}
-              </div>
-            ) : billingData?.message ? (
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription>{billingData.message}</AlertDescription>
-              </Alert>
-            ) : !billingLoading && !billingData ? (
-              <div className="space-y-4">
-                {/* Check if user is on Explorer Plan from profile */}
-                {(() => {
-                  const productId =
-                    (profile as AdvertiserProfile)?.subscription_info
-                      ?.product_id || "";
-                  const plan = productId
-                    ? getSubscriptionPlanById(productId)
-                    : null;
-                  if (plan?.name === "EXPLORER") {
-                    return (
-                      <div className="flex justify-center pt-2">
-                        <Button
-                          onClick={() => {
-                            router.push("/dashboard/billing");
-                            setIsBillingModalOpen(false);
-                          }}
-                          className="bg-[#6C43D0] text-white hover:bg-[#5A36B8] px-6 py-2"
-                        >
-                          Subscribe
-                        </Button>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-              </div>
-            ) : null}
+                }
+                return null;
+              })()}
+            </div>
+          ) : null}
 
-            {/* <div className="flex justify-end pt-4">
+          {/* <div className="flex justify-end pt-4">
               <Button
                 type="button"
                 onClick={() => setIsBillingModalOpen(false)}
@@ -3581,8 +3590,8 @@ export default function SettingsPage({
                 Close
               </Button>
             </div> */}
-          </DialogContent>
-        </Dialog>
+        </DialogContent>
+      </Dialog>
 
       {/* Log out button */}
       <div
