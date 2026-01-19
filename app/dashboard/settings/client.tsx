@@ -717,7 +717,8 @@ export default function SettingsPage({
 
   const handleInstagramConnect = () => {
     const instagramClientId = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID;
-    const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    // Strip trailing slash so redirect_uri matches App Dashboard; avoid double slashes
+    const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
 
     if (!instagramClientId) {
       toast({
@@ -740,24 +741,18 @@ export default function SettingsPage({
 
     setIsLoading(true);
     try {
+      // Must exactly match one of the Valid OAuth Redirect URIs in App Dashboard
       const instagramRedirectUri = `${appBaseUrl}/api/instagram/callback`;
 
-      // Instagram API with Instagram Login scopes (as of 2025)
-      // Note: Instagram Basic Display API was deprecated Dec 4, 2024
-      // These scopes work with Instagram API with Instagram Login (Professional accounts only)
-      // The deprecated parameters enable_fb_login and force_authentication have been removed (deprecated June 14, 2025)
       const scopes = [
         "instagram_business_basic",
         "instagram_business_manage_insights",
       ].join(",");
 
-      // Instagram API with Instagram Login OAuth endpoint (Business Login for Instagram)
-      // Uses api.instagram.com (not Facebook Login endpoint)
-      // force_reauth parameter is recommended (introduced June 14, 2025) to fix broken login experience
-      // Especially important for mobile devices - forces reauthentication even if user is already logged in
-      const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(
+      // Business login: www.instagram.com/oauth/authorize per official docs; force_reauth=true
+      const authUrl = `https://www.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(
         instagramRedirectUri
-      )}&scope=${scopes}&response_type=code&force_reauth=1`;
+      )}&response_type=code&scope=${encodeURIComponent(scopes)}&force_reauth=true`;
 
       // Set a timeout to reset loading state if redirect doesn't happen
       const timeoutId = setTimeout(() => {
