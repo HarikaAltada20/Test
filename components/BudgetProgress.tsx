@@ -43,6 +43,9 @@ export function BudgetProgress({
     cpmConfig?.flat_fee_bonus || leaderboardConfig?.flat_fee_bonus || 0;
   const hasFlatFeeBonus = flatFeeBonus > 0;
 
+  // Temporary: treat all CPM contests as Twitter until platform is properly passed
+  const isTwitterPlatform: boolean = contest.contest_type === "cpm";
+
   const {
     cpmPaid,
     bonusPaid,
@@ -111,15 +114,23 @@ export function BudgetProgress({
 
       // Calculate CPM earnings
       let submissionEarnings = 0;
-      if (sub.paid && sub.earnings != null) {
-        // Use actual paid earnings from database
+      if (isTwitterPlatform) {
+        const basePoints = (sub as any).other_stats?.base_points || 0;
+        const manualPointsAdjustment = (sub as any).manual_points_adjustment || 0;
+        const totalPoints = basePoints + manualPointsAdjustment;
+        submissionEarnings = (totalPoints * cpmRate) / 1000;
+        console.log(`[Twitter CPM] basePoints=${basePoints}, manual=${manualPointsAdjustment}, totalPoints=${totalPoints}, cpmRate=${cpmRate}, earnings=${submissionEarnings.toFixed(2)}`);
+      } else if (sub.paid && sub.earnings != null) {
+        // Use actual paid earnings from database for non-Twitter
         submissionEarnings = sub.earnings / 100; // Convert cents to dollars
+        console.log(`[Non-Twitter Paid] earnings=${submissionEarnings.toFixed(2)}`);
       } else {
-        // Calculate expected earnings for verified unpaid
+        // Calculate expected earnings for verified unpaid (non-Twitter)
         let views = (sub as any).views || 0;
         if (minViews != null && views < minViews) views = 0;
         if (maxViews != null && views > maxViews) views = maxViews;
         submissionEarnings = (views * cpmRate) / 1000;
+        console.log(`[Non-Twitter Unpaid] views=${views}, cpmRate=${cpmRate}, earnings=${submissionEarnings.toFixed(2)}`);
       }
 
       // Apply creator cap if configured
@@ -141,15 +152,33 @@ export function BudgetProgress({
         creatorData.bonusTotal += actualBonus;
         totalBonusSpentSoFar += actualBonus;
       } else if (flatFeeBonus > 0) {
-        // For CPM contests with cap, check if we can add this bonus
+        // For both CPM and leaderboard contests, check if we can add this bonus
         const bonusAmount = flatFeeBonus / 100;
+        let budgetCap = null;
+        
         if (contest.contest_type === "cpm" && capInDollars !== null) {
-          // Check if adding this bonus would exceed the cap
-          if (totalBonusSpentSoFar + bonusAmount <= capInDollars) {
-            creatorData.bonusTotal += bonusAmount;
-            totalBonusSpentSoFar += bonusAmount;
+          budgetCap = capInDollars;
+        } else if (contest.contest_type === "leaderboard" && totalBudget > 0) {
+          // For leaderboard contests, use total_budget as the cap for flat fee bonuses
+          budgetCap = totalBudget / 100;
+        }
+        
+        if (budgetCap !== null) {
+          // Calculate remaining budget for bonuses
+          const remainingBudget = budgetCap - totalBonusSpentSoFar;
+          
+          if (remainingBudget > 0) {
+            if (remainingBudget >= bonusAmount) {
+              // Full bonus can be granted
+              creatorData.bonusTotal += bonusAmount;
+              totalBonusSpentSoFar += bonusAmount;
+            } else {
+              // Only partial bonus remaining - distribute the remaining amount
+              creatorData.bonusTotal += remainingBudget;
+              totalBonusSpentSoFar += remainingBudget;
+            }
           }
-          // If cap would be exceeded, this submission gets $0 bonus (cap reached)
+          // If no remaining budget, this submission gets $0 bonus (budget exhausted)
         } else {
           // No cap, add full bonus
           creatorData.bonusTotal += bonusAmount;
@@ -221,7 +250,7 @@ export function BudgetProgress({
       bonusBudget,
       bonusSpent: bonusPaid,
     };
-  }, [contest, submissions]);
+  }, [contest, submissions, isTwitterPlatform]);
 
   const formatCurrency = (cents: number) => {
     return `$${(cents / 100).toFixed(2)}`;
@@ -230,7 +259,6 @@ export function BudgetProgress({
   const totalSpent = cpmPaid + bonusPaid;
   const remaining = Math.max(0, totalBudget - totalSpent);
   const isNearLimit = totalPercentage >= 80;
-  const isOverBudget = totalPercentage >= 100;
 
   // Only show for CPM and leaderboard contests
   if (
@@ -286,9 +314,7 @@ export function BudgetProgress({
         <div className="relative w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
           <div
             className={`absolute h-full transition-all duration-300 ${
-              isOverBudget
-                ? "bg-red-500"
-                : isNearLimit
+              isNearLimit
                 ? "bg-yellow-500"
                 : "bg-blue-500"
             }`}
@@ -298,7 +324,7 @@ export function BudgetProgress({
 
         <p className="text-xs text-gray-600 dark:text-gray-400 text-right">
           {formatCurrency(remaining)} remaining (
-          {(100 - totalPercentage).toFixed(1)}%)
+          {(100 - Math.min(totalPercentage, 100)).toFixed(1)}%)
         </p>
       </div>
     );
@@ -313,7 +339,6 @@ export function BudgetProgress({
     const bonusPercentage =
       bonusBudget > 0 ? Math.min((bonusSpent / bonusBudget) * 100, 100) : 0;
     const isNearLimit = bonusPercentage >= 80;
-    const isOverBudget = bonusPercentage >= 100;
     const remaining = Math.max(0, bonusBudget - bonusSpent);
 
     return (
@@ -341,25 +366,12 @@ export function BudgetProgress({
         >
           <div
             className={`absolute h-full transition-all duration-300 ${
-              isOverBudget
-                ? "bg-red-500"
-                : isNearLimit
+              isNearLimit
                 ? "bg-yellow-500"
                 : "bg-green-500"
             }`}
             style={{ width: `${Math.min(bonusPercentage, 100)}%` }}
           />
-          {/* Warning indicator if over budget */}
-          {isOverBudget && (
-            <div
-              className="absolute h-full bg-red-500 transition-all duration-300"
-              style={{
-                left: "100%",
-                width: `${bonusPercentage - 100}%`,
-                transform: "translateX(-100%)",
-              }}
-            />
-          )}
         </div>
 
         {/* Legend */}
@@ -386,19 +398,7 @@ export function BudgetProgress({
         </div>
 
         {/* Status message */}
-        {isOverBudget ? (
-          <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-            <div className="flex-shrink-0 w-1 h-8 bg-red-500 rounded-full" />
-            <div className="flex-1 text-xs">
-              <p className="font-semibold text-red-900 dark:text-red-100">
-                Over Budget
-              </p>
-              <p className="text-red-700 dark:text-red-300">
-                Exceeded by {formatCurrency(bonusSpent - bonusBudget)}
-              </p>
-            </div>
-          </div>
-        ) : isNearLimit ? (
+        {isNearLimit ? (
           <div className="flex items-center gap-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
             <div className="flex-shrink-0 w-1 h-8 bg-yellow-500 rounded-full" />
             <div className="flex-1 text-xs">
@@ -469,7 +469,9 @@ export function BudgetProgress({
               } | Total: ${formatCurrency(totalSpent)}`
             : `Total ${
                 contest.contest_type === "cpm"
-                  ? "based on views"
+                  ? isTwitterPlatform
+                    ? "based on points"
+                    : "based on views"
                   : "contest earnings"
               }: ${formatCurrency(cpmPaid)}`
         }
@@ -487,19 +489,8 @@ export function BudgetProgress({
               left: `${Math.min(cpmPercentage, 100)}%`,
               width: `${Math.min(
                 bonusPercentageOfTotal,
-                100 - cpmPercentage
+                Math.max(0, 100 - cpmPercentage)
               )}%`,
-            }}
-          />
-        )}
-        {/* Warning indicator if over budget */}
-        {isOverBudget && (
-          <div
-            className="absolute h-full bg-red-500 transition-all duration-300"
-            style={{
-              left: "100%",
-              width: `${totalPercentage - 100}%`,
-              transform: "translateX(-100%)",
             }}
           />
         )}
@@ -572,19 +563,7 @@ export function BudgetProgress({
       </div>
 
       {/* Status message */}
-      {isOverBudget ? (
-        <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-          <div className="flex-shrink-0 w-1 h-8 bg-red-500 rounded-full" />
-          <div className="flex-1 text-xs">
-            <p className="font-semibold text-red-900 dark:text-red-100">
-              Over Budget
-            </p>
-            <p className="text-red-700 dark:text-red-300">
-              Exceeded by {formatCurrency(totalSpent - totalBudget)}
-            </p>
-          </div>
-        </div>
-      ) : isNearLimit ? (
+      {isNearLimit ? (
         <div className="flex items-center gap-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
           <div className="flex-shrink-0 w-1 h-8 bg-yellow-500 rounded-full" />
           <div className="flex-1 text-xs">
@@ -604,7 +583,7 @@ export function BudgetProgress({
           )}
         >
           {formatCurrency(remaining)} remaining (
-          {(100 - totalPercentage).toFixed(1)}% available)
+          {(100 - Math.min(totalPercentage, 100)).toFixed(1)}% available)
         </p>
       )}
     </div>

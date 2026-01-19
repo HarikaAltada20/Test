@@ -489,6 +489,55 @@ export function CreatorSubmissionsModal({
   const maxEarningsPerCreator =
     (contest as any)?.max_earnings_per_creator || null;
 
+  // Pre-calculate expected bonuses with budget constraints
+  const expectedBonusMap = new Map<string, number>();
+
+  if (hasBonus) {
+    // Get budget information
+    const totalBudget = contest?.contest_type === "cpm"
+      ? (contest?.contest_based_details as any)?.cpm_contest?.total_budget || 0
+      : (contest?.contest_based_details as any)?.leaderboard_contest?.total_budget || 0;
+    
+    const bonusBudget = contest?.contest_type === "cpm" 
+      ? ((contest?.contest_based_details as any)?.cpm_contest?.flat_fee_bonus_cap || totalBudget)
+      : totalBudget;
+
+    // Sort submissions by created_at to process in order
+    const submissionsByTime = [...submissions].sort((a, b) => {
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+
+    let currentTotalExpectedBonus = 0;
+
+    submissionsByTime.forEach((sub) => {
+      const isTwitterTweet = sub.is_twitter_tweet === true;
+      const isEligibleForBonus = hasBonus &&
+        ((isTwitterTweet && sub.moderation_status === "approved") ||
+          (!isTwitterTweet && (sub.status === "verified" || sub.status === "paid")));
+
+      if (isEligibleForBonus) {
+        // Calculate remaining budget for bonuses
+        const remainingBudget = bonusBudget - currentTotalExpectedBonus;
+        
+        if (remainingBudget > 0) {
+          if (remainingBudget >= flatFeeBonus) {
+            // Full bonus can be granted
+            expectedBonusMap.set(sub.id, flatFeeBonus);
+            currentTotalExpectedBonus += flatFeeBonus;
+          } else {
+            // Only partial bonus remaining - distribute the remaining amount
+            expectedBonusMap.set(sub.id, remainingBudget);
+            currentTotalExpectedBonus += remainingBudget;
+          }
+        } else {
+          expectedBonusMap.set(sub.id, 0);
+        }
+      } else {
+        expectedBonusMap.set(sub.id, 0);
+      }
+    });
+  }
+
   if (maxEarningsPerCreator && maxEarningsPerCreator > 0) {
     // Sort by created_at to apply cap in submission order
     const submissionsByTime = [...sortedSubmissions].sort((a, b) => {
@@ -1160,8 +1209,8 @@ export function CreatorSubmissionsModal({
                       </TableHead>
                     </>
                   )}
-                  {/* Bonus columns only for non-Twitter contests */}
-                  {hasBonus && !isTwitterTextImageContest && (
+                  {/* Bonus columns */}
+                  {hasBonus && (
                     <>
                       <TableHead
                         className={cn(
@@ -1260,15 +1309,9 @@ export function CreatorSubmissionsModal({
                     const grantedReward = submission.paid
                       ? submission.earnings || 0
                       : 0;
-                    const expectedBonus =
-                      (submission.status === "verified" ||
-                        submission.status === "paid") &&
-                        hasBonus &&
-                        !isTwitterTweet // Twitter tweets don't have bonuses
-                        ? flatFeeBonus
-                        : 0;
+                    const expectedBonus = expectedBonusMap.get(submission.id) || 0;
                     // Use actual bonus_amount from database if available
-                    const grantedBonus = submission.bonus_paid && !isTwitterTweet
+                    const grantedBonus = submission.bonus_paid
                       ? (submission as any).bonus_amount || flatFeeBonus
                       : 0;
 
@@ -1665,8 +1708,8 @@ export function CreatorSubmissionsModal({
                             )}
                           </>
                         )}
-                        {/* Bonus columns only for non-Twitter submissions */}
-                        {hasBonus && !isTwitterTextImageContest && (
+                        {/* Bonus columns */}
+                        {hasBonus && (
                           <>
                             <TableCell className="text-center font-medium">
                               {expectedBonus > 0

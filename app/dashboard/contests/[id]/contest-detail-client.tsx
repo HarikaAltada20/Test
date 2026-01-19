@@ -814,163 +814,55 @@ export default function ContestDetailClient({
       if (normalizedStatus === "verified" || normalizedStatus === "approved") {
         group.statusCounts.verified++;
         if (submission.paid) group.statusCounts.verified_paid++;
-      }
-      if (submission.paid) group.statusCounts.paid++;
-      if (normalizedStatus === "pending") group.statusCounts.pending++;
-      if (normalizedStatus === "rejected") group.statusCounts.rejected++;
-
-      // Aggregate metrics
-      group.metrics.views += submission.views || 0;
-
-      // Reuse isTwitterTweet from above (already declared)
-      if (isTwitterTweet) {
-        // Aggregate Twitter-specific metrics
-        group.metrics.likes += submission.other_stats?.likes || 0;
-        group.metrics.comments += submission.other_stats?.replies || 0;
-        group.metrics.retweets =
-          (group.metrics.retweets || 0) +
-          (submission.other_stats?.retweets || 0);
-        group.metrics.quote_reposts =
-          (group.metrics.quote_reposts || 0) +
-          (submission.other_stats?.quote_reposts || 0);
-        group.metrics.impressions =
-          (group.metrics.impressions || 0) +
-          (submission.other_stats?.impressions || 0);
-        // Don't accumulate points field - it's the total (base + manual), which causes double-counting
-        // Only accumulate base_points and manual_points_adjustment separately
-        // Use base_points directly, don't fallback to points (which is total)
-        group.metrics.base_points =
-          (group.metrics.base_points || 0) +
-          (submission.other_stats?.base_points || 0);
         
-        // For CPM contests, don't accumulate submission-level manual adjustments
-        // Only use creator-level manual adjustments (like leaderboard contests)
-        const isCpmContest = currentContest?.contest_type === "cpm";
-        if (!isCpmContest) {
-          group.metrics.manual_points_adjustment =
-            (group.metrics.manual_points_adjustment || 0) +
-            ((submission as any).manual_points_adjustment || 0);
-        }
-        // Store manual points reason (use the latest one if multiple)
-        if ((submission as any).manual_points_reason) {
-          group.metrics.manual_points_reason = (
-            submission as any
-          ).manual_points_reason;
-        }
-      } else {
-        // Aggregate YouTube/Instagram metrics
-        group.metrics.likes +=
-          submission.other_stats?.youtube?.likes ||
-          submission.other_stats?.instagram?.likes ||
-          0;
-        group.metrics.comments +=
-          submission.other_stats?.youtube?.comments ||
-          submission.other_stats?.instagram?.comments ||
-          0;
-        group.metrics.shares += submission.other_stats?.instagram?.shares || 0;
-        group.metrics.saves += submission.other_stats?.instagram?.saves || 0;
-        group.metrics.reach += submission.other_stats?.instagram?.reach || 0;
-        group.metrics.interactions +=
-          submission.other_stats?.instagram?.total_interactions || 0;
-        // Aggregate watch time metrics for Instagram
-        const instagramStats = submission.other_stats?.instagram || {};
-        const avgWatchTime = instagramStats.avg_watch_time_ms || 0;
-        const totalWatchTime = instagramStats.total_watch_time_ms || 0;
-        // Sum average watch times (we'll calculate the mean average when displaying)
-        group.metrics.avg_watch_time_ms += avgWatchTime;
-        // Sum total watch times (this is cumulative across all submissions)
-        group.metrics.total_watch_time_ms += totalWatchTime;
-      }
+        // Get flat_fee_bonus from the correct nested location
+        const flatFeeBonus =
+          currentContest?.contest_type === "cpm"
+            ? (currentContest?.contest_based_details as any)?.cpm_contest
+                ?.flat_fee_bonus || 0
+            : (currentContest?.contest_based_details as any)?.leaderboard_contest
+                ?.flat_fee_bonus || 0;
 
-      // Calculate earnings and bonus
-      let expectedEarnings = submission.earnings || 0;
-
-      // If earnings not stored, calculate dynamically for CPM contests
-      if (!expectedEarnings && currentContest?.contest_type === "cpm") {
-        const cpmConfig = (currentContest?.contest_based_details as any)
-          ?.cpm_contest;
-        if (cpmConfig?.cpm_rate_usd) {
-          // For Twitter CPM contests, use total points
-          // For other platforms, use views
-          const isTwitterCpm =
-            isTwitterTweet &&
-            (currentContest.platform?.toLowerCase() === "twitter" ||
-              currentContest.platform?.toLowerCase() === "x") &&
-            currentContest.contest_format === "text_image";
-
-          if (isTwitterCpm) {
-            // Calculate total points: base_points + manual_points_adjustment
-            const totalPoints =
-              (submission.other_stats?.base_points || 0) +
-              ((submission as any).manual_points_adjustment || 0);
-
-            // Calculate earnings: (total points * CPM rate) / 1000, convert to cents
-            const calculatedEarnings =
-              (totalPoints * cpmConfig.cpm_rate_usd * 100) / 1000;
-            expectedEarnings = Math.round(calculatedEarnings);
-          } else {
-            // For non-Twitter CPM contests, use views
-            let effectiveViews = submission.views || 0;
-
-            // Apply min_views threshold
-            if (
-              cpmConfig.min_views != null &&
-              effectiveViews < cpmConfig.min_views
-            ) {
-              effectiveViews = 0;
+        // Calculate bonus with budget constraints
+        if (flatFeeBonus > 0) {
+          // Check budget constraints before adding expected bonus
+          const totalBudget = currentContest?.contest_type === "cpm"
+            ? (currentContest?.contest_based_details as any)?.cpm_contest?.total_budget || 0
+            : (currentContest?.contest_based_details as any)?.leaderboard_contest?.total_budget || 0;
+          
+          // For CPM contests, check flat_fee_bonus_cap if configured
+          const bonusBudget = currentContest?.contest_type === "cpm" 
+            ? ((currentContest?.contest_based_details as any)?.cpm_contest?.flat_fee_bonus_cap || totalBudget)
+            : totalBudget;
+          
+          // Calculate current total expected bonuses across all creators processed so far
+          let currentTotalExpectedBonus = 0;
+          Object.values(acc).forEach((g: any) => {
+            currentTotalExpectedBonus += g.bonus.expected;
+          });
+          
+          // Calculate remaining budget for bonuses
+          const remainingBudget = bonusBudget - currentTotalExpectedBonus;
+          
+          if (remainingBudget > 0) {
+            if (remainingBudget >= flatFeeBonus) {
+              // Full bonus can be granted
+              group.bonus.expected += flatFeeBonus;
+            } else {
+              // Only partial bonus remaining - distribute the remaining amount
+              group.bonus.expected += remainingBudget;
             }
-
-            // Apply max_views cap
-            if (
-              cpmConfig.max_views != null &&
-              effectiveViews > cpmConfig.max_views
-            ) {
-              effectiveViews = cpmConfig.max_views;
-            }
-
-            // Calculate earnings: (views * CPM rate) / 1000, convert to cents
-            const calculatedEarnings =
-              (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
-            expectedEarnings = Math.round(calculatedEarnings);
           }
         }
-      }
-
-      group.earnings.expected += expectedEarnings;
-
-      // For granted earnings, use ACTUAL earnings from database (which respects cap)
-      if (submission.paid) {
-        // For Twitter leaderboard, prize is per creator, so we'll calculate granted earnings after grouping
-        // For other contests, accumulate earnings per submission
-        if (!isTwitterTweet) {
-          group.earnings.granted += submission.earnings || 0;
-        } else {
-          // For Twitter leaderboard, mark that this creator has paid submissions
-          // We'll set the granted earnings to the prize amount after determining creator rank
-          if (!(group as any).hasPaidSubmissions) {
-            (group as any).hasPaidSubmissions = true;
-            // Store the earnings from the paid submission (should be the prize amount)
-            (group as any).paidEarnings = submission.earnings || 0;
-          }
-        }
-      }
-
-      // Track uncapped earnings for display purposes
-      group.earningsBeforeCap += expectedEarnings;
-
-      // Get flat_fee_bonus from the correct nested location
-      const flatFeeBonus =
-        currentContest?.contest_type === "cpm"
-          ? (currentContest?.contest_based_details as any)?.cpm_contest
-              ?.flat_fee_bonus || 0
-          : (currentContest?.contest_based_details as any)?.leaderboard_contest
-              ?.flat_fee_bonus || 0;
-
-      if (flatFeeBonus > 0 && (status === "verified" || status === "paid")) {
-        group.bonus.expected += flatFeeBonus;
       }
       if (submission.bonus_paid) {
         // Use actual bonus_amount from database if available
+        const flatFeeBonus =
+          currentContest?.contest_type === "cpm"
+            ? (currentContest?.contest_based_details as any)?.cpm_contest
+                ?.flat_fee_bonus || 0
+            : (currentContest?.contest_based_details as any)?.leaderboard_contest
+                ?.flat_fee_bonus || 0;
         const actualBonus = (submission as any).bonus_amount || flatFeeBonus;
         group.bonus.granted += actualBonus;
       }
@@ -1057,7 +949,7 @@ export default function ContestDetailClient({
     }
 
     return Object.values(grouped);
-  }, [filteredSubmissions, viewMode, currentContest, activeStatusTab]);
+  }, [filteredSubmissions, viewMode, currentContest, activeStatusTab, creatorModerationData]);
 
   // Creator ranking for Twitter leaderboard contests (based on total points per creator)
   const creatorRankingMap = useMemo(() => {
