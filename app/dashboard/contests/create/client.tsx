@@ -2223,178 +2223,181 @@ export default function CreateContestPage({
           twitterCampaign.max_participants = maxParticipants;
         }
 
-        // CPM-based Twitter contests (Points Model): configure metric weights
-        // Stored in contest_based_details.twitter_campaign.points_config
-        const commentsWeight =
-          parseFloat(cpmPointsConfig.comment_base_points.toString()) || 0;
-        const retweetsWeight =
-          parseFloat(cpmPointsConfig.retweet_base_points.toString()) || 0;
-        const quoteRepostsWeight =
-          parseFloat(cpmPointsConfig.quote_repost_base_points.toString()) || 0;
+        if (contestType === "cpm") {
+          // CPM-based Twitter contests (Points Model): configure metric weights
+          // Stored in contest_based_details.twitter_campaign.points_config
+          const commentsWeight =
+            parseFloat(cpmPointsConfig.comment_base_points.toString()) || 0;
+          const retweetsWeight =
+            parseFloat(cpmPointsConfig.retweet_base_points.toString()) || 0;
+          const quoteRepostsWeight =
+            parseFloat(cpmPointsConfig.quote_repost_base_points.toString()) ||
+            0;
 
-        // Build points_config with nested multipliers inside comments_weight, retweets_weight, quote_reposts_weight
-        // For raid campaigns, don't save likes_weight and impressions_weight
-        const pointsConfig: any = {};
-        if (contentType !== "raid") {
-          // Normalize Twitter points inputs (blank => 0) so users can skip metrics they don't need
-          const likesWeightStr = twitterPointsConfig.likesWeight
-            .toString()
-            .trim();
-          const impressionsWeightStr = twitterPointsConfig.impressionsWeight
-            .toString()
-            .trim();
+          // Build points_config with nested multipliers inside comments_weight, retweets_weight, quote_reposts_weight
+          // For raid campaigns, don't save likes_weight and impressions_weight
+          const pointsConfig: any = {};
+          if (contentType !== "raid") {
+            // Normalize Twitter points inputs (blank => 0) so users can skip metrics they don't need
+            const likesWeightStr = twitterPointsConfig.likesWeight
+              .toString()
+              .trim();
+            const impressionsWeightStr = twitterPointsConfig.impressionsWeight
+              .toString()
+              .trim();
 
-          const likesWeight = parseFloat(likesWeightStr) || 0;
-          const impressionsWeight = parseFloat(impressionsWeightStr) || 0;
-          pointsConfig.likes_weight = likesWeight;
-          pointsConfig.impressions_weight = impressionsWeight;
+            const likesWeight = parseFloat(likesWeightStr) || 0;
+            const impressionsWeight = parseFloat(impressionsWeightStr) || 0;
+            pointsConfig.likes_weight = likesWeight;
+            pointsConfig.impressions_weight = impressionsWeight;
+          }
+
+          // Add comments_weight - always save multipliers (defaults or user values)
+          // Checkbox only controls visibility, not whether multipliers are saved
+          const commentMultipliers: any = {};
+          if (showCommentMultipliers) {
+            // Checkbox is checked - use user values if provided, otherwise use defaults
+            const commentLikes = getMultiplierValue(
+              cpmPointsConfig.comment_likes_multiplier
+            );
+            const commentReplies = getMultiplierValue(
+              cpmPointsConfig.comment_replies_multiplier
+            );
+            const commentImpressions = getMultiplierValue(
+              cpmPointsConfig.comment_impressions_multiplier
+            );
+            const commentRetweets = getMultiplierValue(
+              cpmPointsConfig.comment_retweets_multiplier
+            );
+            const commentQuoteReposts = getMultiplierValue(
+              cpmPointsConfig.comment_quote_reposts_multiplier
+            );
+
+            commentMultipliers.likes_multiplier =
+              commentLikes !== undefined ? commentLikes : 0.1;
+            commentMultipliers.replies_multiplier =
+              commentReplies !== undefined ? commentReplies : 1;
+            commentMultipliers.impressions_multiplier =
+              commentImpressions !== undefined ? commentImpressions : 0.001;
+            commentMultipliers.retweets_multiplier =
+              commentRetweets !== undefined ? commentRetweets : 0;
+            commentMultipliers.quote_reposts_multiplier =
+              commentQuoteReposts !== undefined ? commentQuoteReposts : 0;
+          } else {
+            // Checkbox is unchecked - always use default multipliers
+            commentMultipliers.likes_multiplier = 0.1;
+            commentMultipliers.replies_multiplier = 1;
+            commentMultipliers.impressions_multiplier = 0.001;
+            commentMultipliers.retweets_multiplier = 0;
+            commentMultipliers.quote_reposts_multiplier = 0;
+          }
+
+          pointsConfig.comments_weight = {
+            ...(commentsWeight > 0 && { base_weight: commentsWeight }),
+            ...commentMultipliers,
+            _showMultipliers: showCommentMultipliers, // Flag to track checkbox state
+          };
+
+          // Add retweets_weight - always save multipliers (defaults or user values)
+          // Checkbox only controls visibility, not whether multipliers are saved
+          const retweetMultipliers: any = {};
+          if (showRetweetMultipliers) {
+            // Checkbox is checked - use user values if provided, otherwise use defaults
+            const retweetLikes = getMultiplierValue(
+              cpmPointsConfig.retweet_likes_multiplier
+            );
+            const retweetReplies = getMultiplierValue(
+              cpmPointsConfig.retweet_replies_multiplier
+            );
+            const retweetImpressions = getMultiplierValue(
+              cpmPointsConfig.retweet_impressions_multiplier
+            );
+            const retweetRetweets = getMultiplierValue(
+              cpmPointsConfig.retweet_retweets_multiplier
+            );
+            const retweetQuoteReposts = getMultiplierValue(
+              cpmPointsConfig.retweet_quote_reposts_multiplier
+            );
+
+            retweetMultipliers.likes_multiplier =
+              retweetLikes !== undefined ? retweetLikes : 0.05;
+            retweetMultipliers.replies_multiplier =
+              retweetReplies !== undefined ? retweetReplies : 0.05;
+            retweetMultipliers.impressions_multiplier =
+              retweetImpressions !== undefined ? retweetImpressions : 0.001;
+            retweetMultipliers.retweets_multiplier =
+              retweetRetweets !== undefined ? retweetRetweets : 0.05;
+            retweetMultipliers.quote_reposts_multiplier =
+              retweetQuoteReposts !== undefined ? retweetQuoteReposts : 0;
+          } else {
+            // Checkbox is unchecked - always use default multipliers
+            retweetMultipliers.likes_multiplier = 0.05;
+            retweetMultipliers.replies_multiplier = 0.05;
+            retweetMultipliers.impressions_multiplier = 0.001;
+            retweetMultipliers.retweets_multiplier = 0.05;
+            retweetMultipliers.quote_reposts_multiplier = 0;
+          }
+
+          pointsConfig.retweets_weight = {
+            ...(retweetsWeight > 0 && { base_weight: retweetsWeight }),
+            ...retweetMultipliers,
+            _showMultipliers: showRetweetMultipliers, // Flag to track checkbox state
+          };
+
+          // Add quote_reposts_weight - always save multipliers (defaults or user values)
+          // Checkbox only controls visibility, not whether multipliers are saved
+          const quoteRepostMultipliers: any = {};
+          if (showQuoteRepostMultipliers) {
+            // Checkbox is checked - use user values if provided, otherwise use defaults
+            const quoteRepostLikes = getMultiplierValue(
+              cpmPointsConfig.quote_repost_likes_multiplier
+            );
+            const quoteRepostReplies = getMultiplierValue(
+              cpmPointsConfig.quote_repost_replies_multiplier
+            );
+            const quoteRepostImpressions = getMultiplierValue(
+              cpmPointsConfig.quote_repost_impressions_multiplier
+            );
+            const quoteRepostRetweets = getMultiplierValue(
+              cpmPointsConfig.quote_repost_retweets_multiplier
+            );
+            const quoteRepostQuoteReposts = getMultiplierValue(
+              cpmPointsConfig.quote_repost_quote_reposts_multiplier
+            );
+
+            quoteRepostMultipliers.likes_multiplier =
+              quoteRepostLikes !== undefined ? quoteRepostLikes : 0.1;
+            quoteRepostMultipliers.replies_multiplier =
+              quoteRepostReplies !== undefined ? quoteRepostReplies : 0.1;
+            quoteRepostMultipliers.impressions_multiplier =
+              quoteRepostImpressions !== undefined
+                ? quoteRepostImpressions
+                : 0.001;
+            quoteRepostMultipliers.retweets_multiplier =
+              quoteRepostRetweets !== undefined ? quoteRepostRetweets : 0.1;
+            quoteRepostMultipliers.quote_reposts_multiplier =
+              quoteRepostQuoteReposts !== undefined
+                ? quoteRepostQuoteReposts
+                : 0.1;
+          } else {
+            // Checkbox is unchecked - always use default multipliers
+            quoteRepostMultipliers.likes_multiplier = 0.1;
+            quoteRepostMultipliers.replies_multiplier = 0.1;
+            quoteRepostMultipliers.impressions_multiplier = 0.001;
+            quoteRepostMultipliers.retweets_multiplier = 0.1;
+            quoteRepostMultipliers.quote_reposts_multiplier = 0.1;
+          }
+
+          pointsConfig.quote_reposts_weight = {
+            ...(quoteRepostsWeight > 0 && {
+              base_weight: quoteRepostsWeight,
+            }),
+            ...quoteRepostMultipliers,
+            _showMultipliers: showQuoteRepostMultipliers, // Flag to track checkbox state
+          };
+
+          twitterCampaign.points_config = pointsConfig;
         }
-
-        // Add comments_weight - always save multipliers (defaults or user values)
-        // Checkbox only controls visibility, not whether multipliers are saved
-        const commentMultipliers: any = {};
-        if (showCommentMultipliers) {
-          // Checkbox is checked - use user values if provided, otherwise use defaults
-          const commentLikes = getMultiplierValue(
-            cpmPointsConfig.comment_likes_multiplier
-          );
-          const commentReplies = getMultiplierValue(
-            cpmPointsConfig.comment_replies_multiplier
-          );
-          const commentImpressions = getMultiplierValue(
-            cpmPointsConfig.comment_impressions_multiplier
-          );
-          const commentRetweets = getMultiplierValue(
-            cpmPointsConfig.comment_retweets_multiplier
-          );
-          const commentQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.comment_quote_reposts_multiplier
-          );
-
-          commentMultipliers.likes_multiplier =
-            commentLikes !== undefined ? commentLikes : 0.1;
-          commentMultipliers.replies_multiplier =
-            commentReplies !== undefined ? commentReplies : 1;
-          commentMultipliers.impressions_multiplier =
-            commentImpressions !== undefined ? commentImpressions : 0.001;
-          commentMultipliers.retweets_multiplier =
-            commentRetweets !== undefined ? commentRetweets : 0;
-          commentMultipliers.quote_reposts_multiplier =
-            commentQuoteReposts !== undefined ? commentQuoteReposts : 0;
-        } else {
-          // Checkbox is unchecked - always use default multipliers
-          commentMultipliers.likes_multiplier = 0.1;
-          commentMultipliers.replies_multiplier = 1;
-          commentMultipliers.impressions_multiplier = 0.001;
-          commentMultipliers.retweets_multiplier = 0;
-          commentMultipliers.quote_reposts_multiplier = 0;
-        }
-
-        pointsConfig.comments_weight = {
-          ...(commentsWeight > 0 && { base_weight: commentsWeight }),
-          ...commentMultipliers,
-          _showMultipliers: showCommentMultipliers, // Flag to track checkbox state
-        };
-
-        // Add retweets_weight - always save multipliers (defaults or user values)
-        // Checkbox only controls visibility, not whether multipliers are saved
-        const retweetMultipliers: any = {};
-        if (showRetweetMultipliers) {
-          // Checkbox is checked - use user values if provided, otherwise use defaults
-          const retweetLikes = getMultiplierValue(
-            cpmPointsConfig.retweet_likes_multiplier
-          );
-          const retweetReplies = getMultiplierValue(
-            cpmPointsConfig.retweet_replies_multiplier
-          );
-          const retweetImpressions = getMultiplierValue(
-            cpmPointsConfig.retweet_impressions_multiplier
-          );
-          const retweetRetweets = getMultiplierValue(
-            cpmPointsConfig.retweet_retweets_multiplier
-          );
-          const retweetQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.retweet_quote_reposts_multiplier
-          );
-
-          retweetMultipliers.likes_multiplier =
-            retweetLikes !== undefined ? retweetLikes : 0.05;
-          retweetMultipliers.replies_multiplier =
-            retweetReplies !== undefined ? retweetReplies : 0.05;
-          retweetMultipliers.impressions_multiplier =
-            retweetImpressions !== undefined ? retweetImpressions : 0.001;
-          retweetMultipliers.retweets_multiplier =
-            retweetRetweets !== undefined ? retweetRetweets : 0.05;
-          retweetMultipliers.quote_reposts_multiplier =
-            retweetQuoteReposts !== undefined ? retweetQuoteReposts : 0;
-        } else {
-          // Checkbox is unchecked - always use default multipliers
-          retweetMultipliers.likes_multiplier = 0.05;
-          retweetMultipliers.replies_multiplier = 0.05;
-          retweetMultipliers.impressions_multiplier = 0.001;
-          retweetMultipliers.retweets_multiplier = 0.05;
-          retweetMultipliers.quote_reposts_multiplier = 0;
-        }
-
-        pointsConfig.retweets_weight = {
-          ...(retweetsWeight > 0 && { base_weight: retweetsWeight }),
-          ...retweetMultipliers,
-          _showMultipliers: showRetweetMultipliers, // Flag to track checkbox state
-        };
-
-        // Add quote_reposts_weight - always save multipliers (defaults or user values)
-        // Checkbox only controls visibility, not whether multipliers are saved
-        const quoteRepostMultipliers: any = {};
-        if (showQuoteRepostMultipliers) {
-          // Checkbox is checked - use user values if provided, otherwise use defaults
-          const quoteRepostLikes = getMultiplierValue(
-            cpmPointsConfig.quote_repost_likes_multiplier
-          );
-          const quoteRepostReplies = getMultiplierValue(
-            cpmPointsConfig.quote_repost_replies_multiplier
-          );
-          const quoteRepostImpressions = getMultiplierValue(
-            cpmPointsConfig.quote_repost_impressions_multiplier
-          );
-          const quoteRepostRetweets = getMultiplierValue(
-            cpmPointsConfig.quote_repost_retweets_multiplier
-          );
-          const quoteRepostQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.quote_repost_quote_reposts_multiplier
-          );
-
-          quoteRepostMultipliers.likes_multiplier =
-            quoteRepostLikes !== undefined ? quoteRepostLikes : 0.1;
-          quoteRepostMultipliers.replies_multiplier =
-            quoteRepostReplies !== undefined ? quoteRepostReplies : 0.1;
-          quoteRepostMultipliers.impressions_multiplier =
-            quoteRepostImpressions !== undefined
-              ? quoteRepostImpressions
-              : 0.001;
-          quoteRepostMultipliers.retweets_multiplier =
-            quoteRepostRetweets !== undefined ? quoteRepostRetweets : 0.1;
-          quoteRepostMultipliers.quote_reposts_multiplier =
-            quoteRepostQuoteReposts !== undefined
-              ? quoteRepostQuoteReposts
-              : 0.1;
-        } else {
-          // Checkbox is unchecked - always use default multipliers
-          quoteRepostMultipliers.likes_multiplier = 0.1;
-          quoteRepostMultipliers.replies_multiplier = 0.1;
-          quoteRepostMultipliers.impressions_multiplier = 0.001;
-          quoteRepostMultipliers.retweets_multiplier = 0.1;
-          quoteRepostMultipliers.quote_reposts_multiplier = 0.1;
-        }
-
-        pointsConfig.quote_reposts_weight = {
-          ...(quoteRepostsWeight > 0 && {
-            base_weight: quoteRepostsWeight,
-          }),
-          ...quoteRepostMultipliers,
-          _showMultipliers: showQuoteRepostMultipliers, // Flag to track checkbox state
-        };
-
-        twitterCampaign.points_config = pointsConfig;
 
         if (contentType !== "raid") {
           if (keywordsRequirementMode) {
@@ -3346,169 +3349,172 @@ export default function CreateContestPage({
           twitterCampaign.max_participants = maxParticipants;
         }
 
-        // CPM-based Twitter contests (Points Model): configure metric weights
-        const likesWeight =
-          parseFloat(twitterPointsConfig.likesWeight.toString()) || 0;
-        const commentsWeight =
-          parseFloat(cpmPointsConfig.comment_base_points.toString()) || 0;
-        const retweetsWeight =
-          parseFloat(cpmPointsConfig.retweet_base_points.toString()) || 0;
-        const quoteRepostsWeight =
-          parseFloat(cpmPointsConfig.quote_repost_base_points.toString()) || 0;
-        const impressionsWeight =
-          parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0;
+        if (contestType === "cpm") {
+          // CPM-based Twitter contests (Points Model): configure metric weights
+          const likesWeight =
+            parseFloat(twitterPointsConfig.likesWeight.toString()) || 0;
+          const commentsWeight =
+            parseFloat(cpmPointsConfig.comment_base_points.toString()) || 0;
+          const retweetsWeight =
+            parseFloat(cpmPointsConfig.retweet_base_points.toString()) || 0;
+          const quoteRepostsWeight =
+            parseFloat(cpmPointsConfig.quote_repost_base_points.toString()) ||
+            0;
+          const impressionsWeight =
+            parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0;
 
-        // Build points_config with nested multipliers inside comments_weight, retweets_weight, quote_reposts_weight
-        const pointsConfig: any = {
-          likes_weight: likesWeight,
-          impressions_weight: impressionsWeight,
-        };
+          // Build points_config with nested multipliers inside comments_weight, retweets_weight, quote_reposts_weight
+          const pointsConfig: any = {
+            likes_weight: likesWeight,
+            impressions_weight: impressionsWeight,
+          };
 
-        // Add comments_weight - always save multipliers (defaults or user values)
-        // Checkbox only controls visibility, not whether multipliers are saved
-        const commentMultipliers: any = {};
-        if (showCommentMultipliers) {
-          // Checkbox is checked - use user values if provided, otherwise use defaults
-          const commentLikes = getMultiplierValue(
-            cpmPointsConfig.comment_likes_multiplier
-          );
-          const commentReplies = getMultiplierValue(
-            cpmPointsConfig.comment_replies_multiplier
-          );
-          const commentImpressions = getMultiplierValue(
-            cpmPointsConfig.comment_impressions_multiplier
-          );
-          const commentRetweets = getMultiplierValue(
-            cpmPointsConfig.comment_retweets_multiplier
-          );
-          const commentQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.comment_quote_reposts_multiplier
-          );
+          // Add comments_weight - always save multipliers (defaults or user values)
+          // Checkbox only controls visibility, not whether multipliers are saved
+          const commentMultipliers: any = {};
+          if (showCommentMultipliers) {
+            // Checkbox is checked - use user values if provided, otherwise use defaults
+            const commentLikes = getMultiplierValue(
+              cpmPointsConfig.comment_likes_multiplier
+            );
+            const commentReplies = getMultiplierValue(
+              cpmPointsConfig.comment_replies_multiplier
+            );
+            const commentImpressions = getMultiplierValue(
+              cpmPointsConfig.comment_impressions_multiplier
+            );
+            const commentRetweets = getMultiplierValue(
+              cpmPointsConfig.comment_retweets_multiplier
+            );
+            const commentQuoteReposts = getMultiplierValue(
+              cpmPointsConfig.comment_quote_reposts_multiplier
+            );
 
-          commentMultipliers.likes_multiplier =
-            commentLikes !== undefined ? commentLikes : 0.1;
-          commentMultipliers.replies_multiplier =
-            commentReplies !== undefined ? commentReplies : 1;
-          commentMultipliers.impressions_multiplier =
-            commentImpressions !== undefined ? commentImpressions : 0.001;
-          commentMultipliers.retweets_multiplier =
-            commentRetweets !== undefined ? commentRetweets : 0;
-          commentMultipliers.quote_reposts_multiplier =
-            commentQuoteReposts !== undefined ? commentQuoteReposts : 0;
-        } else {
-          // Checkbox is unchecked - always use default multipliers
-          commentMultipliers.likes_multiplier = 0.1;
-          commentMultipliers.replies_multiplier = 1;
-          commentMultipliers.impressions_multiplier = 0.001;
-          commentMultipliers.retweets_multiplier = 0;
-          commentMultipliers.quote_reposts_multiplier = 0;
+            commentMultipliers.likes_multiplier =
+              commentLikes !== undefined ? commentLikes : 0.1;
+            commentMultipliers.replies_multiplier =
+              commentReplies !== undefined ? commentReplies : 1;
+            commentMultipliers.impressions_multiplier =
+              commentImpressions !== undefined ? commentImpressions : 0.001;
+            commentMultipliers.retweets_multiplier =
+              commentRetweets !== undefined ? commentRetweets : 0;
+            commentMultipliers.quote_reposts_multiplier =
+              commentQuoteReposts !== undefined ? commentQuoteReposts : 0;
+          } else {
+            // Checkbox is unchecked - always use default multipliers
+            commentMultipliers.likes_multiplier = 0.1;
+            commentMultipliers.replies_multiplier = 1;
+            commentMultipliers.impressions_multiplier = 0.001;
+            commentMultipliers.retweets_multiplier = 0;
+            commentMultipliers.quote_reposts_multiplier = 0;
+          }
+
+          pointsConfig.comments_weight = {
+            ...(commentsWeight > 0 && { base_weight: commentsWeight }),
+            ...commentMultipliers,
+            _showMultipliers: showCommentMultipliers, // Flag to track checkbox state
+          };
+
+          // Add retweets_weight - always save multipliers (defaults or user values)
+          // Checkbox only controls visibility, not whether multipliers are saved
+          const retweetMultipliers: any = {};
+          if (showRetweetMultipliers) {
+            // Checkbox is checked - use user values if provided, otherwise use defaults
+            const retweetLikes = getMultiplierValue(
+              cpmPointsConfig.retweet_likes_multiplier
+            );
+            const retweetReplies = getMultiplierValue(
+              cpmPointsConfig.retweet_replies_multiplier
+            );
+            const retweetImpressions = getMultiplierValue(
+              cpmPointsConfig.retweet_impressions_multiplier
+            );
+            const retweetRetweets = getMultiplierValue(
+              cpmPointsConfig.retweet_retweets_multiplier
+            );
+            const retweetQuoteReposts = getMultiplierValue(
+              cpmPointsConfig.retweet_quote_reposts_multiplier
+            );
+
+            retweetMultipliers.likes_multiplier =
+              retweetLikes !== undefined ? retweetLikes : 0.05;
+            retweetMultipliers.replies_multiplier =
+              retweetReplies !== undefined ? retweetReplies : 0.05;
+            retweetMultipliers.impressions_multiplier =
+              retweetImpressions !== undefined ? retweetImpressions : 0.001;
+            retweetMultipliers.retweets_multiplier =
+              retweetRetweets !== undefined ? retweetRetweets : 0.05;
+            retweetMultipliers.quote_reposts_multiplier =
+              retweetQuoteReposts !== undefined ? retweetQuoteReposts : 0;
+          } else {
+            // Checkbox is unchecked - always use default multipliers
+            retweetMultipliers.likes_multiplier = 0.05;
+            retweetMultipliers.replies_multiplier = 0.05;
+            retweetMultipliers.impressions_multiplier = 0.001;
+            retweetMultipliers.retweets_multiplier = 0.05;
+            retweetMultipliers.quote_reposts_multiplier = 0;
+          }
+
+          pointsConfig.retweets_weight = {
+            ...(retweetsWeight > 0 && { base_weight: retweetsWeight }),
+            ...retweetMultipliers,
+            _showMultipliers: showRetweetMultipliers, // Flag to track checkbox state
+          };
+
+          // Add quote_reposts_weight - always save multipliers (defaults or user values)
+          // Checkbox only controls visibility, not whether multipliers are saved
+          const quoteRepostMultipliers: any = {};
+          if (showQuoteRepostMultipliers) {
+            // Checkbox is checked - use user values if provided, otherwise use defaults
+            const quoteRepostLikes = getMultiplierValue(
+              cpmPointsConfig.quote_repost_likes_multiplier
+            );
+            const quoteRepostReplies = getMultiplierValue(
+              cpmPointsConfig.quote_repost_replies_multiplier
+            );
+            const quoteRepostImpressions = getMultiplierValue(
+              cpmPointsConfig.quote_repost_impressions_multiplier
+            );
+            const quoteRepostRetweets = getMultiplierValue(
+              cpmPointsConfig.quote_repost_retweets_multiplier
+            );
+            const quoteRepostQuoteReposts = getMultiplierValue(
+              cpmPointsConfig.quote_repost_quote_reposts_multiplier
+            );
+
+            quoteRepostMultipliers.likes_multiplier =
+              quoteRepostLikes !== undefined ? quoteRepostLikes : 0.1;
+            quoteRepostMultipliers.replies_multiplier =
+              quoteRepostReplies !== undefined ? quoteRepostReplies : 0.1;
+            quoteRepostMultipliers.impressions_multiplier =
+              quoteRepostImpressions !== undefined
+                ? quoteRepostImpressions
+                : 0.001;
+            quoteRepostMultipliers.retweets_multiplier =
+              quoteRepostRetweets !== undefined ? quoteRepostRetweets : 0.1;
+            quoteRepostMultipliers.quote_reposts_multiplier =
+              quoteRepostQuoteReposts !== undefined
+                ? quoteRepostQuoteReposts
+                : 0.1;
+          } else {
+            // Checkbox is unchecked - always use default multipliers
+            quoteRepostMultipliers.likes_multiplier = 0.1;
+            quoteRepostMultipliers.replies_multiplier = 0.1;
+            quoteRepostMultipliers.impressions_multiplier = 0.001;
+            quoteRepostMultipliers.retweets_multiplier = 0.1;
+            quoteRepostMultipliers.quote_reposts_multiplier = 0.1;
+          }
+
+          pointsConfig.quote_reposts_weight = {
+            ...(quoteRepostsWeight > 0 && {
+              base_weight: quoteRepostsWeight,
+            }),
+            ...quoteRepostMultipliers,
+            _showMultipliers: showQuoteRepostMultipliers, // Flag to track checkbox state
+          };
+
+          twitterCampaign.points_config = pointsConfig;
         }
-
-        pointsConfig.comments_weight = {
-          ...(commentsWeight > 0 && { base_weight: commentsWeight }),
-          ...commentMultipliers,
-          _showMultipliers: showCommentMultipliers, // Flag to track checkbox state
-        };
-
-        // Add retweets_weight - always save multipliers (defaults or user values)
-        // Checkbox only controls visibility, not whether multipliers are saved
-        const retweetMultipliers: any = {};
-        if (showRetweetMultipliers) {
-          // Checkbox is checked - use user values if provided, otherwise use defaults
-          const retweetLikes = getMultiplierValue(
-            cpmPointsConfig.retweet_likes_multiplier
-          );
-          const retweetReplies = getMultiplierValue(
-            cpmPointsConfig.retweet_replies_multiplier
-          );
-          const retweetImpressions = getMultiplierValue(
-            cpmPointsConfig.retweet_impressions_multiplier
-          );
-          const retweetRetweets = getMultiplierValue(
-            cpmPointsConfig.retweet_retweets_multiplier
-          );
-          const retweetQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.retweet_quote_reposts_multiplier
-          );
-
-          retweetMultipliers.likes_multiplier =
-            retweetLikes !== undefined ? retweetLikes : 0.05;
-          retweetMultipliers.replies_multiplier =
-            retweetReplies !== undefined ? retweetReplies : 0.05;
-          retweetMultipliers.impressions_multiplier =
-            retweetImpressions !== undefined ? retweetImpressions : 0.001;
-          retweetMultipliers.retweets_multiplier =
-            retweetRetweets !== undefined ? retweetRetweets : 0.05;
-          retweetMultipliers.quote_reposts_multiplier =
-            retweetQuoteReposts !== undefined ? retweetQuoteReposts : 0;
-        } else {
-          // Checkbox is unchecked - always use default multipliers
-          retweetMultipliers.likes_multiplier = 0.05;
-          retweetMultipliers.replies_multiplier = 0.05;
-          retweetMultipliers.impressions_multiplier = 0.001;
-          retweetMultipliers.retweets_multiplier = 0.05;
-          retweetMultipliers.quote_reposts_multiplier = 0;
-        }
-
-        pointsConfig.retweets_weight = {
-          ...(retweetsWeight > 0 && { base_weight: retweetsWeight }),
-          ...retweetMultipliers,
-          _showMultipliers: showRetweetMultipliers, // Flag to track checkbox state
-        };
-
-        // Add quote_reposts_weight - always save multipliers (defaults or user values)
-        // Checkbox only controls visibility, not whether multipliers are saved
-        const quoteRepostMultipliers: any = {};
-        if (showQuoteRepostMultipliers) {
-          // Checkbox is checked - use user values if provided, otherwise use defaults
-          const quoteRepostLikes = getMultiplierValue(
-            cpmPointsConfig.quote_repost_likes_multiplier
-          );
-          const quoteRepostReplies = getMultiplierValue(
-            cpmPointsConfig.quote_repost_replies_multiplier
-          );
-          const quoteRepostImpressions = getMultiplierValue(
-            cpmPointsConfig.quote_repost_impressions_multiplier
-          );
-          const quoteRepostRetweets = getMultiplierValue(
-            cpmPointsConfig.quote_repost_retweets_multiplier
-          );
-          const quoteRepostQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.quote_repost_quote_reposts_multiplier
-          );
-
-          quoteRepostMultipliers.likes_multiplier =
-            quoteRepostLikes !== undefined ? quoteRepostLikes : 0.1;
-          quoteRepostMultipliers.replies_multiplier =
-            quoteRepostReplies !== undefined ? quoteRepostReplies : 0.1;
-          quoteRepostMultipliers.impressions_multiplier =
-            quoteRepostImpressions !== undefined
-              ? quoteRepostImpressions
-              : 0.001;
-          quoteRepostMultipliers.retweets_multiplier =
-            quoteRepostRetweets !== undefined ? quoteRepostRetweets : 0.1;
-          quoteRepostMultipliers.quote_reposts_multiplier =
-            quoteRepostQuoteReposts !== undefined
-              ? quoteRepostQuoteReposts
-              : 0.1;
-        } else {
-          // Checkbox is unchecked - always use default multipliers
-          quoteRepostMultipliers.likes_multiplier = 0.1;
-          quoteRepostMultipliers.replies_multiplier = 0.1;
-          quoteRepostMultipliers.impressions_multiplier = 0.001;
-          quoteRepostMultipliers.retweets_multiplier = 0.1;
-          quoteRepostMultipliers.quote_reposts_multiplier = 0.1;
-        }
-
-        pointsConfig.quote_reposts_weight = {
-          ...(quoteRepostsWeight > 0 && {
-            base_weight: quoteRepostsWeight,
-          }),
-          ...quoteRepostMultipliers,
-          _showMultipliers: showQuoteRepostMultipliers, // Flag to track checkbox state
-        };
-
-        twitterCampaign.points_config = pointsConfig;
 
         if (contentType !== "raid") {
           if (keywordsRequirementMode) {

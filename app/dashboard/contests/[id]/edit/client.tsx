@@ -4598,8 +4598,11 @@ export default function EditContestPage({
                     : null;
                 }
 
-                // Add CPM Points Configuration (for Twitter CPM contests)
-                if (platform?.toLowerCase() === "twitter") {
+                // Add CPM Points Configuration (for Twitter CPM contests only)
+                if (
+                  contestType === "cpm" &&
+                  platform?.toLowerCase() === "twitter"
+                ) {
                   // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
                   const isValidMultiplierValue = (
                     value: number | string

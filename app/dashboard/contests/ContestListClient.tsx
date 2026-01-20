@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useLayoutEffect } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useRef,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -257,47 +264,90 @@ export function ContestListClient({
     externalViewMode !== undefined ? externalViewMode : internalViewMode;
   const setViewMode = onViewModeChange || setInternalViewMode;
 
+  const [contests, setContests] = useState<Contest[]>(initialContests);
+  const isMountedRef = useRef(true);
+
+  const fetchLatestContests = useCallback(async () => {
+    try {
+      const response = await fetch("/api/contests/list", {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        console.warn(
+          "[ContestListClient] Unable to refresh contests",
+          response.status
+        );
+        return;
+      }
+      const payload = await response.json();
+      if (!Array.isArray(payload?.contests)) {
+        return;
+      }
+      if (!isMountedRef.current) {
+        return;
+      }
+      setContests(payload.contests);
+    } catch (error) {
+      console.error("[ContestListClient] Error refreshing contests:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setContests(initialContests);
+  }, [initialContests]);
+
+  useEffect(() => {
+    fetchLatestContests();
+    const intervalId = window.setInterval(fetchLatestContests, 30000);
+    return () => window.clearInterval(intervalId);
+  }, [fetchLatestContests]);
+
   const availablePlatforms = useMemo(() => {
     const platforms = new Set(
-      initialContests.map((c) => c.platform).filter(Boolean) as string[]
+      contests.map((c) => c.platform).filter(Boolean) as string[]
     );
     return ["all", ...Array.from(platforms)];
-  }, [initialContests]);
+  }, [contests]);
 
   // Group contests by moderation status and contest lifecycle
   const contestsByStatus = useMemo(() => {
     const groups = {
-      all: initialContests,
-      draft: initialContests.filter((c) => c.moderation_status === "draft"),
-      pending_approval: initialContests.filter(
+      all: contests,
+      draft: contests.filter((c) => c.moderation_status === "draft"),
+      pending_approval: contests.filter(
         (c) => c.moderation_status === "pending_approval"
       ),
-      ready: initialContests.filter((c) => c.moderation_status === "approved"),
-      active: initialContests.filter(
+      ready: contests.filter((c) => c.moderation_status === "approved"),
+      active: contests.filter(
         (c) =>
           c.moderation_status === "published" &&
           (c.status === "active" || c.status === "upcoming")
       ),
-      pending_verification: initialContests.filter(
+      pending_verification: contests.filter(
         (c) =>
           c.moderation_status === "published" &&
           c.status === "ended" &&
           c.post_contest_status !== "verification_complete" &&
           c.post_contest_status !== "payouts_processed"
       ),
-      done: initialContests.filter(
+      done: contests.filter(
         (c) =>
           c.moderation_status === "published" &&
           c.status === "ended" &&
           (c.post_contest_status === "verification_complete" ||
             c.post_contest_status === "payouts_processed")
       ),
-      rejected: initialContests.filter(
-        (c) => c.moderation_status === "rejected"
-      ),
+      rejected: contests.filter((c) => c.moderation_status === "rejected"),
     };
     return groups;
-  }, [initialContests]);
+  }, [contests]);
 
   // Read and react to mode changes from data attribute with immediate updates
   useLayoutEffect(() => {

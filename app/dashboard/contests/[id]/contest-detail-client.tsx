@@ -621,6 +621,20 @@ export default function ContestDetailClient({
                   (leaderboardData.manual_points_adjustment || 0)
               );
 
+        const verifiedSubmissionCount = creatorSubmissions.filter(
+          (submission: any) => {
+            const status =
+              (submission.is_twitter_tweet &&
+                (submission as any).moderation_status) ||
+              submission.status;
+            return (
+              status === "verified" ||
+              status === "approved" ||
+              status === "paid"
+            );
+          }
+        ).length;
+
         grouped[creatorId] = {
           creator: {
             id: creatorId,
@@ -694,6 +708,7 @@ export default function ContestDetailClient({
           paid_at: leaderboardData.paid_at || null,
           earnings_from_db: leaderboardData.earnings || 0,
           paid_rank: leaderboardData.paid_rank || null,
+          eligibleTweets: Math.max(0, verifiedSubmissionCount),
         };
       });
 
@@ -734,6 +749,33 @@ export default function ContestDetailClient({
           }
         }
       });
+
+      const leaderboardDetails =
+        currentContest?.contest_based_details?.leaderboard_contest;
+      const leaderboardFlatFeeBonus = leaderboardDetails?.flat_fee_bonus || 0;
+      if (leaderboardFlatFeeBonus > 0) {
+        const leaderboardTotalBudget = leaderboardDetails?.total_budget;
+        const leaderboardBonusBudget =
+          leaderboardDetails?.flat_fee_bonus_cap ??
+          leaderboardTotalBudget ??
+          Number.MAX_SAFE_INTEGER;
+        let currentTotalExpectedBonus = 0;
+
+        Object.values(grouped).forEach((group: any) => {
+          const eligibleTweets = group.eligibleTweets || 0;
+          if (eligibleTweets <= 0) return;
+          const remainingBudget =
+            leaderboardBonusBudget - currentTotalExpectedBonus;
+          if (remainingBudget <= 0) return;
+
+          const expectedBonus = eligibleTweets * leaderboardFlatFeeBonus;
+          const bonusToAssign = Math.min(expectedBonus, remainingBudget);
+          if (bonusToAssign <= 0) return;
+
+          group.bonus.expected = bonusToAssign;
+          currentTotalExpectedBonus += bonusToAssign;
+        });
+      }
 
       // Filter out groups with no submissions when status filter is active (to avoid undefined/empty groups)
       const groupsArray = Object.values(grouped);
