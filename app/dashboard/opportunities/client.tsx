@@ -678,18 +678,47 @@ export default function OpportunitiesPage({
                 contest.contest_based_details?.leaderboard_contest
                   ?.flat_fee_bonus > 0
               ) {
-                // Fetch submissions for this contest
-                const { data: submissions } = await supabase
-                  .from("submissions")
-                  .select(
-                    "paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views"
-                  )
-                  .eq("contest_id", contest.id)
-                  .in("status", ["verified", "paid"]);
+                // Determine where to read leaderboard submissions from
+                let leaderboardSubmissions: Submission[] = [];
+
+                if (isTwitterTextImage) {
+                  const { data: twitterTweets } = await supabase
+                    .from("twitter_campaign_tweets")
+                    .select(
+                      "id, creator_id, tweet_created_at, moderation_status"
+                    )
+                    .eq("contest_id", contest.id)
+                    .eq("is_eligible", true)
+                    .in("moderation_status", ["verified", "paid"]);
+
+                  leaderboardSubmissions = (twitterTweets || [])
+                    .filter((tweet) => tweet.creator_id)
+                    .map((tweet) => ({
+                      id: tweet.id,
+                      creator_id: tweet.creator_id,
+                      created_at:
+                        tweet.tweet_created_at || new Date().toISOString(),
+                      status: tweet.moderation_status,
+                      paid: tweet.moderation_status === "paid",
+                      earnings: null,
+                      bonus_paid: false,
+                      platform: "twitter",
+                    }));
+                } else {
+                  const { data: submissions } = await supabase
+                    .from("submissions")
+                    .select(
+                      "paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views"
+                    )
+                    .eq("contest_id", contest.id)
+                    .in("status", ["verified", "paid"]);
+
+                  leaderboardSubmissions = (submissions || []) as Submission[];
+                }
 
                 // Calculate actual budget spent
                 const actualBudgetSpent = calculateLeaderboardBudgetSpent(
-                  submissions || [],
+                  leaderboardSubmissions,
                   contest.contest_based_details.leaderboard_contest
                     .flat_fee_bonus
                 );

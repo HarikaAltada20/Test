@@ -85,18 +85,67 @@ export default async function ContestsPage() {
         contest.contest_based_details?.leaderboard_contest?.total_budget > 0 &&
         contest.contest_based_details?.leaderboard_contest?.flat_fee_bonus > 0
       ) {
-        // Fetch submissions for this contest
-        const { data: submissions } = await supabase
-          .from("submissions")
-          .select(
-            "id, paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views"
-          )
-          .eq("contest_id", contest.id)
-          .in("status", ["verified", "paid"]);
+        // Determine which data source to use for leaderboard submissions
+        let leaderboardSubmissions: Submission[] = [];
+
+        if (isTwitterTextImage) {
+          const { data: twitterTweets, error: twitterError } = await supabase
+            .from("twitter_campaign_tweets")
+            .select("id, creator_id, tweet_created_at, moderation_status")
+            .eq("contest_id", contest.id)
+            .eq("is_eligible", true)
+            .in("moderation_status", ["verified", "paid"]);
+
+          if (twitterError) {
+            console.error(
+              `[ContestsPage] Error fetching Twitter tweets for contest ${contest.id}:`,
+              twitterError
+            );
+          } else if (twitterTweets) {
+            leaderboardSubmissions = twitterTweets
+              .filter((tweet) => tweet.creator_id)
+              .map(
+                (tweet): Submission => ({
+                  id: tweet.id,
+                  creator_id: tweet.creator_id,
+                  created_at:
+                    tweet.tweet_created_at || new Date().toISOString(),
+                  status: tweet.moderation_status,
+                  paid: tweet.moderation_status === "paid",
+                  earnings: null,
+                  bonus_paid: false,
+                })
+              );
+          }
+        } else {
+          const { data: submissions } = await supabase
+            .from("submissions")
+            .select(
+              "id, paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views"
+            )
+            .eq("contest_id", contest.id)
+            .in("status", ["verified", "paid"]);
+
+          leaderboardSubmissions = (submissions || []).map((submission) => ({
+            id: submission.id,
+            paid: submission.paid,
+            earnings: submission.earnings,
+            bonus_paid: submission.bonus_paid,
+            bonus_amount:
+              submission.bonus_amount !== null &&
+              submission.bonus_amount !== undefined
+                ? submission.bonus_amount
+                : undefined,
+            creator_id: submission.creator_id,
+            created_at: submission.created_at,
+            status: submission.status || undefined,
+            views: submission.views,
+          }));
+        }
 
         // Calculate actual budget spent
         const actualBudgetSpent = calculateLeaderboardBudgetSpent(
-          submissions || [],
+          leaderboardSubmissions,
           contest.contest_based_details.leaderboard_contest.flat_fee_bonus
         );
 
