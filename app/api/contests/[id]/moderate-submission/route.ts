@@ -5,14 +5,14 @@ import { verifyAdminAccess } from "@/utils/admin-auth";
 
 /**
  * POST /api/contests/[id]/moderate-submission
- * 
+ *
  * Accept or reject a Twitter campaign tweet
  * Note: This is for Twitter campaigns only (automated fetching system)
  * For manual submissions (YouTube/Instagram), use the existing verify-submission endpoint
- * 
+ *
  * Body:
  * - tweetId: string (twitter_campaign_tweets.id)
- * - action: "approve" | "reject"
+ * - action: "approve" | "reject" | "pending"
  * - reason?: string (required for reject)
  */
 export async function POST(
@@ -21,7 +21,9 @@ export async function POST(
 ) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,9 +33,13 @@ export async function POST(
     const { tweetId, action, reason } = await request.json();
 
     // Validate input
-    if (!tweetId || !action || !["approve", "reject"].includes(action)) {
+    if (
+      !tweetId ||
+      !action ||
+      !["approve", "reject", "pending"].includes(action)
+    ) {
       return NextResponse.json(
-        { error: "tweetId and action (approve/reject) are required" },
+        { error: "tweetId and action (approve/reject/pending) are required" },
         { status: 400 }
       );
     }
@@ -74,7 +80,12 @@ export async function POST(
     }
 
     const supabaseAdmin = createAdminClient();
-    const moderationStatus = action === "approve" ? "verified" : "rejected";
+    const moderationStatus =
+      action === "approve"
+        ? "verified"
+        : action === "reject"
+        ? "rejected"
+        : "pending";
 
     // Update Twitter campaign tweet
     const updateData: any = {
@@ -94,7 +105,10 @@ export async function POST(
         .single();
 
       // Only clear reason if there's no manual points adjustment
-      if (!existingTweet?.manual_points_adjustment || existingTweet.manual_points_adjustment === 0) {
+      if (
+        !existingTweet?.manual_points_adjustment ||
+        existingTweet.manual_points_adjustment === 0
+      ) {
         updateData.manual_points_reason = null;
       }
     }
@@ -121,22 +135,31 @@ export async function POST(
       .single();
 
     if (tweet?.creator_id) {
-      // Trigger leaderboard recalculation
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      // Trigger leaderboard recalculation by calling the refresh endpoint on the current host
+      const requestUrl = new URL(request.url);
+      const origin = process.env.NEXT_PUBLIC_APP_URL || requestUrl.origin;
       try {
-        await fetch(`${baseUrl}/api/contests/${contestId}/twitter-refresh-tweets`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        });
+        await fetch(
+          `${origin}/api/contests/${contestId}/twitter-refresh-tweets`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          }
+        );
       } catch (refreshError) {
-        console.error("[moderate-submission] Error refreshing leaderboard:", refreshError);
+        console.error(
+          "[moderate-submission] Error refreshing leaderboard:",
+          refreshError
+        );
         // Don't fail the request if leaderboard refresh fails
       }
     }
 
     return NextResponse.json({
       success: true,
-      message: `Tweet ${action === "approve" ? "approved" : "rejected"} successfully`,
+      message: `Tweet ${
+        action === "approve" ? "approved" : "rejected"
+      } successfully`,
     });
   } catch (error: any) {
     console.error("[moderate-submission] Error:", error);
@@ -146,4 +169,3 @@ export async function POST(
     );
   }
 }
-

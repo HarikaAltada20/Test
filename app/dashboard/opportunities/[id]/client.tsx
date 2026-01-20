@@ -7271,10 +7271,34 @@ export function ContestClientPage({
                               creatorGroup.total_earnings +
                               flatFeeBonus * creatorGroup.submission_count;
 
-                            if (
+                            const contestStatus = contest?.status;
+                            const postContestStatus =
+                              contest?.post_contest_status;
+                            const isLeaderboardContest =
+                              contest?.contest_type === "leaderboard";
+                            const hasPaidSubmission =
+                              creatorGroup.submissions.some(
+                                (submission) => submission.status === "paid"
+                              );
+                            const hasPayoutsProcessed =
+                              contestStatus === "ended" &&
+                              postContestStatus === "payouts_processed";
+                            const shouldShowActualEarnings =
+                              hasPaidSubmission || hasPayoutsProcessed;
+                            const earningsLabel = shouldShowActualEarnings
+                              ? "Total Earned"
+                              : contestStatus === "active" &&
+                                isLeaderboardContest
+                              ? "Winning Zone"
+                              : "Expected";
+
+                            const hasEarningsToDisplay =
                               creatorGroup.total_earnings > 0 ||
-                              flatFeeBonus > 0
-                            ) {
+                              flatFeeBonus > 0;
+                            const shouldDisplayEarnings =
+                              shouldShowActualEarnings && hasEarningsToDisplay;
+
+                            if (shouldDisplayEarnings) {
                               if (
                                 leaderboardViewMode === "detailed" &&
                                 flatFeeBonus > 0
@@ -7282,7 +7306,8 @@ export function ContestClientPage({
                                 prizeDisplay = (
                                   <div className="space-y-1">
                                     <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                      Total Earned: {formatMoney(totalEarnings)}
+                                      {earningsLabel}:{" "}
+                                      {formatMoney(totalEarnings)}
                                     </div>
                                     <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
                                       <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
@@ -7311,7 +7336,8 @@ export function ContestClientPage({
                               } else {
                                 prizeDisplay = (
                                   <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                    Total Earned: {formatMoney(totalEarnings)}
+                                    {earningsLabel}:{" "}
+                                    {formatMoney(totalEarnings)}
                                   </div>
                                 );
                               }

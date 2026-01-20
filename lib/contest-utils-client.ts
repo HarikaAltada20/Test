@@ -1,15 +1,15 @@
 export interface Submission {
-    paid: boolean;
-    earnings: number | null;
-    bonus_paid: boolean;
-    bonus_amount?: number;
-    creator_id: string;
-    created_at: string;
-    status?: string;
-    views?: number;
-    platform?: string;
-    other_stats?: any;
-    manual_points_adjustment?: number;
+  paid: boolean;
+  earnings: number | null;
+  bonus_paid: boolean;
+  bonus_amount?: number;
+  creator_id: string;
+  created_at: string;
+  status?: string;
+  views?: number;
+  platform?: string;
+  other_stats?: any;
+  manual_points_adjustment?: number;
 }
 
 /**
@@ -17,13 +17,16 @@ export interface Submission {
  * This matches the logic used in BudgetProgress component
  * Client-side version that doesn't import server-side dependencies
  */
-export function calculateLeaderboardBudgetSpent(submissions: Submission[], flatFeeBonus: number): number {
+export function calculateLeaderboardBudgetSpent(
+  submissions: Submission[],
+  flatFeeBonus: number
+): number {
   if (!submissions?.length || flatFeeBonus <= 0) return 0;
 
   // Filter to verified or paid submissions
-  const relevantSubmissions = submissions.filter(s => {
+  const relevantSubmissions = submissions.filter((s) => {
     const status = s.status?.toLowerCase();
-    return status === 'verified' || status === 'paid';
+    return status === "verified" || status === "paid";
   });
 
   // Sort by created_at to respect "first submitted, first paid" logic
@@ -70,18 +73,24 @@ export function calculateLeaderboardBudgetSpent(submissions: Submission[], flatF
  * Client-side version that doesn't import server-side dependencies
  */
 export function calculateTwitterCpmBudgetSpent(
-  submissions: Submission[], 
+  submissions: Submission[],
   cpmRate: number,
   maxEarningsPerCreator?: number | null,
   minViews?: number,
-  maxViews?: number
+  maxViews?: number,
+  flatFeeBonus?: number,
+  flatFeeBonusCap?: number | null
 ): number {
   if (!submissions?.length || cpmRate <= 0) return 0;
 
+  const flatFeeBonusInDollars =
+    flatFeeBonus && flatFeeBonus > 0 ? flatFeeBonus / 100 : 0;
+  const bonusCapInDollars = flatFeeBonusCap ? flatFeeBonusCap / 100 : null;
+
   // Filter to verified or paid submissions
-  const relevantSubmissions = submissions.filter(s => {
+  const relevantSubmissions = submissions.filter((s) => {
     const status = s.status?.toLowerCase();
-    return status === 'verified' || status === 'paid';
+    return status === "verified" || status === "paid";
   });
 
   // Sort by created_at to respect "first submitted, first paid" logic
@@ -92,12 +101,16 @@ export function calculateTwitterCpmBudgetSpent(
   });
 
   // Group submissions by creator to apply cap correctly
-  const creatorEarnings = new Map<string, { cpmTotal: number }>();
+  const creatorEarnings = new Map<
+    string,
+    { cpmTotal: number; bonusTotal: number }
+  >();
+  let totalBonusSpentSoFar = 0;
 
   for (const sub of sortedSubmissions) {
     const creatorId = sub.creator_id;
     if (!creatorEarnings.has(creatorId)) {
-      creatorEarnings.set(creatorId, { cpmTotal: 0 });
+      creatorEarnings.set(creatorId, { cpmTotal: 0, bonusTotal: 0 });
     }
 
     const creatorData = creatorEarnings.get(creatorId)!;
@@ -105,7 +118,7 @@ export function calculateTwitterCpmBudgetSpent(
     // Calculate CPM earnings based on platform
     let submissionEarnings = 0;
     const submissionPlatform = sub.platform?.toLowerCase();
-    
+
     if (submissionPlatform === "twitter") {
       const basePoints = sub.other_stats?.base_points || 0;
       const manualPointsAdjustment = sub.manual_points_adjustment || 0;
@@ -113,7 +126,7 @@ export function calculateTwitterCpmBudgetSpent(
       submissionEarnings = (totalPoints * cpmRate) / 1000;
     } else if (sub.paid && sub.earnings != null) {
       // Use actual paid earnings from database for non-Twitter platforms (YouTube, Instagram)
-      submissionEarnings = sub.earnings / 100; // Convert cents to dollars
+      submissionEarnings = sub.earnings / 100;
     } else {
       // Calculate expected earnings for verified unpaid (YouTube, Instagram)
       let views = sub.views || 0;
@@ -129,17 +142,29 @@ export function calculateTwitterCpmBudgetSpent(
       if (remainingCap > 0) {
         creatorData.cpmTotal += Math.min(submissionEarnings, remainingCap);
       }
-      // If cap reached, this submission contributes $0
     } else {
       creatorData.cpmTotal += submissionEarnings;
+    }
+
+    // Include flat fee bonus for verified submissions (cap respected across contest)
+    if (flatFeeBonusInDollars > 0) {
+      if (
+        bonusCapInDollars === null ||
+        totalBonusSpentSoFar + flatFeeBonusInDollars <= bonusCapInDollars
+      ) {
+        creatorData.bonusTotal += flatFeeBonusInDollars;
+        totalBonusSpentSoFar += flatFeeBonusInDollars;
+      }
     }
   }
 
   // Sum up all creator earnings
   let totalCpmSpent = 0;
+  let totalBonusSpent = 0;
   for (const [, earnings] of creatorEarnings) {
     totalCpmSpent += earnings.cpmTotal;
+    totalBonusSpent += earnings.bonusTotal;
   }
 
-  return totalCpmSpent;
+  return totalCpmSpent + totalBonusSpent;
 }

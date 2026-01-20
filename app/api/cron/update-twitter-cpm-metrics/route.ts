@@ -22,19 +22,24 @@ export async function GET(request: Request) {
     // Fetch all Twitter CPM contests that need budget updates
     const { data: contests, error: contestsError } = await supabaseAdmin
       .from("contests")
-      .select(`
+      .select(
+        `
         id,
         title,
         contest_type,
         platform,
         contest_based_details
-      `)
+      `
+      )
       .eq("contest_type", "cpm")
       .eq("platform", "twitter")
       .not("contest_based_details->cpm_contest->cpm_rate_usd", "is", null);
 
     if (contestsError) {
-      console.error("[Twitter CPM Metrics] Error fetching contests:", contestsError);
+      console.error(
+        "[Twitter CPM Metrics] Error fetching contests:",
+        contestsError
+      );
       return NextResponse.json(
         { error: "Failed to fetch contests" },
         { status: 500 }
@@ -57,7 +62,9 @@ export async function GET(request: Request) {
     for (const contest of contests) {
       try {
         const cpmConfig = (contest as any).contest_based_details?.cpm_contest;
-        
+        const flatFeeBonus = cpmConfig?.flat_fee_bonus || 0;
+        const flatFeeBonusCap = cpmConfig?.flat_fee_bonus_cap || null;
+
         if (!cpmConfig?.cpm_rate_usd) {
           console.warn(
             `[Twitter CPM Metrics] Contest ${contest.id} missing cpm_rate_usd, skipping`
@@ -83,23 +90,24 @@ export async function GET(request: Request) {
         }
 
         // Convert Twitter tweets to Submission format for budget calculation
-        const submissions = twitterTweets?.map(tweet => ({
-          id: tweet.id,
-          creator_id: tweet.creator_id,
-          created_at: tweet.tweet_created_at,
-          platform: 'twitter',
-          status: tweet.moderation_status,
-          paid: tweet.moderation_status === 'paid',
-          earnings: null, // Twitter uses points, not direct earnings
-          bonus_paid: false,
-          bonus_amount: 0,
-          other_stats: {
-            base_points: tweet.points || 0,
-            manual_points_adjustment: tweet.manual_points_adjustment || 0
-          },
-          manual_points_adjustment: tweet.manual_points_adjustment || 0,
-          views: 0 // Twitter doesn't use views
-        })) || [];
+        const submissions =
+          twitterTweets?.map((tweet) => ({
+            id: tweet.id,
+            creator_id: tweet.creator_id,
+            created_at: tweet.tweet_created_at,
+            platform: "twitter",
+            status: tweet.moderation_status,
+            paid: tweet.moderation_status === "paid",
+            earnings: null, // Twitter uses points, not direct earnings
+            bonus_paid: false,
+            bonus_amount: 0,
+            other_stats: {
+              base_points: tweet.points || 0,
+              manual_points_adjustment: tweet.manual_points_adjustment || 0,
+            },
+            manual_points_adjustment: tweet.manual_points_adjustment || 0,
+            views: 0, // Twitter doesn't use views
+          })) || [];
 
         // Calculate actual budget spent using Twitter CPM formula
         const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
@@ -107,7 +115,9 @@ export async function GET(request: Request) {
           cpmConfig.cpm_rate_usd,
           cpmConfig.max_earnings_per_creator,
           cpmConfig.min_views,
-          cpmConfig.max_views
+          cpmConfig.max_views,
+          flatFeeBonus,
+          flatFeeBonusCap
         );
 
         // Update the contest's budget_spent field
@@ -132,7 +142,9 @@ export async function GET(request: Request) {
           );
         } else {
           console.log(
-            `[Twitter CPM Metrics] Updated budget for contest ${contest.id} (${contest.title}): $${actualBudgetSpent.toFixed(2)}`
+            `[Twitter CPM Metrics] Updated budget for contest ${contest.id} (${
+              contest.title
+            }): $${actualBudgetSpent.toFixed(2)}`
           );
           processedCount++;
         }

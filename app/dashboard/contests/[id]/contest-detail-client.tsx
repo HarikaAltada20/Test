@@ -1523,20 +1523,24 @@ export default function ContestDetailClient({
     // Check if this is a Twitter tweet - if so, use Twitter moderation endpoint
     const submission = currentSubmissions.find((s) => s.id === submissionId);
     if ((submission as any)?.is_twitter_tweet) {
-      // Map status to Twitter moderation action
       if (newStatus === "verified") {
         await handleModerateTwitterTweet(submissionId, "approve");
-      } else if (newStatus === "rejected") {
-        await handleModerateTwitterTweet(submissionId, "reject");
-      } else if (newStatus === "pending") {
-        await handleModerateTwitterTweet(submissionId, "pending");
-      } else {
-        toast({
-          title: "Error",
-          description: `Action "${newStatus}" is not supported for Twitter tweets`,
-          variant: "destructive",
-        });
+        return;
       }
+      if (newStatus === "rejected") {
+        await handleModerateTwitterTweet(submissionId, "reject");
+        return;
+      }
+      if (newStatus === "pending") {
+        await handleModerateTwitterTweet(submissionId, "pending");
+        return;
+      }
+
+      toast({
+        title: "Error",
+        description: `Action "${newStatus}" is not supported for Twitter tweets`,
+        variant: "destructive",
+      });
       return;
     }
 

@@ -711,31 +711,38 @@ export default function OpportunitiesPage({
                   .in("moderation_status", ["verified", "paid"]);
 
                 // Convert Twitter tweets to Submission format for budget calculation
-                const submissions = twitterTweets?.map(tweet => ({
-                  id: tweet.id,
-                  creator_id: tweet.creator_id,
-                  created_at: tweet.tweet_created_at,
-                  platform: 'twitter',
-                  status: tweet.moderation_status,
-                  paid: tweet.moderation_status === 'paid',
-                  earnings: null, // Twitter uses points, not direct earnings
-                  bonus_paid: false,
-                  bonus_amount: 0,
-                  other_stats: {
-                    base_points: tweet.points || 0,
-                    manual_points_adjustment: tweet.manual_points_adjustment || 0
-                  },
-                  manual_points_adjustment: tweet.manual_points_adjustment || 0,
-                  views: 0 // Twitter doesn't use views
-                })) || [];
+                const submissions =
+                  twitterTweets?.map((tweet) => ({
+                    id: tweet.id,
+                    creator_id: tweet.creator_id,
+                    created_at: tweet.tweet_created_at,
+                    platform: "twitter",
+                    status: tweet.moderation_status,
+                    paid: tweet.moderation_status === "paid",
+                    earnings: null, // Twitter uses points, not direct earnings
+                    bonus_paid: false,
+                    bonus_amount: 0,
+                    other_stats: {
+                      base_points: tweet.points || 0,
+                      manual_points_adjustment:
+                        tweet.manual_points_adjustment || 0,
+                    },
+                    manual_points_adjustment:
+                      tweet.manual_points_adjustment || 0,
+                    views: 0, // Twitter doesn't use views
+                  })) || [];
 
                 // Calculate actual budget spent using Twitter CPM formula
+                const cpmDetails = contest.contest_based_details.cpm_contest;
+
                 const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
                   submissions || [],
-                  contest.contest_based_details.cpm_contest.cpm_rate_usd,
-                  contest.contest_based_details.cpm_contest.max_earnings_per_creator,
-                  contest.contest_based_details.cpm_contest.min_views,
-                  contest.contest_based_details.cpm_contest.max_views
+                  cpmDetails.cpm_rate_usd,
+                  cpmDetails.max_earnings_per_creator,
+                  cpmDetails.min_views,
+                  cpmDetails.max_views,
+                  cpmDetails.flat_fee_bonus || 0,
+                  cpmDetails.flat_fee_bonus_cap || null
                 );
 
                 // Update the contest object with calculated budget spent

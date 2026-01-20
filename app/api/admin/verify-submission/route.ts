@@ -758,23 +758,6 @@ export async function POST(request: Request) {
     // Only rejected submissions are hidden from public view
 
     // Log the verification action (optional - for audit trail)
-    if (currentUserId) {
-      const { error: logError } = await supabase
-        .from("verification_logs")
-        .insert({
-          submission_id: submissionId,
-          admin_id: currentUserId,
-          action: action,
-          reason: reason || null,
-          performed_at: new Date().toISOString(),
-        });
-
-      if (logError) {
-        console.warn("Failed to log verification action:", logError);
-        // Don't fail the request if logging fails
-      }
-    }
-
     // Always return the latest submission data (including updated earnings)
     const { data: latestSubmission } = await supabaseAdmin
       .from("submissions")
