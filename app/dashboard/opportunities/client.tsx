@@ -33,6 +33,7 @@ import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { createClient } from "@/utils/supabase/client";
 import {
   calculateLeaderboardBudgetSpent,
+  calculateTwitterCpmBudgetSpent,
   Submission,
 } from "@/lib/contest-utils-client";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
@@ -689,6 +690,61 @@ export default function OpportunitiesPage({
                     leaderboard_contest: {
                       ...updatedContest.contest_based_details
                         .leaderboard_contest,
+                      budget_spent: Math.round(actualBudgetSpent * 100), // Convert to cents
+                    },
+                  },
+                };
+              }
+              // For Twitter CPM contests, calculate actual budget spent from submissions
+              else if (
+                contest.contest_type === "cpm" &&
+                contest.platform === "twitter" &&
+                contest.contest_based_details?.cpm_contest?.cpm_rate_usd > 0
+              ) {
+                // Fetch Twitter tweets for this contest with Twitter-specific fields
+                const { data: twitterTweets } = await supabase
+                  .from("twitter_campaign_tweets")
+                  .select(
+                    "id, creator_id, tweet_created_at, points, moderation_status, manual_points_adjustment"
+                  )
+                  .eq("contest_id", contest.id)
+                  .in("moderation_status", ["verified", "paid"]);
+
+                // Convert Twitter tweets to Submission format for budget calculation
+                const submissions = twitterTweets?.map(tweet => ({
+                  id: tweet.id,
+                  creator_id: tweet.creator_id,
+                  created_at: tweet.tweet_created_at,
+                  platform: 'twitter',
+                  status: tweet.moderation_status,
+                  paid: tweet.moderation_status === 'paid',
+                  earnings: null, // Twitter uses points, not direct earnings
+                  bonus_paid: false,
+                  bonus_amount: 0,
+                  other_stats: {
+                    base_points: tweet.points || 0,
+                    manual_points_adjustment: tweet.manual_points_adjustment || 0
+                  },
+                  manual_points_adjustment: tweet.manual_points_adjustment || 0,
+                  views: 0 // Twitter doesn't use views
+                })) || [];
+
+                // Calculate actual budget spent using Twitter CPM formula
+                const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
+                  submissions || [],
+                  contest.contest_based_details.cpm_contest.cpm_rate_usd,
+                  contest.contest_based_details.cpm_contest.max_earnings_per_creator,
+                  contest.contest_based_details.cpm_contest.min_views,
+                  contest.contest_based_details.cpm_contest.max_views
+                );
+
+                // Update the contest object with calculated budget spent
+                updatedContest = {
+                  ...updatedContest,
+                  contest_based_details: {
+                    ...updatedContest.contest_based_details,
+                    cpm_contest: {
+                      ...updatedContest.contest_based_details.cpm_contest,
                       budget_spent: Math.round(actualBudgetSpent * 100), // Convert to cents
                     },
                   },

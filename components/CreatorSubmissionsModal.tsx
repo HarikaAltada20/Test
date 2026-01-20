@@ -334,7 +334,8 @@ export function CreatorSubmissionsModal({
       } catch (error) {
         console.error("Bulk payment error:", error);
         alert(
-          `Bulk payment failed:\n${error instanceof Error ? error.message : "Unknown error"
+          `Bulk payment failed:\n${
+            error instanceof Error ? error.message : "Unknown error"
           }`
         );
       }
@@ -370,7 +371,11 @@ export function CreatorSubmissionsModal({
     setSelectAll(false);
   };
 
-  const getStatusBadge = (status: string, paid: boolean, isTwitterTweet?: boolean) => {
+  const getStatusBadge = (
+    status: string,
+    paid: boolean,
+    isTwitterTweet?: boolean
+  ) => {
     const statusLower = status.toLowerCase();
 
     if (paid && !isTwitterTweet) {
@@ -443,18 +448,22 @@ export function CreatorSubmissionsModal({
       contest?.platform?.toLowerCase() === "x") &&
     contest?.contest_format === "text_image";
 
+  const isTwitterSubmissionVerified = (modStatus?: string) => {
+    return modStatus === "approved" || modStatus === "verified";
+  };
+
   // Filter submissions based on status
   // For Twitter tweets, use moderation_status; for others, use status
   const filteredSubmissions = submissions.filter((sub) => {
     const isTwitterTweet = sub.is_twitter_tweet === true;
     const statusToCheck = isTwitterTweet
-      ? (sub.moderation_status || sub.status)
+      ? sub.moderation_status || sub.status
       : sub.status;
 
     // Map Twitter moderation_status to submission status for filtering
     let mappedStatus = statusToCheck;
     if (isTwitterTweet) {
-      if (statusToCheck === "approved") mappedStatus = "verified";
+      if (isTwitterSubmissionVerified(statusToCheck)) mappedStatus = "verified";
       else if (statusToCheck === "rejected") mappedStatus = "rejected";
       else mappedStatus = "pending";
     }
@@ -494,31 +503,41 @@ export function CreatorSubmissionsModal({
 
   if (hasBonus) {
     // Get budget information
-    const totalBudget = contest?.contest_type === "cpm"
-      ? (contest?.contest_based_details as any)?.cpm_contest?.total_budget || 0
-      : (contest?.contest_based_details as any)?.leaderboard_contest?.total_budget || 0;
-    
-    const bonusBudget = contest?.contest_type === "cpm" 
-      ? ((contest?.contest_based_details as any)?.cpm_contest?.flat_fee_bonus_cap || totalBudget)
-      : totalBudget;
+    const totalBudget =
+      contest?.contest_type === "cpm"
+        ? (contest?.contest_based_details as any)?.cpm_contest?.total_budget ||
+          0
+        : (contest?.contest_based_details as any)?.leaderboard_contest
+            ?.total_budget || 0;
+
+    const bonusBudget =
+      contest?.contest_type === "cpm"
+        ? (contest?.contest_based_details as any)?.cpm_contest
+            ?.flat_fee_bonus_cap || totalBudget
+        : totalBudget;
 
     // Sort submissions by created_at to process in order
     const submissionsByTime = [...submissions].sort((a, b) => {
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return (
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
     });
 
     let currentTotalExpectedBonus = 0;
 
     submissionsByTime.forEach((sub) => {
       const isTwitterTweet = sub.is_twitter_tweet === true;
-      const isEligibleForBonus = hasBonus &&
-        ((isTwitterTweet && sub.moderation_status === "approved") ||
-          (!isTwitterTweet && (sub.status === "verified" || sub.status === "paid")));
+      const isEligibleForBonus =
+        hasBonus &&
+        ((isTwitterTweet &&
+          isTwitterSubmissionVerified(sub.moderation_status)) ||
+          (!isTwitterTweet &&
+            (sub.status === "verified" || sub.status === "paid")));
 
       if (isEligibleForBonus) {
         // Calculate remaining budget for bonuses
         const remainingBudget = bonusBudget - currentTotalExpectedBonus;
-        
+
         if (remainingBudget > 0) {
           if (remainingBudget >= flatFeeBonus) {
             // Full bonus can be granted
@@ -630,7 +649,9 @@ export function CreatorSubmissionsModal({
     verifiedOrPaid: submissions.filter((s) => {
       const isTwitterTweet = s.is_twitter_tweet === true;
       const status = isTwitterTweet
-        ? (s.moderation_status === "approved" ? "verified" : s.status)
+        ? isTwitterSubmissionVerified(s.moderation_status)
+          ? "verified"
+          : s.status
         : s.status;
       return status === "verified" || status === "paid";
     }).length,
@@ -644,7 +665,7 @@ export function CreatorSubmissionsModal({
     verified: submissions.filter((s) => {
       const isTwitterTweet = s.is_twitter_tweet === true;
       if (isTwitterTweet) {
-        return s.moderation_status === "approved";
+        return isTwitterSubmissionVerified(s.moderation_status);
       }
       return s.status === "verified";
     }).length,
@@ -737,8 +758,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "all"
-                      ? "text-white"
-                      : "text-gray-600"
+                    ? "text-white"
+                    : "text-gray-600"
                 )}
               >
                 All{" "}
@@ -759,8 +780,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "verified_or_paid"
-                      ? "text-white"
-                      : "text-gray-600"
+                    ? "text-white"
+                    : "text-gray-600"
                 )}
               >
                 Verified + Paid{" "}
@@ -779,8 +800,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "pending"
-                      ? "text-white"
-                      : "text-gray-600"
+                    ? "text-white"
+                    : "text-gray-600"
                 )}
               >
                 Pending{" "}
@@ -799,8 +820,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "verified"
-                      ? "text-white"
-                      : "text-gray-600"
+                    ? "text-white"
+                    : "text-gray-600"
                 )}
               >
                 Verified{" "}
@@ -819,8 +840,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "rejected"
-                      ? "text-white"
-                      : "text-gray-600"
+                    ? "text-white"
+                    : "text-gray-600"
                 )}
               >
                 Rejected{" "}
@@ -839,8 +860,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "paid"
-                      ? "text-white"
-                      : "text-gray-600"
+                    ? "text-white"
+                    : "text-gray-600"
                 )}
               >
                 Paid{" "}
@@ -1264,8 +1285,8 @@ export function CreatorSubmissionsModal({
                         isTwitterTextImageContest
                           ? 15 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Manual Points Reason, Status, Submitted, Actions
                           : hasBonus
-                            ? 13 // Checkbox, #, Content, Views, Likes, Comments, Expected Reward, Reward Granted, Bonus Expected, Bonus Granted, Status, Submitted, Actions
-                            : 11 // Checkbox, #, Content, Views, Likes, Comments, Expected Reward, Reward Granted, Status, Submitted, Actions
+                          ? 13 // Checkbox, #, Content, Views, Likes, Comments, Expected Reward, Reward Granted, Bonus Expected, Bonus Granted, Status, Submitted, Actions
+                          : 11 // Checkbox, #, Content, Views, Likes, Comments, Expected Reward, Reward Granted, Status, Submitted, Actions
                       }
                       className={cn(
                         "text-center py-8",
@@ -1283,20 +1304,26 @@ export function CreatorSubmissionsModal({
                     const likes = isTwitterTweet
                       ? submission.other_stats?.likes || 0
                       : submission.other_stats?.youtube?.likes ||
-                      submission.other_stats?.instagram?.likes ||
-                      0;
+                        submission.other_stats?.instagram?.likes ||
+                        0;
                     const comments = isTwitterTweet
                       ? submission.other_stats?.replies || 0
                       : submission.other_stats?.youtube?.comments ||
-                      submission.other_stats?.instagram?.comments ||
-                      0;
+                        submission.other_stats?.instagram?.comments ||
+                        0;
 
                     // Twitter-specific metrics
                     const retweets = submission.other_stats?.retweets || 0;
-                    const quoteReposts = submission.other_stats?.quote_reposts || 0;
-                    const impressions = submission.other_stats?.impressions || 0;
-                    const basePoints = submission.other_stats?.base_points || submission.other_stats?.points || 0;
-                    const manualPointsAdjustment = submission.manual_points_adjustment || 0;
+                    const quoteReposts =
+                      submission.other_stats?.quote_reposts || 0;
+                    const impressions =
+                      submission.other_stats?.impressions || 0;
+                    const basePoints =
+                      submission.other_stats?.base_points ||
+                      submission.other_stats?.points ||
+                      0;
+                    const manualPointsAdjustment =
+                      submission.manual_points_adjustment || 0;
                     const totalPoints = basePoints + manualPointsAdjustment;
 
                     // Get pre-calculated expected reward (with cap applied in submission time order)
@@ -1309,7 +1336,8 @@ export function CreatorSubmissionsModal({
                     const grantedReward = submission.paid
                       ? submission.earnings || 0
                       : 0;
-                    const expectedBonus = expectedBonusMap.get(submission.id) || 0;
+                    const expectedBonus =
+                      expectedBonusMap.get(submission.id) || 0;
                     // Use actual bonus_amount from database if available
                     const grantedBonus = submission.bonus_paid
                       ? (submission as any).bonus_amount || flatFeeBonus
@@ -1317,7 +1345,7 @@ export function CreatorSubmissionsModal({
 
                     // For Twitter tweets, use moderation_status for status badge
                     const statusToUse = isTwitterTweet
-                      ? (submission.moderation_status || submission.status)
+                      ? submission.moderation_status || submission.status
                       : submission.status;
 
                     return (
@@ -1357,20 +1385,26 @@ export function CreatorSubmissionsModal({
                                     variant="outline"
                                     className={cn(
                                       "text-xs px-2 py-0.5",
-                                      (submission.other_stats?.tweet_type === "reply" ||
-                                        submission.other_stats?.tweet_type === "quote" ||
-                                        submission.other_stats?.tweet_type === "retweet")
+                                      submission.other_stats?.tweet_type ===
+                                        "reply" ||
+                                        submission.other_stats?.tweet_type ===
+                                          "quote" ||
+                                        submission.other_stats?.tweet_type ===
+                                          "retweet"
                                         ? "bg-purple-100 text-purple-700 border-purple-300"
                                         : "bg-blue-100 text-blue-700 border-blue-300"
                                     )}
                                   >
-                                    {submission.other_stats?.tweet_type === "reply"
+                                    {submission.other_stats?.tweet_type ===
+                                    "reply"
                                       ? "REPLY"
-                                      : submission.other_stats?.tweet_type === "quote"
-                                        ? "QUOTE"
-                                        : submission.other_stats?.tweet_type === "retweet"
-                                          ? "RETWEET"
-                                          : "TWEET"}
+                                      : submission.other_stats?.tweet_type ===
+                                        "quote"
+                                      ? "QUOTE"
+                                      : submission.other_stats?.tweet_type ===
+                                        "retweet"
+                                      ? "RETWEET"
+                                      : "TWEET"}
                                   </Badge>
                                   <span
                                     className={cn(
@@ -1387,9 +1421,15 @@ export function CreatorSubmissionsModal({
                                     "text-sm line-clamp-3",
                                     isDark ? "text-white" : "text-gray-900"
                                   )}
-                                  title={submission.other_stats?.tweet_text || submission.video_title || ""}
+                                  title={
+                                    submission.other_stats?.tweet_text ||
+                                    submission.video_title ||
+                                    ""
+                                  }
                                 >
-                                  {submission.other_stats?.tweet_text || submission.video_title || "No content"}
+                                  {submission.other_stats?.tweet_text ||
+                                    submission.video_title ||
+                                    "No content"}
                                 </p>
                                 {/* View tweet link */}
                                 {submission.content_link && (
@@ -1399,7 +1439,9 @@ export function CreatorSubmissionsModal({
                                     rel="noopener noreferrer"
                                     className={cn(
                                       "text-xs flex items-center gap-1 hover:underline w-fit",
-                                      isDark ? "text-purple-400" : "text-purple-600"
+                                      isDark
+                                        ? "text-purple-400"
+                                        : "text-purple-600"
                                     )}
                                   >
                                     Click to view tweet
@@ -1459,10 +1501,10 @@ export function CreatorSubmissionsModal({
                                     manualPointsAdjustment > 0
                                       ? "text-green-600"
                                       : manualPointsAdjustment < 0
-                                        ? "text-red-600"
-                                        : isDark
-                                          ? "text-white"
-                                          : "text-gray-900"
+                                      ? "text-red-600"
+                                      : isDark
+                                      ? "text-white"
+                                      : "text-gray-900"
                                   )}
                                 >
                                   {manualPointsAdjustment > 0 ? "+" : ""}
@@ -1603,7 +1645,10 @@ export function CreatorSubmissionsModal({
                                   title={submission.manual_points_reason}
                                 >
                                   {submission.manual_points_reason.length > 20
-                                    ? submission.manual_points_reason.substring(0, 20) + "..."
+                                    ? submission.manual_points_reason.substring(
+                                        0,
+                                        20
+                                      ) + "..."
                                     : submission.manual_points_reason}
                                 </span>
                               ) : (
@@ -1627,7 +1672,8 @@ export function CreatorSubmissionsModal({
                                   <img
                                     src={submission.video_thumbnail_url}
                                     alt={
-                                      submission.video_title || "Video thumbnail"
+                                      submission.video_title ||
+                                      "Video thumbnail"
                                     }
                                     className="w-16 h-9 object-cover rounded"
                                   />
@@ -1659,13 +1705,13 @@ export function CreatorSubmissionsModal({
                                           className={cn(
                                             "text-xs text-blue-600 hover:underline flex items-center gap-1",
                                             downloadingSubmissionId ===
-                                            submission.id &&
-                                            "opacity-50 cursor-not-allowed"
+                                              submission.id &&
+                                              "opacity-50 cursor-not-allowed"
                                           )}
                                           title="Download Reel/Short"
                                         >
                                           {downloadingSubmissionId ===
-                                            submission.id ? (
+                                          submission.id ? (
                                             <>
                                               <Loader2 className="h-3 w-3 animate-spin" />
                                               Downloading...
@@ -1729,7 +1775,11 @@ export function CreatorSubmissionsModal({
                           </>
                         )}
                         <TableCell>
-                          {getStatusBadge(statusToUse, submission.paid, isTwitterTweet)}
+                          {getStatusBadge(
+                            statusToUse,
+                            submission.paid,
+                            isTwitterTweet
+                          )}
                         </TableCell>
                         <TableCell
                           className={cn(
@@ -1750,45 +1800,49 @@ export function CreatorSubmissionsModal({
                               {contest?.post_contest_status !==
                                 "verification_complete" &&
                                 contest?.post_contest_status !==
-                                "payments_processed" && (
+                                  "payments_processed" && (
                                   <>
                                     {/* For Twitter tweets, check moderation_status; for others, check status */}
                                     {(isTwitterTweet
-                                      ? submission.moderation_status !== "approved"
+                                      ? !isTwitterSubmissionVerified(
+                                          submission.moderation_status
+                                        )
                                       : submission.status !== "verified") && (
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            onVerify([submission.id])
-                                          }
-                                        >
-                                          <CheckCircle className="h-4 w-4 mr-2" />
-                                          {isTwitterTweet ? "Approve" : "Verify"}
-                                        </DropdownMenuItem>
-                                      )}
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          onVerify([submission.id])
+                                        }
+                                      >
+                                        <CheckCircle className="h-4 w-4 mr-2" />
+                                        {isTwitterTweet ? "Approve" : "Verify"}
+                                      </DropdownMenuItem>
+                                    )}
                                     {(isTwitterTweet
-                                      ? submission.moderation_status !== "rejected"
+                                      ? submission.moderation_status !==
+                                        "rejected"
                                       : submission.status !== "rejected") && (
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            onReject([submission.id])
-                                          }
-                                        >
-                                          <XCircle className="h-4 w-4 mr-2" />
-                                          Reject
-                                        </DropdownMenuItem>
-                                      )}
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          onReject([submission.id])
+                                        }
+                                      >
+                                        <XCircle className="h-4 w-4 mr-2" />
+                                        Reject
+                                      </DropdownMenuItem>
+                                    )}
                                     {(isTwitterTweet
-                                      ? submission.moderation_status !== "pending"
+                                      ? submission.moderation_status !==
+                                        "pending"
                                       : submission.status !== "pending") && (
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            onSetPending([submission.id])
-                                          }
-                                        >
-                                          <Clock className="h-4 w-4 mr-2" />
-                                          Set Pending
-                                        </DropdownMenuItem>
-                                      )}
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          onSetPending([submission.id])
+                                        }
+                                      >
+                                        <Clock className="h-4 w-4 mr-2" />
+                                        Set Pending
+                                      </DropdownMenuItem>
+                                    )}
                                   </>
                                 )}
 
@@ -1847,7 +1901,7 @@ export function CreatorSubmissionsModal({
                               {contest?.post_contest_status ===
                                 "verification_complete" &&
                                 contest?.post_contest_status !==
-                                "payments_processed" &&
+                                  "payments_processed" &&
                                 isAdminView && (
                                   <>
                                     <DropdownMenuSeparator />
@@ -1886,13 +1940,13 @@ export function CreatorSubmissionsModal({
                                       }
                                       className={
                                         downloadingSubmissionId ===
-                                          submission.id
+                                        submission.id
                                           ? "opacity-50 cursor-not-allowed"
                                           : ""
                                       }
                                     >
                                       {downloadingSubmissionId ===
-                                        submission.id ? (
+                                      submission.id ? (
                                         <>
                                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                           Downloading...

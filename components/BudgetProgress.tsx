@@ -43,9 +43,7 @@ export function BudgetProgress({
     cpmConfig?.flat_fee_bonus || leaderboardConfig?.flat_fee_bonus || 0;
   const hasFlatFeeBonus = flatFeeBonus > 0;
 
-  // Temporary: treat all CPM contests as Twitter until platform is properly passed
-  const isTwitterPlatform: boolean = contest.contest_type === "cpm";
-
+  
   const {
     cpmPaid,
     bonusPaid,
@@ -114,23 +112,25 @@ export function BudgetProgress({
 
       // Calculate CPM earnings
       let submissionEarnings = 0;
-      if (isTwitterPlatform) {
+      const submissionPlatform = (sub as any).platform?.toLowerCase();
+      
+      if (submissionPlatform === "twitter") {
         const basePoints = (sub as any).other_stats?.base_points || 0;
         const manualPointsAdjustment = (sub as any).manual_points_adjustment || 0;
         const totalPoints = basePoints + manualPointsAdjustment;
         submissionEarnings = (totalPoints * cpmRate) / 1000;
         console.log(`[Twitter CPM] basePoints=${basePoints}, manual=${manualPointsAdjustment}, totalPoints=${totalPoints}, cpmRate=${cpmRate}, earnings=${submissionEarnings.toFixed(2)}`);
       } else if (sub.paid && sub.earnings != null) {
-        // Use actual paid earnings from database for non-Twitter
+        // Use actual paid earnings from database for non-Twitter platforms (YouTube, Instagram)
         submissionEarnings = sub.earnings / 100; // Convert cents to dollars
-        console.log(`[Non-Twitter Paid] earnings=${submissionEarnings.toFixed(2)}`);
+        console.log(`[${submissionPlatform || 'Unknown'} Paid] earnings=${submissionEarnings.toFixed(2)}`);
       } else {
-        // Calculate expected earnings for verified unpaid (non-Twitter)
+        // Calculate expected earnings for verified unpaid (YouTube, Instagram)
         let views = (sub as any).views || 0;
         if (minViews != null && views < minViews) views = 0;
         if (maxViews != null && views > maxViews) views = maxViews;
         submissionEarnings = (views * cpmRate) / 1000;
-        console.log(`[Non-Twitter Unpaid] views=${views}, cpmRate=${cpmRate}, earnings=${submissionEarnings.toFixed(2)}`);
+        console.log(`[${submissionPlatform || 'Unknown'} Unpaid] views=${views}, cpmRate=${cpmRate}, earnings=${submissionEarnings.toFixed(2)}`);
       }
 
       // Apply creator cap if configured
@@ -250,7 +250,7 @@ export function BudgetProgress({
       bonusBudget,
       bonusSpent: bonusPaid,
     };
-  }, [contest, submissions, isTwitterPlatform]);
+  }, [contest, submissions]);
 
   const formatCurrency = (cents: number) => {
     return `$${(cents / 100).toFixed(2)}`;
@@ -469,9 +469,7 @@ export function BudgetProgress({
               } | Total: ${formatCurrency(totalSpent)}`
             : `Total ${
                 contest.contest_type === "cpm"
-                  ? isTwitterPlatform
-                    ? "based on points"
-                    : "based on views"
+                  ? "CPM earnings (based on platform)"
                   : "contest earnings"
               }: ${formatCurrency(cpmPaid)}`
         }

@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { RouteGuard } from "@/components/guards/RouteGuard";
 import { ContestsPageClient } from "./ContestsPageClient";
-import { calculateLeaderboardBudgetSpent, Submission } from "@/lib/contest-utils";
+import { calculateLeaderboardBudgetSpent, calculateTwitterCpmBudgetSpent, Submission } from "@/lib/contest-utils";
 
 export default async function ContestsPage() {
   const supabase = await createClient();
@@ -83,7 +83,7 @@ export default async function ContestsPage() {
       // Fetch submissions for this contest
       const { data: submissions } = await supabase
         .from('submissions')
-        .select('paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views')
+        .select('id, paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views')
         .eq('contest_id', contest.id)
         .in('status', ['verified', 'paid']);
 
@@ -100,6 +100,94 @@ export default async function ContestsPage() {
           ...updatedContest.contest_based_details,
           leaderboard_contest: {
             ...updatedContest.contest_based_details.leaderboard_contest,
+            budget_spent: Math.round(actualBudgetSpent * 100) // Convert to cents
+          }
+        },
+        status: updatedContest.status || 'unknown'
+      };
+    } 
+    // Check if this is a Twitter CPM contest that needs budget calculation
+    console.log(`[Twitter CPM Budget] Checking contest ${contest.id} (${contest.title}):`, {
+      contest_type: contest.contest_type,
+      platform: contest.platform,
+      cpm_rate_usd: contest.contest_based_details?.cpm_contest?.cpm_rate_usd
+    });
+    
+    if (contest.contest_type === 'cpm' &&
+      contest.platform === 'twitter' &&
+      contest.contest_based_details?.cpm_contest?.cpm_rate_usd > 0) {
+
+      console.log(`[Twitter CPM Budget] Processing Twitter CPM contest ${contest.id} (${contest.title})`);
+
+      // For Twitter contests, fetch tweets from twitter_campaign_tweets table instead of submissions
+      // First try without moderation_status filter to see if tweets exist
+      const { data: allTwitterTweets } = await supabase
+        .from('twitter_campaign_tweets')
+        .select(`
+          id,
+          creator_id,
+          tweet_created_at,
+          points,
+          moderation_status,
+          manual_points_adjustment
+        `)
+        .eq('contest_id', contest.id);
+
+      console.log(`[Twitter CPM Budget] All tweets for contest ${contest.id}:`, allTwitterTweets?.slice(0, 2));
+
+      // Now filter for verified/paid tweets
+      const { data: twitterTweets } = await supabase
+        .from('twitter_campaign_tweets')
+        .select(`
+          id,
+          creator_id,
+          tweet_created_at,
+          points,
+          moderation_status,
+          manual_points_adjustment
+        `)
+        .eq('contest_id', contest.id)
+        .in('moderation_status', ['verified', 'paid']); // Only include verified/paid tweets
+
+      console.log(`[Twitter CPM Budget] Fetched ${twitterTweets?.length || 0} Twitter tweets for contest ${contest.id}:`, twitterTweets?.slice(0, 2));
+
+      // Convert Twitter tweets to Submission format for budget calculation
+      const submissions = twitterTweets?.map(tweet => ({
+        id: tweet.id,
+        creator_id: tweet.creator_id,
+        created_at: tweet.tweet_created_at, // Use tweet_created_at instead of created_at
+        platform: 'twitter', // Hardcode since this is Twitter table
+        status: tweet.moderation_status,
+        paid: tweet.moderation_status === 'paid',
+        earnings: null, // Twitter uses points, not direct earnings
+        bonus_paid: false,
+        bonus_amount: 0,
+        other_stats: {
+          base_points: tweet.points || 0,
+          manual_points_adjustment: tweet.manual_points_adjustment || 0
+        },
+        manual_points_adjustment: tweet.manual_points_adjustment || 0,
+        views: 0 // Twitter doesn't use views
+      })) || [];
+
+      console.log(`[Twitter CPM Budget] Mapped ${submissions.length} submissions for budget calculation:`, submissions.slice(0, 2));
+
+      // Calculate actual budget spent using Twitter CPM formula
+      const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
+        submissions,
+        contest.contest_based_details.cpm_contest.cpm_rate_usd,
+        contest.contest_based_details.cpm_contest.max_earnings_per_creator,
+        contest.contest_based_details.cpm_contest.min_views,
+        contest.contest_based_details.cpm_contest.max_views
+      );
+
+      // Update the contest object with calculated budget spent
+      updatedContest = {
+        ...updatedContest,
+        contest_based_details: {
+          ...updatedContest.contest_based_details,
+          cpm_contest: {
+            ...updatedContest.contest_based_details.cpm_contest,
             budget_spent: Math.round(actualBudgetSpent * 100) // Convert to cents
           }
         },

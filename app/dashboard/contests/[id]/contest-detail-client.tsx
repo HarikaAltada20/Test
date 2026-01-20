@@ -582,12 +582,30 @@ export default function ContestDetailClient({
         let calculatedBasePoints = 0;
         creatorSubmissions.forEach((submission: any) => {
           const status =
-            (submission.is_twitter_tweet &&
-              (submission as any).moderation_status) ||
+            (submission.is_twitter_tweet && submission.moderation_status) ||
             submission.status;
           // Only count pending or verified submissions (not rejected)
           if (status !== "rejected") {
-            calculatedBasePoints += submission.other_stats?.base_points || 0;
+            const submissionBasePoints =
+              submission.other_stats?.base_points || 0;
+            calculatedBasePoints += submissionBasePoints;
+
+            // DEBUG: Log each submission's base points contribution for Twitter CPM
+            if (
+              currentContest?.contest_type === "cpm" &&
+              currentContest?.platform === "twitter"
+            ) {
+              console.log(
+                `[contest-detail-client] Adding base points for submission ${submission.id}:`,
+                {
+                  submissionId: submission.id,
+                  basePoints: submissionBasePoints,
+                  otherStats: submission.other_stats,
+                  status: status,
+                  runningTotal: calculatedBasePoints,
+                }
+              );
+            }
           }
         });
 
@@ -802,48 +820,56 @@ export default function ContestDetailClient({
         : submission.status?.toLowerCase() || "pending";
 
       // Map Twitter moderation_status to standard status for counting
-      const normalizedStatus = isTwitterTweet
-        ? status === "approved"
-          ? "verified"
-          : status === "rejected"
-          ? "rejected"
-          : "pending"
-        : status;
+      let normalizedStatus = status;
+      if (isTwitterTweet) {
+        if (status === "approved" || status === "verified") {
+          normalizedStatus = "verified";
+        } else if (status === "rejected") {
+          normalizedStatus = "rejected";
+        } else {
+          normalizedStatus = "pending";
+        }
+      }
 
       group.statusCounts.all++;
       if (normalizedStatus === "verified" || normalizedStatus === "approved") {
         group.statusCounts.verified++;
         if (submission.paid) group.statusCounts.verified_paid++;
-        
+
         // Get flat_fee_bonus from the correct nested location
         const flatFeeBonus =
           currentContest?.contest_type === "cpm"
             ? (currentContest?.contest_based_details as any)?.cpm_contest
                 ?.flat_fee_bonus || 0
-            : (currentContest?.contest_based_details as any)?.leaderboard_contest
-                ?.flat_fee_bonus || 0;
+            : (currentContest?.contest_based_details as any)
+                ?.leaderboard_contest?.flat_fee_bonus || 0;
 
         // Calculate bonus with budget constraints
         if (flatFeeBonus > 0) {
           // Check budget constraints before adding expected bonus
-          const totalBudget = currentContest?.contest_type === "cpm"
-            ? (currentContest?.contest_based_details as any)?.cpm_contest?.total_budget || 0
-            : (currentContest?.contest_based_details as any)?.leaderboard_contest?.total_budget || 0;
-          
+          const totalBudget =
+            currentContest?.contest_type === "cpm"
+              ? (currentContest?.contest_based_details as any)?.cpm_contest
+                  ?.total_budget || 0
+              : (currentContest?.contest_based_details as any)
+                  ?.leaderboard_contest?.total_budget || 0;
+
           // For CPM contests, check flat_fee_bonus_cap if configured
-          const bonusBudget = currentContest?.contest_type === "cpm" 
-            ? ((currentContest?.contest_based_details as any)?.cpm_contest?.flat_fee_bonus_cap || totalBudget)
-            : totalBudget;
-          
+          const bonusBudget =
+            currentContest?.contest_type === "cpm"
+              ? (currentContest?.contest_based_details as any)?.cpm_contest
+                  ?.flat_fee_bonus_cap || totalBudget
+              : totalBudget;
+
           // Calculate current total expected bonuses across all creators processed so far
           let currentTotalExpectedBonus = 0;
           Object.values(acc).forEach((g: any) => {
             currentTotalExpectedBonus += g.bonus.expected;
           });
-          
+
           // Calculate remaining budget for bonuses
           const remainingBudget = bonusBudget - currentTotalExpectedBonus;
-          
+
           if (remainingBudget > 0) {
             if (remainingBudget >= flatFeeBonus) {
               // Full bonus can be granted
@@ -861,10 +887,67 @@ export default function ContestDetailClient({
           currentContest?.contest_type === "cpm"
             ? (currentContest?.contest_based_details as any)?.cpm_contest
                 ?.flat_fee_bonus || 0
-            : (currentContest?.contest_based_details as any)?.leaderboard_contest
-                ?.flat_fee_bonus || 0;
+            : (currentContest?.contest_based_details as any)
+                ?.leaderboard_contest?.flat_fee_bonus || 0;
         const actualBonus = (submission as any).bonus_amount || flatFeeBonus;
         group.bonus.granted += actualBonus;
+      }
+
+      // ACCUMULATE METRICS from each submission - THIS WAS MISSING!
+      if (isTwitterTweet) {
+        // For Twitter tweets, accumulate Twitter-specific metrics
+        group.metrics.likes += submission.other_stats?.likes || 0;
+        group.metrics.comments += submission.other_stats?.replies || 0;
+        group.metrics.retweets += submission.other_stats?.retweets || 0;
+        group.metrics.quote_reposts +=
+          submission.other_stats?.quote_reposts || 0;
+        group.metrics.impressions += submission.other_stats?.impressions || 0;
+
+        // For Twitter CPM contests, accumulate points and base_points
+        const submissionBasePoints = submission.other_stats?.base_points || 0;
+        const submissionManualPoints =
+          (submission as any).manual_points_adjustment || 0;
+        const submissionTotalPoints = submission.other_stats?.points || 0;
+
+        group.metrics.base_points += submissionBasePoints;
+        group.metrics.points += submissionTotalPoints;
+
+        // Add manual points adjustment to the existing manual_points_adjustment
+        group.metrics.manual_points_adjustment += submissionManualPoints;
+
+        // DEBUG: Log metrics accumulation for Twitter CPM
+        if (
+          currentContest?.contest_type === "cpm" &&
+          currentContest?.platform === "twitter"
+        ) {
+          console.log(
+            `[contest-detail-client] Accumulating metrics for Twitter CPM submission ${submission.id}:`,
+            {
+              submissionId: submission.id,
+              creatorId: creatorId,
+              basePoints: submissionBasePoints,
+              manualPoints: submissionManualPoints,
+              totalPoints: submissionTotalPoints,
+              runningBasePoints: group.metrics.base_points,
+              runningPoints: group.metrics.points,
+              runningManualPoints: group.metrics.manual_points_adjustment,
+              otherStats: submission.other_stats,
+            }
+          );
+        }
+      } else {
+        // For non-Twitter submissions, accumulate regular metrics
+        group.metrics.views += submission.views || 0;
+        group.metrics.likes += submission.other_stats?.likes || 0;
+        group.metrics.comments += submission.other_stats?.comments || 0;
+        group.metrics.shares += submission.other_stats?.shares || 0;
+        group.metrics.saves += submission.other_stats?.saves || 0;
+        group.metrics.reach += submission.other_stats?.reach || 0;
+        group.metrics.interactions += submission.other_stats?.interactions || 0;
+
+        // For regular submissions, accumulate base_points and points
+        group.metrics.base_points += submission.other_stats?.base_points || 0;
+        group.metrics.points += submission.other_stats?.points || 0;
       }
 
       // Track earliest submission
@@ -920,9 +1003,118 @@ export default function ContestDetailClient({
       });
     }
 
-    // Apply earnings cap per creator for expected earnings display
+    // Calculate earnings for Twitter CPM contests based on CPM rate and points
+    const isTwitterCpmContest =
+      (currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+      currentContest?.contest_format === "text_image" &&
+      currentContest?.contest_type === "cpm";
+
+    if (isTwitterCpmContest) {
+      const cpmConfig = (currentContest?.contest_based_details as any)
+        ?.cpm_contest;
+      const cpmRate = cpmConfig?.cpm_rate_usd || 0;
+      const maxEarningsPerCreator = cpmConfig?.max_earnings_per_creator || null;
+
+      if (cpmRate > 0) {
+        Object.values(grouped).forEach((group: any) => {
+          // Calculate earnings based on total points (base + manual)
+          const totalPoints = group.metrics.points || 0;
+          const calculatedEarnings = (totalPoints * cpmRate) / 1000; // Convert to dollars
+          const earningsInCents = Math.round(calculatedEarnings * 100); // Convert to cents
+
+          // Apply creator cap if configured
+          let finalExpectedEarnings = earningsInCents;
+          if (
+            maxEarningsPerCreator &&
+            earningsInCents > maxEarningsPerCreator
+          ) {
+            finalExpectedEarnings = maxEarningsPerCreator;
+            group.isCapped = true;
+          }
+
+          group.earnings.expected = finalExpectedEarnings;
+
+          // DEBUG: Log earnings calculation for Twitter CPM
+          console.log(
+            `[contest-detail-client] Calculated earnings for Twitter CPM creator ${group.creator.id}:`,
+            {
+              creatorId: group.creator.id,
+              totalPoints: totalPoints,
+              cpmRate: cpmRate,
+              calculatedEarnings: calculatedEarnings,
+              earningsInCents: earningsInCents,
+              maxEarningsPerCreator: maxEarningsPerCreator,
+              finalExpectedEarnings: finalExpectedEarnings,
+              isCapped: group.isCapped,
+            }
+          );
+        });
+      }
+    }
+
+    // Calculate bonus for Twitter CPM contests based on flat_fee_bonus
+    if (isTwitterCpmContest) {
+      const cpmConfig = (currentContest?.contest_based_details as any)
+        ?.cpm_contest;
+      const flatFeeBonus = cpmConfig?.flat_fee_bonus || 0;
+      const totalBudget = cpmConfig?.total_budget || 0;
+      const bonusBudget = cpmConfig?.flat_fee_bonus_cap || totalBudget;
+
+      if (flatFeeBonus > 0) {
+        // Calculate current total expected bonuses across all creators
+        let currentTotalExpectedBonus = 0;
+        Object.values(grouped).forEach((group: any) => {
+          currentTotalExpectedBonus += group.bonus.expected;
+        });
+
+        // Calculate remaining budget for bonuses
+        const remainingBudget = bonusBudget - currentTotalExpectedBonus;
+
+        // Assign bonus to verified creators only
+        Object.values(grouped).forEach((group: any) => {
+          // For Twitter CPM contests, check if creator has verified submissions
+          // rather than relying on creator_moderation_status which might not be set
+          const hasVerifiedSubmissions = group.statusCounts.verified > 0;
+          const isVerified =
+            hasVerifiedSubmissions ||
+            group.creator_moderation_status === "verified";
+
+          if (isVerified && remainingBudget > 0) {
+            if (remainingBudget >= flatFeeBonus) {
+              // Full bonus can be granted
+              group.bonus.expected = flatFeeBonus;
+              currentTotalExpectedBonus += flatFeeBonus;
+            } else {
+              // Only partial bonus remaining - distribute the remaining amount
+              group.bonus.expected = remainingBudget;
+              currentTotalExpectedBonus = 0; // Budget exhausted
+            }
+          }
+
+          // DEBUG: Log bonus calculation for Twitter CPM
+          console.log(
+            `[contest-detail-client] Calculated bonus for Twitter CPM creator ${group.creator.id}:`,
+            {
+              creatorId: group.creator.id,
+              creatorStatus: group.creator_moderation_status,
+              hasVerifiedSubmissions: hasVerifiedSubmissions,
+              isVerified: isVerified,
+              statusCounts: group.statusCounts,
+              flatFeeBonus: flatFeeBonus,
+              totalBudget: totalBudget,
+              bonusBudget: bonusBudget,
+              remainingBudget: remainingBudget,
+              expectedBonus: group.bonus.expected,
+            }
+          );
+        });
+      }
+    }
+
+    // Apply earnings cap per creator for expected earnings display (for non-CPM contests)
     const maxEarnings = currentContest?.max_earnings_per_creator;
-    if (maxEarnings && maxEarnings > 0) {
+    if (maxEarnings && maxEarnings > 0 && !isTwitterCpmContest) {
       Object.values(grouped).forEach((group: any) => {
         if (group.earnings.expected > maxEarnings) {
           group.isCapped = true;
@@ -941,15 +1133,45 @@ export default function ContestDetailClient({
 
     if (isTwitterContest) {
       Object.values(grouped).forEach((group: any) => {
-        // Calculate total points: base_points + manual_points_adjustment
-        group.metrics.points =
+        // For Twitter contests, ensure points = base_points + manual_points_adjustment
+        // But don't overwrite if we already have the correct accumulated points
+        const calculatedTotalPoints =
           (group.metrics.base_points || 0) +
           (group.metrics.manual_points_adjustment || 0);
+
+        // DEBUG: Log final points calculation for Twitter CPM
+        if (
+          currentContest?.contest_type === "cpm" &&
+          currentContest?.platform === "twitter"
+        ) {
+          console.log(
+            `[contest-detail-client] Final points calculation for Twitter CPM creator ${group.creator.id}:`,
+            {
+              creatorId: group.creator.id,
+              basePoints: group.metrics.base_points,
+              manualPointsAdjustment: group.metrics.manual_points_adjustment,
+              calculatedTotalPoints: calculatedTotalPoints,
+              currentPoints: group.metrics.points,
+              willOverwrite: group.metrics.points !== calculatedTotalPoints,
+            }
+          );
+        }
+
+        // Only set if different (to avoid overwriting accumulated points)
+        if (group.metrics.points !== calculatedTotalPoints) {
+          group.metrics.points = calculatedTotalPoints;
+        }
       });
     }
 
     return Object.values(grouped);
-  }, [filteredSubmissions, viewMode, currentContest, activeStatusTab, creatorModerationData]);
+  }, [
+    filteredSubmissions,
+    viewMode,
+    currentContest,
+    activeStatusTab,
+    creatorModerationData,
+  ]);
 
   // Creator ranking for Twitter leaderboard contests (based on total points per creator)
   const creatorRankingMap = useMemo(() => {
