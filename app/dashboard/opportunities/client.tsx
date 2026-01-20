@@ -83,6 +83,18 @@ type SortOptionType =
   | "submissions_desc"
   | "submissions_asc";
 
+const getBudgetTrackerValues = (
+  totalBudget: number,
+  budgetSpent?: number | null
+) => {
+  const spent = Math.max(0, budgetSpent ?? 0);
+  const clampedSpent = Math.min(spent, totalBudget);
+  const percentage = totalBudget > 0 ? (clampedSpent / totalBudget) * 100 : 0;
+  const remaining = Math.max(totalBudget - clampedSpent, 0);
+
+  return { spent: clampedSpent, percentage, remaining };
+};
+
 export default function OpportunitiesPage({
   user,
 }: {
@@ -2658,11 +2670,15 @@ export default function OpportunitiesPage({
                         const totalBudget =
                           contest.contest_based_details.leaderboard_contest
                             .total_budget;
-                        const budgetSpent =
+                        const leaderboardBudgetSpent =
                           contest.contest_based_details.leaderboard_contest
                             .budget_spent || 0;
-                        const percentage = (budgetSpent / totalBudget) * 100;
-                        const remaining = totalBudget - budgetSpent;
+                        const tracker = getBudgetTrackerValues(
+                          totalBudget,
+                          leaderboardBudgetSpent
+                        );
+                        const percentage = tracker.percentage;
+                        const remaining = tracker.remaining;
 
                         return (
                           <div className="mt-3 mb-3">
@@ -2677,14 +2693,14 @@ export default function OpportunitiesPage({
                                 Flat Fee Bonus Budget Tracker
                               </span>
                               <span className="font-semibold">
-                                {formatMoney(budgetSpent)} /{" "}
+                                {formatMoney(tracker.spent)} /{" "}
                                 {formatMoney(totalBudget)}
                               </span>
                             </div>
                             <div
                               className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
                               title={`Flat Fee Bonus Budget Spent: ${formatMoney(
-                                budgetSpent
+                                tracker.spent
                               )}`}
                             >
                               <div

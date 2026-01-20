@@ -1694,37 +1694,13 @@ export default function CreateContestPage({
             }
           } else {
             // For non-raid campaigns, check all metrics including likes and impressions
-            // Validate that Twitter points fields are not empty - must be 0 or a positive number
+            // Normalize Twitter points inputs (blank => 0) so unused metrics can be skipped
             const likesWeightStr = twitterPointsConfig.likesWeight
               .toString()
               .trim();
             const impressionsWeightStr = twitterPointsConfig.impressionsWeight
               .toString()
               .trim();
-
-            if (
-              likesWeightStr === "" ||
-              likesWeightStr === null ||
-              likesWeightStr === undefined
-            ) {
-              return {
-                isValid: false,
-                error:
-                  "Likes points cannot be empty. Please enter a value (use 0 if you don't want likes to count towards points).",
-              };
-            }
-
-            if (
-              impressionsWeightStr === "" ||
-              impressionsWeightStr === null ||
-              impressionsWeightStr === undefined
-            ) {
-              return {
-                isValid: false,
-                error:
-                  "Views points cannot be empty. Please enter a value (use 0 if you don't want views to count towards points).",
-              };
-            }
 
             // When engagement multiplier sections are enabled, all multiplier fields must be filled (0 allowed)
             if (showCommentMultipliers) {
@@ -2260,43 +2236,13 @@ export default function CreateContestPage({
         // For raid campaigns, don't save likes_weight and impressions_weight
         const pointsConfig: any = {};
         if (contentType !== "raid") {
-          // Validate that Twitter points fields are not empty - must be 0 or a positive number
+          // Normalize Twitter points inputs (blank => 0) so users can skip metrics they don't need
           const likesWeightStr = twitterPointsConfig.likesWeight
             .toString()
             .trim();
           const impressionsWeightStr = twitterPointsConfig.impressionsWeight
             .toString()
             .trim();
-
-          if (!isDraft) {
-            if (
-              likesWeightStr === "" ||
-              likesWeightStr === null ||
-              likesWeightStr === undefined
-            ) {
-              setFormFeedback(
-                "Likes points cannot be empty. Please enter a value (use 0 if you don't want likes to count towards points)."
-              );
-              setFormFeedbackType("error");
-              setIsLoading(false);
-              setUploadProgress(null);
-              return;
-            }
-
-            if (
-              impressionsWeightStr === "" ||
-              impressionsWeightStr === null ||
-              impressionsWeightStr === undefined
-            ) {
-              setFormFeedback(
-                "Views points cannot be empty. Please enter a value (use 0 if you don't want views to count towards points)."
-              );
-              setFormFeedbackType("error");
-              setIsLoading(false);
-              setUploadProgress(null);
-              return;
-            }
-          }
 
           const likesWeight = parseFloat(likesWeightStr) || 0;
           const impressionsWeight = parseFloat(impressionsWeightStr) || 0;
@@ -6365,7 +6311,8 @@ export default function CreateContestPage({
                               htmlFor="showCommentMultipliers"
                               className="text-sm cursor-pointer"
                             >
-                          Keep all values set to 0 if you do not want to award points for comment engagement.
+                              Keep all values set to 0 if you do not want to
+                              award points for comment engagement.
                             </Label>
                           </div>
                           {showCommentMultipliers && (
@@ -6376,7 +6323,7 @@ export default function CreateContestPage({
                               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                                 <div className="space-y-2">
                                   <Label htmlFor="commentLikesMultiplier">
-                                    Likes 
+                                    Likes
                                   </Label>
                                   <Input
                                     id="commentLikesMultiplier"
@@ -6402,7 +6349,7 @@ export default function CreateContestPage({
                                 </div>
                                 <div className="space-y-2">
                                   <Label htmlFor="commentRepliesMultiplier">
-                                    Replies 
+                                    Replies
                                   </Label>
                                   <Input
                                     id="commentRepliesMultiplier"
@@ -6428,7 +6375,7 @@ export default function CreateContestPage({
                                 </div>
                                 <div className="space-y-2">
                                   <Label htmlFor="commentImpressionsMultiplier">
-                                    Impressions 
+                                    Impressions
                                   </Label>
                                   <Input
                                     id="commentImpressionsMultiplier"
@@ -6454,7 +6401,7 @@ export default function CreateContestPage({
                                 </div>
                                 <div className="space-y-2">
                                   <Label htmlFor="commentRetweetsMultiplier">
-                                    Retweets 
+                                    Retweets
                                   </Label>
                                   <Input
                                     id="commentRetweetsMultiplier"
@@ -6480,7 +6427,7 @@ export default function CreateContestPage({
                                 </div>
                                 <div className="space-y-2">
                                   <Label htmlFor="commentQuoteRepostsMultiplier">
-                                    Quote Reposts 
+                                    Quote Reposts
                                   </Label>
                                   <Input
                                     id="commentQuoteRepostsMultiplier"
@@ -6549,7 +6496,8 @@ export default function CreateContestPage({
                               htmlFor="showRetweetMultipliers"
                               className="text-sm cursor-pointer"
                             >
-                            Keep all values set to 0 if you do not want to award points for retweet engagement
+                              Keep all values set to 0 if you do not want to
+                              award points for retweet engagement
                             </Label>
                           </div>
                           {showRetweetMultipliers && (
@@ -6560,7 +6508,7 @@ export default function CreateContestPage({
                               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                                 <div className="space-y-2">
                                   <Label htmlFor="retweetLikesMultiplier">
-                                    Likes 
+                                    Likes
                                   </Label>
                                   <Input
                                     id="retweetLikesMultiplier"
@@ -6638,7 +6586,7 @@ export default function CreateContestPage({
                                 </div>
                                 <div className="space-y-2">
                                   <Label htmlFor="retweetRetweetsMultiplier">
-                                    Retweets 
+                                    Retweets
                                   </Label>
                                   <Input
                                     id="retweetRetweetsMultiplier"
@@ -6664,7 +6612,7 @@ export default function CreateContestPage({
                                 </div>
                                 <div className="space-y-2">
                                   <Label htmlFor="retweetQuoteRepostsMultiplier">
-                                    Quote Reposts 
+                                    Quote Reposts
                                   </Label>
                                   <Input
                                     id="retweetQuoteRepostsMultiplier"
@@ -6733,7 +6681,8 @@ export default function CreateContestPage({
                               htmlFor="showQuoteRepostMultipliers"
                               className="text-sm cursor-pointer"
                             >
-                              Keep all values set to 0 if you do not want to award points for quote repost engagement.
+                              Keep all values set to 0 if you do not want to
+                              award points for quote repost engagement.
                             </Label>
                           </div>
                           {showQuoteRepostMultipliers && (
@@ -6744,7 +6693,7 @@ export default function CreateContestPage({
                               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                                 <div className="space-y-2">
                                   <Label htmlFor="quoteRepostLikesMultiplier">
-                                    Likes 
+                                    Likes
                                   </Label>
                                   <Input
                                     id="quoteRepostLikesMultiplier"
@@ -6796,7 +6745,7 @@ export default function CreateContestPage({
                                 </div>
                                 <div className="space-y-2">
                                   <Label htmlFor="quoteRepostImpressionsMultiplier">
-                                    Impressions 
+                                    Impressions
                                   </Label>
                                   <Input
                                     id="quoteRepostImpressionsMultiplier"
@@ -6822,7 +6771,7 @@ export default function CreateContestPage({
                                 </div>
                                 <div className="space-y-2">
                                   <Label htmlFor="quoteRepostRetweetsMultiplier">
-                                    Retweets 
+                                    Retweets
                                   </Label>
                                   <Input
                                     id="quoteRepostRetweetsMultiplier"
