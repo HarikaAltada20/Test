@@ -6,7 +6,9 @@ export const dynamic = 'force-dynamic'; // Ensures the route is not statically c
 
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
-    const code = searchParams.get('code');
+    // Doc: "#_" appended to redirect URI is not part of the code; searchParams excludes fragment, but strip defensively
+    const rawCode = searchParams.get('code');
+    const code = rawCode ? rawCode.replace(/#_.*$/, '').trim() : null;
     const errorParam = searchParams.get('error');
     const errorDescription = searchParams.get('error_description');
 
@@ -74,7 +76,12 @@ export async function GET(request: NextRequest) {
             throw new Error(tokenData.error_message || `Failed to exchange code for token. Status: ${tokenExchangeRes.status}`);
         }
 
-        const { access_token: short_lived_user_access_token, user_id: instagram_user_id_from_token_exchange } = tokenData;
+        // Official Business login docs: success is { data: [ { access_token, user_id, permissions } ] }
+        const payload = Array.isArray(tokenData.data) && tokenData.data[0]
+            ? tokenData.data[0]
+            : tokenData;
+        const short_lived_user_access_token = payload.access_token;
+        const instagram_user_id_from_token_exchange = payload.user_id;
 
         if (!short_lived_user_access_token || !instagram_user_id_from_token_exchange) {
             throw new Error('Short-lived User Access token or Instagram User ID not received from Instagram token exchange.');
