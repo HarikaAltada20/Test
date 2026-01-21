@@ -268,6 +268,9 @@ export function ContestListClient({
   const isMountedRef = useRef(true);
 
   const fetchLatestContests = useCallback(async () => {
+    if (isAdminView) {
+      return;
+    }
     try {
       const response = await fetch("/api/contests/list", {
         cache: "no-store",
@@ -290,7 +293,7 @@ export function ContestListClient({
     } catch (error) {
       console.error("[ContestListClient] Error refreshing contests:", error);
     }
-  }, []);
+  }, [isAdminView]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -304,12 +307,20 @@ export function ContestListClient({
   }, [initialContests]);
 
   useEffect(() => {
+    if (isAdminView) {
+      return;
+    }
+
     fetchLatestContests();
     const intervalId = window.setInterval(fetchLatestContests, 30000);
     return () => window.clearInterval(intervalId);
-  }, [fetchLatestContests]);
+  }, [fetchLatestContests, isAdminView]);
 
   useEffect(() => {
+    if (isAdminView) {
+      return;
+    }
+
     const handleContestRefresh = () => {
       fetchLatestContests();
     };
@@ -318,7 +329,7 @@ export function ContestListClient({
     return () => {
       window.removeEventListener("contests:refresh", handleContestRefresh);
     };
-  }, [fetchLatestContests]);
+  }, [fetchLatestContests, isAdminView]);
 
   const availablePlatforms = useMemo(() => {
     const platforms = new Set(
