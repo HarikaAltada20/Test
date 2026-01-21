@@ -1720,6 +1720,18 @@ export default function ContestDetailClient({
       const toastConfig = getToastConfig(newStatus);
       console.log("🎉 Calling toast with config:", toastConfig);
       toast(toastConfig);
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("contests:refresh", {
+            detail: {
+              contestId,
+              submissionId,
+              newStatus,
+            },
+          })
+        );
+      }
     } catch (error: any) {
       console.error("Error updating submission status:", error);
 

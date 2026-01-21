@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useLayoutEffect } from "react";
+import { useCallback, useEffect, useState, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ import {
   Film,
   FileType,
 } from "lucide-react";
-import { User, UserResponse } from "@supabase/supabase-js";
+import { UserResponse } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { createClient } from "@/utils/supabase/client";
@@ -310,7 +310,7 @@ export default function OpportunitiesPage({
     }
   }, [user?.id]);
 
-  useEffect(() => {
+  const fetchOpportunities = useCallback(async () => {
     if (!user) {
       console.log(
         "OpportunitiesPage: No user found after auth load, redirecting to signin."
@@ -319,559 +319,544 @@ export default function OpportunitiesPage({
       return;
     }
 
-    async function fetchData(currentUser: User) {
-      setIsFetchingData(true);
+    setIsFetchingData(true);
+
+    try {
+      const locationCacheKey = "user_location";
+      const locationTimestampKey = "user_location_timestamp";
+      const cachedLocation = localStorage.getItem(locationCacheKey);
+      const cachedLocationTimestamp =
+        localStorage.getItem(locationTimestampKey);
+
+      const isLocationCacheValid =
+        cachedLocationTimestamp &&
+        Date.now() - parseInt(cachedLocationTimestamp) < 24 * 60 * 60 * 1000;
+
+      let userCountries: string[] = [];
+      let currentUserCountry: string | null = null;
+      let currentUserRegion: string | null = null;
 
       try {
-        // Fetch user location - check database first, then API if needed
-        const locationCacheKey = "user_location";
-        const locationTimestampKey = "user_location_timestamp";
-        const cachedLocation = localStorage.getItem(locationCacheKey);
-        const cachedLocationTimestamp =
-          localStorage.getItem(locationTimestampKey);
-
-        // Check if cache is still valid (24 hours)
-        const isLocationCacheValid =
-          cachedLocationTimestamp &&
-          Date.now() - parseInt(cachedLocationTimestamp) < 24 * 60 * 60 * 1000;
-
-        // Use local variable for filtering (state updates are async)
-        // Support multiple countries - both registration info and creator profile will work together
-        let userCountries: string[] = [];
-        let currentUserCountry: string | null = null;
-        let currentUserRegion: string | null = null;
-
-        // Collect countries from both sources - both will work together
-        //  get country from registration_info
-        try {
-          const { data: userProfile, error: profileError } = await supabase
-            .from("users")
-            .select("registration_info")
-            .eq("id", currentUser.id)
-            .single();
-
-          if (!profileError && userProfile) {
-            // Get country from registration_info JSONB
-            let extractedCountry = null;
-            if (userProfile.registration_info) {
-              const registrationInfo = userProfile.registration_info as Record<
-                string,
-                any
-              >;
-              extractedCountry = registrationInfo.country || null;
-            }
-
-            // Add registration info country to the list if available
-            if (extractedCountry) {
-              userCountries.push(extractedCountry);
-              // Set as primary country for state (first one found)
-              if (!currentUserCountry) {
-                currentUserCountry = extractedCountry;
-                currentUserRegion = getRegionForCountry(extractedCountry);
-              }
-            }
-          } else if (profileError) {
-            console.error(
-              "Error fetching location from database:",
-              profileError
-            );
-          }
-        } catch (dbError) {
-          console.error("Error fetching location from database:", dbError);
-        }
-
-        //  get country from creator profile (add to list if different)
-        try {
-          const { data: creatorProfileData, error: creatorProfileError } =
-            await supabase
-              .from("creator_profiles")
-              .select("country")
-              .eq("id", currentUser.id)
-              .single();
-
-          if (!creatorProfileError && creatorProfileData?.country) {
-            // Add creator profile country if it's different from registration info
-            if (
-              creatorProfileData.country &&
-              !userCountries.includes(creatorProfileData.country)
-            ) {
-              userCountries.push(creatorProfileData.country);
-            }
-            // Set as primary if no country set yet
-            if (!currentUserCountry && creatorProfileData.country) {
-              currentUserCountry = creatorProfileData.country;
-              currentUserRegion = getRegionForCountry(
-                creatorProfileData.country
-              );
-            }
-          }
-        } catch (creatorProfileError) {
-          console.error(
-            "Error fetching creator profile country:",
-            creatorProfileError
-          );
-        }
-
-        // Update state with primary country (for display purposes)
-        if (currentUserCountry) {
-          setUserCountry(currentUserCountry);
-          setUserRegion(currentUserRegion);
-          // Cache it
-          const locationData = {
-            country: currentUserCountry,
-            region: currentUserRegion,
-            countries: userCountries, // Store all countries
-          };
-          localStorage.setItem(locationCacheKey, JSON.stringify(locationData));
-          localStorage.setItem(locationTimestampKey, Date.now().toString());
-        }
-
-        // Always fetch location from API to refresh/update location
-        // This ensures location is updated when user logs in from different location
-        // The API will decide whether to update based on IP changes, country changes, etc.
-        // If no country found in database, use cache as fallback for immediate display
-        if (userCountries.length === 0) {
-          if (cachedLocation && isLocationCacheValid) {
-            try {
-              const locationData = JSON.parse(cachedLocation);
-              if (locationData.country) {
-                userCountries.push(locationData.country);
-                currentUserCountry = locationData.country;
-                currentUserRegion = locationData.region;
-                setUserCountry(locationData.country);
-                setUserRegion(locationData.region);
-              }
-            } catch (e) {
-              console.error("Error parsing cached location:", e);
-            }
-          }
-        }
-
-        // Always call API to refresh/update location (even if we already have a country)
-        // This ensures location is updated when user logs in with different account
-        // The API will update the database if IP changed, country changed, or location is stale
-        try {
-          const locationResponse = await fetch("/api/get-location");
-          if (locationResponse.ok) {
-            const locationData = await locationResponse.json();
-            if (locationData.country) {
-              // Add to countries list if not already present
-              if (!userCountries.includes(locationData.country)) {
-                userCountries.push(locationData.country);
-              }
-
-              // Update current country if it changed or if we didn't have one
-              if (
-                !currentUserCountry ||
-                currentUserCountry !== locationData.country
-              ) {
-                currentUserCountry = locationData.country;
-                currentUserRegion = locationData.region;
-                setUserCountry(locationData.country);
-                setUserRegion(locationData.region);
-              }
-
-              // Cache the location
-              const locationCacheData = {
-                country: locationData.country,
-                region: locationData.region,
-                countries: userCountries,
-              };
-              localStorage.setItem(
-                locationCacheKey,
-                JSON.stringify(locationCacheData)
-              );
-              localStorage.setItem(locationTimestampKey, Date.now().toString());
-            }
-          }
-        } catch (locationError) {
-          console.error("Error fetching user location:", locationError);
-          // Continue without location filtering if API fails
-        }
-
-        const { data: userData, error: userError } = await supabase
+        const { data: userProfile, error: profileError } = await supabase
           .from("users")
-          .select("user_type")
-          .eq("id", currentUser.id)
+          .select("registration_info")
+          .eq("id", user.id)
           .single();
 
-        if (userError) {
-          console.error("Error fetching user type:", userError);
-          setIsFetchingData(false);
-          setAvailableContests([]);
-          return;
+        if (!profileError && userProfile) {
+          let extractedCountry = null;
+          if (userProfile.registration_info) {
+            const registrationInfo = userProfile.registration_info as Record<
+              string,
+              any
+            >;
+            extractedCountry = registrationInfo.country || null;
+          }
+
+          if (extractedCountry) {
+            userCountries.push(extractedCountry);
+            if (!currentUserCountry) {
+              currentUserCountry = extractedCountry;
+              currentUserRegion = getRegionForCountry(extractedCountry);
+            }
+          }
+        } else if (profileError) {
+          console.error("Error fetching location from database:", profileError);
         }
+      } catch (dbError) {
+        console.error("Error fetching location from database:", dbError);
+      }
 
-        if (userData?.user_type === "advertiser") {
-          console.log(
-            "OpportunitiesPage: Advertiser detected, redirecting to contests."
-          );
-          router.push("/dashboard/contests");
-          return;
+      try {
+        const { data: creatorProfileData, error: creatorProfileError } =
+          await supabase
+            .from("creator_profiles")
+            .select("country")
+            .eq("id", user.id)
+            .single();
+
+        if (!creatorProfileError && creatorProfileData?.country) {
+          if (!userCountries.includes(creatorProfileData.country)) {
+            userCountries.push(creatorProfileData.country);
+          }
+          if (!currentUserCountry) {
+            currentUserCountry = creatorProfileData.country;
+            currentUserRegion = getRegionForCountry(creatorProfileData.country);
+          }
         }
+      } catch (creatorProfileError) {
+        console.error(
+          "Error fetching creator profile country:",
+          creatorProfileError
+        );
+      }
 
-        // Smart guidelines check with caching
-        const guidelinesCacheKey = `guidelines_${currentUser.id}`;
-        const guidelinesTimestampKey = `guidelines_timestamp_${currentUser.id}`;
-        const cachedGuidelines = localStorage.getItem(guidelinesCacheKey);
-        const cachedTimestamp = localStorage.getItem(guidelinesTimestampKey);
+      if (currentUserCountry) {
+        setUserCountry(currentUserCountry);
+        setUserRegion(currentUserRegion);
+        const locationData = {
+          country: currentUserCountry,
+          region: currentUserRegion,
+          countries: userCountries,
+        };
+        localStorage.setItem(locationCacheKey, JSON.stringify(locationData));
+        localStorage.setItem(locationTimestampKey, Date.now().toString());
+      }
 
-        // Check if cache is still valid (24 hours)
-        const isCacheValid =
-          cachedTimestamp &&
-          Date.now() - parseInt(cachedTimestamp) < 24 * 60 * 60 * 1000;
+      if (
+        userCountries.length === 0 &&
+        cachedLocation &&
+        isLocationCacheValid
+      ) {
+        try {
+          const locationData = JSON.parse(cachedLocation);
+          if (locationData.country) {
+            userCountries.push(locationData.country);
+            currentUserCountry = locationData.country;
+            currentUserRegion = locationData.region;
+            setUserCountry(locationData.country);
+            setUserRegion(locationData.region);
+          }
+        } catch (e) {
+          console.error("Error parsing cached location:", e);
+        }
+      }
 
-        if (cachedGuidelines === "true" && isCacheValid) {
-          // User has seen guidelines - no need to query database
-          setProfile({ has_seen_guidelines: true });
-          setHasCheckedGuidelines(true);
-        } else if (cachedGuidelines === "false" && isCacheValid) {
-          // User hasn't seen guidelines - show modal
+      try {
+        const locationResponse = await fetch("/api/get-location");
+        if (locationResponse.ok) {
+          const locationData = await locationResponse.json();
+          if (locationData.country) {
+            if (!userCountries.includes(locationData.country)) {
+              userCountries.push(locationData.country);
+            }
+            if (
+              !currentUserCountry ||
+              currentUserCountry !== locationData.country
+            ) {
+              currentUserCountry = locationData.country;
+              currentUserRegion = locationData.region;
+              setUserCountry(locationData.country);
+              setUserRegion(locationData.region);
+            }
+            const locationCacheData = {
+              country: locationData.country,
+              region: locationData.region,
+              countries: userCountries,
+            };
+            localStorage.setItem(
+              locationCacheKey,
+              JSON.stringify(locationCacheData)
+            );
+            localStorage.setItem(locationTimestampKey, Date.now().toString());
+          }
+        }
+      } catch (locationError) {
+        console.error("Error fetching user location:", locationError);
+      }
+
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("user_type")
+        .eq("id", user.id)
+        .single();
+
+      if (userError) {
+        console.error("Error fetching user type:", userError);
+        setAvailableContests([]);
+        return;
+      }
+
+      if (userData?.user_type === "advertiser") {
+        console.log(
+          "OpportunitiesPage: Advertiser detected, redirecting to contests."
+        );
+        router.push("/dashboard/contests");
+        return;
+      }
+
+      const guidelinesCacheKey = `guidelines_${user.id}`;
+      const guidelinesTimestampKey = `guidelines_timestamp_${user.id}`;
+      const cachedGuidelines = localStorage.getItem(guidelinesCacheKey);
+      const cachedTimestamp = localStorage.getItem(guidelinesTimestampKey);
+
+      const isCacheValid =
+        cachedTimestamp &&
+        Date.now() - parseInt(cachedTimestamp) < 24 * 60 * 60 * 1000;
+
+      if (cachedGuidelines === "true" && isCacheValid) {
+        setProfile({ has_seen_guidelines: true });
+        setHasCheckedGuidelines(true);
+      } else if (cachedGuidelines === "false" && isCacheValid) {
+        setProfile({ has_seen_guidelines: false });
+        setShowGuidelines(true);
+        setHasCheckedGuidelines(true);
+      } else {
+        const { data: creatorProfile, error: profileError } = await supabase
+          .from("creator_profiles")
+          .select(
+            "has_seen_guidelines, country, categories, subcategories, interests"
+          )
+          .eq("id", user.id)
+          .single();
+
+        if (profileError) {
+          console.error("Error fetching creator profile:", profileError);
           setProfile({ has_seen_guidelines: false });
           setShowGuidelines(true);
-          setHasCheckedGuidelines(true);
         } else {
-          // No cache - query database once
-          const { data: creatorProfile, error: profileError } = await supabase
-            .from("creator_profiles")
-            .select(
-              "has_seen_guidelines, country, categories, subcategories, interests"
-            )
-            .eq("id", currentUser.id)
-            .single();
-
-          if (profileError) {
-            console.error("Error fetching creator profile:", profileError);
-            // Fallback: assume guidelines not seen
-            setProfile({ has_seen_guidelines: false });
+          setProfile(creatorProfile);
+          localStorage.setItem(
+            guidelinesCacheKey,
+            creatorProfile.has_seen_guidelines.toString()
+          );
+          localStorage.setItem(guidelinesTimestampKey, Date.now().toString());
+          if (creatorProfile.has_seen_guidelines === false) {
             setShowGuidelines(true);
-          } else {
-            setProfile(creatorProfile);
-            // Cache the result with timestamp
-            localStorage.setItem(
-              guidelinesCacheKey,
-              creatorProfile.has_seen_guidelines.toString()
-            );
-            localStorage.setItem(guidelinesTimestampKey, Date.now().toString());
-            if (creatorProfile.has_seen_guidelines === false) {
-              setShowGuidelines(true);
-            }
           }
-          setHasCheckedGuidelines(true);
+        }
+        setHasCheckedGuidelines(true);
+      }
+
+      let localCreatorCategories: string[] = [];
+      let localCreatorSubcategories: Record<string, string[]> = {};
+      let localCreatorInterests: string[] = [];
+
+      const { data: creatorProfileData } = await supabase
+        .from("creator_profiles")
+        .select("categories, subcategories, interests")
+        .eq("id", user.id)
+        .single();
+
+      if (creatorProfileData) {
+        if (creatorProfileData.categories) {
+          localCreatorCategories = Array.isArray(creatorProfileData.categories)
+            ? creatorProfileData.categories
+            : [];
         }
 
-        // Fetch creator's categories, subcategories, and interests for filtering
-        // Use local variables since state updates are async
-        let localCreatorCategories: string[] = [];
-        let localCreatorSubcategories: Record<string, string[]> = {};
-        let localCreatorInterests: string[] = [];
-
-        // Fetch from database
-        const { data: creatorProfileData } = await supabase
-          .from("creator_profiles")
-          .select("categories, subcategories, interests")
-          .eq("id", currentUser.id)
-          .single();
-
-        if (creatorProfileData) {
-          if (creatorProfileData.categories) {
-            localCreatorCategories = Array.isArray(
-              creatorProfileData.categories
-            )
-              ? creatorProfileData.categories
-              : [];
-          }
-
-          if (creatorProfileData.subcategories) {
-            // Handle both object format and array format
-            if (Array.isArray(creatorProfileData.subcategories)) {
-              // If it's an array of {category, subcategory} objects
-              (creatorProfileData.subcategories as any[]).forEach(
-                (item: any) => {
-                  if (item.category && item.subcategory) {
-                    if (!localCreatorSubcategories[item.category]) {
-                      localCreatorSubcategories[item.category] = [];
-                    }
-                    if (
-                      !localCreatorSubcategories[item.category].includes(
-                        item.subcategory
-                      )
-                    ) {
-                      localCreatorSubcategories[item.category].push(
-                        item.subcategory
-                      );
-                    }
-                  }
+        if (creatorProfileData.subcategories) {
+          if (Array.isArray(creatorProfileData.subcategories)) {
+            (creatorProfileData.subcategories as any[]).forEach((item: any) => {
+              if (item.category && item.subcategory) {
+                if (!localCreatorSubcategories[item.category]) {
+                  localCreatorSubcategories[item.category] = [];
                 }
-              );
-            } else if (typeof creatorProfileData.subcategories === "object") {
-              // If it's already an object
-              localCreatorSubcategories =
-                creatorProfileData.subcategories as Record<string, string[]>;
-            }
-          }
-
-          if (creatorProfileData.interests) {
-            localCreatorInterests = Array.isArray(creatorProfileData.interests)
-              ? creatorProfileData.interests
-              : [];
+                if (
+                  !localCreatorSubcategories[item.category].includes(
+                    item.subcategory
+                  )
+                ) {
+                  localCreatorSubcategories[item.category].push(
+                    item.subcategory
+                  );
+                }
+              }
+            });
+          } else if (typeof creatorProfileData.subcategories === "object") {
+            localCreatorSubcategories =
+              creatorProfileData.subcategories as Record<string, string[]>;
           }
         }
 
-        // Update state for use in scoring function
-        setCreatorCategories(localCreatorCategories);
-        setCreatorSubcategories(localCreatorSubcategories);
-        setCreatorInterests(localCreatorInterests);
+        if (creatorProfileData.interests) {
+          localCreatorInterests = Array.isArray(creatorProfileData.interests)
+            ? creatorProfileData.interests
+            : [];
+        }
+      }
 
-        const { data: contests, error: contestError } = await supabase
-          .from("contests_with_status")
-          .select(
-            `
+      setCreatorCategories(localCreatorCategories);
+      setCreatorSubcategories(localCreatorSubcategories);
+      setCreatorInterests(localCreatorInterests);
+
+      const { data: contests, error: contestError } = await supabase
+        .from("contests_with_status")
+        .select(
+          `
             *,
             contest_based_details
           `
-          )
-          .eq("moderation_status", "published") // Only show published contests
-          .not("status", "eq", "incomplete") // Exclude incomplete published contests
-          .order("created_at", { ascending: false });
+        )
+        .eq("moderation_status", "published")
+        .not("status", "eq", "incomplete")
+        .order("created_at", { ascending: false });
 
-        if (contestError) {
-          console.error("Error fetching contests:", contestError);
-          setAvailableContests([]);
-        } else {
-          // For leaderboard contests, calculate actual budget spent from submissions (CPM now uses real-time budget_spent field)
-          // For Twitter contests, fetch participant count from twitter_campaign_metrics
-          const contestsWithCalculatedBudgets = await Promise.all(
-            (contests || []).map(async (contest) => {
-              let updatedContest = { ...contest };
+      if (contestError) {
+        console.error("Error fetching contests:", contestError);
+        setAvailableContests([]);
+      } else {
+        const contestsWithCalculatedBudgets = await Promise.all(
+          (contests || []).map(async (contest) => {
+            let updatedContest = { ...contest };
 
-              // Check if this is a Twitter text_image contest
-              const isTwitterTextImage =
-                (contest.platform?.toLowerCase() === "twitter" ||
-                  contest.platform?.toLowerCase() === "x") &&
-                contest.contest_format === "text_image";
+            const isTwitterTextImage =
+              (contest.platform?.toLowerCase() === "twitter" ||
+                contest.platform?.toLowerCase() === "x") &&
+              contest.contest_format === "text_image";
 
-              // Fetch participant count from twitter_campaign_metrics for Twitter contests
+            if (isTwitterTextImage) {
+              const { data: metrics } = await supabase
+                .from("twitter_campaign_metrics")
+                .select("total_participants, max_participants")
+                .eq("contest_id", contest.id)
+                .maybeSingle();
+
+              if (metrics) {
+                updatedContest.twitter_participants_count =
+                  metrics.total_participants || 0;
+                updatedContest.twitter_max_participants =
+                  metrics.max_participants;
+              } else {
+                updatedContest.twitter_participants_count = 0;
+                updatedContest.twitter_max_participants = null;
+              }
+            }
+
+            if (
+              contest.contest_type === "leaderboard" &&
+              contest.contest_based_details?.leaderboard_contest?.total_budget >
+                0 &&
+              contest.contest_based_details?.leaderboard_contest
+                ?.flat_fee_bonus > 0
+            ) {
+              let leaderboardSubmissions: Submission[] = [];
+
               if (isTwitterTextImage) {
-                const { data: metrics } = await supabase
-                  .from("twitter_campaign_metrics")
-                  .select("total_participants, max_participants")
-                  .eq("contest_id", contest.id)
-                  .maybeSingle();
-
-                if (metrics) {
-                  updatedContest.twitter_participants_count =
-                    metrics.total_participants || 0;
-                  updatedContest.twitter_max_participants =
-                    metrics.max_participants;
-                } else {
-                  updatedContest.twitter_participants_count = 0;
-                  updatedContest.twitter_max_participants = null;
-                }
-              }
-
-              // For leaderboard contests, calculate actual budget spent from submissions
-              if (
-                contest.contest_type === "leaderboard" &&
-                contest.contest_based_details?.leaderboard_contest
-                  ?.total_budget > 0 &&
-                contest.contest_based_details?.leaderboard_contest
-                  ?.flat_fee_bonus > 0
-              ) {
-                // Determine where to read leaderboard submissions from
-                let leaderboardSubmissions: Submission[] = [];
-
-                if (isTwitterTextImage) {
-                  const { data: twitterTweets } = await supabase
-                    .from("twitter_campaign_tweets")
-                    .select(
-                      "id, creator_id, tweet_created_at, moderation_status"
-                    )
-                    .eq("contest_id", contest.id)
-                    .eq("is_eligible", true)
-                    .in("moderation_status", ["verified", "paid"]);
-
-                  leaderboardSubmissions = (twitterTweets || [])
-                    .filter((tweet) => tweet.creator_id)
-                    .map((tweet) => ({
-                      id: tweet.id,
-                      creator_id: tweet.creator_id,
-                      created_at:
-                        tweet.tweet_created_at || new Date().toISOString(),
-                      status: tweet.moderation_status,
-                      paid: tweet.moderation_status === "paid",
-                      earnings: null,
-                      bonus_paid: false,
-                      platform: "twitter",
-                    }));
-                } else {
-                  const { data: submissions } = await supabase
-                    .from("submissions")
-                    .select(
-                      "paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views"
-                    )
-                    .eq("contest_id", contest.id)
-                    .in("status", ["verified", "paid"]);
-
-                  leaderboardSubmissions = (submissions || []) as Submission[];
-                }
-
-                // Calculate actual budget spent
-                const actualBudgetSpent = calculateLeaderboardBudgetSpent(
-                  leaderboardSubmissions,
-                  contest.contest_based_details.leaderboard_contest
-                    .flat_fee_bonus
-                );
-
-                // Update the contest object with calculated budget spent
-                updatedContest = {
-                  ...updatedContest,
-                  contest_based_details: {
-                    ...updatedContest.contest_based_details,
-                    leaderboard_contest: {
-                      ...updatedContest.contest_based_details
-                        .leaderboard_contest,
-                      budget_spent: Math.round(actualBudgetSpent * 100), // Convert to cents
-                    },
-                  },
-                };
-              }
-              // For Twitter CPM contests, calculate actual budget spent from submissions
-              else if (
-                contest.contest_type === "cpm" &&
-                contest.platform === "twitter" &&
-                contest.contest_based_details?.cpm_contest?.cpm_rate_usd > 0
-              ) {
-                // Fetch Twitter tweets for this contest with Twitter-specific fields
                 const { data: twitterTweets } = await supabase
                   .from("twitter_campaign_tweets")
-                  .select(
-                    "id, creator_id, tweet_created_at, points, moderation_status, manual_points_adjustment"
-                  )
+                  .select("id, creator_id, tweet_created_at, moderation_status")
                   .eq("contest_id", contest.id)
+                  .eq("is_eligible", true)
                   .in("moderation_status", ["verified", "paid"]);
 
-                // Convert Twitter tweets to Submission format for budget calculation
-                const submissions =
-                  twitterTweets?.map((tweet) => ({
+                leaderboardSubmissions = (twitterTweets || [])
+                  .filter((tweet) => tweet.creator_id)
+                  .map((tweet) => ({
                     id: tweet.id,
                     creator_id: tweet.creator_id,
-                    created_at: tweet.tweet_created_at,
-                    platform: "twitter",
+                    created_at:
+                      tweet.tweet_created_at || new Date().toISOString(),
                     status: tweet.moderation_status,
                     paid: tweet.moderation_status === "paid",
-                    earnings: null, // Twitter uses points, not direct earnings
+                    earnings: null,
                     bonus_paid: false,
-                    bonus_amount: 0,
-                    other_stats: {
-                      base_points: tweet.points || 0,
-                      manual_points_adjustment:
-                        tweet.manual_points_adjustment || 0,
-                    },
+                    platform: "twitter",
+                  }));
+              } else {
+                const { data: submissions } = await supabase
+                  .from("submissions")
+                  .select(
+                    "paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views"
+                  )
+                  .eq("contest_id", contest.id)
+                  .in("status", ["verified", "paid"]);
+
+                leaderboardSubmissions = (submissions || []) as Submission[];
+              }
+
+              const actualBudgetSpent = calculateLeaderboardBudgetSpent(
+                leaderboardSubmissions,
+                contest.contest_based_details.leaderboard_contest.flat_fee_bonus
+              );
+
+              updatedContest = {
+                ...updatedContest,
+                contest_based_details: {
+                  ...updatedContest.contest_based_details,
+                  leaderboard_contest: {
+                    ...updatedContest.contest_based_details.leaderboard_contest,
+                    budget_spent: Math.round(actualBudgetSpent * 100),
+                  },
+                },
+              };
+            } else if (
+              contest.contest_type === "cpm" &&
+              contest.platform === "twitter" &&
+              contest.contest_based_details?.cpm_contest?.cpm_rate_usd > 0
+            ) {
+              const { data: twitterTweets } = await supabase
+                .from("twitter_campaign_tweets")
+                .select(
+                  "id, creator_id, tweet_created_at, points, moderation_status, manual_points_adjustment"
+                )
+                .eq("contest_id", contest.id)
+                .in("moderation_status", ["verified", "paid"]);
+
+              const submissions =
+                twitterTweets?.map((tweet) => ({
+                  id: tweet.id,
+                  creator_id: tweet.creator_id,
+                  created_at: tweet.tweet_created_at,
+                  platform: "twitter",
+                  status: tweet.moderation_status,
+                  paid: tweet.moderation_status === "paid",
+                  earnings: null,
+                  bonus_paid: false,
+                  bonus_amount: 0,
+                  other_stats: {
+                    base_points: tweet.points || 0,
                     manual_points_adjustment:
                       tweet.manual_points_adjustment || 0,
-                    views: 0, // Twitter doesn't use views
-                  })) || [];
-
-                // Calculate actual budget spent using Twitter CPM formula
-                const cpmDetails = contest.contest_based_details.cpm_contest;
-
-                const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
-                  submissions || [],
-                  cpmDetails.cpm_rate_usd,
-                  cpmDetails.max_earnings_per_creator,
-                  cpmDetails.min_views,
-                  cpmDetails.max_views,
-                  cpmDetails.flat_fee_bonus || 0,
-                  cpmDetails.flat_fee_bonus_cap || null
-                );
-
-                // Update the contest object with calculated budget spent
-                updatedContest = {
-                  ...updatedContest,
-                  contest_based_details: {
-                    ...updatedContest.contest_based_details,
-                    cpm_contest: {
-                      ...updatedContest.contest_based_details.cpm_contest,
-                      budget_spent: Math.round(actualBudgetSpent * 100), // Convert to cents
-                    },
                   },
-                };
-              }
+                  manual_points_adjustment: tweet.manual_points_adjustment || 0,
+                  views: 0,
+                })) || [];
 
-              return updatedContest;
-            })
-          );
+              const cpmDetails = contest.contest_based_details.cpm_contest;
 
-          // Filter contests based on user's countries (both registration info and creator profile)
-          const regionFilteredContests = contestsWithCalculatedBudgets.filter(
-            (contest) => {
-              // If no user countries available, show all contests (fallback)
-              if (userCountries.length === 0) {
-                return true;
-              }
-
-              // If contest has no region restrictions, show it to everyone
-              if (!contest.region || Object.keys(contest.region).length === 0) {
-                return true;
-              }
-
-              // Check if ANY of the user's countries matches the contest's regions
-              // This allows users to see contests from both their registration country and profile country
-              return userCountries.some((country: string) =>
-                isCountryInContestRegions(country, contest.region)
+              const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
+                submissions,
+                cpmDetails.cpm_rate_usd,
+                cpmDetails.max_earnings_per_creator,
+                cpmDetails.min_views,
+                cpmDetails.max_views,
+                cpmDetails.flat_fee_bonus || 0,
+                cpmDetails.flat_fee_bonus_cap || null
               );
+
+              updatedContest = {
+                ...updatedContest,
+                contest_based_details: {
+                  ...updatedContest.contest_based_details,
+                  cpm_contest: {
+                    ...updatedContest.contest_based_details.cpm_contest,
+                    budget_spent: Math.round(actualBudgetSpent * 100),
+                  },
+                },
+              };
+            } else if (
+              contest.contest_type === "cpm" &&
+              contest.contest_based_details?.cpm_contest?.cpm_rate_usd > 0 &&
+              !["twitter", "x"].includes((contest.platform || "").toLowerCase())
+            ) {
+              const { data: submissions } = await supabase
+                .from("submissions")
+                .select(
+                  "id, creator_id, created_at, status, paid, earnings, views, platform, other_stats"
+                )
+                .eq("contest_id", contest.id)
+                .in("status", ["verified", "paid"])
+                .order("created_at", { ascending: true });
+
+              const submissionRecords = (submissions || []).map(
+                (submission) => ({
+                  id: submission.id,
+                  creator_id: submission.creator_id,
+                  created_at: submission.created_at,
+                  status: submission.status,
+                  paid: submission.paid,
+                  earnings: submission.earnings,
+                  views: submission.views,
+                  platform: submission.platform,
+                  other_stats: submission.other_stats,
+                  manual_points_adjustment: 0,
+                  bonus_paid: submission.paid ?? false,
+                  bonus_amount: submission.earnings ?? 0,
+                })
+              );
+
+              const cpmDetails = contest.contest_based_details.cpm_contest;
+
+              const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
+                submissionRecords,
+                cpmDetails.cpm_rate_usd,
+                contest.max_earnings_per_creator ||
+                  cpmDetails.max_earnings_per_creator,
+                cpmDetails.min_views,
+                cpmDetails.max_views,
+                cpmDetails.flat_fee_bonus || 0,
+                cpmDetails.flat_fee_bonus_cap || null
+              );
+
+              updatedContest = {
+                ...updatedContest,
+                contest_based_details: {
+                  ...updatedContest.contest_based_details,
+                  cpm_contest: {
+                    ...updatedContest.contest_based_details.cpm_contest,
+                    budget_spent: Math.round(actualBudgetSpent * 100),
+                  },
+                },
+              };
             }
-          );
-          // setAvailableContests(regionFilteredContests);
 
-          // Static demo Twitter campaign for UI showcase (does not exist in DB)
-          const demoTwitterContest = {
-            id: "demo-twitter-campaign",
-            title: "Demo Twitter Campaign",
-            platform: "twitter",
-            status: "active",
-            thumbnail_url: null,
-            contest_type: "cpm",
-            contest_based_details: {
-              cpm_contest: {
-                cpm_rate_usd: 5,
-                total_budget: 50000,
-                budget_spent: 0,
-                flat_fee_bonus: 0,
-              },
-              leaderboard_contest: null,
+            return updatedContest;
+          })
+        );
+
+        const regionFilteredContests = contestsWithCalculatedBudgets.filter(
+          (contest) => {
+            if (userCountries.length === 0) {
+              return true;
+            }
+            if (!contest.region || Object.keys(contest.region).length === 0) {
+              return true;
+            }
+            return userCountries.some((country: string) =>
+              isCountryInContestRegions(country, contest.region)
+            );
+          }
+        );
+
+        const demoTwitterContest = {
+          id: "demo-twitter-campaign",
+          title: "Demo Twitter Campaign",
+          platform: "twitter",
+          status: "active",
+          thumbnail_url: null,
+          contest_type: "cpm",
+          contest_based_details: {
+            cpm_contest: {
+              cpm_rate_usd: 5,
+              total_budget: 50000,
+              budget_spent: 0,
+              flat_fee_bonus: 0,
             },
-            live_submission_count: 0,
-            categories: [],
-            subcategories: {},
-            interests: [],
-            bonus_details: null,
-            region: {},
-            multiple_submissions_enabled: false,
-            max_submissions_per_creator: 1,
-            start_date: "2025-01-01T09:00:00.000Z",
-            end_date: "2025-01-31T23:59:59.000Z",
-            post_contest_status: null,
-            is_demo: true,
-          } as any;
+            leaderboard_contest: null,
+          },
+          live_submission_count: 0,
+          categories: [],
+          subcategories: {},
+          interests: [],
+          bonus_details: null,
+          region: {},
+          multiple_submissions_enabled: false,
+          max_submissions_per_creator: 1,
+          start_date: "2025-01-01T09:00:00.000Z",
+          end_date: "2025-01-31T23:59:59.000Z",
+          post_contest_status: null,
+          is_demo: true,
+        } as any;
 
-          const contestsWithDemo = [
-            demoTwitterContest,
-            ...regionFilteredContests,
-          ];
-          setAvailableContests(contestsWithDemo);
-        }
-      } catch (error) {
-        console.error("Unexpected error in fetchData:", error);
-        setAvailableContests([]);
-      } finally {
-        setIsFetchingData(false);
+        const contestsWithDemo = [
+          demoTwitterContest,
+          ...regionFilteredContests,
+        ];
+        setAvailableContests(contestsWithDemo);
       }
+    } catch (error) {
+      console.error("Unexpected error in fetchData:", error);
+      setAvailableContests([]);
+    } finally {
+      setIsFetchingData(false);
     }
-
-    fetchData(user);
   }, [user, router, supabase]);
+
+  useEffect(() => {
+    fetchOpportunities();
+  }, [fetchOpportunities]);
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      fetchOpportunities();
+    };
+
+    window.addEventListener("contests:refresh", handleRefresh);
+    return () => {
+      window.removeEventListener("contests:refresh", handleRefresh);
+    };
+  }, [fetchOpportunities]);
 
   // Calculate relevance score for a contest
   const calculateRelevanceScore = (contest: any): number => {

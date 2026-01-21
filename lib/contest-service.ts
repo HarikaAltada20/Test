@@ -137,11 +137,12 @@ export async function getAdvertiserContestsWithCalculatedBudgets(
         };
       }
 
-      if (
-        contest.contest_type === "cpm" &&
-        contest.platform === "twitter" &&
-        cpmDetails?.cpm_rate_usd > 0
-      ) {
+      const platformSlug = (contest.platform || "").toLowerCase();
+      const hasCpmRate = cpmDetails?.cpm_rate_usd > 0;
+      const isTwitterPlatform =
+        platformSlug === "twitter" || platformSlug === "x";
+
+      if (contest.contest_type === "cpm" && isTwitterPlatform && hasCpmRate) {
         const { data: twitterTweets } = await supabase
           .from("twitter_campaign_tweets")
           .select(
@@ -197,6 +198,74 @@ export async function getAdvertiserContestsWithCalculatedBudgets(
           },
           status: updatedContest.status || "unknown",
         };
+      } else if (contest.contest_type === "cpm" && hasCpmRate) {
+        const { data: submissions, error: submissionsError } = await supabase
+          .from("submissions")
+          .select(
+            `
+              id,
+              creator_id,
+              created_at,
+              status,
+              paid,
+              earnings,
+              views,
+              platform,
+              other_stats,
+              bonus_paid,
+              bonus_amount
+            `
+          )
+          .eq("contest_id", contest.id)
+          .in("status", ["verified", "paid"])
+          .order("created_at", { ascending: true });
+
+        if (!submissionsError) {
+          const submissionRecords = (submissions || []).map((submission) => ({
+            id: submission.id,
+            creator_id: submission.creator_id,
+            created_at: submission.created_at,
+            status: submission.status || undefined,
+            paid: submission.paid ?? false,
+            earnings: submission.earnings,
+            views: submission.views,
+            platform: submission.platform || contest.platform || undefined,
+            other_stats: submission.other_stats,
+            bonus_paid: submission.bonus_paid ?? false,
+            bonus_amount: submission.bonus_amount ?? undefined,
+          }));
+
+          const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
+            submissionRecords,
+            cpmDetails.cpm_rate_usd,
+            contest.max_earnings_per_creator ||
+              cpmDetails.max_earnings_per_creator ||
+              null,
+            cpmDetails.min_views,
+            cpmDetails.max_views,
+            cpmDetails.flat_fee_bonus || 0,
+            cpmDetails.flat_fee_bonus_cap || null
+          );
+
+          updatedContest = {
+            ...updatedContest,
+            contest_based_details: {
+              ...contestDetails,
+              cpm_contest: {
+                ...cpmDetails,
+                budget_spent: Math.round(actualBudgetSpent * 100),
+              },
+            },
+            status: updatedContest.status || "unknown",
+          };
+        } else {
+          console.error(
+            "Failed to calculate CPM budget for contest",
+            contest.id,
+            submissionsError.message
+          );
+          updatedContest.status = updatedContest.status || "unknown";
+        }
       } else {
         updatedContest.status = updatedContest.status || "unknown";
       }

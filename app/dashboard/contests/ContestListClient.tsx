@@ -309,6 +309,17 @@ export function ContestListClient({
     return () => window.clearInterval(intervalId);
   }, [fetchLatestContests]);
 
+  useEffect(() => {
+    const handleContestRefresh = () => {
+      fetchLatestContests();
+    };
+
+    window.addEventListener("contests:refresh", handleContestRefresh);
+    return () => {
+      window.removeEventListener("contests:refresh", handleContestRefresh);
+    };
+  }, [fetchLatestContests]);
+
   const availablePlatforms = useMemo(() => {
     const platforms = new Set(
       contests.map((c) => c.platform).filter(Boolean) as string[]
