@@ -1814,6 +1814,19 @@ export default function ContestDetailClient({
       console.log("🎉 Calling toast with config:", toastConfig);
       toast(toastConfig);
 
+      if (
+        ["cpm", "leaderboard"].includes(currentContest?.contest_type || "") &&
+        currentContest?.platform &&
+        ["youtube", "instagram"].some((platform) =>
+          currentContest.platform?.toLowerCase().includes(platform)
+        ) &&
+        (newStatus === "verified" || newStatus === "pending")
+      ) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }
+
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("contests:refresh", {
@@ -9760,7 +9773,7 @@ export default function ContestDetailClient({
                                         "cpm") && (
                                       <>
                                         <TableHead className="text-center">
-                                         Creator Manual Points Adjustment
+                                          Creator Manual Points Adjustment
                                         </TableHead>
                                         <TableHead className="text-center">
                                           Manual Points Reason

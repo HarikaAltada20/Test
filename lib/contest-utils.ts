@@ -240,20 +240,12 @@ export function calculateTwitterCpmBudgetSpent(
     flatFeeBonus && flatFeeBonus > 0 ? flatFeeBonus / 100 : 0;
   const bonusCapInDollars = flatFeeBonusCap ? flatFeeBonusCap / 100 : null;
 
-  console.log(`[Twitter CPM Budget] Starting calculation with:`, {
-    totalSubmissions: submissions?.length || 0,
-    cpmRate,
-    maxEarningsPerCreator,
-    minViews,
-    maxViews,
-    flatFeeBonusInDollars,
-    bonusCapInDollars,
-  });
+
 
   if (!submissions?.length || cpmRate <= 0) {
-    console.log(
-      `[Twitter CPM Budget] Early return: no submissions or invalid cpmRate`
-    );
+    // console.log(
+    //   `[Twitter CPM Budget] Early return: no submissions or invalid cpmRate`
+    // );
     return 0;
   }
 
@@ -263,9 +255,9 @@ export function calculateTwitterCpmBudgetSpent(
     return status === "verified" || status === "paid";
   });
 
-  console.log(
-    `[Twitter CPM Budget] Relevant submissions after filter: ${relevantSubmissions.length}/${submissions.length}`
-  );
+  // console.log(
+  //   `[Twitter CPM Budget] Relevant submissions after filter: ${relevantSubmissions.length}/${submissions.length}`
+  // );
 
   // Sort by created_at to respect "first submitted, first paid" logic
   const sortedSubmissions = [...relevantSubmissions].sort((a, b) => {
@@ -281,9 +273,9 @@ export function calculateTwitterCpmBudgetSpent(
   >();
   let totalBonusSpentSoFar = 0;
 
-  console.log(
-    `[Twitter CPM Budget] Processing ${sortedSubmissions.length} submissions:`
-  );
+  // console.log(
+  //   `[Twitter CPM Budget] Processing ${sortedSubmissions.length} submissions:`
+  // );
 
   for (const sub of sortedSubmissions) {
     const creatorId = sub.creator_id;
@@ -303,32 +295,32 @@ export function calculateTwitterCpmBudgetSpent(
       const totalPoints = basePoints + manualPointsAdjustment;
       submissionEarnings = (totalPoints * cpmRate) / 1000;
 
-      console.log(`[Twitter CPM Budget] Twitter submission ${sub.id}:`, {
-        creatorId,
-        status: sub.status,
-        basePoints,
-        manualPointsAdjustment,
-        totalPoints,
-        cpmRate,
-        calculation: `(${totalPoints} * ${cpmRate}) / 1000`,
-        submissionEarnings: submissionEarnings.toFixed(2),
-        currentCreatorTotal: creatorData.cpmTotal.toFixed(2),
-      });
+      // console.log(`[Twitter CPM Budget] Twitter submission ${sub.id}:`, {
+      //   creatorId,
+      //   status: sub.status,
+      //   basePoints,
+      //   manualPointsAdjustment,
+      //   totalPoints,
+      //   cpmRate,
+      //   calculation: `(${totalPoints} * ${cpmRate}) / 1000`,
+      //   submissionEarnings: submissionEarnings.toFixed(2),
+      //   currentCreatorTotal: creatorData.cpmTotal.toFixed(2),
+      // });
     } else if (sub.paid && sub.earnings != null) {
       // Use actual paid earnings from database for non-Twitter platforms (YouTube, Instagram)
       submissionEarnings = sub.earnings / 100; // Convert cents to dollars
 
-      console.log(
-        `[Twitter CPM Budget] Non-Twitter paid submission ${sub.id}:`,
-        {
-          creatorId,
-          platform: submissionPlatform,
-          status: sub.status,
-          paidEarnings: sub.earnings,
-          submissionEarnings: submissionEarnings.toFixed(2),
-          currentCreatorTotal: creatorData.cpmTotal.toFixed(2),
-        }
-      );
+      // console.log(
+      //   `[Twitter CPM Budget] Non-Twitter paid submission ${sub.id}:`,
+      //   {
+      //     creatorId,
+      //     platform: submissionPlatform,
+      //     status: sub.status,
+      //     paidEarnings: sub.earnings,
+      //     submissionEarnings: submissionEarnings.toFixed(2),
+      //     currentCreatorTotal: creatorData.cpmTotal.toFixed(2),
+      //   }
+      // );
     } else {
       // Note: For Twitter contests, this branch should not be reached as Twitter is handled above
       // Calculate expected earnings for verified unpaid (YouTube, Instagram)
@@ -337,20 +329,20 @@ export function calculateTwitterCpmBudgetSpent(
       if (maxViews != null && views > maxViews) views = maxViews;
       submissionEarnings = (views * cpmRate) / 1000;
 
-      console.log(
-        `[Twitter CPM Budget] Non-Twitter verified submission ${sub.id}:`,
-        {
-          creatorId,
-          platform: submissionPlatform,
-          status: sub.status,
-          originalViews: sub.views,
-          adjustedViews: views,
-          cpmRate,
-          calculation: `(${views} * ${cpmRate}) / 1000`,
-          submissionEarnings: submissionEarnings.toFixed(2),
-          currentCreatorTotal: creatorData.cpmTotal.toFixed(2),
-        }
-      );
+      // console.log(
+      //   `[Twitter CPM Budget] Non-Twitter verified submission ${sub.id}:`,
+      //   {
+      //     creatorId,
+      //     platform: submissionPlatform,
+      //     status: sub.status,
+      //     originalViews: sub.views,
+      //     adjustedViews: views,
+      //     cpmRate,
+      //     calculation: `(${views} * ${cpmRate}) / 1000`,
+      //     submissionEarnings: submissionEarnings.toFixed(2),
+      //     currentCreatorTotal: creatorData.cpmTotal.toFixed(2),
+      //   }
+      // );
     }
 
     // Apply creator cap if configured
@@ -362,17 +354,17 @@ export function calculateTwitterCpmBudgetSpent(
         const actualEarnings = Math.min(submissionEarnings, remainingCap);
         creatorData.cpmTotal += actualEarnings;
 
-        console.log(
-          `[Twitter CPM Budget] Creator cap applied for ${creatorId}:`,
-          {
-            maxEarningsPerCreator: maxInDollars.toFixed(2),
-            previousTotal: (creatorData.cpmTotal - actualEarnings).toFixed(2),
-            submissionEarnings: submissionEarnings.toFixed(2),
-            remainingCap: remainingCap.toFixed(2),
-            actualEarnings: actualEarnings.toFixed(2),
-            newTotal: creatorData.cpmTotal.toFixed(2),
-          }
-        );
+        // console.log(
+        //   `[Twitter CPM Budget] Creator cap applied for ${creatorId}:`,
+        //   {
+        //     maxEarningsPerCreator: maxInDollars.toFixed(2),
+        //     previousTotal: (creatorData.cpmTotal - actualEarnings).toFixed(2),
+        //     submissionEarnings: submissionEarnings.toFixed(2),
+        //     remainingCap: remainingCap.toFixed(2),
+        //     actualEarnings: actualEarnings.toFixed(2),
+        //     newTotal: creatorData.cpmTotal.toFixed(2),
+        //   }
+        // );
       } else {
         console.log(
           `[Twitter CPM Budget] Creator cap reached for ${creatorId}:`,
@@ -380,19 +372,13 @@ export function calculateTwitterCpmBudgetSpent(
             maxEarningsPerCreator: maxInDollars.toFixed(2),
             currentTotal: creatorData.cpmTotal.toFixed(2),
             submissionEarnings: submissionEarnings.toFixed(2),
-            remainingCap: remainingCap.toFixed(2),
-            addedEarnings: "0.00",
           }
         );
       }
     } else {
       creatorData.cpmTotal += submissionEarnings;
 
-      console.log(`[Twitter CPM Budget] No creator cap for ${creatorId}:`, {
-        previousTotal: (creatorData.cpmTotal - submissionEarnings).toFixed(2),
-        submissionEarnings: submissionEarnings.toFixed(2),
-        newTotal: creatorData.cpmTotal.toFixed(2),
-      });
+      
     }
 
     // Include flat fee bonus for verified submissions (cap respected across contest)
@@ -404,9 +390,9 @@ export function calculateTwitterCpmBudgetSpent(
         creatorData.bonusTotal += flatFeeBonusInDollars;
         totalBonusSpentSoFar += flatFeeBonusInDollars;
       } else {
-        console.log(
-          `[Twitter CPM Budget] Flat fee bonus cap reached for ${creatorId}, skipping bonus`
-        );
+        // console.log(
+        //   `[Twitter CPM Budget] Flat fee bonus cap reached for ${creatorId}, skipping bonus`
+        // );
       }
     }
   }
@@ -456,17 +442,17 @@ export function calculateTwitterCpmBudgetSpent(
 
   const totalSpent = totalCpmSpent + totalBonusSpent;
 
-  console.log(`[Twitter CPM Budget] Final calculation:`, {
-    totalCreators: creatorEarnings.size,
-    creatorBreakdown: creatorBreakdown.map((c) => ({
-      creatorId: c.creatorId,
-      total: c.total.toFixed(2),
-    })),
-    totalCpmSpent: totalCpmSpent.toFixed(2),
-    totalBonusSpent: totalBonusSpent.toFixed(2),
-    totalBudgetSpent: totalSpent.toFixed(2),
-    totalBudgetSpentCents: Math.round(totalSpent * 100),
-  });
+  // console.log(`[Twitter CPM Budget] Final calculation:`, {
+  //   totalCreators: creatorEarnings.size,
+  //   creatorBreakdown: creatorBreakdown.map((c) => ({
+  //     creatorId: c.creatorId,
+  //     total: c.total.toFixed(2),
+  //   })),
+  //   totalCpmSpent: totalCpmSpent.toFixed(2),
+  //   totalBonusSpent: totalBonusSpent.toFixed(2),
+  //   totalBudgetSpent: totalSpent.toFixed(2),
+  //   totalBudgetSpentCents: Math.round(totalSpent * 100),
+  // });
 
   return totalSpent;
 }

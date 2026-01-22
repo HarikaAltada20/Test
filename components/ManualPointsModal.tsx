@@ -158,8 +158,8 @@ export default function ManualPointsModal({
 
   const totalPointsValue = totalPoints ?? currentPoints ?? 0;
   const basePointsValue = basePoints ?? 0;
-  const manualPointsValue = manualPoints ?? 0;
   const creatorAdjustmentValue = creatorManualPointsAdjustment ?? 0;
+  const totalManualPointsValue = (manualPoints ?? 0) + creatorAdjustmentValue;
 
   const statCards = [
     {
@@ -174,7 +174,7 @@ export default function ManualPointsModal({
     },
     {
       label: "Manual Points",
-      value: manualPointsValue,
+      value: totalManualPointsValue,
       isManual: true,
     },
     {
@@ -379,7 +379,9 @@ export default function ManualPointsModal({
           </Alert>
           {isLeaderboard && (
             <p className={cn("text-sm text-muted-foreground mt-2 px-1")}>
-             Creator manual point adjustments are now cumulative, ensuring new points are added to the existing total without overriding previous values.
+              Creator manual point adjustments are now cumulative, ensuring new
+              points are added to the existing total without overriding previous
+              values.
             </p>
           )}
         </div>
