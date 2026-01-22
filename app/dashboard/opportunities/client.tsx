@@ -2096,11 +2096,9 @@ export default function OpportunitiesPage({
             <SelectItem value="leaderboard" isDark={isDark}>
               Leaderboard
             </SelectItem>
-            {mediaType == "media" && (
-              <SelectItem value="cpm" isDark={isDark}>
-                CPM
-              </SelectItem>
-            )}
+            <SelectItem value="cpm" isDark={isDark}>
+              CPM
+            </SelectItem>
           </SelectContent>
         </Select>
 
