@@ -21,12 +21,14 @@ interface BudgetProgressProps {
   contest: Contest;
   submissions: Submission[];
   showDetailed?: boolean; // Toggle between simple and detailed view
+  creatorManualPointsAdjustments?: Record<string, number>;
 }
 
 export function BudgetProgress({
   contest,
   submissions,
   showDetailed = true,
+  creatorManualPointsAdjustments,
 }: BudgetProgressProps) {
   const [mode, setMode] = useState<"light" | "dark">("light");
   // Get contest config outside useMemo so it's available in the component
@@ -43,7 +45,6 @@ export function BudgetProgress({
     cpmConfig?.flat_fee_bonus || leaderboardConfig?.flat_fee_bonus || 0;
   const hasFlatFeeBonus = flatFeeBonus > 0;
 
-  
   const {
     cpmPaid,
     bonusPaid,
@@ -56,6 +57,7 @@ export function BudgetProgress({
     prizePoolTotal,
     bonusBudget,
     bonusSpent,
+    totalSpent,
   } = useMemo(() => {
     // Use total_budget from the contest object (works for both CPM and Leaderboard)
     const totalBudget = contest.total_budget || 0;
@@ -102,6 +104,14 @@ export function BudgetProgress({
     let totalBonusSpentSoFar = 0;
     const capInDollars = flatFeeBonusCap ? flatFeeBonusCap / 100 : null;
 
+    const verifiedCreatorIds = new Set<string>();
+    relevantSubmissions.forEach((sub) => {
+      const creatorId = (sub as any).creator_id;
+      if (creatorId) {
+        verifiedCreatorIds.add(creatorId);
+      }
+    });
+
     for (const sub of sortedSubmissions) {
       const creatorId = (sub as any).creator_id;
       if (!creatorEarnings.has(creatorId)) {
@@ -113,24 +123,39 @@ export function BudgetProgress({
       // Calculate CPM earnings
       let submissionEarnings = 0;
       const submissionPlatform = (sub as any).platform?.toLowerCase();
-      
+
       if (submissionPlatform === "twitter") {
         const basePoints = (sub as any).other_stats?.base_points || 0;
-        const manualPointsAdjustment = (sub as any).manual_points_adjustment || 0;
+        const manualPointsAdjustment =
+          (sub as any).manual_points_adjustment || 0;
         const totalPoints = basePoints + manualPointsAdjustment;
         submissionEarnings = (totalPoints * cpmRate) / 1000;
-        console.log(`[Twitter CPM] basePoints=${basePoints}, manual=${manualPointsAdjustment}, totalPoints=${totalPoints}, cpmRate=${cpmRate}, earnings=${submissionEarnings.toFixed(2)}`);
+        console.log(
+          `[Twitter CPM] basePoints=${basePoints}, manual=${manualPointsAdjustment}, totalPoints=${totalPoints}, cpmRate=${cpmRate}, earnings=${submissionEarnings.toFixed(
+            2
+          )}`
+        );
       } else if (sub.paid && sub.earnings != null) {
         // Use actual paid earnings from database for non-Twitter platforms (YouTube, Instagram)
         submissionEarnings = sub.earnings / 100; // Convert cents to dollars
-        console.log(`[${submissionPlatform || 'Unknown'} Paid] earnings=${submissionEarnings.toFixed(2)}`);
+        console.log(
+          `[${
+            submissionPlatform || "Unknown"
+          } Paid] earnings=${submissionEarnings.toFixed(2)}`
+        );
       } else {
         // Calculate expected earnings for verified unpaid (YouTube, Instagram)
         let views = (sub as any).views || 0;
         if (minViews != null && views < minViews) views = 0;
         if (maxViews != null && views > maxViews) views = maxViews;
         submissionEarnings = (views * cpmRate) / 1000;
-        console.log(`[${submissionPlatform || 'Unknown'} Unpaid] views=${views}, cpmRate=${cpmRate}, earnings=${submissionEarnings.toFixed(2)}`);
+        console.log(
+          `[${
+            submissionPlatform || "Unknown"
+          } Unpaid] views=${views}, cpmRate=${cpmRate}, earnings=${submissionEarnings.toFixed(
+            2
+          )}`
+        );
       }
 
       // Apply creator cap if configured
@@ -155,18 +180,18 @@ export function BudgetProgress({
         // For both CPM and leaderboard contests, check if we can add this bonus
         const bonusAmount = flatFeeBonus / 100;
         let budgetCap = null;
-        
+
         if (contest.contest_type === "cpm" && capInDollars !== null) {
           budgetCap = capInDollars;
         } else if (contest.contest_type === "leaderboard" && totalBudget > 0) {
           // For leaderboard contests, use total_budget as the cap for flat fee bonuses
           budgetCap = totalBudget / 100;
         }
-        
+
         if (budgetCap !== null) {
           // Calculate remaining budget for bonuses
           const remainingBudget = budgetCap - totalBonusSpentSoFar;
-          
+
           if (remainingBudget > 0) {
             if (remainingBudget >= bonusAmount) {
               // Full bonus can be granted
@@ -185,6 +210,42 @@ export function BudgetProgress({
           totalBonusSpentSoFar += bonusAmount;
         }
       }
+    }
+
+    const manualAdjustments = creatorManualPointsAdjustments || {};
+    if (
+      contest.contest_type === "cpm" &&
+      cpmRate > 0 &&
+      Object.keys(manualAdjustments).length > 0
+    ) {
+      Object.entries(manualAdjustments).forEach(([creatorId, manualPoints]) => {
+        if (!manualPoints) return;
+        if (!verifiedCreatorIds.has(creatorId)) return;
+
+        const manualEarnings = (manualPoints * cpmRate) / 1000;
+        if (manualEarnings === 0) return;
+
+        let creatorData = creatorEarnings.get(creatorId);
+        if (!creatorData) {
+          creatorData = { cpmTotal: 0, bonusTotal: 0 };
+          creatorEarnings.set(creatorId, creatorData);
+        }
+
+        if (manualEarnings > 0 && maxEarningsPerCreator) {
+          const maxInDollars = maxEarningsPerCreator / 100;
+          const remainingCap = maxInDollars - creatorData.cpmTotal;
+
+          if (remainingCap <= 0) return;
+          creatorData.cpmTotal += Math.min(manualEarnings, remainingCap);
+        } else if (manualEarnings > 0) {
+          creatorData.cpmTotal += manualEarnings;
+        } else {
+          creatorData.cpmTotal = Math.max(
+            0,
+            creatorData.cpmTotal + manualEarnings
+          );
+        }
+      });
     }
 
     // Sum up all creator earnings
@@ -249,14 +310,14 @@ export function BudgetProgress({
       prizePoolTotal,
       bonusBudget,
       bonusSpent: bonusPaid,
+      totalSpent,
     };
-  }, [contest, submissions]);
+  }, [contest, submissions, creatorManualPointsAdjustments]);
 
   const formatCurrency = (cents: number) => {
     return `$${(cents / 100).toFixed(2)}`;
   };
 
-  const totalSpent = cpmPaid + bonusPaid;
   const remaining = Math.max(0, totalBudget - totalSpent);
   const isNearLimit = totalPercentage >= 80;
 
@@ -314,9 +375,7 @@ export function BudgetProgress({
         <div className="relative w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
           <div
             className={`absolute h-full transition-all duration-300 ${
-              isNearLimit
-                ? "bg-yellow-500"
-                : "bg-blue-500"
+              isNearLimit ? "bg-yellow-500" : "bg-blue-500"
             }`}
             style={{ width: `${Math.min(totalPercentage, 100)}%` }}
           />
@@ -366,9 +425,7 @@ export function BudgetProgress({
         >
           <div
             className={`absolute h-full transition-all duration-300 ${
-              isNearLimit
-                ? "bg-yellow-500"
-                : "bg-green-500"
+              isNearLimit ? "bg-yellow-500" : "bg-green-500"
             }`}
             style={{ width: `${Math.min(bonusPercentage, 100)}%` }}
           />

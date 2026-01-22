@@ -115,6 +115,28 @@ export default function OpportunitiesPage({
   const router = useRouter();
   const supabase = createClient();
 
+  const fetchTwitterLeaderboardManualAdjustments = async (
+    contestId: string
+  ): Promise<Record<string, number>> => {
+    const { data: adjustments } = await supabase
+      .from("twitter_campaign_leaderboard")
+      .select("creator_id, manual_points_adjustment")
+      .eq("contest_id", contestId);
+
+    const adjustmentMap: Record<string, number> = {};
+    (adjustments || []).forEach((entry: any) => {
+      if (
+        entry &&
+        entry.creator_id &&
+        typeof entry.manual_points_adjustment === "number"
+      ) {
+        adjustmentMap[entry.creator_id] = entry.manual_points_adjustment;
+      }
+    });
+
+    return adjustmentMap;
+  };
+
   const tabs = [
     {
       id: "all",
@@ -595,6 +617,11 @@ export default function OpportunitiesPage({
                 contest.platform?.toLowerCase() === "x") &&
               contest.contest_format === "text_image";
 
+            const manualAdjustmentMap =
+              contest.contest_type === "cpm"
+                ? await fetchTwitterLeaderboardManualAdjustments(contest.id)
+                : {};
+
             if (isTwitterTextImage) {
               const { data: metrics } = await supabase
                 .from("twitter_campaign_metrics")
@@ -712,7 +739,8 @@ export default function OpportunitiesPage({
                 cpmDetails.min_views,
                 cpmDetails.max_views,
                 cpmDetails.flat_fee_bonus || 0,
-                cpmDetails.flat_fee_bonus_cap || null
+                cpmDetails.flat_fee_bonus_cap || null,
+                manualAdjustmentMap
               );
 
               updatedContest = {
@@ -766,7 +794,8 @@ export default function OpportunitiesPage({
                 cpmDetails.min_views,
                 cpmDetails.max_views,
                 cpmDetails.flat_fee_bonus || 0,
-                cpmDetails.flat_fee_bonus_cap || null
+                cpmDetails.flat_fee_bonus_cap || null,
+                manualAdjustmentMap
               );
 
               updatedContest = {

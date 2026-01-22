@@ -359,6 +359,32 @@ export default function ContestDetailClient({
   const [twitterMetrics, setTwitterMetrics] = useState<any>(null);
   const [loadingMetrics, setLoadingMetrics] = useState(false);
 
+  const markCreatorSubmissionsVerifiedLocally = (
+    creatorId: string | null | undefined
+  ) => {
+    if (!creatorId) return;
+
+    const isTwitterCpm =
+      currentContest?.contest_type === "cpm" &&
+      (currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+      currentContest?.contest_format === "text_image";
+
+    if (!isTwitterCpm) return;
+
+    setCurrentSubmissions((prev) =>
+      prev.map((submission) =>
+        submission.creator_id === creatorId
+          ? {
+              ...submission,
+              status: "verified",
+              moderation_status: "verified",
+            }
+          : submission
+      )
+    );
+  };
+
   // Rejection modal state
   const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
   const [pendingRejectionSubmission, setPendingRejectionSubmission] = useState<
@@ -389,6 +415,34 @@ export default function ContestDetailClient({
   >(null);
   const [pendingTwitterPaymentCreator, setPendingTwitterPaymentCreator] =
     useState<string | null>(null);
+  const [manualAdjustmentOverrides, setManualAdjustmentOverrides] = useState<
+    Record<string, number>
+  >({});
+  const getCreatorManualAdjustment = useCallback(
+    (creatorId?: string | null) => {
+      if (!creatorId) return 0;
+      const baseAdjustment =
+        creatorModerationData?.[creatorId]?.manual_points_adjustment || 0;
+      const overrideAdjustment = manualAdjustmentOverrides[creatorId] || 0;
+      return baseAdjustment + overrideAdjustment;
+    },
+    [creatorModerationData, manualAdjustmentOverrides]
+  );
+  const creatorManualPointsAdjustments = useMemo(() => {
+    const adjustments: Record<string, number> = {};
+    const seenCreators = new Set<string>();
+    (currentSubmissions || []).forEach((submission) => {
+      const creatorId = submission.creator_id;
+      if (!creatorId || seenCreators.has(creatorId)) return;
+      seenCreators.add(creatorId);
+
+      const adjustment = getCreatorManualAdjustment(creatorId);
+      if (adjustment !== 0) {
+        adjustments[creatorId] = adjustment;
+      }
+    });
+    return adjustments;
+  }, [currentSubmissions, getCreatorManualAdjustment]);
   const [confirmReversal, setConfirmReversal] = useState<{
     id: string;
     target: "verified" | "pending" | "rejected";
@@ -541,7 +595,7 @@ export default function ContestDetailClient({
 
   // Creator-wise grouping logic
   const groupSubmissionsByCreator = useMemo(() => {
-    if (!filteredSubmissions || viewMode !== "creator-wise") return null;
+    if (!filteredSubmissions) return [];
 
     // Check if this is a Twitter leaderboard campaign
     const isTwitterLeaderboard =
@@ -576,6 +630,20 @@ export default function ContestDetailClient({
           (s: any) => s.creator_id === creatorId
         );
         const firstSubmission = creatorSubmissions[0];
+        const submissionManualPointsTotal = creatorSubmissions.reduce(
+          (sum: number, submission: any) => {
+            const submissionManualPoints =
+              (submission as any).manual_points_adjustment ||
+              submission.other_stats?.manual_points_adjustment ||
+              0;
+            return sum + submissionManualPoints;
+          },
+          0
+        );
+        const creatorManualAdjustment =
+          getCreatorManualAdjustment(creatorId) || 0;
+        const manualPointsAdjustmentTotal =
+          creatorManualAdjustment + submissionManualPointsTotal;
 
         // Calculate base_points from submissions (for raid campaigns, this correctly uses base_points from other_stats)
         // For leaderboard, we need to sum base_points from all eligible submissions
@@ -688,9 +756,10 @@ export default function ContestDetailClient({
             impressions: leaderboardData.total_impressions || 0,
             points: leaderboardData.total_points || 0,
             base_points: basePoints,
-            manual_points_adjustment:
-              leaderboardData.manual_points_adjustment || 0,
+            manual_points_adjustment: manualPointsAdjustmentTotal,
             manual_points_reason: leaderboardData.manual_points_reason || null,
+            tweet_manual_points_adjustment: submissionManualPointsTotal,
+            creator_manual_points_adjustment: creatorManualAdjustment,
           },
           earnings: { expected: 0, granted: 0 },
           earningsBeforeCap: 0,
@@ -795,6 +864,7 @@ export default function ContestDetailClient({
       if (!acc[creatorId]) {
         // Get creator-level moderation data if available
         const creatorModeration = creatorModerationData[creatorId] || {};
+        const creatorManualAdjustment = getCreatorManualAdjustment(creatorId);
         acc[creatorId] = {
           creator: {
             id: creatorId,
@@ -830,9 +900,10 @@ export default function ContestDetailClient({
             points: 0,
             base_points: 0,
             // Seed manual points from creator-level moderation (e.g. Twitter leaderboard / CPM adjustments)
-            // Per-submission manual adjustments will be accumulated on top of this.
-            manual_points_adjustment:
-              creatorModeration.manual_points_adjustment || 0,
+            // Tweet-level manual adjustments will be aggregated separately.
+            manual_points_adjustment: creatorManualAdjustment,
+            creator_manual_points_adjustment: creatorManualAdjustment,
+            tweet_manual_points_adjustment: 0,
             manual_points_reason:
               creatorModeration.manual_points_reason || (null as string | null),
           },
@@ -947,17 +1018,18 @@ export default function ContestDetailClient({
 
         // For Twitter CPM contests, accumulate points and base_points
         const submissionBasePoints = submission.other_stats?.base_points || 0;
-        const submissionManualPoints =
-          (submission as any).manual_points_adjustment || 0;
+        const submissionManualPoints = Number(
+          (submission as any).manual_points_adjustment ??
+            submission.other_stats?.manual_points_adjustment ??
+            0
+        );
         const submissionTotalPoints = submission.other_stats?.points || 0;
 
         group.metrics.base_points += submissionBasePoints;
         group.metrics.points += submissionTotalPoints;
 
-        // Add manual points adjustment to the existing manual_points_adjustment
-        group.metrics.manual_points_adjustment += submissionManualPoints;
+        group.metrics.tweet_manual_points_adjustment += submissionManualPoints;
 
-        // DEBUG: Log metrics accumulation for Twitter CPM
         if (
           currentContest?.contest_type === "cpm" &&
           currentContest?.platform === "twitter"
@@ -972,7 +1044,9 @@ export default function ContestDetailClient({
               totalPoints: submissionTotalPoints,
               runningBasePoints: group.metrics.base_points,
               runningPoints: group.metrics.points,
-              runningManualPoints: group.metrics.manual_points_adjustment,
+              runningManualPoints:
+                group.metrics.creator_manual_points_adjustment +
+                group.metrics.tweet_manual_points_adjustment,
               otherStats: submission.other_stats,
             }
           );
@@ -999,6 +1073,53 @@ export default function ContestDetailClient({
 
       return acc;
     }, {});
+
+    Object.values(grouped).forEach((group: any) => {
+      const creatorId = group.creator?.id;
+      const creatorManualAdjustment = getCreatorManualAdjustment(creatorId);
+      const tweetManualAdjustment =
+        group.metrics.tweet_manual_points_adjustment || 0;
+      group.metrics.creator_manual_points_adjustment = creatorManualAdjustment;
+      group.metrics.manual_points_adjustment =
+        creatorManualAdjustment + tweetManualAdjustment;
+      group.metrics.manual_points_reason =
+        creatorModerationData?.[creatorId]?.manual_points_reason ||
+        group.metrics.manual_points_reason;
+    });
+
+    const isTwitterContestForPoints =
+      (currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+      currentContest?.contest_format === "text_image";
+
+    if (isTwitterContestForPoints) {
+      Object.values(grouped).forEach((group: any) => {
+        const calculatedTotalPoints =
+          (group.metrics.base_points || 0) +
+          (group.metrics.manual_points_adjustment || 0);
+
+        if (
+          currentContest?.contest_type === "cpm" &&
+          currentContest?.platform?.toLowerCase() === "twitter"
+        ) {
+          console.log(
+            `[contest-detail-client] Final points calculation for Twitter CPM creator ${group.creator.id}:`,
+            {
+              creatorId: group.creator.id,
+              basePoints: group.metrics.base_points,
+              manualPointsAdjustment: group.metrics.manual_points_adjustment,
+              calculatedTotalPoints: calculatedTotalPoints,
+              currentPoints: group.metrics.points,
+              willOverwrite: group.metrics.points !== calculatedTotalPoints,
+            }
+          );
+        }
+
+        if (group.metrics.points !== calculatedTotalPoints) {
+          group.metrics.points = calculatedTotalPoints;
+        }
+      });
+    }
 
     // For Twitter leaderboard contests, calculate expected earnings based on creator rank
     // Note: isTwitterLeaderboard was already checked above, but we need to check again for non-leaderboard path
@@ -1060,6 +1181,16 @@ export default function ContestDetailClient({
 
       if (cpmRate > 0) {
         Object.values(grouped).forEach((group: any) => {
+          const hasVerifiedSubmissions = group.statusCounts?.verified > 0;
+          const creatorStatus = group.creator_moderation_status;
+          const isCreatorEligible =
+            hasVerifiedSubmissions || creatorStatus === "verified";
+
+          if (!isCreatorEligible) {
+            group.earnings.expected = 0;
+            return;
+          }
+
           // Calculate earnings based on total points (base + manual)
           const totalPoints = group.metrics.points || 0;
           const calculatedEarnings = (totalPoints * cpmRate) / 1000; // Convert to dollars
@@ -1167,52 +1298,14 @@ export default function ContestDetailClient({
       });
     }
 
-    // Calculate total points (base + manual) for Twitter contests (CPM and leaderboard)
-    const isTwitterContest =
-      (currentContest?.platform?.toLowerCase() === "twitter" ||
-        currentContest?.platform?.toLowerCase() === "x") &&
-      currentContest?.contest_format === "text_image";
-
-    if (isTwitterContest) {
-      Object.values(grouped).forEach((group: any) => {
-        // For Twitter contests, ensure points = base_points + manual_points_adjustment
-        // But don't overwrite if we already have the correct accumulated points
-        const calculatedTotalPoints =
-          (group.metrics.base_points || 0) +
-          (group.metrics.manual_points_adjustment || 0);
-
-        // DEBUG: Log final points calculation for Twitter CPM
-        if (
-          currentContest?.contest_type === "cpm" &&
-          currentContest?.platform === "twitter"
-        ) {
-          console.log(
-            `[contest-detail-client] Final points calculation for Twitter CPM creator ${group.creator.id}:`,
-            {
-              creatorId: group.creator.id,
-              basePoints: group.metrics.base_points,
-              manualPointsAdjustment: group.metrics.manual_points_adjustment,
-              calculatedTotalPoints: calculatedTotalPoints,
-              currentPoints: group.metrics.points,
-              willOverwrite: group.metrics.points !== calculatedTotalPoints,
-            }
-          );
-        }
-
-        // Only set if different (to avoid overwriting accumulated points)
-        if (group.metrics.points !== calculatedTotalPoints) {
-          group.metrics.points = calculatedTotalPoints;
-        }
-      });
-    }
-
     return Object.values(grouped);
   }, [
     filteredSubmissions,
-    viewMode,
     currentContest,
     activeStatusTab,
     creatorModerationData,
+    manualAdjustmentOverrides,
+    getCreatorManualAdjustment,
   ]);
 
   // Creator ranking for Twitter leaderboard contests (based on total points per creator)
@@ -2754,6 +2847,10 @@ export default function ContestDetailClient({
         throw new Error(error.error || `Failed to ${action} creator`);
       }
 
+      if (action === "approve") {
+        markCreatorSubmissionsVerifiedLocally(creatorId);
+      }
+
       toast({
         title: "Success",
         description: `Creator ${
@@ -2908,6 +3005,17 @@ export default function ContestDetailClient({
         title: "Success",
         description: `Points adjusted successfully`,
       });
+
+      if (
+        pendingManualPointsSubmission.type === "leaderboard" &&
+        pendingManualPointsSubmission.creatorId
+      ) {
+        const creatorId = pendingManualPointsSubmission.creatorId;
+        setManualAdjustmentOverrides((prev) => ({
+          ...prev,
+          [creatorId]: (prev[creatorId] || 0) + points,
+        }));
+      }
 
       setManualPointsModalOpen(false);
       setPendingManualPointsSubmission(null);
@@ -3948,6 +4056,9 @@ export default function ContestDetailClient({
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}
+                  creatorManualPointsAdjustments={
+                    creatorManualPointsAdjustments
+                  }
                 />
               </div>
             </div>
@@ -9649,7 +9760,7 @@ export default function ContestDetailClient({
                                         "cpm") && (
                                       <>
                                         <TableHead className="text-center">
-                                          Manual Points Adjustment
+                                         Creator Manual Points Adjustment
                                         </TableHead>
                                         <TableHead className="text-center">
                                           Manual Points Reason
@@ -10143,11 +10254,11 @@ export default function ContestDetailClient({
                                                       className={cn(
                                                         "font-semibold text-sm",
                                                         group.metrics
-                                                          .manual_points_adjustment >
+                                                          .creator_manual_points_adjustment >
                                                           0
                                                           ? "text-green-600"
                                                           : group.metrics
-                                                              .manual_points_adjustment <
+                                                              .creator_manual_points_adjustment <
                                                             0
                                                           ? "text-red-600"
                                                           : isDark
@@ -10156,13 +10267,13 @@ export default function ContestDetailClient({
                                                       )}
                                                     >
                                                       {group.metrics
-                                                        .manual_points_adjustment >
+                                                        .creator_manual_points_adjustment >
                                                       0
                                                         ? "+"
                                                         : ""}
                                                       {formatMetricValue(
                                                         group.metrics
-                                                          .manual_points_adjustment ||
+                                                          .creator_manual_points_adjustment ||
                                                           0
                                                       )}
                                                     </span>
@@ -10341,6 +10452,11 @@ export default function ContestDetailClient({
                                                                     if (
                                                                       response.ok
                                                                     ) {
+                                                                      markCreatorSubmissionsVerifiedLocally(
+                                                                        group
+                                                                          .creator
+                                                                          .id
+                                                                      );
                                                                       window.location.reload();
                                                                     } else {
                                                                       const error =
@@ -12451,8 +12567,7 @@ export default function ContestDetailClient({
                                     ).reduce(
                                       (sum, creatorId) =>
                                         sum +
-                                        (creatorModerationData?.[creatorId]
-                                          ?.manual_points_adjustment || 0),
+                                        getCreatorManualAdjustment(creatorId),
                                       0
                                     );
 
@@ -13263,48 +13378,95 @@ export default function ContestDetailClient({
       />
 
       {/* Manual Points Adjustment Modal */}
-      <ManualPointsModal
-        isOpen={manualPointsModalOpen}
-        onClose={() => {
-          setManualPointsModalOpen(false);
-          setPendingManualPointsSubmission(null);
-        }}
-        onConfirm={handleManualPointsConfirm}
-        isLoading={
-          pendingManualPointsSubmission
-            ? isLoadingSubmission[pendingManualPointsSubmission.id] || false
-            : false
-        }
-        adjustmentType={pendingManualPointsSubmission?.type || "tweet"}
-        currentPoints={
-          pendingManualPointsSubmission
-            ? (() => {
-                const submission = currentSubmissions.find(
-                  (s) => s.id === pendingManualPointsSubmission.id
+      {(() => {
+        const manualStats = pendingManualPointsSubmission
+          ? (() => {
+              if (pendingManualPointsSubmission.type === "leaderboard") {
+                const creatorGroup = (groupSubmissionsByCreator as any[])?.find(
+                  (g) =>
+                    g.creator?.id === pendingManualPointsSubmission.creatorId
                 );
-                if (pendingManualPointsSubmission.type === "leaderboard") {
-                  // Get total points from leaderboard (would need to fetch or calculate)
-                  return submission?.other_stats?.points || 0;
-                }
-                return submission?.other_stats?.points || 0;
-              })()
-            : 0
-        }
-        creatorName={
-          pendingManualPointsSubmission
-            ? (() => {
-                const submission = currentSubmissions.find(
-                  (s) => s.id === pendingManualPointsSubmission.id
-                );
-                return (
-                  submission?.creator_display_name ||
-                  submission?.creator_username ||
-                  undefined
-                );
-              })()
-            : undefined
-        }
-      />
+                const submission =
+                  creatorGroup?.submissions?.[0] ||
+                  currentSubmissions.find(
+                    (s) => s.id === pendingManualPointsSubmission.id
+                  );
+                const basePoints = creatorGroup?.metrics?.base_points || 0;
+                const tweetManualPoints =
+                  creatorGroup?.metrics?.tweet_manual_points_adjustment || 0;
+                const creatorAdjustment =
+                  creatorGroup?.metrics?.creator_manual_points_adjustment || 0;
+                const totalPoints =
+                  creatorGroup?.metrics?.points ??
+                  basePoints + tweetManualPoints + creatorAdjustment;
+
+                return {
+                  totalPoints,
+                  basePoints,
+                  manualPoints: tweetManualPoints,
+                  creatorManualPointsAdjustment: creatorAdjustment,
+                  submission,
+                };
+              }
+
+              const submission = currentSubmissions.find(
+                (s) => s.id === pendingManualPointsSubmission.id
+              );
+              if (!submission) {
+                return {
+                  totalPoints: 0,
+                  basePoints: 0,
+                  manualPoints: 0,
+                  creatorManualPointsAdjustment: 0,
+                  submission: undefined,
+                };
+              }
+              const basePoints = submission.other_stats?.base_points || 0;
+              const manualPointValue =
+                submission.manual_points_adjustment ??
+                (submission.other_stats?.manual_points_adjustment || 0);
+              const totalPoints =
+                submission.other_stats?.points || basePoints + manualPointValue;
+
+              return {
+                totalPoints,
+                basePoints,
+                manualPoints: manualPointValue,
+                creatorManualPointsAdjustment: 0,
+                submission,
+              };
+            })()
+          : null;
+
+        return (
+          <ManualPointsModal
+            isOpen={manualPointsModalOpen}
+            onClose={() => {
+              setManualPointsModalOpen(false);
+              setPendingManualPointsSubmission(null);
+            }}
+            onConfirm={handleManualPointsConfirm}
+            isLoading={
+              pendingManualPointsSubmission
+                ? isLoadingSubmission[pendingManualPointsSubmission.id] || false
+                : false
+            }
+            adjustmentType={pendingManualPointsSubmission?.type || "tweet"}
+            currentPoints={manualStats?.totalPoints ?? 0}
+            totalPoints={manualStats?.totalPoints}
+            basePoints={manualStats?.basePoints}
+            manualPoints={manualStats?.manualPoints}
+            creatorManualPointsAdjustment={
+              manualStats?.creatorManualPointsAdjustment
+            }
+            creatorName={
+              manualStats?.submission?.creator_display_name ||
+              manualStats?.submission?.creator_username ||
+              undefined
+            }
+          />
+        );
+      })()}
 
       {/* Reversal confirmation dialog for submissions */}
       <Dialog

@@ -233,7 +233,8 @@ export function calculateTwitterCpmBudgetSpent(
   minViews?: number,
   maxViews?: number,
   flatFeeBonus?: number,
-  flatFeeBonusCap?: number | null
+  flatFeeBonusCap?: number | null,
+  creatorManualAdjustments?: Record<string, number>
 ): number {
   const flatFeeBonusInDollars =
     flatFeeBonus && flatFeeBonus > 0 ? flatFeeBonus / 100 : 0;
@@ -414,6 +415,35 @@ export function calculateTwitterCpmBudgetSpent(
   let totalCpmSpent = 0;
   let totalBonusSpent = 0;
   const creatorBreakdown: Array<{ creatorId: string; total: number }> = [];
+
+  if (
+    creatorManualAdjustments &&
+    Object.keys(creatorManualAdjustments).length > 0
+  ) {
+    const capInDollars =
+      maxEarningsPerCreator != null ? maxEarningsPerCreator / 100 : null;
+
+    for (const [creatorId, adjustmentPoints] of Object.entries(
+      creatorManualAdjustments
+    )) {
+      if (!adjustmentPoints) continue;
+      const creatorData = creatorEarnings.get(creatorId);
+      if (!creatorData) continue;
+
+      const adjustmentEarnings = (adjustmentPoints * cpmRate) / 1000;
+      let additional = adjustmentEarnings;
+
+      if (capInDollars != null) {
+        const remainingCap = Math.max(capInDollars - creatorData.cpmTotal, 0);
+        if (remainingCap <= 0) {
+          continue;
+        }
+        additional = Math.min(additional, remainingCap);
+      }
+
+      creatorData.cpmTotal += additional;
+    }
+  }
 
   for (const [creatorId, earnings] of creatorEarnings) {
     totalCpmSpent += earnings.cpmTotal;

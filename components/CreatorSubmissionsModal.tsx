@@ -371,30 +371,13 @@ export function CreatorSubmissionsModal({
     setSelectAll(false);
   };
 
-  const getStatusBadge = (
-    status: string,
-    paid: boolean,
-    isTwitterTweet?: boolean
-  ) => {
-    const statusLower = status.toLowerCase();
+  const getStatusBadge = (status: string, paid: boolean) => {
+    const statusLower = status?.toLowerCase() || "pending";
 
-    if (paid && !isTwitterTweet) {
+    if (paid || statusLower === "paid") {
       return <Badge className="bg-green-600 text-white">Paid</Badge>;
     }
 
-    // Handle Twitter moderation_status mapping
-    if (isTwitterTweet) {
-      if (statusLower === "approved") {
-        return <Badge className="bg-green-500 text-white">Approved</Badge>;
-      }
-      if (statusLower === "rejected") {
-        return <Badge className="bg-red-500 text-white">Rejected</Badge>;
-      }
-      // pending
-      return <Badge className="bg-yellow-500 text-white">Pending</Badge>;
-    }
-
-    // Regular submission status
     switch (statusLower) {
       case "verified":
         return <Badge className="bg-green-500 text-white">Verified</Badge>;
@@ -403,7 +386,11 @@ export function CreatorSubmissionsModal({
       case "rejected":
         return <Badge className="bg-red-500 text-white">Rejected</Badge>;
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return (
+          <Badge variant="outline">
+            {statusLower.charAt(0).toUpperCase() + statusLower.slice(1)}
+          </Badge>
+        );
     }
   };
 
@@ -448,33 +435,38 @@ export function CreatorSubmissionsModal({
       contest?.platform?.toLowerCase() === "x") &&
     contest?.contest_format === "text_image";
 
-  const isTwitterSubmissionVerified = (modStatus?: string) => {
-    return modStatus === "approved" || modStatus === "verified";
+  const getNormalizedSubmissionStatus = (submission: Submission) => {
+    const isTwitterTweet = submission.is_twitter_tweet === true;
+    const rawStatus =
+      (isTwitterTweet
+        ? submission.moderation_status || submission.status
+        : submission.status) || "pending";
+    const statusLower = String(rawStatus).toLowerCase();
+
+    if (isTwitterTweet) {
+      if (statusLower === "paid") return "paid";
+      if (statusLower === "approved" || statusLower === "verified")
+        return "verified";
+      if (statusLower === "rejected") return "rejected";
+      return "pending";
+    }
+
+    return statusLower;
   };
 
   // Filter submissions based on status
   // For Twitter tweets, use moderation_status; for others, use status
   const filteredSubmissions = submissions.filter((sub) => {
-    const isTwitterTweet = sub.is_twitter_tweet === true;
-    const statusToCheck = isTwitterTweet
-      ? sub.moderation_status || sub.status
-      : sub.status;
-
-    // Map Twitter moderation_status to submission status for filtering
-    let mappedStatus = statusToCheck;
-    if (isTwitterTweet) {
-      if (isTwitterSubmissionVerified(statusToCheck)) mappedStatus = "verified";
-      else if (statusToCheck === "rejected") mappedStatus = "rejected";
-      else mappedStatus = "pending";
-    }
+    const normalizedStatus = getNormalizedSubmissionStatus(sub);
+    const isPaidSubmission = normalizedStatus === "paid" || sub.paid === true;
 
     if (statusFilter === "all") return true;
     if (statusFilter === "verified_or_paid")
-      return mappedStatus === "verified" || mappedStatus === "paid";
-    if (statusFilter === "paid") return mappedStatus === "paid";
-    if (statusFilter === "verified") return mappedStatus === "verified";
-    if (statusFilter === "pending") return mappedStatus === "pending";
-    if (statusFilter === "rejected") return mappedStatus === "rejected";
+      return normalizedStatus === "verified" || isPaidSubmission;
+    if (statusFilter === "paid") return isPaidSubmission;
+    if (statusFilter === "verified") return normalizedStatus === "verified";
+    if (statusFilter === "pending") return normalizedStatus === "pending";
+    if (statusFilter === "rejected") return normalizedStatus === "rejected";
     return true;
   });
 
@@ -526,13 +518,12 @@ export function CreatorSubmissionsModal({
     let currentTotalExpectedBonus = 0;
 
     submissionsByTime.forEach((sub) => {
-      const isTwitterTweet = sub.is_twitter_tweet === true;
-      const isEligibleForBonus =
-        hasBonus &&
-        ((isTwitterTweet &&
-          isTwitterSubmissionVerified(sub.moderation_status)) ||
-          (!isTwitterTweet &&
-            (sub.status === "verified" || sub.status === "paid")));
+      const normalizedStatus = getNormalizedSubmissionStatus(sub);
+      const isBonusStatus =
+        normalizedStatus === "verified" ||
+        normalizedStatus === "paid" ||
+        sub.paid === true;
+      const isEligibleForBonus = hasBonus && isBonusStatus;
 
       if (isEligibleForBonus) {
         // Calculate remaining budget for bonuses
@@ -647,36 +638,29 @@ export function CreatorSubmissionsModal({
   const statusCounts = {
     all: submissions.length,
     verifiedOrPaid: submissions.filter((s) => {
-      const isTwitterTweet = s.is_twitter_tweet === true;
-      const status = isTwitterTweet
-        ? isTwitterSubmissionVerified(s.moderation_status)
-          ? "verified"
-          : s.status
-        : s.status;
-      return status === "verified" || status === "paid";
+      const normalizedStatus = getNormalizedSubmissionStatus(s);
+      return (
+        normalizedStatus === "verified" ||
+        normalizedStatus === "paid" ||
+        s.paid === true
+      );
     }).length,
     pending: submissions.filter((s) => {
-      const isTwitterTweet = s.is_twitter_tweet === true;
-      if (isTwitterTweet) {
-        return (s.moderation_status || s.status) === "pending";
-      }
-      return s.status === "pending";
+      const normalizedStatus = getNormalizedSubmissionStatus(s);
+      return normalizedStatus === "pending";
     }).length,
     verified: submissions.filter((s) => {
-      const isTwitterTweet = s.is_twitter_tweet === true;
-      if (isTwitterTweet) {
-        return isTwitterSubmissionVerified(s.moderation_status);
-      }
-      return s.status === "verified";
+      const normalizedStatus = getNormalizedSubmissionStatus(s);
+      return normalizedStatus === "verified";
     }).length,
     rejected: submissions.filter((s) => {
-      const isTwitterTweet = s.is_twitter_tweet === true;
-      if (isTwitterTweet) {
-        return s.moderation_status === "rejected";
-      }
-      return s.status === "rejected";
+      const normalizedStatus = getNormalizedSubmissionStatus(s);
+      return normalizedStatus === "rejected";
     }).length,
-    paid: submissions.filter((s) => s.status === "paid").length,
+    paid: submissions.filter((s) => {
+      const normalizedStatus = getNormalizedSubmissionStatus(s);
+      return normalizedStatus === "paid" || s.paid === true;
+    }).length,
   };
   const isDark = mode === "dark";
 
@@ -1343,10 +1327,13 @@ export function CreatorSubmissionsModal({
                       ? (submission as any).bonus_amount || flatFeeBonus
                       : 0;
 
-                    // For Twitter tweets, use moderation_status for status badge
-                    const statusToUse = isTwitterTweet
-                      ? submission.moderation_status || submission.status
-                      : submission.status;
+                    const normalizedStatus =
+                      getNormalizedSubmissionStatus(submission);
+                    const isSubmissionVerified =
+                      normalizedStatus === "verified";
+                    const isSubmissionRejected =
+                      normalizedStatus === "rejected";
+                    const isSubmissionPending = normalizedStatus === "pending";
 
                     return (
                       <TableRow
@@ -1775,11 +1762,7 @@ export function CreatorSubmissionsModal({
                           </>
                         )}
                         <TableCell>
-                          {getStatusBadge(
-                            statusToUse,
-                            submission.paid,
-                            isTwitterTweet
-                          )}
+                          {getStatusBadge(normalizedStatus, submission.paid)}
                         </TableCell>
                         <TableCell
                           className={cn(
@@ -1803,11 +1786,7 @@ export function CreatorSubmissionsModal({
                                   "payments_processed" && (
                                   <>
                                     {/* For Twitter tweets, check moderation_status; for others, check status */}
-                                    {(isTwitterTweet
-                                      ? !isTwitterSubmissionVerified(
-                                          submission.moderation_status
-                                        )
-                                      : submission.status !== "verified") && (
+                                    {!isSubmissionVerified && (
                                       <DropdownMenuItem
                                         onClick={() =>
                                           onVerify([submission.id])
@@ -1817,10 +1796,7 @@ export function CreatorSubmissionsModal({
                                         {isTwitterTweet ? "Approve" : "Verify"}
                                       </DropdownMenuItem>
                                     )}
-                                    {(isTwitterTweet
-                                      ? submission.moderation_status !==
-                                        "rejected"
-                                      : submission.status !== "rejected") && (
+                                    {!isSubmissionRejected && (
                                       <DropdownMenuItem
                                         onClick={() =>
                                           onReject([submission.id])
@@ -1830,10 +1806,7 @@ export function CreatorSubmissionsModal({
                                         Reject
                                       </DropdownMenuItem>
                                     )}
-                                    {(isTwitterTweet
-                                      ? submission.moderation_status !==
-                                        "pending"
-                                      : submission.status !== "pending") && (
+                                    {!isSubmissionPending && (
                                       <DropdownMenuItem
                                         onClick={() =>
                                           onSetPending([submission.id])
