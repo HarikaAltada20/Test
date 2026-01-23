@@ -9812,6 +9812,14 @@ export default function ContestDetailClient({
                                         (creatorWisePage - 1) *
                                           creatorWiseItemsPerPage +
                                         index;
+                                      const hasVerifiedOrPaidSubmissions =
+                                        (group.statusCounts?.verified || 0) >
+                                          0 ||
+                                        (group.statusCounts?.paid || 0) > 0;
+                                      const bonusExpectedForDisplay =
+                                        hasVerifiedOrPaidSubmissions
+                                          ? group.bonus.expected
+                                          : 0;
                                       return (
                                         <TableRow key={group.creator.id}>
                                           <TableCell className="font-medium">
@@ -10240,7 +10248,7 @@ export default function ContestDetailClient({
                                             <>
                                               <TableCell className="text-center font-medium">
                                                 {formatMoney(
-                                                  group.bonus.expected
+                                                  bonusExpectedForDisplay
                                                 )}
                                               </TableCell>
                                               <TableCell className="text-center font-medium text-green-600">
