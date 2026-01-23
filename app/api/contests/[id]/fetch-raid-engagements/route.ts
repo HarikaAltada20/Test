@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import axios from "axios";
+import {
+  hasRapidApiKeys,
+  rapidApiHost,
+  rapidApiRequest,
+} from "@/lib/twitter/rapidApiClient";
 import { extractTweetId, getTwitterRaidTarget } from "@/lib/twitter-utils";
 
 export const dynamic = "force-dynamic";
@@ -486,12 +490,12 @@ export async function POST(
     });
 
     // 4. Fetch target tweet and all replies using RapidAPI
-    const rapidApiKey = process.env.TWITTER_RAPIDAPI_KEY;
-    const rapidApiHost = "twitter-api45.p.rapidapi.com";
-
-    if (!rapidApiKey) {
+    if (!hasRapidApiKeys) {
+      console.error(
+        "[fetch-raid-engagements] RapidAPI keys are not configured"
+      );
       return NextResponse.json(
-        { error: "TWITTER_RAPIDAPI_KEY not configured" },
+        { error: "Twitter RapidAPI keys are not configured" },
         { status: 500 }
       );
     }
@@ -509,13 +513,9 @@ export async function POST(
         params: {
           id: targetTweetId,
         },
-        headers: {
-          "x-rapidapi-key": rapidApiKey,
-          "x-rapidapi-host": rapidApiHost,
-        },
       };
 
-      const tweetInfoResponse = await axios.request(tweetInfoOptions);
+      const tweetInfoResponse = await rapidApiRequest(tweetInfoOptions);
       const tweetInfoData = tweetInfoResponse.data;
 
       // Handle different response formats
@@ -567,10 +567,6 @@ export async function POST(
           params: {
             id: targetTweetId, // Get all engagements on this specific tweet
           },
-          headers: {
-            "x-rapidapi-key": rapidApiKey,
-            "x-rapidapi-host": rapidApiHost,
-          },
         };
 
         // Add cursor for pagination (if not first page)
@@ -578,7 +574,7 @@ export async function POST(
           repliesOptions.params.cursor = cursor;
         }
 
-        const repliesResponse = await axios.request(repliesOptions);
+        const repliesResponse = await rapidApiRequest(repliesOptions);
         const repliesData = repliesResponse.data;
 
         // The latest_replies.php endpoint returns engagements in a timeline array
@@ -727,13 +723,9 @@ export async function POST(
         params: {
           id: targetTweetId,
         },
-        headers: {
-          "x-rapidapi-key": rapidApiKey,
-          "x-rapidapi-host": rapidApiHost,
-        },
       };
 
-      const retweetsResponse = await axios.request(retweetsOptions);
+      const retweetsResponse = await rapidApiRequest(retweetsOptions);
       const retweetsData = retweetsResponse.data;
 
       let retweetsFromEndpoint: any[] = [];
@@ -809,10 +801,6 @@ export async function POST(
                 params: {
                   screenname: username,
                 },
-                headers: {
-                  "x-rapidapi-key": rapidApiKey,
-                  "x-rapidapi-host": rapidApiHost,
-                },
               };
 
               // Add cursor for pagination (if not first page)
@@ -820,7 +808,7 @@ export async function POST(
                 userTimelineOptions.params.cursor = cursor;
               }
 
-              const userTimelineResponse = await axios.request(
+              const userTimelineResponse = await rapidApiRequest(
                 userTimelineOptions
               );
               const userTimelineData = userTimelineResponse.data;
@@ -979,10 +967,6 @@ export async function POST(
             params: {
               screenname: username,
             },
-            headers: {
-              "x-rapidapi-key": rapidApiKey,
-              "x-rapidapi-host": rapidApiHost,
-            },
           };
 
           // Add cursor for pagination (if not first page)
@@ -990,7 +974,9 @@ export async function POST(
             userTimelineOptions.params.cursor = cursor;
           }
 
-          const userTimelineResponse = await axios.request(userTimelineOptions);
+          const userTimelineResponse = await rapidApiRequest(
+            userTimelineOptions
+          );
           const userTimelineData = userTimelineResponse.data;
           const pageTimeline = Array.isArray(userTimelineData?.timeline)
             ? userTimelineData.timeline
