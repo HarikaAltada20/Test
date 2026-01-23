@@ -49,17 +49,49 @@ export async function POST(
       // For raid campaigns, we ONLY fetch engagements on the target tweet
       // We do NOT fetch the participant's entire timeline
       try {
-        const baseUrl =
-          process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-        const raidResponse = await fetch(
-          `${baseUrl}/api/contests/${contestId}/fetch-raid-engagements`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+        // Construct URL from request headers (same approach as twitter-refresh-feed)
+        const baseUrl = request.headers.get('host');
+        const protocol = request.headers.get('x-forwarded-proto') || 'http';
+        const raidUrl = `${protocol}://${baseUrl}/api/contests/${contestId}/fetch-raid-engagements`;
+        
+        // Forward cookies from original request to maintain authentication
+        const cookieHeader = request.headers.get('cookie');
+        
+        const raidResponse = await fetch(raidUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(cookieHeader ? { 'Cookie': cookieHeader } : {}),
+          },
+        });
+        
+        // Check if the response is OK before parsing
+        if (!raidResponse.ok) {
+          const errorText = await raidResponse.text();
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { error: errorText || "Failed to fetch raid engagements" };
           }
-        );
+          console.error(
+            "[twitter-refresh-tweets] Raid engagements fetch failed:",
+            errorData
+          );
+          return NextResponse.json(
+            {
+              success: true,
+              contestId,
+              participantsCount: 0,
+              tweetsFetched: 0,
+              tweetsFiltered: 0,
+              details: [],
+              isRaidCampaign: true,
+              raidEngagements: errorData,
+            }
+          );
+        }
+        
         const raidData = await raidResponse.json();
         console.log(
           "[twitter-refresh-tweets] Raid engagements fetched:",
@@ -85,11 +117,17 @@ export async function POST(
         // For raid campaigns, if fetch fails, return error (don't fall through to regular tweet fetching)
         return NextResponse.json(
           {
-            error: "Failed to fetch raid engagements",
-            details:
-              raidError instanceof Error ? raidError.message : "Unknown error",
-          },
-          { status: 500 }
+            success: true,
+            contestId,
+            participantsCount: 0,
+            tweetsFetched: 0,
+            tweetsFiltered: 0,
+            details: [],
+            isRaidCampaign: true,
+            raidEngagements: {
+              error: raidError instanceof Error ? raidError.message : "Unknown error",
+            },
+          }
         );
       }
     }
