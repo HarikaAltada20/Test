@@ -6,6 +6,7 @@ export interface SubscriptionPlan {
   name: string;
   displayName?: string;
   price: number; // in cents
+  trialDays?: number; // Trial period in days
   prices?: {
     monthly?: {
       id: string; // Stripe price ID

@@ -1,13 +1,13 @@
-import { NextResponse } from 'next/server';
-import dayjs from 'dayjs';
-import { createClient as createAdminSupabaseClient } from '@supabase/supabase-js';
+import { NextResponse } from "next/server";
+import dayjs from "dayjs";
+import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 
 // 🎯 Types
 interface InstagramAccount {
   access_token: string;
   token_expiry: string;
   app_scoped_user_id: string;
-  account_type?: 'BUSINESS' | 'MEDIA_CREATOR' | 'PERSONAL';
+  account_type?: "BUSINESS" | "MEDIA_CREATOR" | "PERSONAL";
 }
 
 interface Submission {
@@ -44,49 +44,87 @@ interface TokenUpdate {
 
 // 🔧 Constants
 const TOKEN_REFRESH_THRESHOLD_DAYS = 10;
-const METRICS = 'reach,likes,comments,shares,saved,total_interactions,views,ig_reels_avg_watch_time,ig_reels_video_view_total_time';
-const DEFAULT_STATS = { reach: 0, likes: 0, comments: 0, shares: 0, saved: 0, total_interactions: 0, views: 0, avg_watch_time_ms: 0, total_watch_time_ms: 0 };
+const METRICS =
+  "reach,likes,comments,shares,saved,total_interactions,views,ig_reels_avg_watch_time,ig_reels_video_view_total_time";
+const DEFAULT_STATS = {
+  reach: 0,
+  likes: 0,
+  comments: 0,
+  shares: 0,
+  saved: 0,
+  total_interactions: 0,
+  views: 0,
+  avg_watch_time_ms: 0,
+  total_watch_time_ms: 0,
+};
 
 // 🛠️ Utilities
 const isTokenExpiring = (tokenExpiry: string): boolean =>
-  dayjs(tokenExpiry).isBefore(dayjs().add(TOKEN_REFRESH_THRESHOLD_DAYS, 'day'));
+  dayjs(tokenExpiry).isBefore(dayjs().add(TOKEN_REFRESH_THRESHOLD_DAYS, "day"));
 
-const hasStatsChanged = (oldViews: number | null, newViews: number, oldStats: any, newStats: Record<string, number>): boolean => {
+const hasStatsChanged = (
+  oldViews: number | null,
+  newViews: number,
+  oldStats: any,
+  newStats: Record<string, number>
+): boolean => {
   if (oldViews !== newViews) return true;
   if (!oldStats?.instagram) return Object.keys(newStats).length > 0;
-  return Object.keys(newStats).some(key => oldStats.instagram[key] !== newStats[key]);
+  return Object.keys(newStats).some(
+    (key) => oldStats.instagram[key] !== newStats[key]
+  );
 };
 
 // 🔄 Refresh Instagram token
-async function refreshToken(creatorId: string, accessToken: string): Promise<string | null> {
+async function refreshToken(
+  creatorId: string,
+  accessToken: string
+): Promise<string | null> {
   try {
     const refreshUrl = `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${accessToken}`;
     const response = await fetch(refreshUrl);
     const data = await response.json();
 
     if (!response.ok || data.error) {
-      console.error(`Token refresh failed for creator ${creatorId}:`, data.error);
+      console.error(
+        `Token refresh failed for creator ${creatorId}:`,
+        data.error
+      );
       return null;
     }
 
     return data.access_token;
   } catch (error: any) {
-    console.error(`Token refresh exception for creator ${creatorId}:`, error.message);
+    console.error(
+      `Token refresh exception for creator ${creatorId}:`,
+      error.message
+    );
     return null;
   }
 }
 
 // 📊 Fetch insights for a submission
-async function fetchInsights(submission: Submission, accessToken: string): Promise<{ views: number; stats: Record<string, number> } | null> {
+async function fetchInsights(
+  submission: Submission,
+  accessToken: string
+): Promise<{ views: number; stats: Record<string, number> } | null> {
   try {
     const url = `https://graph.instagram.com/${submission.video_id}/insights?metric=${METRICS}&access_token=${accessToken}`;
     const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: response.statusText }));
-      console.error(`Insights fetch failed for submission ${submission.id}:`, error);
+      const error = await response
+        .json()
+        .catch(() => ({ message: response.statusText }));
+      console.error(
+        `Insights fetch failed for submission ${submission.id}:`,
+        error
+      );
       return null;
     }
 
@@ -96,15 +134,15 @@ async function fetchInsights(submission: Submission, accessToken: string): Promi
     const stats = { ...DEFAULT_STATS };
     let primaryViews = 0;
 
-    data.data.forEach(metric => {
+    data.data.forEach((metric) => {
       const value = metric.values[0]?.value || 0;
-      
+
       // Map Quality of Attention metrics to readable keys
-      if (metric.name === 'ig_reels_avg_watch_time') {
+      if (metric.name === "ig_reels_avg_watch_time") {
         stats.avg_watch_time_ms = value;
-      } else if (metric.name === 'ig_reels_video_view_total_time') {
+      } else if (metric.name === "ig_reels_video_view_total_time") {
         stats.total_watch_time_ms = value;
-      } else if (metric.name === 'views') {
+      } else if (metric.name === "views") {
         stats.views = value;
         primaryViews = value;
       } else {
@@ -120,22 +158,28 @@ async function fetchInsights(submission: Submission, accessToken: string): Promi
 
     return { views: primaryViews, stats };
   } catch (error: any) {
-    console.error(`Error fetching insights for submission ${submission.id}:`, error.message);
+    console.error(
+      `Error fetching insights for submission ${submission.id}:`,
+      error.message
+    );
     return null;
   }
 }
 
 // 💰 Update CPM contest budgets
-async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: string): Promise<void> {
+async function updateCpmContestBudgets(
+  supabaseAdmin: any,
+  contestId?: string
+): Promise<void> {
   try {
     let query = supabaseAdmin
-      .from('contests')
-      .select('id, contest_based_details, views_locked_at')
-      .eq('contest_type', 'cpm')
-      .not('contest_based_details', 'is', null)
-      .is('views_locked_at', null); // Only update contests that haven't been finalized
+      .from("contests")
+      .select("id, contest_based_details, views_locked_at")
+      .eq("contest_type", "cpm")
+      .not("contest_based_details", "is", null)
+      .is("views_locked_at", null); // Only update contests that haven't been finalized
 
-    if (contestId) query = query.eq('id', contestId);
+    if (contestId) query = query.eq("id", contestId);
 
     const { data: contests, error } = await query;
     if (error || !contests?.length) return;
@@ -146,26 +190,37 @@ async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: string): 
 
       // Fetch contest details for cap
       const { data: contestDetails } = await supabaseAdmin
-        .from('contests')
-        .select('max_earnings_per_creator')
-        .eq('id', contest.id)
+        .from("contests")
+        .select("max_earnings_per_creator")
+        .eq("id", contest.id)
         .single();
 
-      const maxEarningsPerCreator = contestDetails?.max_earnings_per_creator || null;
+      const maxEarningsPerCreator =
+        contestDetails?.max_earnings_per_creator || null;
 
       // Get submissions with payment status
       const { data: submissions } = await supabaseAdmin
-        .from('submissions')
-        .select('views, creator_id, created_at, paid, bonus_paid, earnings, bonus_amount')
-        .eq('contest_id', contest.id)
-        .in('status', ['verified', 'paid'])
-        .order('created_at', { ascending: true });
+        .from("submissions")
+        .select(
+          "views, creator_id, created_at, paid, bonus_paid, earnings, bonus_amount"
+        )
+        .eq("contest_id", contest.id)
+        .in("status", ["verified", "paid"])
+        .order("created_at", { ascending: true });
 
       if (!submissions?.length) continue;
 
       // Group by creator to respect earnings cap
-      const creatorEarnings = new Map<string, { cpmTotal: number; bonusTotal: number }>();
+      const creatorEarnings = new Map<
+        string,
+        { cpmTotal: number; bonusTotal: number }
+      >();
       const flatFeeBonus = cpmConfig.flat_fee_bonus || 0;
+      const flatFeeBonusCap = cpmConfig.flat_fee_bonus_cap || null;
+
+      // Track total bonus spending to apply cap (first-come-first-served)
+      let totalBonusSpentSoFar = 0;
+      const capInDollars = flatFeeBonusCap ? flatFeeBonusCap / 100 : null;
 
       for (const sub of submissions) {
         const creatorId = sub.creator_id;
@@ -178,21 +233,25 @@ async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: string): 
         // Use actual paid earnings if paid, otherwise calculate expected
         if (sub.paid && sub.earnings != null) {
           // Use actual paid amount from database
-          creatorData.cpmTotal += (sub.earnings / 100); // Convert cents to dollars
+          creatorData.cpmTotal += sub.earnings / 100; // Convert cents to dollars
         } else {
           // Calculate expected CPM earnings for verified but unpaid submissions
           let views = sub.views || 0;
           if (cpmConfig.min_views && views < cpmConfig.min_views) views = 0;
-          if (cpmConfig.max_views && views > cpmConfig.max_views) views = cpmConfig.max_views;
-          
+          if (cpmConfig.max_views && views > cpmConfig.max_views)
+            views = cpmConfig.max_views;
+
           const submissionEarnings = (views * cpmConfig.cpm_rate_usd) / 1000;
-          
+
           // Apply creator cap if exists
           if (maxEarningsPerCreator) {
             const maxEarningsInDollars = maxEarningsPerCreator / 100;
             const remainingCap = maxEarningsInDollars - creatorData.cpmTotal;
             if (remainingCap > 0) {
-              creatorData.cpmTotal += Math.min(submissionEarnings, remainingCap);
+              creatorData.cpmTotal += Math.min(
+                submissionEarnings,
+                remainingCap
+              );
             }
           } else {
             creatorData.cpmTotal += submissionEarnings;
@@ -200,12 +259,23 @@ async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: string): 
         }
 
         // Use actual bonus amount if bonus_paid, otherwise calculate expected
+        // Apply cap during calculation (first-come-first-served)
         if (sub.bonus_paid && sub.bonus_amount != null) {
           // Use actual bonus amount from database
-          creatorData.bonusTotal += (sub.bonus_amount / 100); // Convert cents to dollars
+          const actualBonus = sub.bonus_amount / 100;
+          creatorData.bonusTotal += actualBonus;
+          totalBonusSpentSoFar += actualBonus;
         } else if (flatFeeBonus > 0) {
-          // Add expected flat fee bonus for verified but unpaid submissions
-          creatorData.bonusTotal += (flatFeeBonus / 100);
+          const bonusAmount = flatFeeBonus / 100;
+          // Check if adding this bonus would exceed the cap
+          if (
+            capInDollars === null ||
+            totalBonusSpentSoFar + bonusAmount <= capInDollars
+          ) {
+            creatorData.bonusTotal += bonusAmount;
+            totalBonusSpentSoFar += bonusAmount;
+          }
+          // If cap would be exceeded, this submission gets $0 bonus (cap reached)
         }
       }
 
@@ -221,28 +291,31 @@ async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: string): 
 
       const now = new Date().toISOString();
       await supabaseAdmin
-        .from('contests')
+        .from("contests")
         .update({
           contest_based_details: {
             ...contest.contest_based_details,
-            cpm_contest: { ...cpmConfig, budget_spent: Math.round(totalSpent * 100) }
+            cpm_contest: {
+              ...cpmConfig,
+              budget_spent: Math.round(totalSpent * 100),
+            },
           },
           last_metrics_updated: now,
-          updated_at: now
+          updated_at: now,
         })
-        .eq('id', contest.id);
+        .eq("id", contest.id);
     }
   } catch (error: any) {
-    console.error('CPM budget update failed:', error.message);
+    console.error("CPM budget update failed:", error.message);
   }
 }
 
 // 🚀 Main handler - Now optimized, readable, and efficient!
 export async function GET(request: Request) {
   // Auth check
-  const authHeader = request.headers.get('authorization');
+  const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const supabaseAdmin = createAdminSupabaseClient(
@@ -252,54 +325,65 @@ export async function GET(request: Request) {
 
   try {
     const url = new URL(request.url);
-    const contestId = url.searchParams.get('contestId');
+    const contestId = url.searchParams.get("contestId");
 
     // Determine active contests up-front to avoid touching finalized ones
     let activeIds: string[] | undefined = undefined;
     if (contestId) {
       const { data: c } = await supabaseAdmin
-        .from('contests')
-        .select('id, views_locked_at')
-        .eq('id', contestId)
+        .from("contests")
+        .select("id, views_locked_at")
+        .eq("id", contestId)
         .single();
       if (!c || c.views_locked_at) {
-        return NextResponse.json({ message: `Contest ${contestId} is finalized or not found; nothing to update` });
+        return NextResponse.json({
+          message: `Contest ${contestId} is finalized or not found; nothing to update`,
+        });
       }
     } else {
       const { data: activeContests } = await supabaseAdmin
-        .from('contests')
-        .select('id')
-        .is('views_locked_at', null);
+        .from("contests")
+        .select("id")
+        .is("views_locked_at", null);
       activeIds = (activeContests || []).map((c: any) => c.id);
       if (!activeIds.length) {
-        return NextResponse.json({ message: 'No active contests to update' });
+        return NextResponse.json({ message: "No active contests to update" });
       }
     }
-    
-    console.log(`🚀 Starting Instagram insights update${contestId ? ` for contest ${contestId}` : ''}`);
+
+    console.log(
+      `🚀 Starting Instagram insights update${
+        contestId ? ` for contest ${contestId}` : ""
+      }`
+    );
 
     // 📥 Fetch submissions (only from active contests)
     let submissionsQuery = supabaseAdmin
-      .from('submissions')
-      .select('id, creator_id, video_id, views, other_stats')
-      .eq('platform', 'instagram')
-      .not('video_id', 'is', null);
+      .from("submissions")
+      .select("id, creator_id, video_id, views, other_stats")
+      .eq("platform", "instagram")
+      .not("video_id", "is", null);
 
     if (contestId) {
-      submissionsQuery = submissionsQuery.eq('contest_id', contestId);
+      submissionsQuery = submissionsQuery.eq("contest_id", contestId);
     } else if (activeIds && activeIds.length) {
-      submissionsQuery = submissionsQuery.in('contest_id', activeIds);
+      submissionsQuery = submissionsQuery.in("contest_id", activeIds);
     }
 
-    const { data: submissions, error: submissionError } = await submissionsQuery;
+    const { data: submissions, error: submissionError } =
+      await submissionsQuery;
 
     if (submissionError) {
-      throw new Error(`Failed to fetch submissions: ${submissionError.message}`);
+      throw new Error(
+        `Failed to fetch submissions: ${submissionError.message}`
+      );
     }
 
     if (!submissions?.length) {
-      return NextResponse.json({ 
-        message: `No submissions to update${contestId ? ` for contest ${contestId}` : ''}` 
+      return NextResponse.json({
+        message: `No submissions to update${
+          contestId ? ` for contest ${contestId}` : ""
+        }`,
       });
     }
 
@@ -316,33 +400,39 @@ export async function GET(request: Request) {
 
     // 🔍 Fetch creator profiles (only Instagram account data - no unnecessary fields!)
     const { data: creators, error: profilesError } = await supabaseAdmin
-      .from('creator_profiles')
-      .select('id, instagram_account')
-      .in('id', creatorIds)
-      .not('instagram_account', 'is', null);
+      .from("creator_profiles")
+      .select("id, instagram_account")
+      .in("id", creatorIds)
+      .not("instagram_account", "is", null);
 
     if (profilesError) {
-      throw new Error(`Failed to fetch creator profiles: ${profilesError.message}`);
+      throw new Error(
+        `Failed to fetch creator profiles: ${profilesError.message}`
+      );
     }
 
     if (!creators?.length) {
       await updateCpmContestBudgets(supabaseAdmin, contestId || undefined);
-      return NextResponse.json({ 
-        message: 'No connected Instagram accounts found, budget tracking completed' 
+      return NextResponse.json({
+        message:
+          "No connected Instagram accounts found, budget tracking completed",
       });
     }
 
     // 🔄 Process insights efficiently
     const updates: SubmissionUpdate[] = [];
     const tokenUpdates: TokenUpdate[] = [];
-    
+
     for (const creator of creators as Creator[]) {
       const account = creator.instagram_account;
       const userSubmissions = submissionsByCreator[creator.id];
 
       // Skip invalid accounts
-      if (!account?.access_token || 
-          (account.account_type !== 'BUSINESS' && account.account_type !== 'MEDIA_CREATOR')) {
+      if (
+        !account?.access_token ||
+        (account.account_type !== "BUSINESS" &&
+          account.account_type !== "MEDIA_CREATOR")
+      ) {
         continue;
       }
 
@@ -352,15 +442,15 @@ export async function GET(request: Request) {
       if (account.token_expiry && isTokenExpiring(account.token_expiry)) {
         const newToken = await refreshToken(creator.id, accessToken);
         if (!newToken) continue;
-        
+
         accessToken = newToken;
         tokenUpdates.push({
           userId: creator.id,
           newAccountData: {
             ...account,
             access_token: newToken,
-            token_expiry: dayjs().add(3600, 'second').toISOString()
-          }
+            token_expiry: dayjs().add(3600, "second").toISOString(),
+          },
         });
       }
 
@@ -372,13 +462,20 @@ export async function GET(request: Request) {
         if (!result) continue;
 
         const { views, stats } = result;
-        
-        if (hasStatsChanged(submission.views, views, submission.other_stats, stats)) {
+
+        if (
+          hasStatsChanged(
+            submission.views,
+            views,
+            submission.other_stats,
+            stats
+          )
+        ) {
           updates.push({
             id: submission.id,
             views,
             other_stats: { ...submission.other_stats, instagram: stats },
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
           });
         }
       }
@@ -386,18 +483,18 @@ export async function GET(request: Request) {
 
     // 💾 Batch database updates (much more efficient!)
     const now = new Date().toISOString();
-    
+
     if (tokenUpdates.length > 0) {
       console.log(`🔄 Updating ${tokenUpdates.length} tokens`);
       await Promise.allSettled(
-        tokenUpdates.map(update =>
+        tokenUpdates.map((update) =>
           supabaseAdmin
-            .from('creator_profiles')
-            .update({ 
+            .from("creator_profiles")
+            .update({
               instagram_account: update.newAccountData,
-              updated_at: now 
+              updated_at: now,
             })
-            .eq('id', update.userId)
+            .eq("id", update.userId)
         )
       );
     }
@@ -405,29 +502,35 @@ export async function GET(request: Request) {
     if (updates.length > 0) {
       console.log(`📊 Updating ${updates.length} submissions`);
       await Promise.allSettled(
-        updates.map(update =>
+        updates.map((update) =>
           supabaseAdmin
-            .from('submissions')
+            .from("submissions")
             .update({
               views: update.views,
               other_stats: update.other_stats,
               last_insights_update: now,
-              updated_at: update.updated_at
+              updated_at: update.updated_at,
             })
-            .eq('id', update.id)
+            .eq("id", update.id)
         )
       );
     }
 
     await updateCpmContestBudgets(supabaseAdmin, contestId || undefined);
 
-    console.log(`✅ Instagram insights update completed. Updated ${updates.length} submissions`);
-    return NextResponse.json({ 
-      message: `Updated ${updates.length} Instagram submissions${contestId ? ` for contest ${contestId}` : ''} and CPM budgets` 
+    console.log(
+      `✅ Instagram insights update completed. Updated ${updates.length} submissions`
+    );
+    return NextResponse.json({
+      message: `Updated ${updates.length} Instagram submissions${
+        contestId ? ` for contest ${contestId}` : ""
+      } and CPM budgets`,
     });
-
   } catch (error: any) {
-    console.error('❌ Instagram insights update failed:', error.message);
-    return NextResponse.json({ error: `Cron job failed: ${error.message}` }, { status: 500 });
+    console.error("❌ Instagram insights update failed:", error.message);
+    return NextResponse.json(
+      { error: `Cron job failed: ${error.message}` },
+      { status: 500 }
+    );
   }
 }

@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import axios from "axios";
+import {
+  hasRapidApiKeys,
+  rapidApiHost,
+  rapidApiRequest,
+} from "@/lib/twitter/rapidApiClient";
 import { extractTweetId, getTwitterRaidTarget } from "@/lib/twitter-utils";
 
 export const dynamic = "force-dynamic";
@@ -12,40 +16,40 @@ const RAID_POINTS_CONFIG = {
   // ============================================
   // BASE POINTS (for doing the action)
   // ============================================
-  comment_base_points: 1,           // Points for commenting on target tweet
-  retweet_base_points: 5,           // Points for retweeting target tweet
-  quote_repost_base_points: 10,     // Points for quote reposting target tweet
-  
+  comment_base_points: 1, // Points for commenting on target tweet
+  retweet_base_points: 5, // Points for retweeting target tweet
+  quote_repost_base_points: 10, // Points for quote reposting target tweet
+
   // ============================================
   // COMMENT ENGAGEMENT MULTIPLIERS
   // (Reward for engagement on their comment)
   // ============================================
-  comment_likes_multiplier: 0.1,           // Points per like on their comment
-  comment_replies_multiplier: 1,           // Points per reply to their comment
-  comment_impressions_multiplier: 0.001,   // Points per impression on their comment
-  comment_retweets_multiplier: 0,          // (Comments can't be retweeted, but if they could)
-  comment_quote_reposts_multiplier: 0,     // (Comments can't be quote reposted)
-  
+  comment_likes_multiplier: 0.1, // Points per like on their comment
+  comment_replies_multiplier: 1, // Points per reply to their comment
+  comment_impressions_multiplier: 0.001, // Points per impression on their comment
+  comment_retweets_multiplier: 0, // (Comments can't be retweeted, but if they could)
+  comment_quote_reposts_multiplier: 0, // (Comments can't be quote reposted)
+
   // ============================================
   // RETWEET ENGAGEMENT MULTIPLIERS
   // (Reward for engagement on their retweet)
   // ============================================
-  retweet_likes_multiplier: 0.05,          // Points per like on their retweet
-  retweet_replies_multiplier: 0.05,        // Points per reply to their retweet
-  retweet_impressions_multiplier: 0.001,   // Points per impression on their retweet
-  retweet_retweets_multiplier: 0.05,       // Points per retweet of their retweet (chain retweets)
-  retweet_quote_reposts_multiplier: 0,     // (Retweets can't be quote reposted)
-  
+  retweet_likes_multiplier: 0.05, // Points per like on their retweet
+  retweet_replies_multiplier: 0.05, // Points per reply to their retweet
+  retweet_impressions_multiplier: 0.001, // Points per impression on their retweet
+  retweet_retweets_multiplier: 0.05, // Points per retweet of their retweet (chain retweets)
+  retweet_quote_reposts_multiplier: 0, // (Retweets can't be quote reposted)
+
   // ============================================
   // QUOTE REPOST ENGAGEMENT MULTIPLIERS
   // (Reward for engagement on their quote repost)
   // ============================================
-  quote_repost_likes_multiplier: 0.1,      // Points per like on their quote repost
-  quote_repost_replies_multiplier: 0.1,    // Points per reply to their quote repost
+  quote_repost_likes_multiplier: 0.1, // Points per like on their quote repost
+  quote_repost_replies_multiplier: 0.1, // Points per reply to their quote repost
   quote_repost_impressions_multiplier: 0.001, // Points per impression on their quote repost
-  quote_repost_retweets_multiplier: 0.1,   // Points per retweet of their quote repost
+  quote_repost_retweets_multiplier: 0.1, // Points per retweet of their quote repost
   quote_repost_quote_reposts_multiplier: 0.1, // Points per quote repost of their quote repost
-  
+
   // ============================================
   // OPTIONAL: Additional metrics (if available in future)
   // ============================================
@@ -66,28 +70,355 @@ export async function POST(
     // 1. Get contest and check if it's a raid campaign
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
-      .select("id, contest_based_details, start_date")
+      .select("id, contest_type, contest_based_details, start_date")
       .eq("id", contestId)
       .maybeSingle();
 
     if (contestError || !contest) {
-      return NextResponse.json(
-        { error: "Contest not found" },
-        { status: 404 }
+      return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+    }
+
+    const isCpmContest = contest.contest_type === "cpm";
+    const twitterCampaign = contest.contest_based_details?.twitter_campaign;
+    const raidTarget = twitterCampaign?.raid_target;
+    const pointsConfig = twitterCampaign?.points_config || {};
+
+    // Load brand-provided base points and multipliers for CPM contests
+    // For CPM contests, use brand-provided values; otherwise use hardcoded RAID_POINTS_CONFIG
+    let raidPointsConfig = { ...RAID_POINTS_CONFIG }; // Default to hardcoded values (for leaderboard contests)
+
+    if (isCpmContest) {
+      // For CPM contests: Use brand-assigned base points from points_config
+      // For CPM raid campaigns: Use comments_weight.base_weight, retweets_weight.base_weight, quote_reposts_weight.base_weight
+
+      // Comment base points: Check comments_weight.base_weight first, then fallback to comment_base_points, then default
+      if (
+        pointsConfig.comments_weight != null &&
+        typeof pointsConfig.comments_weight === "object" &&
+        pointsConfig.comments_weight.base_weight != null
+      ) {
+        // Use base_weight from comments_weight object
+        raidPointsConfig.comment_base_points =
+          typeof pointsConfig.comments_weight.base_weight === "number"
+            ? pointsConfig.comments_weight.base_weight
+            : parseFloat(pointsConfig.comments_weight.base_weight) || 1;
+      } else if (pointsConfig.comment_base_points != null) {
+        // Fallback: Use comment_base_points (backward compatibility)
+        raidPointsConfig.comment_base_points =
+          typeof pointsConfig.comment_base_points === "number"
+            ? pointsConfig.comment_base_points
+            : parseFloat(pointsConfig.comment_base_points) || 1;
+      } else if (typeof pointsConfig.comments_weight === "number") {
+        // Fallback: If comments_weight is a number, use it directly
+        raidPointsConfig.comment_base_points = pointsConfig.comments_weight;
+      } else {
+        // Final fallback: Use default
+        raidPointsConfig.comment_base_points =
+          RAID_POINTS_CONFIG.comment_base_points;
+      }
+
+      // Retweet base points: Check retweets_weight.base_weight first, then fallback to retweet_base_points, then default
+      if (
+        pointsConfig.retweets_weight != null &&
+        typeof pointsConfig.retweets_weight === "object" &&
+        pointsConfig.retweets_weight.base_weight != null
+      ) {
+        // Use base_weight from retweets_weight object
+        raidPointsConfig.retweet_base_points =
+          typeof pointsConfig.retweets_weight.base_weight === "number"
+            ? pointsConfig.retweets_weight.base_weight
+            : parseFloat(pointsConfig.retweets_weight.base_weight) || 5;
+      } else if (pointsConfig.retweet_base_points != null) {
+        // Fallback: Use retweet_base_points (backward compatibility)
+        raidPointsConfig.retweet_base_points =
+          typeof pointsConfig.retweet_base_points === "number"
+            ? pointsConfig.retweet_base_points
+            : parseFloat(pointsConfig.retweet_base_points) || 5;
+      } else if (typeof pointsConfig.retweets_weight === "number") {
+        // Fallback: If retweets_weight is a number, use it directly
+        raidPointsConfig.retweet_base_points = pointsConfig.retweets_weight;
+      } else {
+        // Final fallback: Use default
+        raidPointsConfig.retweet_base_points =
+          RAID_POINTS_CONFIG.retweet_base_points;
+      }
+
+      // Quote repost base points: Check quote_reposts_weight.base_weight first, then fallback to quote_repost_base_points, then default
+      if (
+        pointsConfig.quote_reposts_weight != null &&
+        typeof pointsConfig.quote_reposts_weight === "object" &&
+        pointsConfig.quote_reposts_weight.base_weight != null
+      ) {
+        // Use base_weight from quote_reposts_weight object
+        raidPointsConfig.quote_repost_base_points =
+          typeof pointsConfig.quote_reposts_weight.base_weight === "number"
+            ? pointsConfig.quote_reposts_weight.base_weight
+            : parseFloat(pointsConfig.quote_reposts_weight.base_weight) || 10;
+      } else if (pointsConfig.quote_repost_base_points != null) {
+        // Fallback: Use quote_repost_base_points (backward compatibility)
+        raidPointsConfig.quote_repost_base_points =
+          typeof pointsConfig.quote_repost_base_points === "number"
+            ? pointsConfig.quote_repost_base_points
+            : parseFloat(pointsConfig.quote_repost_base_points) || 10;
+      } else if (typeof pointsConfig.quote_reposts_weight === "number") {
+        // Fallback: If quote_reposts_weight is a number, use it directly
+        raidPointsConfig.quote_repost_base_points =
+          pointsConfig.quote_reposts_weight;
+      } else {
+        // Final fallback: Use default
+        raidPointsConfig.quote_repost_base_points =
+          RAID_POINTS_CONFIG.quote_repost_base_points;
+      }
+
+      // Override with brand-provided engagement multipliers for comments
+      // Check inside comments_weight object first, then fallback to flat structure
+      const commentsWeightObj =
+        pointsConfig.comments_weight &&
+        typeof pointsConfig.comments_weight === "object"
+          ? pointsConfig.comments_weight
+          : null;
+
+      if (
+        commentsWeightObj?.likes_multiplier != null ||
+        pointsConfig.comment_likes_multiplier != null
+      ) {
+        raidPointsConfig.comment_likes_multiplier =
+          commentsWeightObj?.likes_multiplier != null
+            ? typeof commentsWeightObj.likes_multiplier === "number"
+              ? commentsWeightObj.likes_multiplier
+              : parseFloat(commentsWeightObj.likes_multiplier) || 0.1
+            : typeof pointsConfig.comment_likes_multiplier === "number"
+            ? pointsConfig.comment_likes_multiplier
+            : parseFloat(pointsConfig.comment_likes_multiplier) || 0.1;
+      }
+      if (
+        commentsWeightObj?.replies_multiplier != null ||
+        pointsConfig.comment_replies_multiplier != null
+      ) {
+        raidPointsConfig.comment_replies_multiplier =
+          commentsWeightObj?.replies_multiplier != null
+            ? typeof commentsWeightObj.replies_multiplier === "number"
+              ? commentsWeightObj.replies_multiplier
+              : parseFloat(commentsWeightObj.replies_multiplier) || 1
+            : typeof pointsConfig.comment_replies_multiplier === "number"
+            ? pointsConfig.comment_replies_multiplier
+            : parseFloat(pointsConfig.comment_replies_multiplier) || 1;
+      }
+      if (
+        commentsWeightObj?.impressions_multiplier != null ||
+        pointsConfig.comment_impressions_multiplier != null
+      ) {
+        raidPointsConfig.comment_impressions_multiplier =
+          commentsWeightObj?.impressions_multiplier != null
+            ? typeof commentsWeightObj.impressions_multiplier === "number"
+              ? commentsWeightObj.impressions_multiplier
+              : parseFloat(commentsWeightObj.impressions_multiplier) || 0.001
+            : typeof pointsConfig.comment_impressions_multiplier === "number"
+            ? pointsConfig.comment_impressions_multiplier
+            : parseFloat(pointsConfig.comment_impressions_multiplier) || 0.001;
+      }
+      if (
+        commentsWeightObj?.retweets_multiplier != null ||
+        pointsConfig.comment_retweets_multiplier != null
+      ) {
+        raidPointsConfig.comment_retweets_multiplier =
+          commentsWeightObj?.retweets_multiplier != null
+            ? typeof commentsWeightObj.retweets_multiplier === "number"
+              ? commentsWeightObj.retweets_multiplier
+              : parseFloat(commentsWeightObj.retweets_multiplier) || 0
+            : typeof pointsConfig.comment_retweets_multiplier === "number"
+            ? pointsConfig.comment_retweets_multiplier
+            : parseFloat(pointsConfig.comment_retweets_multiplier) || 0;
+      }
+      if (
+        commentsWeightObj?.quote_reposts_multiplier != null ||
+        pointsConfig.comment_quote_reposts_multiplier != null
+      ) {
+        raidPointsConfig.comment_quote_reposts_multiplier =
+          commentsWeightObj?.quote_reposts_multiplier != null
+            ? typeof commentsWeightObj.quote_reposts_multiplier === "number"
+              ? commentsWeightObj.quote_reposts_multiplier
+              : parseFloat(commentsWeightObj.quote_reposts_multiplier) || 0
+            : typeof pointsConfig.comment_quote_reposts_multiplier === "number"
+            ? pointsConfig.comment_quote_reposts_multiplier
+            : parseFloat(pointsConfig.comment_quote_reposts_multiplier) || 0;
+      }
+
+      // Override with brand-provided engagement multipliers for retweets
+      // Check inside retweets_weight object first, then fallback to flat structure
+      const retweetsWeightObj =
+        pointsConfig.retweets_weight &&
+        typeof pointsConfig.retweets_weight === "object"
+          ? pointsConfig.retweets_weight
+          : null;
+
+      if (
+        retweetsWeightObj?.likes_multiplier != null ||
+        pointsConfig.retweet_likes_multiplier != null
+      ) {
+        raidPointsConfig.retweet_likes_multiplier =
+          retweetsWeightObj?.likes_multiplier != null
+            ? typeof retweetsWeightObj.likes_multiplier === "number"
+              ? retweetsWeightObj.likes_multiplier
+              : parseFloat(retweetsWeightObj.likes_multiplier) || 0.05
+            : typeof pointsConfig.retweet_likes_multiplier === "number"
+            ? pointsConfig.retweet_likes_multiplier
+            : parseFloat(pointsConfig.retweet_likes_multiplier) || 0.05;
+      }
+      if (
+        retweetsWeightObj?.replies_multiplier != null ||
+        pointsConfig.retweet_replies_multiplier != null
+      ) {
+        raidPointsConfig.retweet_replies_multiplier =
+          retweetsWeightObj?.replies_multiplier != null
+            ? typeof retweetsWeightObj.replies_multiplier === "number"
+              ? retweetsWeightObj.replies_multiplier
+              : parseFloat(retweetsWeightObj.replies_multiplier) || 0.05
+            : typeof pointsConfig.retweet_replies_multiplier === "number"
+            ? pointsConfig.retweet_replies_multiplier
+            : parseFloat(pointsConfig.retweet_replies_multiplier) || 0.05;
+      }
+      if (
+        retweetsWeightObj?.impressions_multiplier != null ||
+        pointsConfig.retweet_impressions_multiplier != null
+      ) {
+        raidPointsConfig.retweet_impressions_multiplier =
+          retweetsWeightObj?.impressions_multiplier != null
+            ? typeof retweetsWeightObj.impressions_multiplier === "number"
+              ? retweetsWeightObj.impressions_multiplier
+              : parseFloat(retweetsWeightObj.impressions_multiplier) || 0.001
+            : typeof pointsConfig.retweet_impressions_multiplier === "number"
+            ? pointsConfig.retweet_impressions_multiplier
+            : parseFloat(pointsConfig.retweet_impressions_multiplier) || 0.001;
+      }
+      if (
+        retweetsWeightObj?.retweets_multiplier != null ||
+        pointsConfig.retweet_retweets_multiplier != null
+      ) {
+        raidPointsConfig.retweet_retweets_multiplier =
+          retweetsWeightObj?.retweets_multiplier != null
+            ? typeof retweetsWeightObj.retweets_multiplier === "number"
+              ? retweetsWeightObj.retweets_multiplier
+              : parseFloat(retweetsWeightObj.retweets_multiplier) || 0.05
+            : typeof pointsConfig.retweet_retweets_multiplier === "number"
+            ? pointsConfig.retweet_retweets_multiplier
+            : parseFloat(pointsConfig.retweet_retweets_multiplier) || 0.05;
+      }
+      if (
+        retweetsWeightObj?.quote_reposts_multiplier != null ||
+        pointsConfig.retweet_quote_reposts_multiplier != null
+      ) {
+        raidPointsConfig.retweet_quote_reposts_multiplier =
+          retweetsWeightObj?.quote_reposts_multiplier != null
+            ? typeof retweetsWeightObj.quote_reposts_multiplier === "number"
+              ? retweetsWeightObj.quote_reposts_multiplier
+              : parseFloat(retweetsWeightObj.quote_reposts_multiplier) || 0
+            : typeof pointsConfig.retweet_quote_reposts_multiplier === "number"
+            ? pointsConfig.retweet_quote_reposts_multiplier
+            : parseFloat(pointsConfig.retweet_quote_reposts_multiplier) || 0;
+      }
+
+      // Override with brand-provided engagement multipliers for quote reposts
+      // Check inside quote_reposts_weight object first, then fallback to flat structure
+      const quoteRepostsWeightObj =
+        pointsConfig.quote_reposts_weight &&
+        typeof pointsConfig.quote_reposts_weight === "object"
+          ? pointsConfig.quote_reposts_weight
+          : null;
+
+      if (
+        quoteRepostsWeightObj?.likes_multiplier != null ||
+        pointsConfig.quote_repost_likes_multiplier != null
+      ) {
+        raidPointsConfig.quote_repost_likes_multiplier =
+          quoteRepostsWeightObj?.likes_multiplier != null
+            ? typeof quoteRepostsWeightObj.likes_multiplier === "number"
+              ? quoteRepostsWeightObj.likes_multiplier
+              : parseFloat(quoteRepostsWeightObj.likes_multiplier) || 0.1
+            : typeof pointsConfig.quote_repost_likes_multiplier === "number"
+            ? pointsConfig.quote_repost_likes_multiplier
+            : parseFloat(pointsConfig.quote_repost_likes_multiplier) || 0.1;
+      }
+      if (
+        quoteRepostsWeightObj?.replies_multiplier != null ||
+        pointsConfig.quote_repost_replies_multiplier != null
+      ) {
+        raidPointsConfig.quote_repost_replies_multiplier =
+          quoteRepostsWeightObj?.replies_multiplier != null
+            ? typeof quoteRepostsWeightObj.replies_multiplier === "number"
+              ? quoteRepostsWeightObj.replies_multiplier
+              : parseFloat(quoteRepostsWeightObj.replies_multiplier) || 0.1
+            : typeof pointsConfig.quote_repost_replies_multiplier === "number"
+            ? pointsConfig.quote_repost_replies_multiplier
+            : parseFloat(pointsConfig.quote_repost_replies_multiplier) || 0.1;
+      }
+      if (
+        quoteRepostsWeightObj?.impressions_multiplier != null ||
+        pointsConfig.quote_repost_impressions_multiplier != null
+      ) {
+        raidPointsConfig.quote_repost_impressions_multiplier =
+          quoteRepostsWeightObj?.impressions_multiplier != null
+            ? typeof quoteRepostsWeightObj.impressions_multiplier === "number"
+              ? quoteRepostsWeightObj.impressions_multiplier
+              : parseFloat(quoteRepostsWeightObj.impressions_multiplier) ||
+                0.001
+            : typeof pointsConfig.quote_repost_impressions_multiplier ===
+              "number"
+            ? pointsConfig.quote_repost_impressions_multiplier
+            : parseFloat(pointsConfig.quote_repost_impressions_multiplier) ||
+              0.001;
+      }
+      if (
+        quoteRepostsWeightObj?.retweets_multiplier != null ||
+        pointsConfig.quote_repost_retweets_multiplier != null
+      ) {
+        raidPointsConfig.quote_repost_retweets_multiplier =
+          quoteRepostsWeightObj?.retweets_multiplier != null
+            ? typeof quoteRepostsWeightObj.retweets_multiplier === "number"
+              ? quoteRepostsWeightObj.retweets_multiplier
+              : parseFloat(quoteRepostsWeightObj.retweets_multiplier) || 0.1
+            : typeof pointsConfig.quote_repost_retweets_multiplier === "number"
+            ? pointsConfig.quote_repost_retweets_multiplier
+            : parseFloat(pointsConfig.quote_repost_retweets_multiplier) || 0.1;
+      }
+      if (
+        quoteRepostsWeightObj?.quote_reposts_multiplier != null ||
+        pointsConfig.quote_repost_quote_reposts_multiplier != null
+      ) {
+        raidPointsConfig.quote_repost_quote_reposts_multiplier =
+          quoteRepostsWeightObj?.quote_reposts_multiplier != null
+            ? typeof quoteRepostsWeightObj.quote_reposts_multiplier === "number"
+              ? quoteRepostsWeightObj.quote_reposts_multiplier
+              : parseFloat(quoteRepostsWeightObj.quote_reposts_multiplier) ||
+                0.1
+            : typeof pointsConfig.quote_repost_quote_reposts_multiplier ===
+              "number"
+            ? pointsConfig.quote_repost_quote_reposts_multiplier
+            : parseFloat(pointsConfig.quote_repost_quote_reposts_multiplier) ||
+              0.1;
+      }
+
+      console.log(
+        `[fetch-raid-engagements] Using brand-assigned points config for CPM contest ${contestId}:`,
+        {
+          comment_base_points: raidPointsConfig.comment_base_points,
+          retweet_base_points: raidPointsConfig.retweet_base_points,
+          quote_repost_base_points: raidPointsConfig.quote_repost_base_points,
+          source:
+            "comments_weight.base_weight, retweets_weight.base_weight, quote_reposts_weight.base_weight",
+        }
+      );
+    } else {
+      // For leaderboard contests: Use hardcoded RAID_POINTS_CONFIG (no changes)
+      console.log(
+        `[fetch-raid-engagements] Using hardcoded RAID_POINTS_CONFIG for leaderboard contest ${contestId}`
       );
     }
 
-    const twitterCampaign = contest.contest_based_details?.twitter_campaign;
-    const raidTarget = twitterCampaign?.raid_target;
-
-    if (
-      !raidTarget?.link ||
-      twitterCampaign?.campaign_type !== "raid"
-    ) {
+    if (!raidTarget?.link || twitterCampaign?.campaign_type !== "raid") {
       return NextResponse.json(
         {
-          error:
-            "This contest is not a raid campaign or has no target tweet",
+          error: "This contest is not a raid campaign or has no target tweet",
         },
         { status: 400 }
       );
@@ -159,12 +490,12 @@ export async function POST(
     });
 
     // 4. Fetch target tweet and all replies using RapidAPI
-    const rapidApiKey = process.env.TWITTER_RAPIDAPI_KEY;
-    const rapidApiHost = "twitter-api45.p.rapidapi.com";
-
-    if (!rapidApiKey) {
+    if (!hasRapidApiKeys) {
+      console.error(
+        "[fetch-raid-engagements] RapidAPI keys are not configured"
+      );
       return NextResponse.json(
-        { error: "TWITTER_RAPIDAPI_KEY not configured" },
+        { error: "Twitter RapidAPI keys are not configured" },
         { status: 500 }
       );
     }
@@ -182,13 +513,9 @@ export async function POST(
         params: {
           id: targetTweetId,
         },
-        headers: {
-          "x-rapidapi-key": rapidApiKey,
-          "x-rapidapi-host": rapidApiHost,
-        },
       };
 
-      const tweetInfoResponse = await axios.request(tweetInfoOptions);
+      const tweetInfoResponse = await rapidApiRequest(tweetInfoOptions);
       const tweetInfoData = tweetInfoResponse.data;
 
       // Handle different response formats
@@ -212,7 +539,10 @@ export async function POST(
         tweetInfoError.message
       );
       return NextResponse.json(
-        { error: "Failed to fetch target tweet info", details: tweetInfoError.message },
+        {
+          error: "Failed to fetch target tweet info",
+          details: tweetInfoError.message,
+        },
         { status: 500 }
       );
     }
@@ -221,7 +551,7 @@ export async function POST(
     // This endpoint returns ALL engagements (replies, retweets, quote reposts) on the target tweet
     // IMPORTANT: We use pagination to fetch ALL engagements up to join dates
     const allEngagementTweets: any[] = [];
-    
+
     try {
       // Fetch ALL engagements using pagination
       let allEngagements: any[] = [];
@@ -229,7 +559,7 @@ export async function POST(
       let hasMorePages = true;
       let pageCount = 0;
       const MAX_PAGES = 50; // Safety limit
-      
+
       while (hasMorePages && pageCount < MAX_PAGES) {
         const repliesOptions: any = {
           method: "GET",
@@ -237,27 +567,26 @@ export async function POST(
           params: {
             id: targetTweetId, // Get all engagements on this specific tweet
           },
-          headers: {
-            "x-rapidapi-key": rapidApiKey,
-            "x-rapidapi-host": rapidApiHost,
-          },
         };
-        
+
         // Add cursor for pagination (if not first page)
         if (cursor) {
           repliesOptions.params.cursor = cursor;
         }
 
-        const repliesResponse = await axios.request(repliesOptions);
+        const repliesResponse = await rapidApiRequest(repliesOptions);
         const repliesData = repliesResponse.data;
-        
+
         // The latest_replies.php endpoint returns engagements in a timeline array
-        const pageEngagements = Array.isArray(repliesData?.timeline) ? repliesData.timeline : 
-                              Array.isArray(repliesData) ? repliesData : [];
-        
+        const pageEngagements = Array.isArray(repliesData?.timeline)
+          ? repliesData.timeline
+          : Array.isArray(repliesData)
+          ? repliesData
+          : [];
+
         // Add engagements from this page
         allEngagements.push(...pageEngagements);
-        
+
         // Check for next cursor
         const nextCursor = repliesData?.next_cursor;
         if (!nextCursor || nextCursor === "0" || nextCursor === 0) {
@@ -270,9 +599,15 @@ export async function POST(
           );
         }
       }
-      
-      console.log(`[fetch-raid-engagements] Found ${allEngagements.length} total engagements from latest_replies.php across ${pageCount + 1} pages`);
-      
+
+      console.log(
+        `[fetch-raid-engagements] Found ${
+          allEngagements.length
+        } total engagements from latest_replies.php across ${
+          pageCount + 1
+        } pages`
+      );
+
       // Process all engagements - identify replies, retweets, and quote reposts
       for (const engagement of allEngagements) {
         // Skip the target tweet itself
@@ -280,13 +615,16 @@ export async function POST(
         if (engagementId === targetTweetId) {
           continue;
         }
-        
-        let engagementType: "comment" | "retweet" | "quote_repost" | null = null;
-        
+
+        let engagementType: "comment" | "retweet" | "quote_repost" | null =
+          null;
+
         // Check if it's a DIRECT reply (comment) to the target tweet
-        if (engagement.in_reply_to_status_id_str === targetTweetId || 
-            engagement.in_reply_to === targetTweetId ||
-            engagement.in_reply_to_status_id === targetTweetId) {
+        if (
+          engagement.in_reply_to_status_id_str === targetTweetId ||
+          engagement.in_reply_to === targetTweetId ||
+          engagement.in_reply_to_status_id === targetTweetId
+        ) {
           engagementType = "comment";
         }
         // Check if it's a retweet of the target tweet
@@ -304,61 +642,79 @@ export async function POST(
         // Quote reposts have quoted tweet AND original text (not just a retweet)
         else if (
           (engagement.quoted?.tweet_id === targetTweetId ||
-           engagement.quoted?.id === targetTweetId ||
-           engagement.quoted_status_id_str === targetTweetId ||
-           engagement.quoted_status_id === targetTweetId) &&
+            engagement.quoted?.id === targetTweetId ||
+            engagement.quoted_status_id_str === targetTweetId ||
+            engagement.quoted_status_id === targetTweetId) &&
           engagement.text && // Has original text (not just a retweet)
           !engagement.retweeted_tweet && // Not a retweet
           !engagement.retweeted
         ) {
           engagementType = "quote_repost";
         }
-        
+
         // Only add if we identified the engagement type
         if (engagementType) {
           // Check if we already added this
-          const alreadyAdded = allEngagementTweets.some(e => 
-            (e.tweet_id || e.id) === engagementId
+          const alreadyAdded = allEngagementTweets.some(
+            (e) => (e.tweet_id || e.id) === engagementId
           );
-          
+
           if (!alreadyAdded) {
             allEngagementTweets.push({
               ...engagement,
               _engagement_type: engagementType, // Mark the type for later processing
             });
-            console.log(`[fetch-raid-engagements] Found ${engagementType} engagement:`, engagementId);
+            console.log(
+              `[fetch-raid-engagements] Found ${engagementType} engagement:`,
+              engagementId
+            );
           }
         } else {
           // Log engagements that couldn't be identified
-          console.log(`[fetch-raid-engagements] Could not identify engagement type:`, {
-            tweet_id: engagementId,
-            in_reply_to: engagement.in_reply_to_status_id_str,
-            has_retweeted_tweet: !!engagement.retweeted_tweet,
-            has_retweeted: !!engagement.retweeted,
-            has_quoted: !!engagement.quoted,
-            quoted_tweet_id: engagement.quoted?.tweet_id,
-            quoted_id: engagement.quoted?.id,
-            quoted_status_id_str: engagement.quoted_status_id_str,
-            has_text: !!engagement.text,
-            keys: Object.keys(engagement).slice(0, 20),
-          });
+          console.log(
+            `[fetch-raid-engagements] Could not identify engagement type:`,
+            {
+              tweet_id: engagementId,
+              in_reply_to: engagement.in_reply_to_status_id_str,
+              has_retweeted_tweet: !!engagement.retweeted_tweet,
+              has_retweeted: !!engagement.retweeted,
+              has_quoted: !!engagement.quoted,
+              quoted_tweet_id: engagement.quoted?.tweet_id,
+              quoted_id: engagement.quoted?.id,
+              quoted_status_id_str: engagement.quoted_status_id_str,
+              has_text: !!engagement.text,
+              keys: Object.keys(engagement).slice(0, 20),
+            }
+          );
         }
       }
-      
-      console.log(`[fetch-raid-engagements] Processed engagements from latest_replies.php:`, {
-        total: allEngagements.length,
-        identified: allEngagementTweets.length,
-        byType: {
-          comments: allEngagementTweets.filter(e => e._engagement_type === "comment").length,
-          retweets: allEngagementTweets.filter(e => e._engagement_type === "retweet").length,
-          quoteReposts: allEngagementTweets.filter(e => e._engagement_type === "quote_repost").length,
-        },
-      });
+
+      console.log(
+        `[fetch-raid-engagements] Processed engagements from latest_replies.php:`,
+        {
+          total: allEngagements.length,
+          identified: allEngagementTweets.length,
+          byType: {
+            comments: allEngagementTweets.filter(
+              (e) => e._engagement_type === "comment"
+            ).length,
+            retweets: allEngagementTweets.filter(
+              (e) => e._engagement_type === "retweet"
+            ).length,
+            quoteReposts: allEngagementTweets.filter(
+              (e) => e._engagement_type === "quote_repost"
+            ).length,
+          },
+        }
+      );
     } catch (repliesError: any) {
-      console.error("[fetch-raid-engagements] Error fetching replies:", repliesError.message);
+      console.error(
+        "[fetch-raid-engagements] Error fetching replies:",
+        repliesError.message
+      );
       // Continue with other engagement types
     }
-    
+
     // 4c. Also fetch retweets using retweets.php as a fallback
     try {
       const retweetsOptions = {
@@ -367,17 +723,13 @@ export async function POST(
         params: {
           id: targetTweetId,
         },
-        headers: {
-          "x-rapidapi-key": rapidApiKey,
-          "x-rapidapi-host": rapidApiHost,
-        },
       };
-      
-      const retweetsResponse = await axios.request(retweetsOptions);
+
+      const retweetsResponse = await rapidApiRequest(retweetsOptions);
       const retweetsData = retweetsResponse.data;
-      
+
       let retweetsFromEndpoint: any[] = [];
-      
+
       if (Array.isArray(retweetsData?.retweets)) {
         retweetsFromEndpoint = retweetsData.retweets;
       } else if (Array.isArray(retweetsData?.timeline)) {
@@ -385,47 +737,63 @@ export async function POST(
       } else if (Array.isArray(retweetsData)) {
         retweetsFromEndpoint = retweetsData;
       }
-      
-      console.log(`[fetch-raid-engagements] Found ${retweetsFromEndpoint.length} retweets from retweets.php`);
+
+      console.log(
+        `[fetch-raid-engagements] Found ${retweetsFromEndpoint.length} retweets from retweets.php`
+      );
       console.log(`[fetch-raid-engagements] Retweets API response structure:`, {
         hasTimeline: !!retweetsData?.timeline,
         hasUsers: !!retweetsData?.users,
         hasRetweets: !!retweetsData?.retweets,
         isArray: Array.isArray(retweetsData),
         keys: retweetsData ? Object.keys(retweetsData) : [],
-        sampleRetweet: retweetsFromEndpoint[0] ? {
-          keys: Object.keys(retweetsFromEndpoint[0]),
-          tweet_id: retweetsFromEndpoint[0].tweet_id,
-          id: retweetsFromEndpoint[0].id,
-          rest_id: retweetsFromEndpoint[0].rest_id,
-          screen_name: retweetsFromEndpoint[0].screen_name,
-        } : null,
+        sampleRetweet: retweetsFromEndpoint[0]
+          ? {
+              keys: Object.keys(retweetsFromEndpoint[0]),
+              tweet_id: retweetsFromEndpoint[0].tweet_id,
+              id: retweetsFromEndpoint[0].id,
+              rest_id: retweetsFromEndpoint[0].rest_id,
+              screen_name: retweetsFromEndpoint[0].screen_name,
+            }
+          : null,
       });
-      
+
       for (const retweet of retweetsFromEndpoint) {
         // Get tweet ID - might be in different fields
-        const tweetId = retweet.tweet_id || retweet.id || retweet.rest_id || retweet.retweet_id;
-        
+        const tweetId =
+          retweet.tweet_id ||
+          retweet.id ||
+          retweet.rest_id ||
+          retweet.retweet_id;
+
         // If it's a user object (has screen_name but no tweet_id), we need to fetch their timeline
         const isUserObject = retweet.screen_name && !tweetId;
-        
+
         if (isUserObject) {
           // This is a user object - we need to fetch their timeline to find the retweet
           const username = retweet.screen_name;
-          console.log(`[fetch-raid-engagements] Retweet is user object (${username}), fetching their timeline to find retweet`);
-          
+          console.log(
+            `[fetch-raid-engagements] Retweet is user object (${username}), fetching their timeline to find retweet`
+          );
+
           try {
             // Get join date for this participant
-            const participantData = activeParticipants.find(p => p.twitter_username?.replace("@", "").toLowerCase() === username.toLowerCase());
-            const joinDate = participantData?.joined_at ? new Date(participantData.joined_at) : null;
-            
+            const participantData = activeParticipants.find(
+              (p) =>
+                p.twitter_username?.replace("@", "").toLowerCase() ===
+                username.toLowerCase()
+            );
+            const joinDate = participantData?.joined_at
+              ? new Date(participantData.joined_at)
+              : null;
+
             // Fetch ALL tweets up to join date using pagination
             let allUserTimelineTweets: any[] = [];
             let cursor: string | null = null;
             let hasMorePages = true;
             let pageCount = 0;
             const MAX_PAGES = 50; // Safety limit
-            
+
             while (hasMorePages && pageCount < MAX_PAGES) {
               const userTimelineOptions: any = {
                 method: "GET",
@@ -433,31 +801,31 @@ export async function POST(
                 params: {
                   screenname: username,
                 },
-                headers: {
-                  "x-rapidapi-key": rapidApiKey,
-                  "x-rapidapi-host": rapidApiHost,
-                },
               };
-              
+
               // Add cursor for pagination (if not first page)
               if (cursor) {
                 userTimelineOptions.params.cursor = cursor;
               }
-              
-              const userTimelineResponse = await axios.request(userTimelineOptions);
+
+              const userTimelineResponse = await rapidApiRequest(
+                userTimelineOptions
+              );
               const userTimelineData = userTimelineResponse.data;
-              const pageTimeline = Array.isArray(userTimelineData?.timeline) ? userTimelineData.timeline : [];
-              
+              const pageTimeline = Array.isArray(userTimelineData?.timeline)
+                ? userTimelineData.timeline
+                : [];
+
               // Add tweets from this page
               allUserTimelineTweets.push(...pageTimeline);
-              
+
               // Check if we've reached the join date
               if (joinDate && pageTimeline.length > 0) {
                 const oldestTweet = pageTimeline[pageTimeline.length - 1];
-                const oldestTweetDate = oldestTweet?.created_at 
-                  ? new Date(oldestTweet.created_at) 
+                const oldestTweetDate = oldestTweet?.created_at
+                  ? new Date(oldestTweet.created_at)
                   : null;
-                
+
                 // If oldest tweet in this page is before join date, we've fetched enough
                 if (oldestTweetDate && oldestTweetDate < joinDate) {
                   console.log(
@@ -467,7 +835,7 @@ export async function POST(
                   break;
                 }
               }
-              
+
               // Check for next cursor
               const nextCursor = userTimelineData?.next_cursor;
               if (!nextCursor || nextCursor === "0" || nextCursor === 0) {
@@ -477,99 +845,121 @@ export async function POST(
                 pageCount++;
               }
             }
-            
+
             const userTimeline = allUserTimelineTweets;
-            
+
             // Find the retweet in their timeline
             for (const tweet of userTimeline) {
-              const isRetweetOfTarget = 
+              const isRetweetOfTarget =
                 tweet.retweeted_tweet?.tweet_id === targetTweetId ||
                 tweet.retweeted?.id === targetTweetId ||
                 tweet.retweeted?.tweet_id === targetTweetId ||
                 tweet.retweeted_status_id_str === targetTweetId ||
                 tweet.retweeted_status_id === targetTweetId;
-              
+
               if (isRetweetOfTarget) {
                 const retweetId = tweet.tweet_id || tweet.id;
                 // Check if we already added this
-                const alreadyAdded = allEngagementTweets.some(e => 
-                  (e.tweet_id || e.id) === retweetId
+                const alreadyAdded = allEngagementTweets.some(
+                  (e) => (e.tweet_id || e.id) === retweetId
                 );
-                
+
                 if (!alreadyAdded) {
                   allEngagementTweets.push({
                     ...tweet,
                     _engagement_type: "retweet",
                   });
-                  console.log(`[fetch-raid-engagements] Found retweet from ${username}:`, retweetId);
+                  console.log(
+                    `[fetch-raid-engagements] Found retweet from ${username}:`,
+                    retweetId
+                  );
                   break; // Found the retweet, no need to continue
                 }
               }
             }
           } catch (userTimelineError: any) {
-            console.error(`[fetch-raid-engagements] Error fetching timeline for ${username}:`, userTimelineError.message);
+            console.error(
+              `[fetch-raid-engagements] Error fetching timeline for ${username}:`,
+              userTimelineError.message
+            );
           }
           continue; // Skip the user object itself
         }
-        
+
         // If it's from retweets.php endpoint, it's a retweet of the target by definition
         // But we still check to be safe
-        const isRetweetOfTarget = 
+        const isRetweetOfTarget =
           retweet.retweeted_tweet?.tweet_id === targetTweetId ||
           retweet.retweeted?.id === targetTweetId ||
           retweet.retweeted?.tweet_id === targetTweetId ||
           retweet.retweeted_status_id_str === targetTweetId ||
           retweet.retweeted_status_id === targetTweetId ||
           !tweetId; // If no tweet_id but it's from retweets.php, assume it's a retweet
-        
+
         // If it's from retweets.php, add it as a retweet (even if we can't verify the target)
         if (tweetId || isRetweetOfTarget) {
           // Check if we already added this (from latest_replies.php)
-          const alreadyAdded = allEngagementTweets.some(e => 
-            (e.tweet_id || e.id) === tweetId
+          const alreadyAdded = allEngagementTweets.some(
+            (e) => (e.tweet_id || e.id) === tweetId
           );
-          
+
           if (!alreadyAdded) {
             allEngagementTweets.push({
               ...retweet,
               tweet_id: tweetId || retweet.tweet_id || retweet.id, // Ensure tweet_id is set
               _engagement_type: "retweet", // Mark as retweet
             });
-            console.log(`[fetch-raid-engagements] Added retweet from retweets.php:`, tweetId || "unknown");
+            console.log(
+              `[fetch-raid-engagements] Added retweet from retweets.php:`,
+              tweetId || "unknown"
+            );
           } else {
-            console.log(`[fetch-raid-engagements] Retweet already added from latest_replies.php:`, tweetId);
+            console.log(
+              `[fetch-raid-engagements] Retweet already added from latest_replies.php:`,
+              tweetId
+            );
           }
         } else {
-          console.log(`[fetch-raid-engagements] Skipping retweet (no tweet_id and not verified):`, {
-            hasTweetId: !!tweetId,
-            isRetweetOfTarget,
-            keys: Object.keys(retweet),
-          });
+          console.log(
+            `[fetch-raid-engagements] Skipping retweet (no tweet_id and not verified):`,
+            {
+              hasTweetId: !!tweetId,
+              isRetweetOfTarget,
+              keys: Object.keys(retweet),
+            }
+          );
         }
       }
     } catch (retweetsError: any) {
-      console.error("[fetch-raid-engagements] Error fetching retweets:", retweetsError.message);
+      console.error(
+        "[fetch-raid-engagements] Error fetching retweets:",
+        retweetsError.message
+      );
     }
-    
+
     // 4d. Search participant timelines for quote reposts (if not already found in latest_replies.php)
     // Quote reposts might not be in latest_replies.php, so we'll check each participant's timeline
     // IMPORTANT: We fetch ALL tweets up to join date using pagination
-    console.log(`[fetch-raid-engagements] Checking participant timelines for quote reposts...`);
+    console.log(
+      `[fetch-raid-engagements] Checking participant timelines for quote reposts...`
+    );
     for (const participant of activeParticipants) {
       const username = participant.twitter_username?.replace("@", "");
       if (!username) continue;
-      
+
       try {
         // Get join date for this participant
-        const joinDate = participant.joined_at ? new Date(participant.joined_at) : null;
-        
+        const joinDate = participant.joined_at
+          ? new Date(participant.joined_at)
+          : null;
+
         // Fetch ALL tweets up to join date using pagination
         let allUserTimelineTweets: any[] = [];
         let cursor: string | null = null;
         let hasMorePages = true;
         let pageCount = 0;
         const MAX_PAGES = 50; // Safety limit
-        
+
         while (hasMorePages && pageCount < MAX_PAGES) {
           const userTimelineOptions: any = {
             method: "GET",
@@ -577,31 +967,31 @@ export async function POST(
             params: {
               screenname: username,
             },
-            headers: {
-              "x-rapidapi-key": rapidApiKey,
-              "x-rapidapi-host": rapidApiHost,
-            },
           };
-          
+
           // Add cursor for pagination (if not first page)
           if (cursor) {
             userTimelineOptions.params.cursor = cursor;
           }
-          
-          const userTimelineResponse = await axios.request(userTimelineOptions);
+
+          const userTimelineResponse = await rapidApiRequest(
+            userTimelineOptions
+          );
           const userTimelineData = userTimelineResponse.data;
-          const pageTimeline = Array.isArray(userTimelineData?.timeline) ? userTimelineData.timeline : [];
-          
+          const pageTimeline = Array.isArray(userTimelineData?.timeline)
+            ? userTimelineData.timeline
+            : [];
+
           // Add tweets from this page
           allUserTimelineTweets.push(...pageTimeline);
-          
+
           // Check if we've reached the join date
           if (joinDate && pageTimeline.length > 0) {
             const oldestTweet = pageTimeline[pageTimeline.length - 1];
-            const oldestTweetDate = oldestTweet?.created_at 
-              ? new Date(oldestTweet.created_at) 
+            const oldestTweetDate = oldestTweet?.created_at
+              ? new Date(oldestTweet.created_at)
               : null;
-            
+
             // If oldest tweet in this page is before join date, we've fetched enough
             if (oldestTweetDate && oldestTweetDate < joinDate) {
               console.log(
@@ -611,7 +1001,7 @@ export async function POST(
               break;
             }
           }
-          
+
           // Check for next cursor
           const nextCursor = userTimelineData?.next_cursor;
           if (!nextCursor || nextCursor === "0" || nextCursor === 0) {
@@ -621,56 +1011,72 @@ export async function POST(
             pageCount++;
           }
         }
-        
+
         // Filter tweets to only include those created on or after join date
-        const filteredTimeline = joinDate 
+        const filteredTimeline = joinDate
           ? allUserTimelineTweets.filter((tweet: any) => {
-              const tweetDate = tweet.created_at ? new Date(tweet.created_at) : null;
+              const tweetDate = tweet.created_at
+                ? new Date(tweet.created_at)
+                : null;
               if (!tweetDate) return false;
               return tweetDate >= joinDate;
             })
           : allUserTimelineTweets;
-        
+
         console.log(
-          `[fetch-raid-engagements] Fetched ${allUserTimelineTweets.length} tweets (${filteredTimeline.length} after join date filter) for ${username} across ${pageCount + 1} pages`
+          `[fetch-raid-engagements] Fetched ${
+            allUserTimelineTweets.length
+          } tweets (${
+            filteredTimeline.length
+          } after join date filter) for ${username} across ${
+            pageCount + 1
+          } pages`
         );
-        
+
         const userTimeline = filteredTimeline;
-        
+
         // Check for quote reposts of the target tweet
         for (const tweet of userTimeline) {
-          const isQuoteRepost = 
+          const isQuoteRepost =
             (tweet.quoted?.tweet_id === targetTweetId ||
-             tweet.quoted?.id === targetTweetId ||
-             tweet.quoted_status_id_str === targetTweetId ||
-             tweet.quoted_status_id === targetTweetId) &&
+              tweet.quoted?.id === targetTweetId ||
+              tweet.quoted_status_id_str === targetTweetId ||
+              tweet.quoted_status_id === targetTweetId) &&
             tweet.text && // Has original text
             !tweet.retweeted_tweet && // Not a retweet
             !tweet.retweeted && // Not a retweet
             tweet.in_reply_to_status_id_str !== targetTweetId; // Not a direct reply
-          
+
           if (isQuoteRepost) {
             const quoteId = tweet.tweet_id || tweet.id;
             // Check if we already added this
-            const alreadyAdded = allEngagementTweets.some(e => 
-              (e.tweet_id || e.id) === quoteId
+            const alreadyAdded = allEngagementTweets.some(
+              (e) => (e.tweet_id || e.id) === quoteId
             );
-            
+
             if (!alreadyAdded) {
               allEngagementTweets.push({
                 ...tweet,
                 _engagement_type: "quote_repost",
               });
-              console.log(`[fetch-raid-engagements] Found quote repost from ${username}:`, quoteId);
+              console.log(
+                `[fetch-raid-engagements] Found quote repost from ${username}:`,
+                quoteId
+              );
             }
           }
         }
       } catch (quoteError: any) {
-        console.error(`[fetch-raid-engagements] Error checking quote reposts for ${username}:`, quoteError.message);
+        console.error(
+          `[fetch-raid-engagements] Error checking quote reposts for ${username}:`,
+          quoteError.message
+        );
       }
     }
-    
-    console.log(`[fetch-raid-engagements] Total direct engagements found: ${allEngagementTweets.length}`);
+
+    console.log(
+      `[fetch-raid-engagements] Total direct engagements found: ${allEngagementTweets.length}`
+    );
     const timeline = allEngagementTweets;
 
     // 5. Update target tweet metrics in metrics table (target_current_*)
@@ -692,12 +1098,22 @@ export async function POST(
       campaign_type: "raid", // Required field - we know this is a raid campaign
       target_tweet_id: targetTweetId, // Include target tweet ID if row doesn't exist
       target_tweet_url: raidTarget.link, // Include target tweet URL if row doesn't exist
-      target_current_likes: targetTweet.likes || targetTweet.favorites || targetTweet.favorite_count || 0,
-      target_current_comments: targetTweet.replies || targetTweet.reply_count || 0,
-      target_current_retweets: targetTweet.retweets || targetTweet.retweet_count || 0,
-      target_current_quote_reposts: targetTweet.quotes || targetTweet.quote_count || 0,
+      target_current_likes:
+        targetTweet.likes ||
+        targetTweet.favorites ||
+        targetTweet.favorite_count ||
+        0,
+      target_current_comments:
+        targetTweet.replies || targetTweet.reply_count || 0,
+      target_current_retweets:
+        targetTweet.retweets || targetTweet.retweet_count || 0,
+      target_current_quote_reposts:
+        targetTweet.quotes || targetTweet.quote_count || 0,
       target_current_views: parseInt(
-        targetTweet.views || targetTweet.view_count || targetTweet.views_count || "0",
+        targetTweet.views ||
+          targetTweet.view_count ||
+          targetTweet.views_count ||
+          "0",
         10
       ),
       last_updated_at: new Date().toISOString(),
@@ -712,80 +1128,97 @@ export async function POST(
 
     const { data: existingMetrics } = await supabaseAdmin
       .from("twitter_campaign_metrics")
-      .select("target_likes, target_comments, target_retweets, target_quote_reposts")
+      .select(
+        "target_likes, target_comments, target_retweets, target_quote_reposts"
+      )
       .eq("contest_id", contestId)
       .maybeSingle();
 
     // Get targets from metrics table if they exist and are not null
     // Otherwise, fall back to contest data (source of truth)
     const raidTargetMetrics = raidTarget?.metrics || {};
-    
+
     if (existingMetrics) {
       // Use metrics table values if they're not null, otherwise fall back to contest data
-      targetLikes = existingMetrics.target_likes !== null && existingMetrics.target_likes !== undefined
-        ? existingMetrics.target_likes
-        : (typeof raidTargetMetrics.likes === "number" 
-            ? raidTargetMetrics.likes 
-            : typeof raidTargetMetrics.likes === "string" 
-              ? parseInt(raidTargetMetrics.likes, 10) 
-              : null);
-      
-      targetComments = existingMetrics.target_comments !== null && existingMetrics.target_comments !== undefined
-        ? existingMetrics.target_comments
-        : (typeof raidTargetMetrics.comments === "number" 
-            ? raidTargetMetrics.comments 
-            : typeof raidTargetMetrics.comments === "string" 
-              ? parseInt(raidTargetMetrics.comments, 10) 
-              : null);
-      
-      targetRetweets = existingMetrics.target_retweets !== null && existingMetrics.target_retweets !== undefined
-        ? existingMetrics.target_retweets
-        : (typeof raidTargetMetrics.retweets === "number" 
-            ? raidTargetMetrics.retweets 
-            : typeof raidTargetMetrics.retweets === "string" 
-              ? parseInt(raidTargetMetrics.retweets, 10) 
-              : null);
-      
-      targetQuoteReposts = existingMetrics.target_quote_reposts !== null && existingMetrics.target_quote_reposts !== undefined
-        ? existingMetrics.target_quote_reposts
-        : (typeof raidTargetMetrics.quote_reposts === "number" 
-            ? raidTargetMetrics.quote_reposts 
-            : typeof raidTargetMetrics.quote_reposts === "string" 
-              ? parseInt(raidTargetMetrics.quote_reposts, 10) 
-              : null);
+      targetLikes =
+        existingMetrics.target_likes !== null &&
+        existingMetrics.target_likes !== undefined
+          ? existingMetrics.target_likes
+          : typeof raidTargetMetrics.likes === "number"
+          ? raidTargetMetrics.likes
+          : typeof raidTargetMetrics.likes === "string"
+          ? parseInt(raidTargetMetrics.likes, 10)
+          : null;
+
+      targetComments =
+        existingMetrics.target_comments !== null &&
+        existingMetrics.target_comments !== undefined
+          ? existingMetrics.target_comments
+          : typeof raidTargetMetrics.comments === "number"
+          ? raidTargetMetrics.comments
+          : typeof raidTargetMetrics.comments === "string"
+          ? parseInt(raidTargetMetrics.comments, 10)
+          : null;
+
+      targetRetweets =
+        existingMetrics.target_retweets !== null &&
+        existingMetrics.target_retweets !== undefined
+          ? existingMetrics.target_retweets
+          : typeof raidTargetMetrics.retweets === "number"
+          ? raidTargetMetrics.retweets
+          : typeof raidTargetMetrics.retweets === "string"
+          ? parseInt(raidTargetMetrics.retweets, 10)
+          : null;
+
+      targetQuoteReposts =
+        existingMetrics.target_quote_reposts !== null &&
+        existingMetrics.target_quote_reposts !== undefined
+          ? existingMetrics.target_quote_reposts
+          : typeof raidTargetMetrics.quote_reposts === "number"
+          ? raidTargetMetrics.quote_reposts
+          : typeof raidTargetMetrics.quote_reposts === "string"
+          ? parseInt(raidTargetMetrics.quote_reposts, 10)
+          : null;
     } else {
       // Fallback: Get targets from contest data if metrics row doesn't exist
-      targetLikes = typeof raidTargetMetrics.likes === "number" 
-        ? raidTargetMetrics.likes 
-        : typeof raidTargetMetrics.likes === "string" 
-          ? parseInt(raidTargetMetrics.likes, 10) 
+      targetLikes =
+        typeof raidTargetMetrics.likes === "number"
+          ? raidTargetMetrics.likes
+          : typeof raidTargetMetrics.likes === "string"
+          ? parseInt(raidTargetMetrics.likes, 10)
           : null;
-      targetComments = typeof raidTargetMetrics.comments === "number" 
-        ? raidTargetMetrics.comments 
-        : typeof raidTargetMetrics.comments === "string" 
-          ? parseInt(raidTargetMetrics.comments, 10) 
+      targetComments =
+        typeof raidTargetMetrics.comments === "number"
+          ? raidTargetMetrics.comments
+          : typeof raidTargetMetrics.comments === "string"
+          ? parseInt(raidTargetMetrics.comments, 10)
           : null;
-      targetRetweets = typeof raidTargetMetrics.retweets === "number" 
-        ? raidTargetMetrics.retweets 
-        : typeof raidTargetMetrics.retweets === "string" 
-          ? parseInt(raidTargetMetrics.retweets, 10) 
+      targetRetweets =
+        typeof raidTargetMetrics.retweets === "number"
+          ? raidTargetMetrics.retweets
+          : typeof raidTargetMetrics.retweets === "string"
+          ? parseInt(raidTargetMetrics.retweets, 10)
           : null;
-      targetQuoteReposts = typeof raidTargetMetrics.quote_reposts === "number" 
-        ? raidTargetMetrics.quote_reposts 
-        : typeof raidTargetMetrics.quote_reposts === "string" 
-          ? parseInt(raidTargetMetrics.quote_reposts, 10) 
+      targetQuoteReposts =
+        typeof raidTargetMetrics.quote_reposts === "number"
+          ? raidTargetMetrics.quote_reposts
+          : typeof raidTargetMetrics.quote_reposts === "string"
+          ? parseInt(raidTargetMetrics.quote_reposts, 10)
           : null;
     }
-    
+
     // Also sync these values back to metrics table if they're different (to keep them in sync)
     // This ensures the metrics table has the correct values for future reads
-    if (existingMetrics && (
-      existingMetrics.target_likes !== targetLikes ||
-      existingMetrics.target_comments !== targetComments ||
-      existingMetrics.target_retweets !== targetRetweets ||
-      existingMetrics.target_quote_reposts !== targetQuoteReposts
-    )) {
-      console.log(`[fetch-raid-engagements] Syncing target values from contest data to metrics table...`);
+    if (
+      existingMetrics &&
+      (existingMetrics.target_likes !== targetLikes ||
+        existingMetrics.target_comments !== targetComments ||
+        existingMetrics.target_retweets !== targetRetweets ||
+        existingMetrics.target_quote_reposts !== targetQuoteReposts)
+    ) {
+      console.log(
+        `[fetch-raid-engagements] Syncing target values from contest data to metrics table...`
+      );
       await supabaseAdmin
         .from("twitter_campaign_metrics")
         .update({
@@ -801,68 +1234,82 @@ export async function POST(
     // Only check targets that are actually set (not null and > 0)
     // If a target is not set (null or 0), it's ignored (doesn't need to be reached)
     // Example: If 3 out of 4 targets are set, we only need to check those 3
-    const likesReached = 
-      (targetLikes == null || targetLikes === 0) ||  // Not set, so considered "reached" (ignored)
-      targetMetrics.target_current_likes >= targetLikes;  // Set, so check if reached
-    
-    const commentsReached = 
-      (targetComments == null || targetComments === 0) ||  // Not set, so considered "reached" (ignored)
-      targetMetrics.target_current_comments >= targetComments;  // Set, so check if reached
-    
-    const retweetsReached = 
-      (targetRetweets == null || targetRetweets === 0) ||  // Not set, so considered "reached" (ignored)
-      targetMetrics.target_current_retweets >= targetRetweets;  // Set, so check if reached
-    
-    const quoteRepostsReached = 
-      (targetQuoteReposts == null || targetQuoteReposts === 0) ||  // Not set, so considered "reached" (ignored)
-      targetMetrics.target_current_quote_reposts >= targetQuoteReposts;  // Set, so check if reached
+    const likesReached =
+      targetLikes == null ||
+      targetLikes === 0 || // Not set, so considered "reached" (ignored)
+      targetMetrics.target_current_likes >= targetLikes; // Set, so check if reached
+
+    const commentsReached =
+      targetComments == null ||
+      targetComments === 0 || // Not set, so considered "reached" (ignored)
+      targetMetrics.target_current_comments >= targetComments; // Set, so check if reached
+
+    const retweetsReached =
+      targetRetweets == null ||
+      targetRetweets === 0 || // Not set, so considered "reached" (ignored)
+      targetMetrics.target_current_retweets >= targetRetweets; // Set, so check if reached
+
+    const quoteRepostsReached =
+      targetQuoteReposts == null ||
+      targetQuoteReposts === 0 || // Not set, so considered "reached" (ignored)
+      targetMetrics.target_current_quote_reposts >= targetQuoteReposts; // Set, so check if reached
 
     // All set targets must be reached for targets_reached to be true
     // If a target is not set, it's automatically "reached" (ignored)
     // Example: If only likes, comments, and quote_reposts are set (retweets is null),
     // then we only need likes, comments, and quote_reposts to be reached
-    const targetsReached = likesReached && commentsReached && retweetsReached && quoteRepostsReached;
+    const targetsReached =
+      likesReached && commentsReached && retweetsReached && quoteRepostsReached;
 
     targetMetrics.targets_reached = targetsReached;
-    
+
     // Log for debugging
-    console.log(`[fetch-raid-engagements] Targets check for contest ${contestId}:`, {
-      target_likes: targetLikes,
-      current_likes: targetMetrics.target_current_likes,
-      likesReached,
-      target_comments: targetComments,
-      current_comments: targetMetrics.target_current_comments,
-      commentsReached,
-      target_retweets: targetRetweets,
-      current_retweets: targetMetrics.target_current_retweets,
-      retweetsReached,
-      target_quote_reposts: targetQuoteReposts,
-      current_quote_reposts: targetMetrics.target_current_quote_reposts,
-      quoteRepostsReached,
-      targetsReached,
-      note: "Only set targets (not null/0) need to be reached. Unset targets are ignored.",
-    });
+    console.log(
+      `[fetch-raid-engagements] Targets check for contest ${contestId}:`,
+      {
+        target_likes: targetLikes,
+        current_likes: targetMetrics.target_current_likes,
+        likesReached,
+        target_comments: targetComments,
+        current_comments: targetMetrics.target_current_comments,
+        commentsReached,
+        target_retweets: targetRetweets,
+        current_retweets: targetMetrics.target_current_retweets,
+        retweetsReached,
+        target_quote_reposts: targetQuoteReposts,
+        current_quote_reposts: targetMetrics.target_current_quote_reposts,
+        quoteRepostsReached,
+        targetsReached,
+        note: "Only set targets (not null/0) need to be reached. Unset targets are ignored.",
+      }
+    );
 
     // Use upsert instead of update to create row if it doesn't exist
-    await supabaseAdmin
-      .from("twitter_campaign_metrics")
-      .upsert(targetMetrics, {
-        onConflict: "contest_id",
-      });
+    await supabaseAdmin.from("twitter_campaign_metrics").upsert(targetMetrics, {
+      onConflict: "contest_id",
+    });
 
     // ============================================================================
     // PRESERVE MODERATION: Fetch existing raid engagements BEFORE refresh
     // This ensures moderation_status and manual_points_adjustment are not lost
     // ============================================================================
-    console.log(`[fetch-raid-engagements] Fetching existing raid engagements to preserve moderation data...`);
-    const { data: existingRaidEngagements, error: existingEngagementsError } = await supabaseAdmin
-      .from("twitter_campaign_tweets")
-      .select("tweet_id, moderation_status, manual_points_adjustment, manual_points_reason, is_eligible")
-      .eq("contest_id", contestId)
-      .not("target_tweet_id", "is", null); // Only raid engagements (those with target_tweet_id)
+    console.log(
+      `[fetch-raid-engagements] Fetching existing raid engagements to preserve moderation data...`
+    );
+    const { data: existingRaidEngagements, error: existingEngagementsError } =
+      await supabaseAdmin
+        .from("twitter_campaign_tweets")
+        .select(
+          "tweet_id, moderation_status, manual_points_adjustment, manual_points_reason, is_eligible"
+        )
+        .eq("contest_id", contestId)
+        .not("target_tweet_id", "is", null); // Only raid engagements (those with target_tweet_id)
 
     if (existingEngagementsError) {
-      console.error("[fetch-raid-engagements] Error fetching existing raid engagements:", existingEngagementsError);
+      console.error(
+        "[fetch-raid-engagements] Error fetching existing raid engagements:",
+        existingEngagementsError
+      );
     }
 
     // Create a map for quick lookup of moderation data
@@ -891,8 +1338,13 @@ export async function POST(
       ? new Date(contest.start_date)
       : null;
 
-    console.log(`[fetch-raid-engagements] Processing ${timeline.length} direct engagements from APIs`);
-    console.log(`[fetch-raid-engagements] Participant map:`, Array.from(participantMap.entries()));
+    console.log(
+      `[fetch-raid-engagements] Processing ${timeline.length} direct engagements from APIs`
+    );
+    console.log(
+      `[fetch-raid-engagements] Participant map:`,
+      Array.from(participantMap.entries())
+    );
 
     for (const tweet of timeline) {
       // Skip the target tweet itself (shouldn't happen, but safety check)
@@ -907,35 +1359,57 @@ export async function POST(
         tweet.screen_name ||
         tweet.user?.screen_name ||
         ""
-      ).toLowerCase().replace("@", "");
-      
+      )
+        .toLowerCase()
+        .replace("@", "");
+
       if (!authorUsername) {
-        console.log(`[fetch-raid-engagements] Skipping tweet ${tweet.tweet_id || tweet.id}: No author username`);
+        console.log(
+          `[fetch-raid-engagements] Skipping tweet ${
+            tweet.tweet_id || tweet.id
+          }: No author username`
+        );
         continue;
       }
 
       // Check if this tweet is from a participant
       const creatorId = participantMap.get(authorUsername);
       if (!creatorId) {
-        console.log(`[fetch-raid-engagements] Skipping tweet ${tweet.tweet_id || tweet.id}: Author ${authorUsername} is not a participant`);
+        console.log(
+          `[fetch-raid-engagements] Skipping tweet ${
+            tweet.tweet_id || tweet.id
+          }: Author ${authorUsername} is not a participant`
+        );
         continue; // Not a participant, skip
       }
 
       // Filter by participant's join date (only count engagements after they joined)
       const participantJoinDate = participantJoinDateMap.get(authorUsername);
       if (participantJoinDate) {
-        const tweetDate = new Date(tweet.created_at || tweet.created_at_iso || new Date());
+        const tweetDate = new Date(
+          tweet.created_at || tweet.created_at_iso || new Date()
+        );
         if (tweetDate < participantJoinDate) {
-          console.log(`[fetch-raid-engagements] Skipping tweet ${tweet.tweet_id || tweet.id}: Created before participant join date (${tweetDate.toISOString()} < ${participantJoinDate.toISOString()})`);
+          console.log(
+            `[fetch-raid-engagements] Skipping tweet ${
+              tweet.tweet_id || tweet.id
+            }: Created before participant join date (${tweetDate.toISOString()} < ${participantJoinDate.toISOString()})`
+          );
           continue;
         }
       }
 
       // Also filter by campaign start date (only count engagements after campaign started)
       if (campaignStartDate) {
-        const tweetDate = new Date(tweet.created_at || tweet.created_at_iso || new Date());
+        const tweetDate = new Date(
+          tweet.created_at || tweet.created_at_iso || new Date()
+        );
         if (tweetDate < campaignStartDate) {
-          console.log(`[fetch-raid-engagements] Skipping tweet ${tweet.tweet_id || tweet.id}: Created before campaign start date`);
+          console.log(
+            `[fetch-raid-engagements] Skipping tweet ${
+              tweet.tweet_id || tweet.id
+            }: Created before campaign start date`
+          );
           continue;
         }
       }
@@ -943,54 +1417,75 @@ export async function POST(
       // Use the pre-marked engagement type from our API calls
       // We marked engagements as: "comment", "retweet", or "quote_repost"
       let engagementType: "comment" | "retweet" | "quote_repost" | null = null;
-      
+
       if (tweet._engagement_type) {
-        engagementType = tweet._engagement_type as "comment" | "retweet" | "quote_repost";
+        engagementType = tweet._engagement_type as
+          | "comment"
+          | "retweet"
+          | "quote_repost";
       } else {
         // Fallback: Determine type from tweet structure (shouldn't be needed, but safety)
-        if (tweet.in_reply_to_status_id_str === targetTweetId || tweet.in_reply_to === targetTweetId) {
+        if (
+          tweet.in_reply_to_status_id_str === targetTweetId ||
+          tweet.in_reply_to === targetTweetId
+        ) {
           engagementType = "comment";
-        } else if (tweet.retweeted_tweet?.tweet_id === targetTweetId || 
-                   tweet.retweeted?.id === targetTweetId ||
-                   tweet.retweeted_status_id_str === targetTweetId) {
+        } else if (
+          tweet.retweeted_tweet?.tweet_id === targetTweetId ||
+          tweet.retweeted?.id === targetTweetId ||
+          tweet.retweeted_status_id_str === targetTweetId
+        ) {
           engagementType = "retweet";
-        } else if (tweet.quoted?.tweet_id === targetTweetId || 
-                   tweet.quoted_status_id_str === targetTweetId) {
+        } else if (
+          tweet.quoted?.tweet_id === targetTweetId ||
+          tweet.quoted_status_id_str === targetTweetId
+        ) {
           engagementType = "quote_repost";
         }
       }
 
       // CRITICAL: If no engagement type identified, skip this tweet
       if (!engagementType) {
-        console.log(`[fetch-raid-engagements] Skipping tweet (could not determine engagement type):`, {
-          tweet_id: tweet.tweet_id || tweet.id,
-          author: authorUsername,
-          _engagement_type: tweet._engagement_type,
-        });
+        console.log(
+          `[fetch-raid-engagements] Skipping tweet (could not determine engagement type):`,
+          {
+            tweet_id: tweet.tweet_id || tweet.id,
+            author: authorUsername,
+            _engagement_type: tweet._engagement_type,
+          }
+        );
         continue;
       }
 
       // Add detailed logging
-      console.log(`[fetch-raid-engagements] ✅ Processing ${engagementType} engagement:`, {
-        tweet_id: tweet.tweet_id || tweet.id,
-        author: authorUsername,
-        engagement_type: engagementType,
-        target_tweet_id: targetTweetId,
-      });
+      console.log(
+        `[fetch-raid-engagements] ✅ Processing ${engagementType} engagement:`,
+        {
+          tweet_id: tweet.tweet_id || tweet.id,
+          author: authorUsername,
+          engagement_type: engagementType,
+          target_tweet_id: targetTweetId,
+        }
+      );
 
-      // Calculate points
-      const basePoints = calculateBasePoints(engagementType);
+      // Calculate points using the appropriate config:
+      // - For CPM contests: Use brand-assigned base points and multipliers from points_config
+      // - For leaderboard contests: Use hardcoded RAID_POINTS_CONFIG base points and multipliers
+      const basePoints = calculateBasePoints(engagementType, raidPointsConfig);
       const engagementBonusPoints = calculateEngagementBonusPoints(
         tweet,
-        engagementType
+        engagementType,
+        raidPointsConfig
       );
 
       // Handle different field names from API
       const tweetId = tweet.tweet_id || tweet.id || "";
-      const screenName = tweet.author?.screen_name || tweet.screen_name || authorUsername;
-      const tweetUrl = tweetId && screenName 
-        ? `https://x.com/${screenName}/status/${tweetId}`
-        : "";
+      const screenName =
+        tweet.author?.screen_name || tweet.screen_name || authorUsername;
+      const tweetUrl =
+        tweetId && screenName
+          ? `https://x.com/${screenName}/status/${tweetId}`
+          : "";
 
       // Track that we saw this engagement in the fresh API response
       freshEngagementIds.add(tweetId);
@@ -1005,10 +1500,17 @@ export async function POST(
         tweet_url: tweetUrl,
         twitter_username: screenName,
         tweet_text: tweet.text || tweet.full_text || "", // Updated text (handles edits)
-        tweet_created_at: new Date(tweet.created_at || tweet.created_at_iso || new Date()).toISOString(),
-        tweet_type: engagementType === "comment" ? "reply" : engagementType === "quote_repost" ? "quote" : engagementType,
+        tweet_created_at: new Date(
+          tweet.created_at || tweet.created_at_iso || new Date()
+        ).toISOString(),
+        tweet_type:
+          engagementType === "comment"
+            ? "reply"
+            : engagementType === "quote_repost"
+            ? "quote"
+            : engagementType,
         target_tweet_id: targetTweetId, // Mark as raid engagement
-        
+
         // Metrics - always update from fresh API data
         likes: tweet.likes || tweet.favorites || tweet.favorite_count || 0,
         replies: tweet.replies || tweet.reply_count || 0,
@@ -1017,15 +1519,16 @@ export async function POST(
         impressions: parseInt(tweet.views || tweet.view_count || "0", 10),
         points: Math.round(basePoints + engagementBonusPoints), // Recalculate based on fresh metrics
         points_calculated_at: new Date().toISOString(),
-        
+
         // Eligibility - re-check based on current data (passed filter, so eligible)
         is_eligible: true,
         eligibility_reason: `Raid engagement: ${engagementType} on target tweet`,
         filter_status: "eligible",
-        
+
         // PRESERVE moderation fields if they exist, otherwise default
         moderation_status: existingModeration?.moderation_status || "pending",
-        manual_points_adjustment: existingModeration?.manual_points_adjustment || 0,
+        manual_points_adjustment:
+          existingModeration?.manual_points_adjustment || 0,
         manual_points_reason: existingModeration?.manual_points_reason || null,
       };
 
@@ -1037,9 +1540,10 @@ export async function POST(
       totalTimelineTweets: timeline.length,
       validEngagementsFound: engagements.length,
       engagementsByType: {
-        comments: engagements.filter(e => e.tweet_type === "reply").length,
-        retweets: engagements.filter(e => e.tweet_type === "retweet").length,
-        quoteReposts: engagements.filter(e => e.tweet_type === "quote").length,
+        comments: engagements.filter((e) => e.tweet_type === "reply").length,
+        retweets: engagements.filter((e) => e.tweet_type === "retweet").length,
+        quoteReposts: engagements.filter((e) => e.tweet_type === "quote")
+          .length,
       },
     });
 
@@ -1053,7 +1557,7 @@ export async function POST(
         engagementKeyMap.set(key, engagement);
       }
       const deduplicatedEngagements = Array.from(engagementKeyMap.values());
-      
+
       console.log(
         `[fetch-raid-engagements] Deduplicated ${engagements.length} engagements to ${deduplicatedEngagements.length} unique engagements`
       );
@@ -1086,13 +1590,15 @@ export async function POST(
     // and latest_replies.php should return all engagements, if an engagement is not found,
     // it means it's actually deleted (or was never eligible)
     // ============================================================================
-    console.log(`[fetch-raid-engagements] Processing deleted engagements (we fetched all tweets up to join date, so missing = deleted)`);
-    
+    console.log(
+      `[fetch-raid-engagements] Processing deleted engagements (we fetched all tweets up to join date, so missing = deleted)`
+    );
+
     // Find engagements that were in DB but not in fresh API response
     // Since we paginated through all tweets up to join date, missing engagements are truly deleted
-    const engagementsToMarkAsDeleted = Array.from(existingEngagementsMap.keys()).filter(
-      (tweetId) => !freshEngagementIds.has(tweetId)
-    );
+    const engagementsToMarkAsDeleted = Array.from(
+      existingEngagementsMap.keys()
+    ).filter((tweetId) => !freshEngagementIds.has(tweetId));
 
     if (engagementsToMarkAsDeleted.length > 0) {
       console.log(
@@ -1103,7 +1609,7 @@ export async function POST(
       const BATCH_SIZE = 100;
       for (let i = 0; i < engagementsToMarkAsDeleted.length; i += BATCH_SIZE) {
         const batch = engagementsToMarkAsDeleted.slice(i, i + BATCH_SIZE);
-        
+
         // Mark as deleted/ineligible, but PRESERVE moderation status
         const deletionTimestamp = new Date().toISOString();
         const { error: updateError } = await supabaseAdmin
@@ -1125,17 +1631,23 @@ export async function POST(
 
         if (updateError) {
           console.error(
-            `[fetch-raid-engagements] Error marking engagements as deleted (batch ${Math.floor(i / BATCH_SIZE) + 1}):`,
+            `[fetch-raid-engagements] Error marking engagements as deleted (batch ${
+              Math.floor(i / BATCH_SIZE) + 1
+            }):`,
             updateError
           );
         } else {
           console.log(
-            `[fetch-raid-engagements] Marked ${batch.length} engagements as deleted (batch ${Math.floor(i / BATCH_SIZE) + 1})`
+            `[fetch-raid-engagements] Marked ${
+              batch.length
+            } engagements as deleted (batch ${Math.floor(i / BATCH_SIZE) + 1})`
           );
         }
       }
     } else {
-      console.log(`[fetch-raid-engagements] No engagements to mark as deleted - all existing engagements found in fresh fetch`);
+      console.log(
+        `[fetch-raid-engagements] No engagements to mark as deleted - all existing engagements found in fresh fetch`
+      );
     }
 
     // 8. Calculate total_* metrics from all participant engagements
@@ -1204,42 +1716,47 @@ export async function POST(
     ).length;
 
     // Use upsert instead of update to create row if it doesn't exist
-    await supabaseAdmin
-      .from("twitter_campaign_metrics")
-      .upsert(
-        {
-          contest_id: contestId,
-          campaign_type: "raid", // Required field - we know this is a raid campaign
-          total_filtered_tweets: filteredTweetsCount || 0,
-          total_participants: totalParticipants || 0,
-          total_likes: totalLikes,
-          total_replies: totalReplies,
-          total_retweets: totalRetweets,
-          total_quote_reposts: totalQuoteReposts,
-          total_impressions: totalImpressions,
-          total_points: totalPoints,
-          last_updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "contest_id",
-        }
-      );
+    await supabaseAdmin.from("twitter_campaign_metrics").upsert(
+      {
+        contest_id: contestId,
+        campaign_type: "raid", // Required field - we know this is a raid campaign
+        total_filtered_tweets: filteredTweetsCount || 0,
+        total_participants: totalParticipants || 0,
+        total_likes: totalLikes,
+        total_replies: totalReplies,
+        total_retweets: totalRetweets,
+        total_quote_reposts: totalQuoteReposts,
+        total_impressions: totalImpressions,
+        total_points: totalPoints,
+        last_updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "contest_id",
+      }
+    );
 
     // 11. Update last_metrics_updated in contests table (same logic as awareness campaigns)
     const currentTime = new Date().toISOString();
-    console.log(`[fetch-raid-engagements] Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime}`);
-    
+    console.log(
+      `[fetch-raid-engagements] Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime}`
+    );
+
     const { data: updateData, error: updateError } = await supabaseAdmin
-      .from('contests')
+      .from("contests")
       .update({ last_metrics_updated: currentTime })
-      .eq('id', contestId)
+      .eq("id", contestId)
       .select();
 
     if (updateError) {
-      console.error(`[fetch-raid-engagements] Failed to update last_metrics_updated for contest ${contestId}:`, updateError);
+      console.error(
+        `[fetch-raid-engagements] Failed to update last_metrics_updated for contest ${contestId}:`,
+        updateError
+      );
       // Don't fail the request, just log the error
     } else {
-      console.log(`[fetch-raid-engagements] Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`);
+      console.log(
+        `[fetch-raid-engagements] Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`
+      );
     }
 
     // 12. If targets reached, log it (you can add logic to end campaign here)
@@ -1273,21 +1790,23 @@ export async function POST(
 
 // Helper function to calculate base points
 function calculateBasePoints(
-  engagementType: "comment" | "retweet" | "quote_repost"
+  engagementType: "comment" | "retweet" | "quote_repost",
+  pointsConfig: typeof RAID_POINTS_CONFIG
 ): number {
-  const pointsConfig = {
-    comment: RAID_POINTS_CONFIG.comment_base_points,
-    retweet: RAID_POINTS_CONFIG.retweet_base_points,
-    quote_repost: RAID_POINTS_CONFIG.quote_repost_base_points,
+  const config = {
+    comment: pointsConfig.comment_base_points,
+    retweet: pointsConfig.retweet_base_points,
+    quote_repost: pointsConfig.quote_repost_base_points,
   };
-  return pointsConfig[engagementType] || 0;
+  return config[engagementType] || 0;
 }
 
 // Helper function to calculate bonus points from engagement metrics
 // This rewards creators for the engagement their engagement receives
 function calculateEngagementBonusPoints(
   tweet: any,
-  engagementType: "comment" | "retweet" | "quote_repost"
+  engagementType: "comment" | "retweet" | "quote_repost",
+  pointsConfig: typeof RAID_POINTS_CONFIG
 ): number {
   // Handle different field names from API
   const likes = tweet.likes || tweet.favorites || tweet.favorite_count || 0;
@@ -1298,31 +1817,34 @@ function calculateEngagementBonusPoints(
   // const bookmarks = tweet.bookmarks || tweet.bookmark_count || 0; // If available in future
 
   if (engagementType === "comment") {
-    // Comments can receive likes, replies, and impressions
+    // Comments can receive likes, replies, impressions, retweets, and quote reposts
     return (
-      likes * RAID_POINTS_CONFIG.comment_likes_multiplier +
-      replies * RAID_POINTS_CONFIG.comment_replies_multiplier +
-      impressions * RAID_POINTS_CONFIG.comment_impressions_multiplier
-      // + bookmarks * RAID_POINTS_CONFIG.comment_bookmarks_multiplier
+      likes * pointsConfig.comment_likes_multiplier +
+      replies * pointsConfig.comment_replies_multiplier +
+      impressions * pointsConfig.comment_impressions_multiplier +
+      retweets * pointsConfig.comment_retweets_multiplier +
+      quotes * pointsConfig.comment_quote_reposts_multiplier
+      // + bookmarks * pointsConfig.comment_bookmarks_multiplier
     );
   } else if (engagementType === "retweet") {
     // Retweets can receive likes, replies, impressions, and chain retweets
     return (
-      likes * RAID_POINTS_CONFIG.retweet_likes_multiplier +
-      replies * RAID_POINTS_CONFIG.retweet_replies_multiplier +
-      impressions * RAID_POINTS_CONFIG.retweet_impressions_multiplier +
-      retweets * RAID_POINTS_CONFIG.retweet_retweets_multiplier
-      // + bookmarks * RAID_POINTS_CONFIG.retweet_bookmarks_multiplier
+      likes * pointsConfig.retweet_likes_multiplier +
+      replies * pointsConfig.retweet_replies_multiplier +
+      impressions * pointsConfig.retweet_impressions_multiplier +
+      retweets * pointsConfig.retweet_retweets_multiplier +
+      quotes * pointsConfig.retweet_quote_reposts_multiplier
+      // + bookmarks * pointsConfig.retweet_bookmarks_multiplier
     );
   } else if (engagementType === "quote_repost") {
     // Quote reposts can receive likes, replies, impressions, retweets, and quote reposts
     return (
-      likes * RAID_POINTS_CONFIG.quote_repost_likes_multiplier +
-      replies * RAID_POINTS_CONFIG.quote_repost_replies_multiplier +
-      impressions * RAID_POINTS_CONFIG.quote_repost_impressions_multiplier +
-      retweets * RAID_POINTS_CONFIG.quote_repost_retweets_multiplier +
-      quotes * RAID_POINTS_CONFIG.quote_repost_quote_reposts_multiplier
-      // + bookmarks * RAID_POINTS_CONFIG.quote_repost_bookmarks_multiplier
+      likes * pointsConfig.quote_repost_likes_multiplier +
+      replies * pointsConfig.quote_repost_replies_multiplier +
+      impressions * pointsConfig.quote_repost_impressions_multiplier +
+      retweets * pointsConfig.quote_repost_retweets_multiplier +
+      quotes * pointsConfig.quote_repost_quote_reposts_multiplier
+      // + bookmarks * pointsConfig.quote_repost_bookmarks_multiplier
     );
   }
 
@@ -1337,7 +1859,9 @@ async function updateRaidLeaderboard(
   // Aggregate points AND metrics from twitter_campaign_tweets where target_tweet_id is set (raid engagements)
   const { data: raidEngagements, error: raidError } = await supabaseAdmin
     .from("twitter_campaign_tweets")
-    .select("creator_id, points, likes, replies, retweets, quote_reposts, impressions, moderation_status, manual_points_adjustment")
+    .select(
+      "creator_id, points, likes, replies, retweets, quote_reposts, impressions, moderation_status, manual_points_adjustment"
+    )
     .eq("contest_id", contestId)
     .eq("is_eligible", true)
     .not("target_tweet_id", "is", null);
@@ -1351,15 +1875,18 @@ async function updateRaidLeaderboard(
   }
 
   // Aggregate by creator - points AND metrics
-  const raidDataByCreator = new Map<string, {
-    points: number;
-    likes: number;
-    replies: number;
-    retweets: number;
-    quoteReposts: number;
-    impressions: number;
-    tweetCount: number;
-  }>();
+  const raidDataByCreator = new Map<
+    string,
+    {
+      points: number;
+      likes: number;
+      replies: number;
+      retweets: number;
+      quoteReposts: number;
+      impressions: number;
+      tweetCount: number;
+    }
+  >();
 
   if (raidEngagements) {
     raidEngagements.forEach((e: any) => {
@@ -1378,11 +1905,11 @@ async function updateRaidLeaderboard(
         impressions: 0,
         tweetCount: 0,
       };
-      
+
       // Calculate points: base points + manual adjustment
       const basePoints = e.points || 0;
       const manualAdjustment = e.manual_points_adjustment || 0;
-      
+
       raidDataByCreator.set(e.creator_id, {
         points: existing.points + basePoints + manualAdjustment,
         likes: existing.likes + (e.likes || 0),
@@ -1399,7 +1926,9 @@ async function updateRaidLeaderboard(
   const { data: existingLeaderboard, error: leaderboardError } =
     await supabaseAdmin
       .from("twitter_campaign_leaderboard")
-      .select("creator_id, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, manual_points_adjustment")
+      .select(
+        "creator_id, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, manual_points_adjustment"
+      )
       .eq("contest_id", contestId);
 
   if (leaderboardError) {
@@ -1413,20 +1942,25 @@ async function updateRaidLeaderboard(
   // Get regular tweet points and metrics (non-raid tweets)
   const { data: regularTweets } = await supabaseAdmin
     .from("twitter_campaign_tweets")
-    .select("creator_id, points, likes, replies, retweets, quote_reposts, impressions, moderation_status, manual_points_adjustment")
+    .select(
+      "creator_id, points, likes, replies, retweets, quote_reposts, impressions, moderation_status, manual_points_adjustment"
+    )
     .eq("contest_id", contestId)
     .eq("is_eligible", true)
     .is("target_tweet_id", null);
 
-  const regularDataByCreator = new Map<string, {
-    points: number;
-    likes: number;
-    replies: number;
-    retweets: number;
-    quoteReposts: number;
-    impressions: number;
-    tweetCount: number;
-  }>();
+  const regularDataByCreator = new Map<
+    string,
+    {
+      points: number;
+      likes: number;
+      replies: number;
+      retweets: number;
+      quoteReposts: number;
+      impressions: number;
+      tweetCount: number;
+    }
+  >();
 
   if (regularTweets) {
     regularTweets.forEach((t: any) => {
@@ -1445,11 +1979,11 @@ async function updateRaidLeaderboard(
         impressions: 0,
         tweetCount: 0,
       };
-      
+
       // Calculate points: base points + manual adjustment
       const basePoints = t.points || 0;
       const manualAdjustment = t.manual_points_adjustment || 0;
-      
+
       regularDataByCreator.set(t.creator_id, {
         points: existing.points + basePoints + manualAdjustment,
         likes: existing.likes + (t.likes || 0),
@@ -1482,7 +2016,7 @@ async function updateRaidLeaderboard(
       impressions: 0,
       tweetCount: 0,
     };
-    
+
     const regularData = regularDataByCreator.get(creatorId) || {
       points: 0,
       likes: 0,
@@ -1503,8 +2037,11 @@ async function updateRaidLeaderboard(
     const totalEligibleTweets = regularData.tweetCount + raidData.tweetCount;
 
     // Get existing leaderboard manual adjustment if any
-    const existingEntry = existingLeaderboard?.find((e: any) => e.creator_id === creatorId);
-    const leaderboardManualAdjustment = existingEntry?.manual_points_adjustment || 0;
+    const existingEntry = existingLeaderboard?.find(
+      (e: any) => e.creator_id === creatorId
+    );
+    const leaderboardManualAdjustment =
+      existingEntry?.manual_points_adjustment || 0;
 
     const finalTotalPoints = totalPoints + leaderboardManualAdjustment;
 
@@ -1553,4 +2090,3 @@ async function updateRaidLeaderboard(
     }
   }
 }
-

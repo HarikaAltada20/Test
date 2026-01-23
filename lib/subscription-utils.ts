@@ -300,8 +300,15 @@ if (!plan) {
 throw new Error('Invalid plan ID');
 }
 
+// Debug logging for trial configuration
+console.log(`🔍 Trial configuration for plan ${productId}:`);
+console.log(`  - Plan trialDays: ${plan.trialDays}`);
+console.log(`  - Passed trialDays: ${trialDays}`);
+console.log(`  - Plan price: ${plan.price}`);
+console.log(`  - Plan name: ${plan.name}`);
+
 // Create checkout session
-const session = await stripe().checkout.sessions.create({
+const sessionConfig: any = {
 customer: customerId,
 mode: 'subscription',
 payment_method_types: ['card'],
@@ -315,23 +322,34 @@ quantity: 1,
 metadata: {
 user_id: userId,
 product_id: productId,
-        upgrade_type: upgradeOptions?.upgradeType || 'immediate',
+upgrade_type: upgradeOptions?.upgradeType || 'immediate',
 ...(upgradeOptions?.oldSubscriptionId && { old_subscription_id: upgradeOptions.oldSubscriptionId }),
 },
-subscription_data: {
-trial_period_days: trialDays > 0 ? trialDays : undefined,
+success_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
+cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription/failed?error=payment_cancelled`,
+allow_promotion_codes: true,
+};
+
+// Add trial configuration only if trial days are specified
+if (trialDays && trialDays > 0) {
+sessionConfig.subscription_data = {
+trial_period_days: trialDays,
 // Also add metadata to subscription for customer.subscription.created webhook
 metadata: {
 user_id: userId,
 product_id: productId,
-          upgrade_type: upgradeOptions?.upgradeType || 'immediate',
+upgrade_type: upgradeOptions?.upgradeType || 'immediate',
 ...(upgradeOptions?.oldSubscriptionId && { old_subscription_id: upgradeOptions.oldSubscriptionId }),
 },
-},
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription/failed?error=payment_cancelled`,
-allow_promotion_codes: true,
-});
+};
+console.log(`✅ Configured trial with ${trialDays} days`);
+} else {
+console.log(`ℹ️ No trial configured - regular subscription`);
+}
+
+console.log(`🔧 Creating Stripe session with config:`, JSON.stringify(sessionConfig, null, 2));
+
+const session = await stripe().checkout.sessions.create(sessionConfig);
 
 return {
 sessionId: session.id,
@@ -668,9 +686,62 @@ isUpgrade
 
 // Check if subscription is about to expire
 export function isSubscriptionExpiringSoon(subscription: UserSubscription, daysThreshold: number = 7): boolean {
-const now = new Date();
-const daysUntilExpiration = Math.ceil((subscription.current_period_end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-return daysUntilExpiration <= daysThreshold;
+  const now = new Date();
+  const daysUntilExpiration = Math.ceil((subscription.current_period_end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  return daysUntilExpiration <= daysThreshold;
+}
+
+// Check if subscription is in trial period
+export function isSubscriptionInTrial(subscription: UserSubscription): boolean {
+  if (subscription.status === 'trialing') {
+    return true;
+  }
+  
+  return !!(subscription.trial_start && subscription.trial_end && 
+           new Date(subscription.trial_start).getTime() <= new Date().getTime() && 
+           new Date().getTime() <= new Date(subscription.trial_end).getTime());
+}
+
+// Get trial days remaining
+export function getTrialDaysRemaining(subscription: UserSubscription): number {
+  if (!isSubscriptionInTrial(subscription) || !subscription.trial_end) {
+    return 0;
+  }
+  
+  const now = new Date();
+  const trialEnd = new Date(subscription.trial_end);
+  const daysRemaining = Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  
+  return Math.max(0, daysRemaining);
+}
+
+// Check if user is eligible for trial on a specific plan
+export function isEligibleForTrial(plan: SubscriptionPlan, currentSubscription: UserSubscription | null): boolean {
+// Only new users (no subscription or free plan) are eligible for trials
+if (currentSubscription && currentSubscription.id !== "free-plan") {
+return false;
+}
+  
+// Only plans with trialDays are eligible
+if (!plan.trialDays || plan.trialDays <= 0) {
+return false;
+}
+  
+// Only paid plans are eligible for trials
+if (plan.price === 0) {
+return false;
+}
+  
+return true;
+}
+
+// Get trial display text for a plan
+export function getTrialDisplayText(plan: SubscriptionPlan, currentSubscription: UserSubscription | null): string | null {
+if (!isEligibleForTrial(plan, currentSubscription)) {
+return null;
+}
+  
+return `${plan.trialDays}-day free trial`;
 }
 
 // Get subscription status display text
