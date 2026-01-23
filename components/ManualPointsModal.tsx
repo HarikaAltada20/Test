@@ -156,10 +156,18 @@ export default function ManualPointsModal({
     return isDark ? "text-white" : "text-slate-900";
   };
 
-  const totalPointsValue = totalPoints ?? currentPoints ?? 0;
   const basePointsValue = basePoints ?? 0;
+  const manualPointsValue = manualPoints ?? 0;
   const creatorAdjustmentValue = creatorManualPointsAdjustment ?? 0;
-  const totalManualPointsValue = (manualPoints ?? 0) + creatorAdjustmentValue;
+  const computedTotalPoints =
+    basePointsValue + manualPointsValue + creatorAdjustmentValue;
+  const totalPointsValue =
+    typeof totalPoints === "number"
+      ? totalPoints
+      : typeof currentPoints === "number"
+      ? currentPoints
+      : computedTotalPoints;
+  const totalManualPointsValue = manualPointsValue;
 
   const statCards = [
     {

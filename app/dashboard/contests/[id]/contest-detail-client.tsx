@@ -10013,47 +10013,48 @@ export default function ContestDetailClient({
                                                 </div>
                                               </TableCell>
                                               {/* Manual Points */}
-                                              <TableCell className="text-center">
-                                                <div className="flex flex-col items-center">
-                                                  <span
-                                                    className={cn(
-                                                      "font-bold text-sm",
-                                                      group.metrics
-                                                        .manual_points_adjustment >
-                                                        0
-                                                        ? "text-green-600"
-                                                        : group.metrics
-                                                            .manual_points_adjustment <
-                                                          0
-                                                        ? "text-red-600"
-                                                        : isDark
-                                                        ? "text-white"
-                                                        : "text-slate-900"
-                                                    )}
-                                                  >
-                                                    {group.metrics
-                                                      .manual_points_adjustment >
-                                                    0
-                                                      ? "+"
-                                                      : ""}
-                                                    {formatMetricValue(
-                                                      group.metrics
-                                                        .manual_points_adjustment ||
-                                                        0
-                                                    )}
-                                                  </span>
-                                                  <span
-                                                    className={cn(
-                                                      "text-xs",
-                                                      isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-500"
-                                                    )}
-                                                  >
-                                                    manual
-                                                  </span>
-                                                </div>
-                                              </TableCell>
+                                              {(() => {
+                                                const tweetManualPoints =
+                                                  group.metrics
+                                                    .tweet_manual_points_adjustment ||
+                                                  0;
+                                                return (
+                                                  <TableCell className="text-center">
+                                                    <div className="flex flex-col items-center">
+                                                      <span
+                                                        className={cn(
+                                                          "font-bold text-sm",
+                                                          tweetManualPoints > 0
+                                                            ? "text-green-600"
+                                                            : tweetManualPoints <
+                                                              0
+                                                            ? "text-red-600"
+                                                            : isDark
+                                                            ? "text-white"
+                                                            : "text-slate-900"
+                                                        )}
+                                                      >
+                                                        {tweetManualPoints > 0
+                                                          ? "+"
+                                                          : ""}
+                                                        {formatMetricValue(
+                                                          tweetManualPoints
+                                                        )}
+                                                      </span>
+                                                      <span
+                                                        className={cn(
+                                                          "text-xs",
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                        )}
+                                                      >
+                                                        manual
+                                                      </span>
+                                                    </div>
+                                                  </TableCell>
+                                                );
+                                              })()}
                                               <TableCell className="text-center">
                                                 {formatMetricValue(
                                                   group.metrics.likes || 0
