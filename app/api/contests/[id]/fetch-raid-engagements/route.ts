@@ -74,7 +74,24 @@ export async function POST(
       .eq("id", contestId)
       .maybeSingle();
 
-    if (contestError || !contest) {
+    if (contestError) {
+      console.error(
+        "[fetch-raid-engagements] Error fetching contest:",
+        contestError,
+        "contestId:",
+        contestId
+      );
+      return NextResponse.json(
+        { error: "Contest not found", details: contestError.message },
+        { status: 404 }
+      );
+    }
+
+    if (!contest) {
+      console.error(
+        "[fetch-raid-engagements] Contest not found, contestId:",
+        contestId
+      );
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
 
