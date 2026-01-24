@@ -1831,7 +1831,9 @@ export function ContestClientPage({
                             contest.contest_based_details.cpm_contest
                               .cpm_rate_usd * 100
                           )}{" "}
-                          per 1000 views
+                          {contest.platform?.toLowerCase() === "twitter"
+                            ? "per 1000 points"
+                            : "per 1000 views"}
                         </div>
                       )}
                   </div>
@@ -2890,7 +2892,9 @@ export function ContestClientPage({
                           )}
                         >
                           {contest.contest_type === "cpm"
-                            ? "per 1000 views"
+                            ? contest.platform?.toLowerCase() === "twitter"
+                              ? "per 1000 points"
+                              : "per 1000 views"
                             : "total prize"}
                         </div>
                       </div>
