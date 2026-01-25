@@ -75,6 +75,7 @@ export const subscriptionPlans = [
     name: 'STARTER',
     displayName: 'Starter Plan',
     price: 10000, // $100.00/month in cents
+    trialDays: 30, // 30-day free trial
     // Add monthly and yearly price IDs from Stripe
     prices: {
       monthly: {
@@ -105,6 +106,7 @@ export const subscriptionPlans = [
     name: 'BUILDER',
     displayName: 'Builder Plan',
     price: 25000, // $250.00/month in cents
+    trialDays: 30, // 30-day free trial
     // Add monthly and yearly price IDs from Stripe
     prices: {
       monthly: {

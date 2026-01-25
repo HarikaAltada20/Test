@@ -316,6 +316,51 @@ export default function CreateContestPage({
   const [maxViews, setMaxViews] = useState<number | string>("");
   const [totalBudget, setTotalBudget] = useState<number | string>("");
   const [termsConditions, setTermsConditions] = useState<string>("");
+
+  // CPM Points Configuration (similar to RAID_POINTS_CONFIG)
+  const [cpmPointsConfig, setCpmPointsConfig] = useState<{
+    // Base points
+    comment_base_points: number | string;
+    retweet_base_points: number | string;
+    quote_repost_base_points: number | string;
+    // Comment engagement multipliers
+    comment_likes_multiplier: number | string;
+    comment_replies_multiplier: number | string;
+    comment_impressions_multiplier: number | string;
+    comment_retweets_multiplier: number | string;
+    comment_quote_reposts_multiplier: number | string;
+    // Retweet engagement multipliers
+    retweet_likes_multiplier: number | string;
+    retweet_replies_multiplier: number | string;
+    retweet_impressions_multiplier: number | string;
+    retweet_retweets_multiplier: number | string;
+    retweet_quote_reposts_multiplier: number | string;
+    // Quote repost engagement multipliers
+    quote_repost_likes_multiplier: number | string;
+    quote_repost_replies_multiplier: number | string;
+    quote_repost_impressions_multiplier: number | string;
+    quote_repost_retweets_multiplier: number | string;
+    quote_repost_quote_reposts_multiplier: number | string;
+  }>({
+    comment_base_points: "1",
+    retweet_base_points: "5",
+    quote_repost_base_points: "10",
+    comment_likes_multiplier: "0.1",
+    comment_replies_multiplier: "1",
+    comment_impressions_multiplier: "0.001",
+    comment_retweets_multiplier: "0",
+    comment_quote_reposts_multiplier: "0",
+    retweet_likes_multiplier: "0.05",
+    retweet_replies_multiplier: "0.05",
+    retweet_impressions_multiplier: "0.001",
+    retweet_retweets_multiplier: "0.05",
+    retweet_quote_reposts_multiplier: "0",
+    quote_repost_likes_multiplier: "0.1",
+    quote_repost_replies_multiplier: "0.1",
+    quote_repost_impressions_multiplier: "0.001",
+    quote_repost_retweets_multiplier: "0.1",
+    quote_repost_quote_reposts_multiplier: "0.1",
+  });
   // End Contest Type and CPM-specific state
 
   // New features state (2025-10-01)
@@ -333,7 +378,28 @@ export default function CreateContestPage({
   const [targetReplies, setTargetReplies] = useState<number | "">("");
   const [targetRetweets, setTargetRetweets] = useState<number | "">("");
   const [targetQuoteReposts, setTargetQuoteReposts] = useState<number | "">("");
+  // Twitter CPM points configuration (Points Model): metric weights (empty = disabled)
+  const [twitterPointsConfig, setTwitterPointsConfig] = useState<{
+    likesWeight: number | string;
+    commentsWeight: number | string;
+    retweetsWeight: number | string;
+    quoteRepostsWeight: number | string;
+    impressionsWeight: number | string; // optional "views" points (impressions)
+  }>({
+    likesWeight: "",
+    commentsWeight: "",
+    retweetsWeight: "",
+    quoteRepostsWeight: "",
+    impressionsWeight: "",
+  });
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
+  const [flatFeeBonusCap, setFlatFeeBonusCap] = useState<number | string>(""); // In dollars - for CPM contests only
+
+  // Checkboxes to show/hide engagement multiplier sections
+  const [showCommentMultipliers, setShowCommentMultipliers] = useState(false);
+  const [showRetweetMultipliers, setShowRetweetMultipliers] = useState(false);
+  const [showQuoteRepostMultipliers, setShowQuoteRepostMultipliers] =
+    useState(false);
   const [bonusEnabled, setBonusEnabled] = useState(false);
   const [bonusHtml, setBonusHtml] = useState("");
   const [bonusJson, setBonusJson] = useState<any>(null);
@@ -918,21 +984,21 @@ export default function CreateContestPage({
           contest_based_details:
             contestType === "leaderboard"
               ? {
-                leaderboard_contest: {
-                  prizes: [],
-                  total_prize: 0,
-                  winner_count: 3,
-                },
-              }
+                  leaderboard_contest: {
+                    prizes: [],
+                    total_prize: 0,
+                    winner_count: 3,
+                  },
+                }
               : contestType === "cpm"
-                ? {
+              ? {
                   cpm_contest: {
                     cpm_rate_usd: 0,
                     total_budget: 0,
                     terms_conditions: "",
                   },
                 }
-                : null,
+              : null,
           // Categories, subcategories, and interests
           categories: contestCategories.length > 0 ? contestCategories : null,
           subcategories: (() => {
@@ -1349,8 +1415,9 @@ export default function CreateContestPage({
       console.error("Error saving draft:", error);
       toast({
         title: "Error",
-        description: `Failed to save draft: ${error.message || "Unknown error"
-          }`,
+        description: `Failed to save draft: ${
+          error.message || "Unknown error"
+        }`,
         variant: "destructive",
       });
       setIsLoading(false);
@@ -1443,15 +1510,16 @@ export default function CreateContestPage({
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-          (1000 * 60 * 60 * 24)
+            (1000 * 60 * 60 * 24)
         );
 
         // CRITICAL: Use exact same logic as getMinDateTime for consistency
         if (daysUntilStart < MIN_DAYS_UNTIL_START) {
           return {
             isValid: false,
-            error: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
-              } day gap required)`,
+            error: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
+              MIN_DAYS_UNTIL_START - 1
+            } day gap required)`,
           };
         }
 
@@ -1494,10 +1562,11 @@ export default function CreateContestPage({
           if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
             return {
               isValid: false,
-              error: `Prize for Winner ${i + 1
-                } must be at least ${formatCurrencyFromCents(
-                  MIN_PRIZE_PER_WINNER
-                )}`,
+              error: `Prize for Winner ${
+                i + 1
+              } must be at least ${formatCurrencyFromCents(
+                MIN_PRIZE_PER_WINNER
+              )}`,
             };
           }
 
@@ -1505,10 +1574,11 @@ export default function CreateContestPage({
           if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
             return {
               isValid: false,
-              error: `Prize for Winner ${i + 1
-                } cannot exceed ${formatCurrencyFromCents(
-                  MAX_PRIZE_PER_WINNER
-                )}. Please reduce the prize amount.`,
+              error: `Prize for Winner ${
+                i + 1
+              } cannot exceed ${formatCurrencyFromCents(
+                MAX_PRIZE_PER_WINNER
+              )}. Please reduce the prize amount.`,
             };
           }
         }
@@ -1530,6 +1600,30 @@ export default function CreateContestPage({
             error: `Your plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners. Please reduce the number of winners.`,
           };
         }
+
+        // Total Budget validation when Flat Fee Bonus is enabled
+        const flatFeeBonusValue =
+          flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0;
+        if (flatFeeBonusValue) {
+          const flatFeeBonusDollars = parseFloat(flatFeeBonus.toString());
+
+          if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
+            return {
+              isValid: false,
+              error:
+                "Total Budget is required when Flat Fee Bonus is enabled. Please enter a budget amount.",
+            };
+          }
+
+          // Validate: Flat fee bonus cannot exceed total bonus budget (leaderboard)
+          const totalBudgetDollars = parseFloat(totalBudget.toString());
+          if (flatFeeBonusDollars > totalBudgetDollars) {
+            return {
+              isValid: false,
+              error: "Flat Fee Bonus cannot exceed Total Budget.",
+            };
+          }
+        }
       } else if (contestType === "cpm") {
         // CPM validation
         if (!cpmRate || parseFloat(cpmRate.toString()) <= 0) {
@@ -1543,14 +1637,20 @@ export default function CreateContestPage({
         if (cpmRateValue < MIN_CPM_RATE) {
           return {
             isValid: false,
-            error: `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+            error:
+              platform === "twitter" && contestFormat === "text_image"
+                ? `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 points.`
+                : `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
           };
         }
 
         if (cpmRateValue > MAX_CPM_RATE) {
           return {
             isValid: false,
-            error: `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+            error:
+              platform === "twitter" && contestFormat === "text_image"
+                ? `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 points.`
+                : `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
           };
         }
 
@@ -1566,6 +1666,126 @@ export default function CreateContestPage({
             isValid: false,
             error: "Terms & Conditions are required for CPM contests.",
           };
+        }
+
+        // Twitter CPM (Points Model): require at least one metric weight > 0
+        if (platform === "twitter" && contestFormat === "text_image") {
+          const commentsWeight =
+            parseFloat(cpmPointsConfig.comment_base_points.toString()) || 0;
+          const retweetsWeight =
+            parseFloat(cpmPointsConfig.retweet_base_points.toString()) || 0;
+          const quoteRepostsWeight =
+            parseFloat(cpmPointsConfig.quote_repost_base_points.toString()) ||
+            0;
+
+          // For raid campaigns, only check comments/replies, retweets, and quote reposts
+          // (likes and impressions are not base points for raid campaigns)
+          if (contentType === "raid") {
+            if (
+              commentsWeight <= 0 &&
+              retweetsWeight <= 0 &&
+              quoteRepostsWeight <= 0
+            ) {
+              return {
+                isValid: false,
+                error:
+                  "For Twitter CPM raid contests, please enable at least one metric (comments/replies, retweets, or quote reposts) to count towards points and payout.",
+              };
+            }
+          } else {
+            // For non-raid campaigns, check all metrics including likes and impressions
+            // Normalize Twitter points inputs (blank => 0) so unused metrics can be skipped
+            const likesWeightStr = twitterPointsConfig.likesWeight
+              .toString()
+              .trim();
+            const impressionsWeightStr = twitterPointsConfig.impressionsWeight
+              .toString()
+              .trim();
+
+            // When engagement multiplier sections are enabled, all multiplier fields must be filled (0 allowed)
+            if (showCommentMultipliers) {
+              const requiredCommentFields = [
+                cpmPointsConfig.comment_likes_multiplier,
+                cpmPointsConfig.comment_replies_multiplier,
+                cpmPointsConfig.comment_impressions_multiplier,
+                cpmPointsConfig.comment_retweets_multiplier,
+                cpmPointsConfig.comment_quote_reposts_multiplier,
+              ];
+
+              const hasEmptyCommentMultiplier = requiredCommentFields.some(
+                (v) => v?.toString().trim() === ""
+              );
+
+              if (hasEmptyCommentMultiplier) {
+                return {
+                  isValid: false,
+                  error:
+                    "Comment Engagement Multipliers cannot be empty. Please enter a value for each field (use 0 if you don't want a metric to add points).",
+                };
+              }
+            }
+
+            if (showRetweetMultipliers) {
+              const requiredRetweetFields = [
+                cpmPointsConfig.retweet_likes_multiplier,
+                cpmPointsConfig.retweet_replies_multiplier,
+                cpmPointsConfig.retweet_impressions_multiplier,
+                cpmPointsConfig.retweet_retweets_multiplier,
+                cpmPointsConfig.retweet_quote_reposts_multiplier,
+              ];
+
+              const hasEmptyRetweetMultiplier = requiredRetweetFields.some(
+                (v) => v?.toString().trim() === ""
+              );
+
+              if (hasEmptyRetweetMultiplier) {
+                return {
+                  isValid: false,
+                  error:
+                    "Retweet Engagement Multipliers cannot be empty. Please enter a value for each field (use 0 if you don't want a metric to add points).",
+                };
+              }
+            }
+
+            if (showQuoteRepostMultipliers) {
+              const requiredQuoteFields = [
+                cpmPointsConfig.quote_repost_likes_multiplier,
+                cpmPointsConfig.quote_repost_replies_multiplier,
+                cpmPointsConfig.quote_repost_impressions_multiplier,
+                cpmPointsConfig.quote_repost_retweets_multiplier,
+                cpmPointsConfig.quote_repost_quote_reposts_multiplier,
+              ];
+
+              const hasEmptyQuoteMultiplier = requiredQuoteFields.some(
+                (v) => v?.toString().trim() === ""
+              );
+
+              if (hasEmptyQuoteMultiplier) {
+                return {
+                  isValid: false,
+                  error:
+                    "Quote Repost Engagement Multipliers cannot be empty. Please enter a value for each field (use 0 if you don't want a metric to add points).",
+                };
+              }
+            }
+
+            const likesWeight = parseFloat(likesWeightStr) || 0;
+            const impressionsWeight = parseFloat(impressionsWeightStr) || 0;
+
+            if (
+              likesWeight <= 0 &&
+              commentsWeight <= 0 &&
+              retweetsWeight <= 0 &&
+              quoteRepostsWeight <= 0 &&
+              impressionsWeight <= 0
+            ) {
+              return {
+                isValid: false,
+                error:
+                  "For Twitter CPM contests, please enable at least one metric (likes, comments/replies, retweets, quote reposts, or views) to count towards points and payout.",
+              };
+            }
+          }
         }
 
         // Validate minimum views vs maximum views
@@ -1597,6 +1817,99 @@ export default function CreateContestPage({
               planFeatures.minContestBudget
             )}. Please increase your total budget.`,
           };
+        }
+
+        // Validate: Total Budget is mandatory for CPM contests
+        if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
+          return {
+            isValid: false,
+            error: "Total Budget is mandatory for CPM contests.",
+          };
+        }
+
+        // Validate: Flat fee bonus selected but total budget missing
+        const flatFeeBonusValue =
+          flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0;
+        if (flatFeeBonusValue) {
+          if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
+            return {
+              isValid: false,
+              error: "Total Budget is required when Flat Fee Bonus is enabled.",
+            };
+          }
+
+          // Validate: Flat Fee Bonus Cap is required when flat fee bonus is enabled (CPM)
+          if (!flatFeeBonusCap || parseFloat(flatFeeBonusCap.toString()) <= 0) {
+            return {
+              isValid: false,
+              error:
+                "Flat Fee Bonus Cap is required when Flat Fee Bonus is enabled for CPM contests.",
+            };
+          }
+        }
+
+        // Validate: Flat Fee Bonus Cap must be greater than or equal to Flat Fee Bonus (CPM)
+        const flatFeeBonusCapValue =
+          flatFeeBonusCap && parseFloat(flatFeeBonusCap.toString()) > 0;
+        if (flatFeeBonusValue && flatFeeBonusCapValue) {
+          const bonusDollars = parseFloat(flatFeeBonus.toString());
+          const capDollars = parseFloat(flatFeeBonusCap.toString());
+          if (capDollars < bonusDollars) {
+            return {
+              isValid: false,
+              error:
+                "Flat Fee Bonus Cap must be greater than or equal to the Flat Fee Bonus amount.",
+            };
+          }
+        }
+
+        // Validate: Flat Fee Bonus Cap must not exceed Total Budget (CPM)
+        if (flatFeeBonusCapValue && totalBudget) {
+          const capInDollars = parseFloat(flatFeeBonusCap.toString());
+          const budgetInDollars = parseFloat(totalBudget.toString());
+          if (capInDollars > budgetInDollars) {
+            return {
+              isValid: false,
+              error: "Flat Fee Bonus Cap cannot exceed Total Budget.",
+            };
+          }
+        }
+
+        // Validate: Prevent contest creation if total money a single creator can earn > total budget
+        if (totalBudget) {
+          const totalBudgetDollars = parseFloat(totalBudget.toString());
+          const totalBudgetCents = totalBudgetDollars * 100;
+          let maxCreatorEarnings = 0;
+
+          // Add max earnings per creator if set
+          if (
+            maxEarningsPerCreator &&
+            parseFloat(maxEarningsPerCreator.toString()) > 0
+          ) {
+            maxCreatorEarnings +=
+              parseFloat(maxEarningsPerCreator.toString()) * 100;
+          }
+
+          // Add flat fee bonus cap if set (for CPM)
+          if (flatFeeBonusCapValue) {
+            maxCreatorEarnings += parseFloat(flatFeeBonusCap.toString()) * 100;
+          } else if (flatFeeBonusValue) {
+            // If no cap but flat fee bonus exists, calculate potential max
+            // (flat fee bonus * max submissions per creator)
+            const maxSubmissions = multipleSubmissionsEnabled
+              ? maxSubmissionsPerCreator
+              : 1;
+            const flatFeeBonusCents = parseFloat(flatFeeBonus.toString()) * 100;
+            maxCreatorEarnings += flatFeeBonusCents * maxSubmissions;
+          }
+
+          if (maxCreatorEarnings > totalBudgetCents) {
+            return {
+              isValid: false,
+              error:
+                "The maximum amount a single creator can earn exceeds the total budget. Please adjust the budget or reduce creator earnings limits.",
+            };
+          }
         }
       }
 
@@ -1718,7 +2031,8 @@ export default function CreateContestPage({
         for (let i = 0; i < winnerCount; i++) {
           if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
             setFormFeedback(
-              `Prize for Winner ${i + 1
+              `Prize for Winner ${
+                i + 1
               } must be at least ${formatCurrencyFromCents(
                 MIN_PRIZE_PER_WINNER
               )}`
@@ -1737,6 +2051,20 @@ export default function CreateContestPage({
           flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
             ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
             : undefined;
+
+        // Validate total budget when flat fee bonus is enabled
+        if (
+          flatFeeBonusCents &&
+          (!totalBudget || parseFloat(totalBudget.toString()) <= 0)
+        ) {
+          setFormFeedback(
+            "Total Budget is required when Flat Fee Bonus is enabled. Please enter a budget amount."
+          );
+          setFormFeedbackType("error");
+          setIsLoading(false);
+          setUploadProgress(null);
+          return;
+        }
 
         const totalBudgetCents =
           totalBudget && parseFloat(totalBudget.toString()) > 0
@@ -1829,23 +2157,44 @@ export default function CreateContestPage({
             ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
             : undefined;
 
+        const flatFeeBonusCapCents =
+          flatFeeBonusCap && parseFloat(flatFeeBonusCap.toString()) > 0
+            ? Math.round(parseFloat(flatFeeBonusCap.toString()) * 100)
+            : undefined;
+
+        // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
+        const isTwitterCpmContest =
+          platform === "twitter" &&
+          contestFormat === "text_image" &&
+          contestType === "cpm";
+
+        const cpmContestDetails: any = {
+          cpm_rate_usd: parseFloat(cpmRate.toString()) || 0,
+          total_budget: (parseFloat(totalBudget.toString()) || 0) * 100, // Convert to cents
+          budget_spent: 0, // Initial value
+          terms_conditions: termsConditions,
+          ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
+          ...(flatFeeBonusCapCents && {
+            flat_fee_bonus_cap: flatFeeBonusCapCents,
+          }), // Only include if set
+          // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
+          // tiered_payouts: [] // Future use
+        };
+
+        // Only include min_views and max_views for non-Twitter CPM contests
+        if (!isTwitterCpmContest) {
+          cpmContestDetails.min_views =
+            minViews && minViews.toString().trim() !== ""
+              ? parseInt(minViews.toString(), 10)
+              : null;
+          cpmContestDetails.max_views =
+            maxViews && maxViews.toString().trim() !== ""
+              ? parseInt(maxViews.toString(), 10)
+              : null;
+        }
+
         contestBasedDetails = {
-          cpm_contest: {
-            cpm_rate_usd: parseFloat(cpmRate.toString()) || 0,
-            min_views:
-              minViews && minViews.toString().trim() !== ""
-                ? parseInt(minViews.toString(), 10)
-                : null,
-            max_views:
-              maxViews && maxViews.toString().trim() !== ""
-                ? parseInt(maxViews.toString(), 10)
-                : null,
-            total_budget: (parseFloat(totalBudget.toString()) || 0) * 100, // Convert to cents
-            budget_spent: 0, // Initial value
-            terms_conditions: termsConditions,
-            ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
-            // tiered_payouts: [] // Future use
-          },
+          cpm_contest: cpmContestDetails,
         };
       }
 
@@ -1866,8 +2215,188 @@ export default function CreateContestPage({
         if (filteredMentions.length > 0) {
           twitterCampaign.mentions = filteredMentions;
         }
-        if (maxParticipants && typeof maxParticipants === "number" && maxParticipants > 0) {
+        if (
+          maxParticipants &&
+          typeof maxParticipants === "number" &&
+          maxParticipants > 0
+        ) {
           twitterCampaign.max_participants = maxParticipants;
+        }
+
+        if (contestType === "cpm") {
+          // CPM-based Twitter contests (Points Model): configure metric weights
+          // Stored in contest_based_details.twitter_campaign.points_config
+          const commentsWeight =
+            parseFloat(cpmPointsConfig.comment_base_points.toString()) || 0;
+          const retweetsWeight =
+            parseFloat(cpmPointsConfig.retweet_base_points.toString()) || 0;
+          const quoteRepostsWeight =
+            parseFloat(cpmPointsConfig.quote_repost_base_points.toString()) ||
+            0;
+
+          // Build points_config with nested multipliers inside comments_weight, retweets_weight, quote_reposts_weight
+          // For raid campaigns, don't save likes_weight and impressions_weight
+          const pointsConfig: any = {};
+          if (contentType !== "raid") {
+            // Normalize Twitter points inputs (blank => 0) so users can skip metrics they don't need
+            const likesWeightStr = twitterPointsConfig.likesWeight
+              .toString()
+              .trim();
+            const impressionsWeightStr = twitterPointsConfig.impressionsWeight
+              .toString()
+              .trim();
+
+            const likesWeight = parseFloat(likesWeightStr) || 0;
+            const impressionsWeight = parseFloat(impressionsWeightStr) || 0;
+            pointsConfig.likes_weight = likesWeight;
+            pointsConfig.impressions_weight = impressionsWeight;
+          }
+
+          // Add comments_weight - always save multipliers (defaults or user values)
+          // Checkbox only controls visibility, not whether multipliers are saved
+          const commentMultipliers: any = {};
+          if (showCommentMultipliers) {
+            // Checkbox is checked - use user values if provided, otherwise use defaults
+            const commentLikes = getMultiplierValue(
+              cpmPointsConfig.comment_likes_multiplier
+            );
+            const commentReplies = getMultiplierValue(
+              cpmPointsConfig.comment_replies_multiplier
+            );
+            const commentImpressions = getMultiplierValue(
+              cpmPointsConfig.comment_impressions_multiplier
+            );
+            const commentRetweets = getMultiplierValue(
+              cpmPointsConfig.comment_retweets_multiplier
+            );
+            const commentQuoteReposts = getMultiplierValue(
+              cpmPointsConfig.comment_quote_reposts_multiplier
+            );
+
+            commentMultipliers.likes_multiplier =
+              commentLikes !== undefined ? commentLikes : 0.1;
+            commentMultipliers.replies_multiplier =
+              commentReplies !== undefined ? commentReplies : 1;
+            commentMultipliers.impressions_multiplier =
+              commentImpressions !== undefined ? commentImpressions : 0.001;
+            commentMultipliers.retweets_multiplier =
+              commentRetweets !== undefined ? commentRetweets : 0;
+            commentMultipliers.quote_reposts_multiplier =
+              commentQuoteReposts !== undefined ? commentQuoteReposts : 0;
+          } else {
+            // Checkbox is unchecked - always use default multipliers
+            commentMultipliers.likes_multiplier = 0.1;
+            commentMultipliers.replies_multiplier = 1;
+            commentMultipliers.impressions_multiplier = 0.001;
+            commentMultipliers.retweets_multiplier = 0;
+            commentMultipliers.quote_reposts_multiplier = 0;
+          }
+
+          pointsConfig.comments_weight = {
+            ...(commentsWeight > 0 && { base_weight: commentsWeight }),
+            ...commentMultipliers,
+            _showMultipliers: showCommentMultipliers, // Flag to track checkbox state
+          };
+
+          // Add retweets_weight - always save multipliers (defaults or user values)
+          // Checkbox only controls visibility, not whether multipliers are saved
+          const retweetMultipliers: any = {};
+          if (showRetweetMultipliers) {
+            // Checkbox is checked - use user values if provided, otherwise use defaults
+            const retweetLikes = getMultiplierValue(
+              cpmPointsConfig.retweet_likes_multiplier
+            );
+            const retweetReplies = getMultiplierValue(
+              cpmPointsConfig.retweet_replies_multiplier
+            );
+            const retweetImpressions = getMultiplierValue(
+              cpmPointsConfig.retweet_impressions_multiplier
+            );
+            const retweetRetweets = getMultiplierValue(
+              cpmPointsConfig.retweet_retweets_multiplier
+            );
+            const retweetQuoteReposts = getMultiplierValue(
+              cpmPointsConfig.retweet_quote_reposts_multiplier
+            );
+
+            retweetMultipliers.likes_multiplier =
+              retweetLikes !== undefined ? retweetLikes : 0.05;
+            retweetMultipliers.replies_multiplier =
+              retweetReplies !== undefined ? retweetReplies : 0.05;
+            retweetMultipliers.impressions_multiplier =
+              retweetImpressions !== undefined ? retweetImpressions : 0.001;
+            retweetMultipliers.retweets_multiplier =
+              retweetRetweets !== undefined ? retweetRetweets : 0.05;
+            retweetMultipliers.quote_reposts_multiplier =
+              retweetQuoteReposts !== undefined ? retweetQuoteReposts : 0;
+          } else {
+            // Checkbox is unchecked - always use default multipliers
+            retweetMultipliers.likes_multiplier = 0.05;
+            retweetMultipliers.replies_multiplier = 0.05;
+            retweetMultipliers.impressions_multiplier = 0.001;
+            retweetMultipliers.retweets_multiplier = 0.05;
+            retweetMultipliers.quote_reposts_multiplier = 0;
+          }
+
+          pointsConfig.retweets_weight = {
+            ...(retweetsWeight > 0 && { base_weight: retweetsWeight }),
+            ...retweetMultipliers,
+            _showMultipliers: showRetweetMultipliers, // Flag to track checkbox state
+          };
+
+          // Add quote_reposts_weight - always save multipliers (defaults or user values)
+          // Checkbox only controls visibility, not whether multipliers are saved
+          const quoteRepostMultipliers: any = {};
+          if (showQuoteRepostMultipliers) {
+            // Checkbox is checked - use user values if provided, otherwise use defaults
+            const quoteRepostLikes = getMultiplierValue(
+              cpmPointsConfig.quote_repost_likes_multiplier
+            );
+            const quoteRepostReplies = getMultiplierValue(
+              cpmPointsConfig.quote_repost_replies_multiplier
+            );
+            const quoteRepostImpressions = getMultiplierValue(
+              cpmPointsConfig.quote_repost_impressions_multiplier
+            );
+            const quoteRepostRetweets = getMultiplierValue(
+              cpmPointsConfig.quote_repost_retweets_multiplier
+            );
+            const quoteRepostQuoteReposts = getMultiplierValue(
+              cpmPointsConfig.quote_repost_quote_reposts_multiplier
+            );
+
+            quoteRepostMultipliers.likes_multiplier =
+              quoteRepostLikes !== undefined ? quoteRepostLikes : 0.1;
+            quoteRepostMultipliers.replies_multiplier =
+              quoteRepostReplies !== undefined ? quoteRepostReplies : 0.1;
+            quoteRepostMultipliers.impressions_multiplier =
+              quoteRepostImpressions !== undefined
+                ? quoteRepostImpressions
+                : 0.001;
+            quoteRepostMultipliers.retweets_multiplier =
+              quoteRepostRetweets !== undefined ? quoteRepostRetweets : 0.1;
+            quoteRepostMultipliers.quote_reposts_multiplier =
+              quoteRepostQuoteReposts !== undefined
+                ? quoteRepostQuoteReposts
+                : 0.1;
+          } else {
+            // Checkbox is unchecked - always use default multipliers
+            quoteRepostMultipliers.likes_multiplier = 0.1;
+            quoteRepostMultipliers.replies_multiplier = 0.1;
+            quoteRepostMultipliers.impressions_multiplier = 0.001;
+            quoteRepostMultipliers.retweets_multiplier = 0.1;
+            quoteRepostMultipliers.quote_reposts_multiplier = 0.1;
+          }
+
+          pointsConfig.quote_reposts_weight = {
+            ...(quoteRepostsWeight > 0 && {
+              base_weight: quoteRepostsWeight,
+            }),
+            ...quoteRepostMultipliers,
+            _showMultipliers: showQuoteRepostMultipliers, // Flag to track checkbox state
+          };
+
+          twitterCampaign.points_config = pointsConfig;
         }
 
         if (contentType !== "raid") {
@@ -1879,7 +2408,10 @@ export default function CreateContestPage({
           }
         }
 
-        if ((contentType === "raid" || contentType === "awareness") && inspirationLinks.length > 0) {
+        if (
+          (contentType === "raid" || contentType === "awareness") &&
+          inspirationLinks.length > 0
+        ) {
           twitterCampaign.raid_target = {
             link: inspirationLinks[0]?.url || null,
             description: inspirationLinks[0]?.description || null,
@@ -1887,10 +2419,13 @@ export default function CreateContestPage({
               likes: targetLikes === "" ? null : targetLikes,
               comments: targetReplies === "" ? null : targetReplies,
               retweets: targetRetweets === "" ? null : targetRetweets,
-              quote_reposts: targetQuoteReposts === "" ? null : targetQuoteReposts,
+              quote_reposts:
+                targetQuoteReposts === "" ? null : targetQuoteReposts,
             },
-            keywords_requirement_mode: contentType === "raid" ? "" : keywordsRequirementMode,
-            mentions_requirement_mode: contentType === "raid" ? "" : mentionsRequirementMode,
+            keywords_requirement_mode:
+              contentType === "raid" ? "" : keywordsRequirementMode,
+            mentions_requirement_mode:
+              contentType === "raid" ? "" : mentionsRequirementMode,
           };
         }
 
@@ -2207,8 +2742,8 @@ export default function CreateContestPage({
         isDraft
           ? "Finalizing draft..."
           : contestId
-            ? "Updating contest..."
-            : "Creating contest..."
+          ? "Updating contest..."
+          : "Creating contest..."
       );
 
       // Helper function to process and group subcategories by category
@@ -2311,13 +2846,13 @@ export default function CreateContestPage({
         bonus_details:
           bonusEnabled && bonusHtml
             ? {
-              description_html: bonusHtml,
-              description_json: bonusJson,
-            }
+                description_html: bonusHtml,
+                description_json: bonusJson,
+              }
             : null,
         max_earnings_per_creator:
           maxEarningsPerCreator &&
-            parseFloat(maxEarningsPerCreator.toString()) > 0
+          parseFloat(maxEarningsPerCreator.toString()) > 0
             ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
             : null,
         // Note: flat_fee_bonus is now stored in contest_based_details (in cents)
@@ -2420,8 +2955,9 @@ export default function CreateContestPage({
       } else {
         toast({
           title: "Error",
-          description: `Failed to ${isDraft ? "save draft" : "create contest"
-            }: ${err.message || "Unknown error"}`,
+          description: `Failed to ${
+            isDraft ? "save draft" : "create contest"
+          }: ${err.message || "Unknown error"}`,
           variant: "destructive",
         });
       }
@@ -2476,7 +3012,8 @@ export default function CreateContestPage({
             retries > 0
           ) {
             console.warn(
-              `Submission failed (payment pending), retrying in ${delay / 1000
+              `Submission failed (payment pending), retrying in ${
+                delay / 1000
               }s...`
             );
             await new Promise((res) => setTimeout(res, delay));
@@ -2696,17 +3233,19 @@ export default function CreateContestPage({
       if (numValue < MIN_PRIZE_PER_WINNER) {
         toast({
           title: "Prize Amount Too Low",
-          description: `Prize amount for Winner ${index + 1
-            } cannot be less than ${formatCurrencyFromCents(
-              MIN_PRIZE_PER_WINNER
-            )}`,
+          description: `Prize amount for Winner ${
+            index + 1
+          } cannot be less than ${formatCurrencyFromCents(
+            MIN_PRIZE_PER_WINNER
+          )}`,
           variant: "destructive",
         });
       } else if (numValue > MAX_PRIZE_PER_WINNER) {
         toast({
           title: "Prize Amount Too High",
-          description: `Prize amount for Winner ${index + 1
-            } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+          description: `Prize amount for Winner ${
+            index + 1
+          } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
           variant: "destructive",
         });
       }
@@ -2727,8 +3266,9 @@ export default function CreateContestPage({
     if (count > planFeatures.maxWinnersPerContest) {
       toast({
         title: "Plan Limit",
-        description: `Your ${userPlan || "current"} plan is limited to ${planFeatures.maxWinnersPerContest
-          } winners per contest. Upgrade your plan for more.`,
+        description: `Your ${userPlan || "current"} plan is limited to ${
+          planFeatures.maxWinnersPerContest
+        } winners per contest. Upgrade your plan for more.`,
         variant: "destructive",
       });
       return;
@@ -2744,7 +3284,7 @@ export default function CreateContestPage({
         const position = i + 1;
         newAmounts.push(
           DEFAULT_PRIZE_ALLOCATIONS[
-          position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
+            position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
           ] || MIN_PRIZE_PER_WINNER
         );
       }
@@ -2801,8 +3341,179 @@ export default function CreateContestPage({
         if (filteredMentions.length > 0) {
           twitterCampaign.mentions = filteredMentions;
         }
-        if (maxParticipants && typeof maxParticipants === "number" && maxParticipants > 0) {
+        if (
+          maxParticipants &&
+          typeof maxParticipants === "number" &&
+          maxParticipants > 0
+        ) {
           twitterCampaign.max_participants = maxParticipants;
+        }
+
+        if (contestType === "cpm") {
+          // CPM-based Twitter contests (Points Model): configure metric weights
+          const likesWeight =
+            parseFloat(twitterPointsConfig.likesWeight.toString()) || 0;
+          const commentsWeight =
+            parseFloat(cpmPointsConfig.comment_base_points.toString()) || 0;
+          const retweetsWeight =
+            parseFloat(cpmPointsConfig.retweet_base_points.toString()) || 0;
+          const quoteRepostsWeight =
+            parseFloat(cpmPointsConfig.quote_repost_base_points.toString()) ||
+            0;
+          const impressionsWeight =
+            parseFloat(twitterPointsConfig.impressionsWeight.toString()) || 0;
+
+          // Build points_config with nested multipliers inside comments_weight, retweets_weight, quote_reposts_weight
+          const pointsConfig: any = {
+            likes_weight: likesWeight,
+            impressions_weight: impressionsWeight,
+          };
+
+          // Add comments_weight - always save multipliers (defaults or user values)
+          // Checkbox only controls visibility, not whether multipliers are saved
+          const commentMultipliers: any = {};
+          if (showCommentMultipliers) {
+            // Checkbox is checked - use user values if provided, otherwise use defaults
+            const commentLikes = getMultiplierValue(
+              cpmPointsConfig.comment_likes_multiplier
+            );
+            const commentReplies = getMultiplierValue(
+              cpmPointsConfig.comment_replies_multiplier
+            );
+            const commentImpressions = getMultiplierValue(
+              cpmPointsConfig.comment_impressions_multiplier
+            );
+            const commentRetweets = getMultiplierValue(
+              cpmPointsConfig.comment_retweets_multiplier
+            );
+            const commentQuoteReposts = getMultiplierValue(
+              cpmPointsConfig.comment_quote_reposts_multiplier
+            );
+
+            commentMultipliers.likes_multiplier =
+              commentLikes !== undefined ? commentLikes : 0.1;
+            commentMultipliers.replies_multiplier =
+              commentReplies !== undefined ? commentReplies : 1;
+            commentMultipliers.impressions_multiplier =
+              commentImpressions !== undefined ? commentImpressions : 0.001;
+            commentMultipliers.retweets_multiplier =
+              commentRetweets !== undefined ? commentRetweets : 0;
+            commentMultipliers.quote_reposts_multiplier =
+              commentQuoteReposts !== undefined ? commentQuoteReposts : 0;
+          } else {
+            // Checkbox is unchecked - always use default multipliers
+            commentMultipliers.likes_multiplier = 0.1;
+            commentMultipliers.replies_multiplier = 1;
+            commentMultipliers.impressions_multiplier = 0.001;
+            commentMultipliers.retweets_multiplier = 0;
+            commentMultipliers.quote_reposts_multiplier = 0;
+          }
+
+          pointsConfig.comments_weight = {
+            ...(commentsWeight > 0 && { base_weight: commentsWeight }),
+            ...commentMultipliers,
+            _showMultipliers: showCommentMultipliers, // Flag to track checkbox state
+          };
+
+          // Add retweets_weight - always save multipliers (defaults or user values)
+          // Checkbox only controls visibility, not whether multipliers are saved
+          const retweetMultipliers: any = {};
+          if (showRetweetMultipliers) {
+            // Checkbox is checked - use user values if provided, otherwise use defaults
+            const retweetLikes = getMultiplierValue(
+              cpmPointsConfig.retweet_likes_multiplier
+            );
+            const retweetReplies = getMultiplierValue(
+              cpmPointsConfig.retweet_replies_multiplier
+            );
+            const retweetImpressions = getMultiplierValue(
+              cpmPointsConfig.retweet_impressions_multiplier
+            );
+            const retweetRetweets = getMultiplierValue(
+              cpmPointsConfig.retweet_retweets_multiplier
+            );
+            const retweetQuoteReposts = getMultiplierValue(
+              cpmPointsConfig.retweet_quote_reposts_multiplier
+            );
+
+            retweetMultipliers.likes_multiplier =
+              retweetLikes !== undefined ? retweetLikes : 0.05;
+            retweetMultipliers.replies_multiplier =
+              retweetReplies !== undefined ? retweetReplies : 0.05;
+            retweetMultipliers.impressions_multiplier =
+              retweetImpressions !== undefined ? retweetImpressions : 0.001;
+            retweetMultipliers.retweets_multiplier =
+              retweetRetweets !== undefined ? retweetRetweets : 0.05;
+            retweetMultipliers.quote_reposts_multiplier =
+              retweetQuoteReposts !== undefined ? retweetQuoteReposts : 0;
+          } else {
+            // Checkbox is unchecked - always use default multipliers
+            retweetMultipliers.likes_multiplier = 0.05;
+            retweetMultipliers.replies_multiplier = 0.05;
+            retweetMultipliers.impressions_multiplier = 0.001;
+            retweetMultipliers.retweets_multiplier = 0.05;
+            retweetMultipliers.quote_reposts_multiplier = 0;
+          }
+
+          pointsConfig.retweets_weight = {
+            ...(retweetsWeight > 0 && { base_weight: retweetsWeight }),
+            ...retweetMultipliers,
+            _showMultipliers: showRetweetMultipliers, // Flag to track checkbox state
+          };
+
+          // Add quote_reposts_weight - always save multipliers (defaults or user values)
+          // Checkbox only controls visibility, not whether multipliers are saved
+          const quoteRepostMultipliers: any = {};
+          if (showQuoteRepostMultipliers) {
+            // Checkbox is checked - use user values if provided, otherwise use defaults
+            const quoteRepostLikes = getMultiplierValue(
+              cpmPointsConfig.quote_repost_likes_multiplier
+            );
+            const quoteRepostReplies = getMultiplierValue(
+              cpmPointsConfig.quote_repost_replies_multiplier
+            );
+            const quoteRepostImpressions = getMultiplierValue(
+              cpmPointsConfig.quote_repost_impressions_multiplier
+            );
+            const quoteRepostRetweets = getMultiplierValue(
+              cpmPointsConfig.quote_repost_retweets_multiplier
+            );
+            const quoteRepostQuoteReposts = getMultiplierValue(
+              cpmPointsConfig.quote_repost_quote_reposts_multiplier
+            );
+
+            quoteRepostMultipliers.likes_multiplier =
+              quoteRepostLikes !== undefined ? quoteRepostLikes : 0.1;
+            quoteRepostMultipliers.replies_multiplier =
+              quoteRepostReplies !== undefined ? quoteRepostReplies : 0.1;
+            quoteRepostMultipliers.impressions_multiplier =
+              quoteRepostImpressions !== undefined
+                ? quoteRepostImpressions
+                : 0.001;
+            quoteRepostMultipliers.retweets_multiplier =
+              quoteRepostRetweets !== undefined ? quoteRepostRetweets : 0.1;
+            quoteRepostMultipliers.quote_reposts_multiplier =
+              quoteRepostQuoteReposts !== undefined
+                ? quoteRepostQuoteReposts
+                : 0.1;
+          } else {
+            // Checkbox is unchecked - always use default multipliers
+            quoteRepostMultipliers.likes_multiplier = 0.1;
+            quoteRepostMultipliers.replies_multiplier = 0.1;
+            quoteRepostMultipliers.impressions_multiplier = 0.001;
+            quoteRepostMultipliers.retweets_multiplier = 0.1;
+            quoteRepostMultipliers.quote_reposts_multiplier = 0.1;
+          }
+
+          pointsConfig.quote_reposts_weight = {
+            ...(quoteRepostsWeight > 0 && {
+              base_weight: quoteRepostsWeight,
+            }),
+            ...quoteRepostMultipliers,
+            _showMultipliers: showQuoteRepostMultipliers, // Flag to track checkbox state
+          };
+
+          twitterCampaign.points_config = pointsConfig;
         }
 
         if (contentType !== "raid") {
@@ -2814,7 +3525,10 @@ export default function CreateContestPage({
           }
         }
 
-        if ((contentType === "raid" || contentType === "awareness") && inspirationLinks.length > 0) {
+        if (
+          (contentType === "raid" || contentType === "awareness") &&
+          inspirationLinks.length > 0
+        ) {
           twitterCampaign.raid_target = {
             link: inspirationLinks[0]?.url || null,
             description: inspirationLinks[0]?.description || null,
@@ -2822,10 +3536,13 @@ export default function CreateContestPage({
               likes: targetLikes === "" ? null : targetLikes,
               comments: targetReplies === "" ? null : targetReplies,
               retweets: targetRetweets === "" ? null : targetRetweets,
-              quote_reposts: targetQuoteReposts === "" ? null : targetQuoteReposts,
+              quote_reposts:
+                targetQuoteReposts === "" ? null : targetQuoteReposts,
             },
-            keywords_requirement_mode: contentType === "raid" ? "" : keywordsRequirementMode,
-            mentions_requirement_mode: contentType === "raid" ? "" : mentionsRequirementMode,
+            keywords_requirement_mode:
+              contentType === "raid" ? "" : keywordsRequirementMode,
+            mentions_requirement_mode:
+              contentType === "raid" ? "" : mentionsRequirementMode,
           };
         }
 
@@ -2886,7 +3603,10 @@ export default function CreateContestPage({
           .maybeSingle();
 
         // Preserve existing contest_based_details when updating
-        if (existingContest?.contest_based_details && basicsData.contest_based_details) {
+        if (
+          existingContest?.contest_based_details &&
+          basicsData.contest_based_details
+        ) {
           basicsData.contest_based_details = {
             ...existingContest.contest_based_details,
             ...basicsData.contest_based_details,
@@ -2905,6 +3625,251 @@ export default function CreateContestPage({
       }
     } catch (error) {
       console.error("Error in saveBasicsAsDraft:", error);
+    }
+  };
+
+  // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
+  const isValidMultiplierValue = (value: number | string): boolean => {
+    if (value === null || value === undefined) return false;
+    const strValue = value.toString().trim();
+    if (strValue === "" || strValue === null) return false;
+    const numValue = parseFloat(strValue);
+    return !isNaN(numValue);
+  };
+
+  // Helper function to get multiplier value or undefined if invalid
+  const getMultiplierValue = (value: number | string): number | undefined => {
+    if (!isValidMultiplierValue(value)) return undefined;
+    return parseFloat(value.toString().trim());
+  };
+
+  // Save CPM points config as draft when checkboxes are toggled
+  const saveCpmAsDraft = async () => {
+    // Ensure we have a contest ID first
+    let currentContestId = contestId;
+    if (!currentContestId) {
+      // If no contest ID, try to save basics first to create one
+      if (!title.trim()) return; // Don't save if no title
+      const newContestId = await saveBasicsAsDraft();
+      if (newContestId) {
+        currentContestId = newContestId;
+      } else {
+        return; // Failed to create contest
+      }
+    }
+
+    try {
+      // Fetch existing contest_based_details to preserve other data
+      const { data: existingContest } = await supabase
+        .from("contests")
+        .select("contest_based_details")
+        .eq("id", currentContestId)
+        .eq("advertiser_id", user?.id)
+        .maybeSingle();
+
+      const existingDetails = existingContest?.contest_based_details || {};
+
+      // Check if this is a Twitter CPM contest
+      const isTwitterCpmContest =
+        platform?.toLowerCase() === "twitter" &&
+        contestFormat === "text_image" &&
+        contestType === "cpm";
+
+      // Update Twitter campaign points_config with multipliers
+      if (isTwitterCpmContest && contestType === "cpm") {
+        const existingTwitterCampaign = existingDetails.twitter_campaign || {};
+        const existingPointsConfig =
+          existingTwitterCampaign.points_config || {};
+
+        // Get base weights from current cpmPointsConfig (user's input)
+        const commentsWeight =
+          parseFloat(cpmPointsConfig.comment_base_points.toString()) || 0;
+        const retweetsWeight =
+          parseFloat(cpmPointsConfig.retweet_base_points.toString()) || 0;
+        const quoteRepostsWeight =
+          parseFloat(cpmPointsConfig.quote_repost_base_points.toString()) || 0;
+
+        // Build points_config with nested multipliers inside comments_weight, retweets_weight, quote_reposts_weight
+        // For raid campaigns, don't save likes_weight and impressions_weight
+        const pointsConfig: any = {};
+        if (contentType !== "raid") {
+          const likesWeight = existingPointsConfig.likes_weight || 0;
+          const impressionsWeight =
+            existingPointsConfig.impressions_weight || 0;
+          pointsConfig.likes_weight = likesWeight;
+          pointsConfig.impressions_weight = impressionsWeight;
+        }
+
+        // Add comments_weight - always save multipliers (defaults or user values)
+        // Checkbox only controls visibility, not whether multipliers are saved
+        const commentMultipliers: any = {};
+        if (showCommentMultipliers) {
+          // Checkbox is checked - use user values if provided, otherwise use defaults
+          const commentLikes = getMultiplierValue(
+            cpmPointsConfig.comment_likes_multiplier
+          );
+          const commentReplies = getMultiplierValue(
+            cpmPointsConfig.comment_replies_multiplier
+          );
+          const commentImpressions = getMultiplierValue(
+            cpmPointsConfig.comment_impressions_multiplier
+          );
+          const commentRetweets = getMultiplierValue(
+            cpmPointsConfig.comment_retweets_multiplier
+          );
+          const commentQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.comment_quote_reposts_multiplier
+          );
+
+          commentMultipliers.likes_multiplier =
+            commentLikes !== undefined ? commentLikes : 0.1;
+          commentMultipliers.replies_multiplier =
+            commentReplies !== undefined ? commentReplies : 1;
+          commentMultipliers.impressions_multiplier =
+            commentImpressions !== undefined ? commentImpressions : 0.001;
+          commentMultipliers.retweets_multiplier =
+            commentRetweets !== undefined ? commentRetweets : 0;
+          commentMultipliers.quote_reposts_multiplier =
+            commentQuoteReposts !== undefined ? commentQuoteReposts : 0;
+        } else {
+          // Checkbox is unchecked - always use default multipliers
+          commentMultipliers.likes_multiplier = 0.1;
+          commentMultipliers.replies_multiplier = 1;
+          commentMultipliers.impressions_multiplier = 0.001;
+          commentMultipliers.retweets_multiplier = 0;
+          commentMultipliers.quote_reposts_multiplier = 0;
+        }
+
+        pointsConfig.comments_weight = {
+          ...(commentsWeight > 0 && { base_weight: commentsWeight }),
+          ...commentMultipliers,
+          _showMultipliers: showCommentMultipliers, // Flag to track checkbox state
+        };
+
+        // Add retweets_weight - always save multipliers (defaults or user values)
+        // Checkbox only controls visibility, not whether multipliers are saved
+        const retweetMultipliers: any = {};
+        if (showRetweetMultipliers) {
+          // Checkbox is checked - use user values if provided, otherwise use defaults
+          const retweetLikes = getMultiplierValue(
+            cpmPointsConfig.retweet_likes_multiplier
+          );
+          const retweetReplies = getMultiplierValue(
+            cpmPointsConfig.retweet_replies_multiplier
+          );
+          const retweetImpressions = getMultiplierValue(
+            cpmPointsConfig.retweet_impressions_multiplier
+          );
+          const retweetRetweets = getMultiplierValue(
+            cpmPointsConfig.retweet_retweets_multiplier
+          );
+          const retweetQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.retweet_quote_reposts_multiplier
+          );
+
+          retweetMultipliers.likes_multiplier =
+            retweetLikes !== undefined ? retweetLikes : 0.05;
+          retweetMultipliers.replies_multiplier =
+            retweetReplies !== undefined ? retweetReplies : 0.05;
+          retweetMultipliers.impressions_multiplier =
+            retweetImpressions !== undefined ? retweetImpressions : 0.001;
+          retweetMultipliers.retweets_multiplier =
+            retweetRetweets !== undefined ? retweetRetweets : 0.05;
+          retweetMultipliers.quote_reposts_multiplier =
+            retweetQuoteReposts !== undefined ? retweetQuoteReposts : 0;
+        } else {
+          // Checkbox is unchecked - always use default multipliers
+          retweetMultipliers.likes_multiplier = 0.05;
+          retweetMultipliers.replies_multiplier = 0.05;
+          retweetMultipliers.impressions_multiplier = 0.001;
+          retweetMultipliers.retweets_multiplier = 0.05;
+          retweetMultipliers.quote_reposts_multiplier = 0;
+        }
+
+        pointsConfig.retweets_weight = {
+          ...(retweetsWeight > 0 && { base_weight: retweetsWeight }),
+          ...retweetMultipliers,
+          _showMultipliers: showRetweetMultipliers, // Flag to track checkbox state
+        };
+
+        // Add quote_reposts_weight - always save multipliers (defaults or user values)
+        // Checkbox only controls visibility, not whether multipliers are saved
+        const quoteRepostMultipliers: any = {};
+        if (showQuoteRepostMultipliers) {
+          // Checkbox is checked - use user values if provided, otherwise use defaults
+          const quoteRepostLikes = getMultiplierValue(
+            cpmPointsConfig.quote_repost_likes_multiplier
+          );
+          const quoteRepostReplies = getMultiplierValue(
+            cpmPointsConfig.quote_repost_replies_multiplier
+          );
+          const quoteRepostImpressions = getMultiplierValue(
+            cpmPointsConfig.quote_repost_impressions_multiplier
+          );
+          const quoteRepostRetweets = getMultiplierValue(
+            cpmPointsConfig.quote_repost_retweets_multiplier
+          );
+          const quoteRepostQuoteReposts = getMultiplierValue(
+            cpmPointsConfig.quote_repost_quote_reposts_multiplier
+          );
+
+          quoteRepostMultipliers.likes_multiplier =
+            quoteRepostLikes !== undefined ? quoteRepostLikes : 0.1;
+          quoteRepostMultipliers.replies_multiplier =
+            quoteRepostReplies !== undefined ? quoteRepostReplies : 0.1;
+          quoteRepostMultipliers.impressions_multiplier =
+            quoteRepostImpressions !== undefined
+              ? quoteRepostImpressions
+              : 0.001;
+          quoteRepostMultipliers.retweets_multiplier =
+            quoteRepostRetweets !== undefined ? quoteRepostRetweets : 0.1;
+          quoteRepostMultipliers.quote_reposts_multiplier =
+            quoteRepostQuoteReposts !== undefined
+              ? quoteRepostQuoteReposts
+              : 0.1;
+        } else {
+          // Checkbox is unchecked - always use default multipliers
+          quoteRepostMultipliers.likes_multiplier = 0.1;
+          quoteRepostMultipliers.replies_multiplier = 0.1;
+          quoteRepostMultipliers.impressions_multiplier = 0.001;
+          quoteRepostMultipliers.retweets_multiplier = 0.1;
+          quoteRepostMultipliers.quote_reposts_multiplier = 0.1;
+        }
+
+        pointsConfig.quote_reposts_weight = {
+          ...(quoteRepostsWeight > 0 && {
+            base_weight: quoteRepostsWeight,
+          }),
+          ...quoteRepostMultipliers,
+          _showMultipliers: showQuoteRepostMultipliers, // Flag to track checkbox state
+        };
+
+        // Update twitter_campaign with new points_config
+        const updatedTwitterCampaign = {
+          ...existingTwitterCampaign,
+          points_config: pointsConfig,
+        };
+
+        const updatedDetails = {
+          ...existingDetails,
+          twitter_campaign: updatedTwitterCampaign,
+        };
+
+        const { error } = await supabase
+          .from("contests")
+          .update({
+            contest_based_details: updatedDetails,
+            moderation_status: "draft",
+          })
+          .eq("id", currentContestId)
+          .eq("advertiser_id", user?.id);
+
+        if (error) {
+          console.error("Error saving CPM draft:", error);
+        }
+      }
+    } catch (error) {
+      console.error("Error in saveCpmAsDraft:", error);
     }
   };
 
@@ -2967,8 +3932,8 @@ export default function CreateContestPage({
           missingFields.length === 1
             ? `Please fill in the following required field: ${missingFields[0]}`
             : `Please fill in the following required fields: ${missingFields.join(
-              ", "
-            )}`;
+                ", "
+              )}`;
         // Use toast-only error for basics step (no CardFooter alert)
         setToastError(errorMessage);
         return;
@@ -3257,7 +4222,10 @@ export default function CreateContestPage({
     console.log("Draft platform:", draft.platform);
     console.log("Draft contest_format:", draft.contest_format);
     console.log("Draft content_type:", draft.content_type);
-    console.log("Draft twitter_campaign:", draft.contest_based_details?.twitter_campaign);
+    console.log(
+      "Draft twitter_campaign:",
+      draft.contest_based_details?.twitter_campaign
+    );
 
     // Set draft/contest IDs first
     setDraftId(draft.id);
@@ -3265,6 +4233,11 @@ export default function CreateContestPage({
 
     // Basic contest fields
     setTitle(draft.title || "");
+
+    // Contest type (leaderboard or CPM)
+    if (draft.contest_type === "leaderboard" || draft.contest_type === "cpm") {
+      setContestType(draft.contest_type);
+    }
 
     // Set platform
     const draftPlatform = draft.platform || "youtube";
@@ -3305,13 +4278,19 @@ export default function CreateContestPage({
 
       if (twitterCampaign) {
         // Keywords from twitter_campaign.keywords
-        if (Array.isArray(twitterCampaign.keywords) && twitterCampaign.keywords.length > 0) {
+        if (
+          Array.isArray(twitterCampaign.keywords) &&
+          twitterCampaign.keywords.length > 0
+        ) {
           console.log("✅ Setting keywords to:", twitterCampaign.keywords);
           setKeywords(twitterCampaign.keywords);
         }
 
         // Mentions from twitter_campaign.mentions
-        if (Array.isArray(twitterCampaign.mentions) && twitterCampaign.mentions.length > 0) {
+        if (
+          Array.isArray(twitterCampaign.mentions) &&
+          twitterCampaign.mentions.length > 0
+        ) {
           console.log("✅ Setting mentions to:", twitterCampaign.mentions);
           setMentions(twitterCampaign.mentions);
         }
@@ -3326,6 +4305,36 @@ export default function CreateContestPage({
         if (twitterCampaign.max_participants) {
           setMaxParticipants(twitterCampaign.max_participants);
         }
+
+        // Twitter CPM points configuration (Points Model) - load weights from JSONB if present
+        const pointsConfig = twitterCampaign.points_config || {};
+        setTwitterPointsConfig({
+          likesWeight:
+            typeof pointsConfig.likes_weight === "number" &&
+            pointsConfig.likes_weight > 0
+              ? pointsConfig.likes_weight
+              : "",
+          commentsWeight:
+            typeof pointsConfig.comments_weight === "number" &&
+            pointsConfig.comments_weight > 0
+              ? pointsConfig.comments_weight
+              : "",
+          retweetsWeight:
+            typeof pointsConfig.retweets_weight === "number" &&
+            pointsConfig.retweets_weight > 0
+              ? pointsConfig.retweets_weight
+              : "",
+          quoteRepostsWeight:
+            typeof pointsConfig.quote_reposts_weight === "number" &&
+            pointsConfig.quote_reposts_weight > 0
+              ? pointsConfig.quote_reposts_weight
+              : "",
+          impressionsWeight:
+            typeof pointsConfig.impressions_weight === "number" &&
+            pointsConfig.impressions_weight > 0
+              ? pointsConfig.impressions_weight
+              : "",
+        });
       }
     }, 100);
 
@@ -3359,16 +4368,28 @@ export default function CreateContestPage({
     if (twitterCampaign?.raid_target) {
       const raidTarget = twitterCampaign.raid_target;
       if (raidTarget.metrics && typeof raidTarget.metrics === "object") {
-        if (raidTarget.metrics.likes !== undefined && raidTarget.metrics.likes !== null) {
+        if (
+          raidTarget.metrics.likes !== undefined &&
+          raidTarget.metrics.likes !== null
+        ) {
           setTargetLikes(raidTarget.metrics.likes);
         }
-        if (raidTarget.metrics.comments !== undefined && raidTarget.metrics.comments !== null) {
+        if (
+          raidTarget.metrics.comments !== undefined &&
+          raidTarget.metrics.comments !== null
+        ) {
           setTargetReplies(raidTarget.metrics.comments);
         }
-        if (raidTarget.metrics.retweets !== undefined && raidTarget.metrics.retweets !== null) {
+        if (
+          raidTarget.metrics.retweets !== undefined &&
+          raidTarget.metrics.retweets !== null
+        ) {
           setTargetRetweets(raidTarget.metrics.retweets);
         }
-        if (raidTarget.metrics.quote_reposts !== undefined && raidTarget.metrics.quote_reposts !== null) {
+        if (
+          raidTarget.metrics.quote_reposts !== undefined &&
+          raidTarget.metrics.quote_reposts !== null
+        ) {
           setTargetQuoteReposts(raidTarget.metrics.quote_reposts);
         }
       }
@@ -3401,9 +4422,12 @@ export default function CreateContestPage({
       setTrackingLinks(draft.tracking_links);
     }
 
-    // Winners / prizes from contest_based_details
-    if (draft.contest_based_details?.leaderboard_contest) {
-      const lc = draft.contest_based_details.leaderboard_contest;
+    // Contest-based details (leaderboard & CPM specific data)
+    const contestDetails = draft.contest_based_details || {};
+
+    // Leaderboard contest details (winners, prizes, flat fee bonus, bonus budget)
+    if (contestDetails.leaderboard_contest) {
+      const lc = contestDetails.leaderboard_contest;
       if (lc.winner_count) {
         setWinnerCount(lc.winner_count);
       }
@@ -3413,6 +4437,255 @@ export default function CreateContestPage({
         );
         setWinnerAmounts(amounts);
         updateTotalPrizePool(amounts);
+      }
+
+      // Restore flat fee bonus (stored in cents)
+      if (
+        typeof lc.flat_fee_bonus === "number" &&
+        !isNaN(lc.flat_fee_bonus) &&
+        lc.flat_fee_bonus > 0
+      ) {
+        setFlatFeeBonus((lc.flat_fee_bonus / 100).toString());
+      }
+
+      // Restore total budget for bonuses (stored in cents as total_budget)
+      if (
+        typeof lc.total_budget === "number" &&
+        !isNaN(lc.total_budget) &&
+        lc.total_budget > 0
+      ) {
+        setTotalBudget((lc.total_budget / 100).toString());
+      }
+    }
+
+    // CPM contest details (rate, views, total budget, terms, flat fee bonus & cap)
+    if (contestDetails.cpm_contest) {
+      const cc = contestDetails.cpm_contest;
+
+      // Ensure contest type is CPM when CPM details exist
+      setContestType("cpm");
+
+      if (
+        typeof cc.cpm_rate_usd === "number" &&
+        !isNaN(cc.cpm_rate_usd) &&
+        cc.cpm_rate_usd > 0
+      ) {
+        setCpmRate(cc.cpm_rate_usd.toString());
+      }
+
+      if (cc.min_views !== undefined && cc.min_views !== null) {
+        setMinViews(cc.min_views);
+      }
+      if (cc.max_views !== undefined && cc.max_views !== null) {
+        setMaxViews(cc.max_views);
+      }
+
+      if (
+        typeof cc.total_budget === "number" &&
+        !isNaN(cc.total_budget) &&
+        cc.total_budget > 0
+      ) {
+        // Stored in cents, convert back to dollars
+        setTotalBudget((cc.total_budget / 100).toString());
+      }
+
+      if (typeof cc.terms_conditions === "string") {
+        setTermsConditions(cc.terms_conditions);
+      }
+
+      // Load CPM Points Configuration from twitter_campaign.points_config (multipliers are nested inside comments_weight, retweets_weight, quote_reposts_weight)
+      const twitterCampaign = draft.contest_based_details?.twitter_campaign;
+      if (twitterCampaign?.points_config) {
+        const pc = twitterCampaign.points_config;
+
+        // Extract multipliers from nested structure
+        const commentsWeightObj =
+          typeof pc.comments_weight === "object" ? pc.comments_weight : {};
+        const retweetsWeightObj =
+          typeof pc.retweets_weight === "object" ? pc.retweets_weight : {};
+        const quoteRepostsWeightObj =
+          typeof pc.quote_reposts_weight === "object"
+            ? pc.quote_reposts_weight
+            : {};
+
+        // Check if checkbox was checked (weight is an object) even if no multipliers were saved
+        const commentWeightIsObject = typeof pc.comments_weight === "object";
+        const retweetWeightIsObject = typeof pc.retweets_weight === "object";
+        const quoteRepostWeightIsObject =
+          typeof pc.quote_reposts_weight === "object";
+
+        // Load values from database
+        // If weight is an object (checkbox was checked), use empty string for missing values (user left them blank)
+        // If weight is a number (checkbox was unchecked or never configured), use defaults when checkbox is checked
+        // Extract base weights from saved data
+        const savedCommentsWeight =
+          typeof pc.comments_weight === "object" &&
+          pc.comments_weight.base_weight !== undefined
+            ? pc.comments_weight.base_weight
+            : typeof pc.comments_weight === "number"
+            ? pc.comments_weight
+            : 0;
+        const savedRetweetsWeight =
+          typeof pc.retweets_weight === "object" &&
+          pc.retweets_weight.base_weight !== undefined
+            ? pc.retweets_weight.base_weight
+            : typeof pc.retweets_weight === "number"
+            ? pc.retweets_weight
+            : 0;
+        const savedQuoteRepostsWeight =
+          typeof pc.quote_reposts_weight === "object" &&
+          pc.quote_reposts_weight.base_weight !== undefined
+            ? pc.quote_reposts_weight.base_weight
+            : typeof pc.quote_reposts_weight === "number"
+            ? pc.quote_reposts_weight
+            : 0;
+
+        setCpmPointsConfig({
+          comment_base_points:
+            savedCommentsWeight > 0 ? savedCommentsWeight.toString() : "1", // Load saved base points or default
+          retweet_base_points:
+            savedRetweetsWeight > 0 ? savedRetweetsWeight.toString() : "5", // Load saved base points or default
+          quote_repost_base_points:
+            savedQuoteRepostsWeight > 0
+              ? savedQuoteRepostsWeight.toString()
+              : "10", // Load saved base points or default
+          comment_likes_multiplier:
+            commentsWeightObj.likes_multiplier !== undefined &&
+            commentsWeightObj.likes_multiplier !== null
+              ? commentsWeightObj.likes_multiplier.toString()
+              : commentWeightIsObject
+              ? ""
+              : "0.1", // Empty if checkbox checked but no value, default if checkbox unchecked
+          comment_replies_multiplier:
+            commentsWeightObj.replies_multiplier !== undefined &&
+            commentsWeightObj.replies_multiplier !== null
+              ? commentsWeightObj.replies_multiplier.toString()
+              : commentWeightIsObject
+              ? ""
+              : "1",
+          comment_impressions_multiplier:
+            commentsWeightObj.impressions_multiplier !== undefined &&
+            commentsWeightObj.impressions_multiplier !== null
+              ? commentsWeightObj.impressions_multiplier.toString()
+              : commentWeightIsObject
+              ? ""
+              : "0.001",
+          comment_retweets_multiplier:
+            commentsWeightObj.retweets_multiplier !== undefined &&
+            commentsWeightObj.retweets_multiplier !== null
+              ? commentsWeightObj.retweets_multiplier.toString()
+              : commentWeightIsObject
+              ? ""
+              : "0",
+          comment_quote_reposts_multiplier:
+            commentsWeightObj.quote_reposts_multiplier !== undefined &&
+            commentsWeightObj.quote_reposts_multiplier !== null
+              ? commentsWeightObj.quote_reposts_multiplier.toString()
+              : commentWeightIsObject
+              ? ""
+              : "0",
+          retweet_likes_multiplier:
+            retweetsWeightObj.likes_multiplier !== undefined &&
+            retweetsWeightObj.likes_multiplier !== null
+              ? retweetsWeightObj.likes_multiplier.toString()
+              : retweetWeightIsObject
+              ? ""
+              : "0.05",
+          retweet_replies_multiplier:
+            retweetsWeightObj.replies_multiplier !== undefined &&
+            retweetsWeightObj.replies_multiplier !== null
+              ? retweetsWeightObj.replies_multiplier.toString()
+              : retweetWeightIsObject
+              ? ""
+              : "0.05",
+          retweet_impressions_multiplier:
+            retweetsWeightObj.impressions_multiplier !== undefined &&
+            retweetsWeightObj.impressions_multiplier !== null
+              ? retweetsWeightObj.impressions_multiplier.toString()
+              : retweetWeightIsObject
+              ? ""
+              : "0.001",
+          retweet_retweets_multiplier:
+            retweetsWeightObj.retweets_multiplier !== undefined &&
+            retweetsWeightObj.retweets_multiplier !== null
+              ? retweetsWeightObj.retweets_multiplier.toString()
+              : retweetWeightIsObject
+              ? ""
+              : "0.05",
+          retweet_quote_reposts_multiplier:
+            retweetsWeightObj.quote_reposts_multiplier !== undefined &&
+            retweetsWeightObj.quote_reposts_multiplier !== null
+              ? retweetsWeightObj.quote_reposts_multiplier.toString()
+              : retweetWeightIsObject
+              ? ""
+              : "0",
+          quote_repost_likes_multiplier:
+            quoteRepostsWeightObj.likes_multiplier !== undefined &&
+            quoteRepostsWeightObj.likes_multiplier !== null
+              ? quoteRepostsWeightObj.likes_multiplier.toString()
+              : quoteRepostWeightIsObject
+              ? ""
+              : "0.1",
+          quote_repost_replies_multiplier:
+            quoteRepostsWeightObj.replies_multiplier !== undefined &&
+            quoteRepostsWeightObj.replies_multiplier !== null
+              ? quoteRepostsWeightObj.replies_multiplier.toString()
+              : quoteRepostWeightIsObject
+              ? ""
+              : "0.1",
+          quote_repost_impressions_multiplier:
+            quoteRepostsWeightObj.impressions_multiplier !== undefined &&
+            quoteRepostsWeightObj.impressions_multiplier !== null
+              ? quoteRepostsWeightObj.impressions_multiplier.toString()
+              : quoteRepostWeightIsObject
+              ? ""
+              : "0.001",
+          quote_repost_retweets_multiplier:
+            quoteRepostsWeightObj.retweets_multiplier !== undefined &&
+            quoteRepostsWeightObj.retweets_multiplier !== null
+              ? quoteRepostsWeightObj.retweets_multiplier.toString()
+              : quoteRepostWeightIsObject
+              ? ""
+              : "0.1",
+          quote_repost_quote_reposts_multiplier:
+            quoteRepostsWeightObj.quote_reposts_multiplier !== undefined &&
+            quoteRepostsWeightObj.quote_reposts_multiplier !== null
+              ? quoteRepostsWeightObj.quote_reposts_multiplier.toString()
+              : quoteRepostWeightIsObject
+              ? ""
+              : "0.1",
+        });
+
+        // Set checkbox states from saved flag
+        // We save _showMultipliers flag to track checkbox state
+        setShowCommentMultipliers(
+          commentWeightIsObject && commentsWeightObj._showMultipliers === true
+        );
+        setShowRetweetMultipliers(
+          retweetWeightIsObject && retweetsWeightObj._showMultipliers === true
+        );
+        setShowQuoteRepostMultipliers(
+          quoteRepostWeightIsObject &&
+            quoteRepostsWeightObj._showMultipliers === true
+        );
+      }
+
+      // Restore flat fee bonus (stored in cents)
+      if (
+        typeof cc.flat_fee_bonus === "number" &&
+        !isNaN(cc.flat_fee_bonus) &&
+        cc.flat_fee_bonus > 0
+      ) {
+        setFlatFeeBonus((cc.flat_fee_bonus / 100).toString());
+      }
+
+      // Restore flat fee bonus cap (stored in cents)
+      if (
+        typeof cc.flat_fee_bonus_cap === "number" &&
+        !isNaN(cc.flat_fee_bonus_cap) &&
+        cc.flat_fee_bonus_cap > 0
+      ) {
+        setFlatFeeBonusCap((cc.flat_fee_bonus_cap / 100).toString());
       }
     }
 
@@ -3559,23 +4832,28 @@ export default function CreateContestPage({
 
     let startMessage = "";
     if (daysUntilStart > 0) {
-      startMessage = `Your contest will be live in ${daysUntilStart} day${daysUntilStart !== 1 ? "s" : ""
-        }`;
+      startMessage = `Your contest will be live in ${daysUntilStart} day${
+        daysUntilStart !== 1 ? "s" : ""
+      }`;
       if (hoursUntilStart > 0)
-        startMessage += ` and ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
-          }`;
-    } else if (hoursUntilStart > 0) {
-      startMessage = `Your contest will be live in ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
+        startMessage += ` and ${hoursUntilStart} hour${
+          hoursUntilStart !== 1 ? "s" : ""
         }`;
+    } else if (hoursUntilStart > 0) {
+      startMessage = `Your contest will be live in ${hoursUntilStart} hour${
+        hoursUntilStart !== 1 ? "s" : ""
+      }`;
     } else {
       startMessage = "Your contest will be live soon";
     }
 
-    const durationMessage = `and will run for ${durationDays} day${durationDays !== 1 ? "s" : ""
-      }${durationHours > 0
+    const durationMessage = `and will run for ${durationDays} day${
+      durationDays !== 1 ? "s" : ""
+    }${
+      durationHours > 0
         ? ` and ${durationHours} hour${durationHours !== 1 ? "s" : ""}`
         : ""
-      }`;
+    }`;
 
     return `${startMessage} ${durationMessage}`;
   };
@@ -3709,15 +4987,16 @@ export default function CreateContestPage({
       disallowed.length === 1
         ? disallowed[0]
         : disallowed.slice(0, -1).join(", ") +
-        " and " +
-        disallowed[disallowed.length - 1];
+          " and " +
+          disallowed[disallowed.length - 1];
 
     return `For example, if today is ${formatDateWithOrdinal(
       startOfToday
     )}, you can create contests starting from ${formatDateWithOrdinal(
       minStartDate
-    )} (00:00 onwards). ${disallowedText} ${disallowed.length > 1 ? "are" : "is"
-      } not allowed.`;
+    )} (00:00 onwards). ${disallowedText} ${
+      disallowed.length > 1 ? "are" : "is"
+    } not allowed.`;
   };
 
   // High Budget Prompt Modal
@@ -3899,13 +5178,13 @@ export default function CreateContestPage({
                       "rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg",
                       isDark ? "bg-[#180438]" : "bg-white"
                     )}
-                  // className={`backdrop-blur-sm rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg ${
-                  //   currentPlan.price === 0
-                  //     ? "bg-white/90 border-gray-200" // Free plan
-                  //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                  //     ? "bg-white/90 border-gray-200" // Bronze plan
-                  //     : "bg-white/90 border-gray-200" // Higher plans
-                  // }`}
+                    // className={`backdrop-blur-sm rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg ${
+                    //   currentPlan.price === 0
+                    //     ? "bg-white/90 border-gray-200" // Free plan
+                    //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
+                    //     ? "bg-white/90 border-gray-200" // Bronze plan
+                    //     : "bg-white/90 border-gray-200" // Higher plans
+                    // }`}
                   >
                     <div
                       className={cn(
@@ -3921,21 +5200,21 @@ export default function CreateContestPage({
                               ? "bg-[#FFFFFF36] text-white"
                               : "text-[#4A00BE] bg-[#D8C3FF]"
                           )}
-                        // className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                        //   userPlan === subscriptionPlans[0].id
-                        //     ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
-                        //     : userPlan === subscriptionPlans[1].id
-                        //     ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
-                        //     : userPlan === subscriptionPlans[2].id
-                        //     ? "bg-gradient-to-br from-gray-400 to-slate-500 text-white"
-                        //     : userPlan === subscriptionPlans[3].id
-                        //     ? "bg-gradient-to-br from-yellow-400 to-orange-500 text-white"
-                        //     : userPlan === subscriptionPlans[4].id
-                        //     ? "bg-gradient-to-br from-purple-500 to-indigo-600 text-white"
-                        //     : userPlan === subscriptionPlans[5].id
-                        //     ? "bg-gradient-to-br from-blue-500 to-cyan-600 text-white"
-                        //     : "bg-gradient-to-br from-gray-500 to-gray-600 text-white"
-                        // }`}
+                          // className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                          //   userPlan === subscriptionPlans[0].id
+                          //     ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
+                          //     : userPlan === subscriptionPlans[1].id
+                          //     ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
+                          //     : userPlan === subscriptionPlans[2].id
+                          //     ? "bg-gradient-to-br from-gray-400 to-slate-500 text-white"
+                          //     : userPlan === subscriptionPlans[3].id
+                          //     ? "bg-gradient-to-br from-yellow-400 to-orange-500 text-white"
+                          //     : userPlan === subscriptionPlans[4].id
+                          //     ? "bg-gradient-to-br from-purple-500 to-indigo-600 text-white"
+                          //     : userPlan === subscriptionPlans[5].id
+                          //     ? "bg-gradient-to-br from-blue-500 to-cyan-600 text-white"
+                          //     : "bg-gradient-to-br from-gray-500 to-gray-600 text-white"
+                          // }`}
                         >
                           <Trophy className="h-6 w-6 sm:h-8 sm:w-8" />
                         </div>
@@ -4029,11 +5308,11 @@ export default function CreateContestPage({
                               "border rounded-xl p-4 flex flex-col justify-between shadow-sm",
                               isDark ? "border-gray-500" : "border-gray-300"
                             )}
-                          // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                          //   planFeatures.maxWinnersPerContest <= 3
-                          //     ? "bg-orange-50/80 border-orange-200"
-                          //     : "bg-white/80 border-gray-200/50"
-                          // }`}
+                            // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                            //   planFeatures.maxWinnersPerContest <= 3
+                            //     ? "bg-orange-50/80 border-orange-200"
+                            //     : "bg-white/80 border-gray-200/50"
+                            // }`}
                           >
                             <div className="flex items-start gap-4">
                               {/* <div
@@ -4060,7 +5339,7 @@ export default function CreateContestPage({
                                   <div className="flex items-center gap-2">
                                     <span className="text-xl font-bold text-green-600 border border-green-600 rounded-full px-6">
                                       {planFeatures.maxWinnersPerContest ===
-                                        Infinity
+                                      Infinity
                                         ? "∞"
                                         : planFeatures.maxWinnersPerContest}
                                     </span>
@@ -4089,11 +5368,11 @@ export default function CreateContestPage({
                                       ? "border-gray-600"
                                       : "bg-[#F0E7FD] border-purple-500 text-purple-600"
                                   )}
-                                // className={`mt-3 text-sm font-medium ${
-                                //   planFeatures.maxWinnersPerContest <= 3
-                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                // }`}
+                                  // className={`mt-3 text-sm font-medium ${
+                                  //   planFeatures.maxWinnersPerContest <= 3
+                                  //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                  //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                  // }`}
                                 >
                                   {planFeatures.maxWinnersPerContest <= 3
                                     ? "Upgrade for more winner slots!"
@@ -4168,12 +5447,12 @@ export default function CreateContestPage({
                             isDark ? "border-gray-500" : "border-gray-300"
                           )}
 
-                        // className={`backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300 ${
-                        //   planFeatures.minContestBudget >=
-                        //   HIGH_MIN_BUDGET_THRESHOLD
-                        //     ? "bg-white"
-                        //     : "bg-white/80 border-gray-200/50"
-                        // }`}
+                          // className={`backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300 ${
+                          //   planFeatures.minContestBudget >=
+                          //   HIGH_MIN_BUDGET_THRESHOLD
+                          //     ? "bg-white"
+                          //     : "bg-white/80 border-gray-200/50"
+                          // }`}
                         >
                           <div className="flex items-start gap-4">
                             {/* <div
@@ -4200,11 +5479,12 @@ export default function CreateContestPage({
                                 </h5>
                                 <div className="flex items-center gap-2">
                                   <span
-                                    className={`text-xl font-bold ${planFeatures.minContestBudget >=
+                                    className={`text-xl font-bold ${
+                                      planFeatures.minContestBudget >=
                                       HIGH_MIN_BUDGET_THRESHOLD
-                                      ? "text-green-600 border border-green-600 rounded-full px-6"
-                                      : "text-green-600 border border-green-600 rounded-full px-6"
-                                      }`}
+                                        ? "text-green-600 border border-green-600 rounded-full px-6"
+                                        : "text-green-600 border border-green-600 rounded-full px-6"
+                                    }`}
                                   >
                                     {formatCurrencyFromCents(
                                       planFeatures.minContestBudget
@@ -4212,10 +5492,10 @@ export default function CreateContestPage({
                                   </span>
                                   {planFeatures.minContestBudget >=
                                     HIGH_MIN_BUDGET_THRESHOLD && (
-                                      <span className="text-orange-500 text-sm">
-                                        ⚠️
-                                      </span>
-                                    )}
+                                    <span className="text-orange-500 text-sm">
+                                      ⚠️
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                               <p
@@ -4235,15 +5515,15 @@ export default function CreateContestPage({
                                     ? "border-gray-600"
                                     : "bg-[#F0E7FD] border-purple-500 text-purple-600"
                                 )}
-                              // className={`mt-4 text-sm font-medium ${
-                              //   planFeatures.minContestBudget >=
-                              //   HIGH_MIN_BUDGET_THRESHOLD
-                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              // }`}
+                                // className={`mt-4 text-sm font-medium ${
+                                //   planFeatures.minContestBudget >=
+                                //   HIGH_MIN_BUDGET_THRESHOLD
+                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                // }`}
                               >
                                 {planFeatures.minContestBudget >=
-                                  HIGH_MIN_BUDGET_THRESHOLD
+                                HIGH_MIN_BUDGET_THRESHOLD
                                   ? "Upgrade for lower minimum budgets!"
                                   : "Tip: Start with smaller budgets to test campaigns"}
                               </div>
@@ -4258,13 +5538,13 @@ export default function CreateContestPage({
                             isDark ? "border-gray-500" : "border-gray-300"
                           )}
 
-                        // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                        //   planFeatures.maxActiveContests <= 1
-                        //     ? "bg-white"
-                        //     : planFeatures.maxActiveContests <= 5
-                        //     ? "bg-orange-50/80 border-orange-200"
-                        //     : "bg-white/80 border-gray-200/50"
-                        // }`}
+                          // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                          //   planFeatures.maxActiveContests <= 1
+                          //     ? "bg-white"
+                          //     : planFeatures.maxActiveContests <= 5
+                          //     ? "bg-orange-50/80 border-orange-200"
+                          //     : "bg-white/80 border-gray-200/50"
+                          // }`}
                         >
                           <div className="flex items-start gap-4">
                             {/* <div
@@ -4292,12 +5572,13 @@ export default function CreateContestPage({
                                 </h5>
                                 <div className="flex items-center gap-2">
                                   <span
-                                    className={`text-xl font-bold ${planFeatures.maxActiveContests <= 1
-                                      ? "text-green-600 border border-green-600 rounded-full px-6"
-                                      : planFeatures.maxActiveContests <= 5
+                                    className={`text-xl font-bold ${
+                                      planFeatures.maxActiveContests <= 1
+                                        ? "text-green-600 border border-green-600 rounded-full px-6"
+                                        : planFeatures.maxActiveContests <= 5
                                         ? "text-green-600 border border-green-600 rounded-full px-6"
                                         : "text-green-600 border border-green-600 rounded-full px-6"
-                                      }`}
+                                    }`}
                                   >
                                     {planFeatures.maxActiveContests === Infinity
                                       ? "∞"
@@ -4305,10 +5586,11 @@ export default function CreateContestPage({
                                   </span>
                                   {planFeatures.maxActiveContests <= 5 && (
                                     <span
-                                      className={`text-sm ${planFeatures.maxActiveContests <= 1
-                                        ? "text-red-500"
-                                        : "text-orange-500"
-                                        }`}
+                                      className={`text-sm ${
+                                        planFeatures.maxActiveContests <= 1
+                                          ? "text-red-500"
+                                          : "text-orange-500"
+                                      }`}
                                     >
                                       ⚠️
                                     </span>
@@ -4332,19 +5614,19 @@ export default function CreateContestPage({
                                     ? "border-gray-600"
                                     : "bg-[#F0E7FD] border-purple-500 text-purple-600"
                                 )}
-                              // className={`mt-4 text-sm font-medium ${
-                              //   planFeatures.maxActiveContests <= 1
-                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              //     : planFeatures.maxActiveContests <= 5
-                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              //     : "mt-4 border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              // }`}
+                                // className={`mt-4 text-sm font-medium ${
+                                //   planFeatures.maxActiveContests <= 1
+                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                //     : planFeatures.maxActiveContests <= 5
+                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                //     : "mt-4 border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                // }`}
                               >
                                 {planFeatures.maxActiveContests <= 1
                                   ? "Only 1 contest allowed - upgrade now!"
                                   : planFeatures.maxActiveContests <= 5
-                                    ? "Upgrade for more simultaneous campaigns!"
-                                    : "Tip: Run parallel campaigns for different products"}
+                                  ? "Upgrade for more simultaneous campaigns!"
+                                  : "Tip: Run parallel campaigns for different products"}
                               </div>
                             </div>
                           </div>
@@ -4357,13 +5639,13 @@ export default function CreateContestPage({
                             isDark ? "border-gray-500" : "border-gray-300"
                           )}
 
-                        // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                        //   planFeatures.commissionPercentage >= 40
-                        //     ? "bg-red-50/80 border-red-200"
-                        //     : planFeatures.commissionPercentage >= 20
-                        //     ? "bg-orange-50/80 border-orange-200"
-                        //     : "bg-white/80 border-gray-200/50"
-                        // }`}
+                          // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                          //   planFeatures.commissionPercentage >= 40
+                          //     ? "bg-red-50/80 border-red-200"
+                          //     : planFeatures.commissionPercentage >= 20
+                          //     ? "bg-orange-50/80 border-orange-200"
+                          //     : "bg-white/80 border-gray-200/50"
+                          // }`}
                         >
                           <div className="flex items-start gap-4">
                             {/* <div
@@ -4391,22 +5673,24 @@ export default function CreateContestPage({
                                 </h5>
                                 <div className="flex items-center gap-2">
                                   <span
-                                    className={`text-xl font-bold ${planFeatures.commissionPercentage >= 40
-                                      ? "text-green-600 border border-green-600 rounded-full px-6"
-                                      : planFeatures.commissionPercentage >=
-                                        20
+                                    className={`text-xl font-bold ${
+                                      planFeatures.commissionPercentage >= 40
+                                        ? "text-green-600 border border-green-600 rounded-full px-6"
+                                        : planFeatures.commissionPercentage >=
+                                          20
                                         ? "text-green-600 border border-green-600 rounded-full px-6"
                                         : "text-green-600 border border-green-600 rounded-full px-6"
-                                      }`}
+                                    }`}
                                   >
                                     {planFeatures.commissionPercentage}%
                                   </span>
                                   {planFeatures.commissionPercentage >= 20 && (
                                     <span
-                                      className={`text-sm ${planFeatures.commissionPercentage >= 40
-                                        ? "text-red-500"
-                                        : "text-orange-500"
-                                        }`}
+                                      className={`text-sm ${
+                                        planFeatures.commissionPercentage >= 40
+                                          ? "text-red-500"
+                                          : "text-orange-500"
+                                      }`}
                                     >
                                       ⚠️
                                     </span>
@@ -4430,19 +5714,19 @@ export default function CreateContestPage({
                                     ? "border-gray-600"
                                     : "bg-[#F0E7FD] border-purple-500 text-purple-600"
                                 )}
-                              // className={`mt-4 text-sm font-medium ${
-                              //   planFeatures.commissionPercentage >= 40
-                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              //     : planFeatures.commissionPercentage >= 20
-                              //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                              // }`}
+                                // className={`mt-4 text-sm font-medium ${
+                                //   planFeatures.commissionPercentage >= 40
+                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                //     : planFeatures.commissionPercentage >= 20
+                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                // }`}
                               >
                                 {planFeatures.maxActiveContests <= 1
                                   ? "Only 1 contest allowed - upgrade now!"
                                   : planFeatures.maxActiveContests <= 5
-                                    ? "Upgrade for more simultaneous campaigns!"
-                                    : "Tip: Run parallel campaigns for different products"}
+                                  ? "Upgrade for more simultaneous campaigns!"
+                                  : "Tip: Run parallel campaigns for different products"}
                               </div>
                             </div>
                           </div>
@@ -4456,13 +5740,13 @@ export default function CreateContestPage({
                       "rounded-xl p-8 text-black shadow-lg relative overflow-hidden",
                       isDark ? "bg-[#180438] text-white" : "bg-white text-black"
                     )}
-                  // className={`rounded-xl p-8 text-black shadow-lg relative overflow-hidden ${
-                  //   currentPlan.price === 0
-                  //     ? "bg-white" // Free plan - modern slate
-                  //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                  //     ? "bg-white" // Bronze plan - warm
-                  //     : "bg-white" // Higher plans - premium
-                  // }`}
+                    // className={`rounded-xl p-8 text-black shadow-lg relative overflow-hidden ${
+                    //   currentPlan.price === 0
+                    //     ? "bg-white" // Free plan - modern slate
+                    //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
+                    //     ? "bg-white" // Bronze plan - warm
+                    //     : "bg-white" // Higher plans - premium
+                    // }`}
                   >
                     {/* Background Pattern */}
                     {/* <div className="absolute inset-0 opacity-10">
@@ -4580,33 +5864,33 @@ export default function CreateContestPage({
                       {/* Enhanced Upgrade CTA for lower tier plans */}
                       {(currentPlan.price === 0 ||
                         planFeatures.commissionPercentage >= 20) && (
-                          <div className="rounded-2xl py-6 px-4 mt-4 border border-gray-300">
-                            <div className="flex items-start justify-between gap-6">
-                              <div className="flex-1 min-w-0">
-                                <h5 className="text-base font-bold">
-                                  {currentPlan.price === 0
-                                    ? "Ready to unlock more potential?"
-                                    : "Want better rates and more features?"}
-                                </h5>
-                                <p className="text-sm opacity-90 leading-relaxed pr-4">
-                                  {currentPlan.price === 0
-                                    ? "Upgrade to reduce commission and get more winners"
-                                    : "Higher plans offer lower commission rates and more flexibility"}
-                                </p>
-                              </div>
-                              {userPlan !== PRODUCT_IDS.CHAMPION && (
-                                <div className="flex-shrink-0">
-                                  <button
-                                    className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white"
-                                    onClick={() => setShowUpgradeModal(true)}
-                                  >
-                                    Upgrade Plan
-                                  </button>
-                                </div>
-                              )}
+                        <div className="rounded-2xl py-6 px-4 mt-4 border border-gray-300">
+                          <div className="flex items-start justify-between gap-6">
+                            <div className="flex-1 min-w-0">
+                              <h5 className="text-base font-bold">
+                                {currentPlan.price === 0
+                                  ? "Ready to unlock more potential?"
+                                  : "Want better rates and more features?"}
+                              </h5>
+                              <p className="text-sm opacity-90 leading-relaxed pr-4">
+                                {currentPlan.price === 0
+                                  ? "Upgrade to reduce commission and get more winners"
+                                  : "Higher plans offer lower commission rates and more flexibility"}
+                              </p>
                             </div>
+                            {userPlan !== PRODUCT_IDS.CHAMPION && (
+                              <div className="flex-shrink-0">
+                                <button
+                                  className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white"
+                                  onClick={() => setShowUpgradeModal(true)}
+                                >
+                                  Upgrade Plan
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -4896,7 +6180,11 @@ export default function CreateContestPage({
                     CPM Contest Configuration
                   </h3>
                   <div className="space-y-2">
-                    <Label htmlFor="cpmRatePrize">CPM Rate (USD)</Label>
+                    <Label htmlFor="cpmRatePrize">
+                      {platform === "twitter" && contestFormat === "text_image"
+                        ? "CPM Rate (USD per 1000 points)"
+                        : "CPM Rate (USD)"}
+                    </Label>
                     <Input
                       id="cpmRatePrize"
                       type="number"
@@ -4910,19 +6198,31 @@ export default function CreateContestPage({
                           setCpmRate(MIN_CPM_RATE.toString());
                           toast({
                             title: "CPM Rate Too Low",
-                            description: `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+                            description:
+                              platform === "twitter" &&
+                              contestFormat === "text_image"
+                                ? `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 points.`
+                                : `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
                             variant: "destructive",
                           });
                         } else if (value && numValue > MAX_CPM_RATE) {
                           setCpmRate(MAX_CPM_RATE.toString());
                           toast({
                             title: "CPM Rate Too High",
-                            description: `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+                            description:
+                              platform === "twitter" &&
+                              contestFormat === "text_image"
+                                ? `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 points.`
+                                : `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
                             variant: "destructive",
                           });
                         }
                       }}
-                      placeholder="e.g., 1.50 for $1.50 per 1000 views"
+                      placeholder={
+                        platform === "twitter" && contestFormat === "text_image"
+                          ? "e.g., 4.00 for $4.00 per 1000 points"
+                          : "e.g., 1.50 for $1.50 per 1000 views"
+                      }
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
@@ -4933,114 +6233,759 @@ export default function CreateContestPage({
                       step="0.01"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Amount paid to creators per 1000 views. Range: $
-                      {MIN_CPM_RATE} - ${MAX_CPM_RATE} per 1000 views.
+                      {platform === "twitter" && contestFormat === "text_image"
+                        ? `Amount paid to creators per 1000 points. Points are calculated from the metric weights below. Range: $${MIN_CPM_RATE} - $${MAX_CPM_RATE} per 1000 points.`
+                        : `Amount paid to creators per 1000 views. Range: $${MIN_CPM_RATE} - $${MAX_CPM_RATE} per 1000 views.`}
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="minViewsPrize">
-                        Minimum Views (Optional)
-                      </Label>
-                      <Input
-                        id="minViewsPrize"
-                        type="number"
-                        className={cn(
-                          isDark
-                            ? "bg-[#180438] border border-gray-600 text-white"
-                            : "bg-white"
-                        )}
-                        value={minViews}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setMinViews(value);
-
-                          // Real-time validation
-                          const minViewsValue =
-                            value && value.trim() !== ""
-                              ? parseInt(value, 10)
-                              : null;
-                          const maxViewsValue =
-                            maxViews && maxViews.toString().trim() !== ""
-                              ? parseInt(maxViews.toString(), 10)
-                              : null;
-
-                          if (
-                            minViewsValue !== null &&
-                            maxViewsValue !== null &&
-                            minViewsValue >= maxViewsValue
-                          ) {
-                            toast({
-                              title: "Invalid View Range",
-                              description:
-                                "Minimum views must be less than maximum views.",
-                              variant: "destructive",
-                            });
-                          }
-                        }}
-                        placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
-                        min="0"
-                      />
+                  {platform === "twitter" && contestFormat === "text_image" && (
+                    <div className="space-y-3 mt-4">
+                      <h4 className="text-md font-medium">
+                        Twitter (X) CPM – Points Model
+                      </h4>
                       <p className="text-xs text-muted-foreground">
-                        Minimum views required for a submission to be eligible
-                        for payment.
+                        Choose which metrics count and set how many points each
+                        metric is worth. Payout is calculated from total points.
                       </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="maxViewsPrize">
-                        Maximum Views (Optional)
-                      </Label>
-                      <Input
-                        id="maxViewsPrize"
-                        type="number"
-                        value={maxViews}
-                        className={cn(
-                          isDark
-                            ? "bg-[#180438] border border-gray-600 text-white"
-                            : "bg-white"
+
+                      <div className="space-y-3">
+                        {contentType !== "raid" && (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                            <label className="flex items-center gap-2 text-sm">
+                              <span>Likes</span>
+                            </label>
+                            <div className="sm:col-span-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={twitterPointsConfig.likesWeight}
+                                onChange={(e) =>
+                                  setTwitterPointsConfig((prev) => ({
+                                    ...prev,
+                                    likesWeight: e.target.value,
+                                  }))
+                                }
+                                placeholder="e.g., 1"
+                                className={cn(
+                                  isDark
+                                    ? "bg-[#180438] border border-gray-600 text-white"
+                                    : "bg-white"
+                                )}
+                              />
+                            </div>
+                          </div>
                         )}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setMaxViews(value);
 
-                          // Real-time validation
-                          const maxViewsValue =
-                            value && value.trim() !== ""
-                              ? parseInt(value, 10)
-                              : null;
-                          const minViewsValue =
-                            minViews && minViews.toString().trim() !== ""
-                              ? parseInt(minViews.toString(), 10)
-                              : null;
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                            <label className="flex items-center gap-2 text-sm">
+                              <span>Comments / Replies</span>
+                            </label>
+                            <div className="sm:col-span-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={cpmPointsConfig.comment_base_points}
+                                onChange={(e) =>
+                                  setCpmPointsConfig((prev) => ({
+                                    ...prev,
+                                    comment_base_points: e.target.value,
+                                  }))
+                                }
+                                placeholder="e.g., 1"
+                                className={cn(
+                                  isDark
+                                    ? "bg-[#180438] border border-gray-600 text-white"
+                                    : "bg-white"
+                                )}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 ml-0 sm:ml-[calc(33.333%+0.75rem)]">
+                            <Checkbox
+                              id="showCommentMultipliers"
+                              checked={showCommentMultipliers}
+                              onCheckedChange={async (checked) => {
+                                setShowCommentMultipliers(checked === true);
+                                // Save to draft when checkbox is toggled
+                                await saveCpmAsDraft();
+                              }}
+                            />
+                            <Label
+                              htmlFor="showCommentMultipliers"
+                              className="text-sm cursor-pointer"
+                            >
+                              Keep all values set to 0 if you do not want to
+                              award points for comment engagement.
+                            </Label>
+                          </div>
+                          {showCommentMultipliers && (
+                            <div className="ml-0 sm:ml-[calc(33.333%+0.75rem)] mt-3 p-4 border rounded-lg space-y-3">
+                              <h5 className="text-sm font-medium">
+                                Comment Engagement Multipliers
+                              </h5>
+                              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="commentLikesMultiplier">
+                                    Likes
+                                  </Label>
+                                  <Input
+                                    id="commentLikesMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={
+                                      cpmPointsConfig.comment_likes_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        comment_likes_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="commentRepliesMultiplier">
+                                    Replies
+                                  </Label>
+                                  <Input
+                                    id="commentRepliesMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={
+                                      cpmPointsConfig.comment_replies_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        comment_replies_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="commentImpressionsMultiplier">
+                                    Impressions
+                                  </Label>
+                                  <Input
+                                    id="commentImpressionsMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.0001"
+                                    value={
+                                      cpmPointsConfig.comment_impressions_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        comment_impressions_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="commentRetweetsMultiplier">
+                                    Retweets
+                                  </Label>
+                                  <Input
+                                    id="commentRetweetsMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={
+                                      cpmPointsConfig.comment_retweets_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        comment_retweets_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="commentQuoteRepostsMultiplier">
+                                    Quote Reposts
+                                  </Label>
+                                  <Input
+                                    id="commentQuoteRepostsMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={
+                                      cpmPointsConfig.comment_quote_reposts_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        comment_quote_reposts_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
 
-                          if (
-                            minViewsValue !== null &&
-                            maxViewsValue !== null &&
-                            minViewsValue >= maxViewsValue
-                          ) {
-                            toast({
-                              title: "Invalid View Range",
-                              description:
-                                "Minimum views must be less than maximum views.",
-                              variant: "destructive",
-                            });
-                          }
-                        }}
-                        placeholder={`e.g., ${FORM_PLACEHOLDER_LARGE_AMOUNT}`}
-                        min="0"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Maximum views for which a submission will be paid.
-                      </p>
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                            <label className="flex items-center gap-2 text-sm">
+                              <span>Retweets</span>
+                            </label>
+                            <div className="sm:col-span-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={cpmPointsConfig.retweet_base_points}
+                                onChange={(e) =>
+                                  setCpmPointsConfig((prev) => ({
+                                    ...prev,
+                                    retweet_base_points: e.target.value,
+                                  }))
+                                }
+                                placeholder="e.g., 5"
+                                className={cn(
+                                  isDark
+                                    ? "bg-[#180438] border border-gray-600 text-white"
+                                    : "bg-white"
+                                )}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 ml-0 sm:ml-[calc(33.333%+0.75rem)]">
+                            <Checkbox
+                              id="showRetweetMultipliers"
+                              checked={showRetweetMultipliers}
+                              onCheckedChange={async (checked) => {
+                                setShowRetweetMultipliers(checked === true);
+                                // Save to draft when checkbox is toggled
+                                await saveCpmAsDraft();
+                              }}
+                            />
+                            <Label
+                              htmlFor="showRetweetMultipliers"
+                              className="text-sm cursor-pointer"
+                            >
+                              Keep all values set to 0 if you do not want to
+                              award points for retweet engagement
+                            </Label>
+                          </div>
+                          {showRetweetMultipliers && (
+                            <div className="ml-0 sm:ml-[calc(33.333%+0.75rem)] mt-3 p-4 border rounded-lg space-y-3">
+                              <h5 className="text-sm font-medium">
+                                Retweet Engagement Multipliers
+                              </h5>
+                              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="retweetLikesMultiplier">
+                                    Likes
+                                  </Label>
+                                  <Input
+                                    id="retweetLikesMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={
+                                      cpmPointsConfig.retweet_likes_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        retweet_likes_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="retweetRepliesMultiplier">
+                                    Replies
+                                  </Label>
+                                  <Input
+                                    id="retweetRepliesMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={
+                                      cpmPointsConfig.retweet_replies_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        retweet_replies_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="retweetImpressionsMultiplier">
+                                    Impressions
+                                  </Label>
+                                  <Input
+                                    id="retweetImpressionsMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.0001"
+                                    value={
+                                      cpmPointsConfig.retweet_impressions_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        retweet_impressions_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="retweetRetweetsMultiplier">
+                                    Retweets
+                                  </Label>
+                                  <Input
+                                    id="retweetRetweetsMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={
+                                      cpmPointsConfig.retweet_retweets_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        retweet_retweets_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="retweetQuoteRepostsMultiplier">
+                                    Quote Reposts
+                                  </Label>
+                                  <Input
+                                    id="retweetQuoteRepostsMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={
+                                      cpmPointsConfig.retweet_quote_reposts_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        retweet_quote_reposts_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                            <label className="flex items-center gap-2 text-sm">
+                              <span>Reposts / Quotes</span>
+                            </label>
+                            <div className="sm:col-span-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={cpmPointsConfig.quote_repost_base_points}
+                                onChange={(e) =>
+                                  setCpmPointsConfig((prev) => ({
+                                    ...prev,
+                                    quote_repost_base_points: e.target.value,
+                                  }))
+                                }
+                                placeholder="e.g., 10"
+                                className={cn(
+                                  isDark
+                                    ? "bg-[#180438] border border-gray-600 text-white"
+                                    : "bg-white"
+                                )}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 ml-0 sm:ml-[calc(33.333%+0.75rem)]">
+                            <Checkbox
+                              id="showQuoteRepostMultipliers"
+                              checked={showQuoteRepostMultipliers}
+                              onCheckedChange={async (checked) => {
+                                setShowQuoteRepostMultipliers(checked === true);
+                                // Save to draft when checkbox is toggled
+                                await saveCpmAsDraft();
+                              }}
+                            />
+                            <Label
+                              htmlFor="showQuoteRepostMultipliers"
+                              className="text-sm cursor-pointer"
+                            >
+                              Keep all values set to 0 if you do not want to
+                              award points for quote repost engagement.
+                            </Label>
+                          </div>
+                          {showQuoteRepostMultipliers && (
+                            <div className="ml-0 sm:ml-[calc(33.333%+0.75rem)] mt-3 p-4 border rounded-lg space-y-3">
+                              <h5 className="text-sm font-medium">
+                                Quote Repost Engagement Multipliers
+                              </h5>
+                              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="quoteRepostLikesMultiplier">
+                                    Likes
+                                  </Label>
+                                  <Input
+                                    id="quoteRepostLikesMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={
+                                      cpmPointsConfig.quote_repost_likes_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        quote_repost_likes_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="quoteRepostRepliesMultiplier">
+                                    Replies
+                                  </Label>
+                                  <Input
+                                    id="quoteRepostRepliesMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={
+                                      cpmPointsConfig.quote_repost_replies_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        quote_repost_replies_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="quoteRepostImpressionsMultiplier">
+                                    Impressions
+                                  </Label>
+                                  <Input
+                                    id="quoteRepostImpressionsMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.0001"
+                                    value={
+                                      cpmPointsConfig.quote_repost_impressions_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        quote_repost_impressions_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="quoteRepostRetweetsMultiplier">
+                                    Retweets
+                                  </Label>
+                                  <Input
+                                    id="quoteRepostRetweetsMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={
+                                      cpmPointsConfig.quote_repost_retweets_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        quote_repost_retweets_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="quoteRepostQuoteRepostsMultiplier">
+                                    Quote Reposts
+                                  </Label>
+                                  <Input
+                                    id="quoteRepostQuoteRepostsMultiplier"
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={
+                                      cpmPointsConfig.quote_repost_quote_reposts_multiplier
+                                    }
+                                    onChange={(e) =>
+                                      setCpmPointsConfig((prev) => ({
+                                        ...prev,
+                                        quote_repost_quote_reposts_multiplier:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white"
+                                    )}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {contentType !== "raid" && (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                            <label className="flex items-center gap-2 text-sm">
+                              <span>Views</span>
+                            </label>
+                            <div className="sm:col-span-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.0001"
+                                value={twitterPointsConfig.impressionsWeight}
+                                onChange={(e) =>
+                                  setTwitterPointsConfig((prev) => ({
+                                    ...prev,
+                                    impressionsWeight: e.target.value,
+                                  }))
+                                }
+                                placeholder="e.g., 0.001"
+                                className={cn(
+                                  isDark
+                                    ? "bg-[#180438] border border-gray-600 text-white"
+                                    : "bg-white"
+                                )}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  {platform === "twitter" && contestFormat === "text_image" ? (
+                    <Alert
+                      className={cn(
+                        "border",
+                        isDark
+                          ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                          : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700"
+                      )}
+                    >
+                      <AlertDescription>
+                        Twitter CPM contests use the{" "}
+                        <strong>Points Model</strong>. Payout is calculated
+                        based on total points earned and the CPM rate per 1,000
+                        points.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="minViewsPrize">
+                          Minimum Views (Optional)
+                        </Label>
+                        <Input
+                          id="minViewsPrize"
+                          type="number"
+                          className={cn(
+                            isDark
+                              ? "bg-[#180438] border border-gray-600 text-white"
+                              : "bg-white"
+                          )}
+                          value={minViews}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setMinViews(value);
+
+                            // Real-time validation
+                            const minViewsValue =
+                              value && value.trim() !== ""
+                                ? parseInt(value, 10)
+                                : null;
+                            const maxViewsValue =
+                              maxViews && maxViews.toString().trim() !== ""
+                                ? parseInt(maxViews.toString(), 10)
+                                : null;
+
+                            if (
+                              minViewsValue !== null &&
+                              maxViewsValue !== null &&
+                              minViewsValue >= maxViewsValue
+                            ) {
+                              toast({
+                                title: "Invalid View Range",
+                                description:
+                                  "Minimum views must be less than maximum views.",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
+                          min="0"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Minimum views required for a submission to be eligible
+                          for payment.
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="maxViewsPrize">
+                          Maximum Views (Optional)
+                        </Label>
+                        <Input
+                          id="maxViewsPrize"
+                          type="number"
+                          value={maxViews}
+                          className={cn(
+                            isDark
+                              ? "bg-[#180438] border border-gray-600 text-white"
+                              : "bg-white"
+                          )}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setMaxViews(value);
+
+                            // Real-time validation
+                            const maxViewsValue =
+                              value && value.trim() !== ""
+                                ? parseInt(value, 10)
+                                : null;
+                            const minViewsValue =
+                              minViews && minViews.toString().trim() !== ""
+                                ? parseInt(minViews.toString(), 10)
+                                : null;
+
+                            if (
+                              minViewsValue !== null &&
+                              maxViewsValue !== null &&
+                              minViewsValue >= maxViewsValue
+                            ) {
+                              toast({
+                                title: "Invalid View Range",
+                                description:
+                                  "Minimum views must be less than maximum views.",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          placeholder={`e.g., ${FORM_PLACEHOLDER_LARGE_AMOUNT}`}
+                          min="0"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Maximum views for which a submission will be paid.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="totalBudgetPrize">
-                      Total Contest Budget (USD)
+                      Total Contest Budget (USD){" "}
+                      <span className="text-red-500">*</span>
                     </Label>
                     <Input
                       id="totalBudgetPrize"
                       type="number"
+                      required
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
@@ -5055,8 +7000,8 @@ export default function CreateContestPage({
                       min="1"
                     />
                     <p className="text-xs text-muted-foreground">
-                      The maximum total amount to be paid out for this contest.
-                      This is the effective prize pool.
+                      Required: The maximum total amount to be paid out for this
+                      contest. This is the effective prize pool.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -5123,10 +7068,11 @@ export default function CreateContestPage({
 
               {/* Flat Fee Bonus */}
               <div
-                className={`space-y-3 p-4 border rounded-lg ${isDark
-                  ? "bg-green-950/40 border-green-800"
-                  : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
-                  }`}
+                className={`space-y-3 p-4 border rounded-lg ${
+                  isDark
+                    ? "bg-green-950/40 border-green-800"
+                    : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
+                }`}
               >
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">🎁</span>
@@ -5176,6 +7122,74 @@ export default function CreateContestPage({
                 )}
               </div>
 
+              {/* Flat Fee Bonus Cap (Only for CPM contests with flat fee bonus) */}
+              {contestType === "cpm" &&
+                flatFeeBonus &&
+                parseFloat(flatFeeBonus.toString()) > 0 && (
+                  <div
+                    className={cn(
+                      "space-y-3 p-4 border rounded-lg",
+                      isDark
+                        ? "bg-purple-950/40 border-purple-800"
+                        : "bg-gradient-to-r from-purple-50 to-violet-50 border-purple-200"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">💰</span>
+                      <Label
+                        htmlFor="flatFeeBonusCap"
+                        className="text-base font-semibold"
+                      >
+                        Flat Fee Bonus Cap{" "}
+                        <span className="text-red-500">*</span>
+                      </Label>
+                    </div>
+                    <Input
+                      id="flatFeeBonusCap"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      value={flatFeeBonusCap}
+                      onChange={(e) => setFlatFeeBonusCap(e.target.value)}
+                      placeholder="e.g., 20 for $20 total cap"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Required: Maximum total flat fee bonus to distribute
+                      across all creators. Once this cap is reached, no more
+                      flat fee bonuses will be given. Must not exceed Total
+                      Budget.
+                    </p>
+                    {flatFeeBonusCap &&
+                      parseFloat(flatFeeBonusCap.toString()) > 0 && (
+                        <Alert
+                          className={cn(
+                            isDark
+                              ? "bg-purple-900/30 border-purple-900"
+                              : "bg-purple-100 border-purple-300"
+                          )}
+                        >
+                          <AlertDescription>
+                            ✓ Maximum flat fee bonus cap set to{" "}
+                            <strong>
+                              $
+                              {parseFloat(flatFeeBonusCap.toString()).toFixed(
+                                2
+                              )}
+                            </strong>
+                            . Once this amount is distributed, no more flat fee
+                            bonuses will be given.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                  </div>
+                )}
+
               {/* Total Budget for Bonuses (Only for Leaderboard contests with flat fee bonus) */}
               {contestType === "leaderboard" &&
                 flatFeeBonus &&
@@ -5194,7 +7208,8 @@ export default function CreateContestPage({
                         htmlFor="totalBudget"
                         className="text-base font-semibold"
                       >
-                        Total Budget for Bonuses (Optional)
+                        Total Budget for Bonuses{" "}
+                        <span className="text-red-500">*</span>
                       </Label>
                     </div>
                     <Input
@@ -5202,6 +7217,7 @@ export default function CreateContestPage({
                       type="number"
                       min="0"
                       step="0.01"
+                      required
                       value={totalBudget}
                       onChange={(e) => setTotalBudget(e.target.value)}
                       placeholder="e.g., 500 for $500 total budget"
@@ -5212,8 +7228,8 @@ export default function CreateContestPage({
                       )}
                     />
                     <p className="text-sm text-muted-foreground">
-                      Optional: Set a budget limit for flat fee bonuses and
-                      future features. Leave empty for no limit.
+                      Required: Set a budget limit for flat fee bonuses. This
+                      budget is required when Flat Fee Bonus is enabled.
                       <br />
                       <strong>Prize Pool:</strong>{" "}
                       {formatCurrencyFromCents(totalPrizePool)} (for rankings)
@@ -5431,21 +7447,22 @@ export default function CreateContestPage({
                   "w-full sm:w-auto",
                   !(formFeedback && formFeedbackType === "error")
                     ? cn(
-                      "sm:mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
-                      isDark
-                        ? "text-white bg-[#170337] border-gray-400"
-                        : "border-[#4A00BE] bg-white text-[#4A00BE]"
-                    )
+                        "sm:mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
+                        isDark
+                          ? "text-white bg-[#170337] border-gray-400"
+                          : "border-[#4A00BE] bg-white text-[#4A00BE]"
+                      )
                     : ""
                 )}
               >
                 Back
               </Button>
               <div
-                className={`flex flex-col sm:flex-row gap-3 w-full sm:w-auto ${formFeedback && formFeedbackType === "error"
-                  ? "sm:ml-4"
-                  : "sm:ml-auto"
-                  }`}
+                className={`flex flex-col sm:flex-row gap-3 w-full sm:w-auto ${
+                  formFeedback && formFeedbackType === "error"
+                    ? "sm:ml-4"
+                    : "sm:ml-auto"
+                }`}
               >
                 <button
                   className={cn(
@@ -5458,8 +7475,8 @@ export default function CreateContestPage({
                   disabled={isLoading || !title.trim()}
                 >
                   {isLoading &&
-                    uploadProgress &&
-                    uploadProgress.includes("draft") ? (
+                  uploadProgress &&
+                  uploadProgress.includes("draft") ? (
                     <div className="flex items-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                       <span>{uploadProgress}</span>
@@ -5488,8 +7505,8 @@ export default function CreateContestPage({
                   )}
                 >
                   {isLoading &&
-                    uploadProgress &&
-                    !uploadProgress.includes("draft") ? (
+                  uploadProgress &&
+                  !uploadProgress.includes("draft") ? (
                     <div className="flex items-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                       <span>{uploadProgress}</span>
@@ -5498,16 +7515,16 @@ export default function CreateContestPage({
                           uploadProgress.includes("Preparing")
                             ? 15
                             : uploadProgress.includes("Validating")
-                              ? 25
-                              : uploadProgress.includes("1/2")
-                                ? 40
-                                : uploadProgress.includes("2/2")
-                                  ? 60
-                                  : uploadProgress.includes("Creating")
-                                    ? 80
-                                    : uploadProgress.includes("submitted")
-                                      ? 100
-                                      : 10
+                            ? 25
+                            : uploadProgress.includes("1/2")
+                            ? 40
+                            : uploadProgress.includes("2/2")
+                            ? 60
+                            : uploadProgress.includes("Creating")
+                            ? 80
+                            : uploadProgress.includes("submitted")
+                            ? 100
+                            : 10
                         }
                         className="w-10 h-2"
                       />
@@ -6155,10 +8172,10 @@ export default function CreateContestPage({
                       step === "basics"
                         ? "8%"
                         : step === "brief"
-                          ? "35%"
-                          : step === "resources"
-                            ? "70%"
-                            : "100%",
+                        ? "35%"
+                        : step === "resources"
+                        ? "70%"
+                        : "100%",
                     // background:
                     //   "linear-gradient(270deg, #E9E9E9 60%, #7F39EC 100%)",
                   }}
@@ -6217,14 +8234,15 @@ export default function CreateContestPage({
                         )}
 
                         <div
-                          className={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 transition-all duration-500 ${isActive
-                            ? "bg-[#7F39EC] border-[#7F39EC] text-white"
-                            : isCompleted
+                          className={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 transition-all duration-500 ${
+                            isActive
+                              ? "bg-[#7F39EC] border-[#7F39EC] text-white"
+                              : isCompleted
                               ? "bg-[#7F39EC] border-[#7F39EC] text-white"
                               : isDark
-                                ? "bg-white border-white text-slate-500 shadow-md"
-                                : "bg-white border-slate-200 text-slate-400 shadow-md"
-                            }`}
+                              ? "bg-white border-white text-slate-500 shadow-md"
+                              : "bg-white border-slate-200 text-slate-400 shadow-md"
+                          }`}
                         >
                           {isCompleted ? (
                             <svg
@@ -6251,34 +8269,36 @@ export default function CreateContestPage({
                       {/* Step Content */}
                       <div className="mt-4 text-center max-w-32">
                         <h3
-                          className={`text-[14px] font-semibold transition-colors duration-300 ${isActive
-                            ? isDark
-                              ? "text-white"
-                              : "text-black"
-                            : isCompleted
+                          className={`text-[14px] font-semibold transition-colors duration-300 ${
+                            isActive
+                              ? isDark
+                                ? "text-white"
+                                : "text-black"
+                              : isCompleted
                               ? isDark
                                 ? "text-white"
                                 : "text-black"
                               : isDark
-                                ? "text-slate-400 text-md"
-                                : "text-slate-500 text-md"
-                            }`}
+                              ? "text-slate-400 text-md"
+                              : "text-slate-500 text-md"
+                          }`}
                         >
                           {stepItem.title}
                         </h3>
                         <p
-                          className={`text-[12px] mt-1 transition-colors duration-300 ${isActive
-                            ? isDark
-                              ? "text-white"
-                              : "text-black"
-                            : isCompleted
+                          className={`text-[12px] mt-1 transition-colors duration-300 ${
+                            isActive
+                              ? isDark
+                                ? "text-white"
+                                : "text-black"
+                              : isCompleted
                               ? isDark
                                 ? "text-white"
                                 : "text-black"
                               : isDark
-                                ? "text-slate-400"
-                                : "text-slate-400"
-                            }`}
+                              ? "text-slate-400"
+                              : "text-slate-400"
+                          }`}
                         >
                           {stepItem.description}
                         </p>
@@ -6306,30 +8326,30 @@ export default function CreateContestPage({
                     {step === "basics"
                       ? "1"
                       : step === "brief"
-                        ? "2"
-                        : step === "resources"
-                          ? "3"
-                          : "4"}
+                      ? "2"
+                      : step === "resources"
+                      ? "3"
+                      : "4"}
                   </div>
                   <div>
                     <h3 className="font-semibold text-foreground">
                       {step === "basics"
                         ? "Get Started"
                         : step === "brief"
-                          ? "Create Brief"
-                          : step === "resources"
-                            ? "Resources"
-                            : "Prize"}
+                        ? "Create Brief"
+                        : step === "resources"
+                        ? "Resources"
+                        : "Prize"}
                     </h3>
                     <p className="text-xs text-muted-foreground">
                       Step{" "}
                       {step === "basics"
                         ? "1"
                         : step === "brief"
-                          ? "2"
-                          : step === "resources"
-                            ? "3"
-                            : "4"}{" "}
+                        ? "2"
+                        : step === "resources"
+                        ? "3"
+                        : "4"}{" "}
                       of 4
                     </p>
                   </div>
@@ -6399,14 +8419,11 @@ export default function CreateContestPage({
                     className={cn(
                       "flex-1 justify-center",
                       contestFormat === "text_image" &&
-                      "bg-[#7F39EC] text-white"
+                        "bg-[#7F39EC] text-white"
                     )}
                     onClick={() => {
                       setContestFormat("text_image");
-                      // Text/Image contests should use Leaderboard type and Twitter platform
-                      if (contestType === "cpm") {
-                        setContestType("leaderboard");
-                      }
+                      // Text/Image contests default to Twitter platform
                       if (platform !== "twitter") {
                         setPlatform("twitter");
                       }
@@ -6449,11 +8466,9 @@ export default function CreateContestPage({
                       planFeatures.contestTypes &&
                       planFeatures.contestTypes.includes("cpm");
 
-                    // Block CPM selection if not available for current format or plan
-                    if (
-                      value === "cpm" &&
-                      (!hasCpmAccess || contestFormat === "text_image")
-                    ) {
+                    // Block CPM selection if not available for current plan
+                    // For Twitter (text/image) CPM is allowed when plan supports CPM
+                    if (value === "cpm" && !hasCpmAccess) {
                       return; // Don't change the value
                     }
                     setContestType(value);
@@ -6461,11 +8476,13 @@ export default function CreateContestPage({
                   className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 pt-2"
                 >
                   <div
-                    className={`flex items-center space-x-2 p-4 border ${isDark ? "border-gray-600" : "border-gray-300"
-                      } rounded-lg cursor-pointer flex-1 
+                    className={`flex items-center space-x-2 p-4 border ${
+                      isDark ? "border-gray-600" : "border-gray-300"
+                    } rounded-lg cursor-pointer flex-1 
         hover:bg-[#D9C0FF26] 
-        ${contestType === "leaderboard" ? "bg-[#D9C0FF26] border-[#7F39EC]" : ""
-                      }`}
+        ${
+          contestType === "leaderboard" ? "bg-[#D9C0FF26] border-[#7F39EC]" : ""
+        }`}
                   >
                     <RadioGroupItem value="leaderboard" id="leaderboard" />
                     <Label htmlFor="leaderboard" className="cursor-pointer">
@@ -6488,22 +8505,28 @@ export default function CreateContestPage({
                     );
                     const isFreePlan = !currentPlan || currentPlan.price === 0;
 
-                    const isDisabledForFormat = contestFormat === "text_image";
+                    // CPM is allowed for:
+                    // - Video contests (YouTube/Instagram)
+                    // - Twitter text/image contests
+                    const isDisabledForFormat = false;
                     const isDisabled = !hasCpmAccess || isDisabledForFormat;
 
                     return (
                       <div
-                        className={`flex items-center space-x-2 p-4 border ${isDark ? "border-gray-600" : "border-gray-300"
-                          } rounded-lg flex-1 relative 
-                        ${isDisabled
+                        className={`flex items-center space-x-2 p-4 border ${
+                          isDark ? "border-gray-600" : "border-gray-300"
+                        } rounded-lg flex-1 relative 
+                        ${
+                          isDisabled
                             ? isDark
                               ? "opacity-50 cursor-not-allowed bg-slate-800"
                               : "opacity-50 cursor-not-allowed bg-gray-50"
-                            : `cursor-pointer hover:bg-[#D9C0FF26] ${contestType === "cpm"
-                              ? "bg-[#D9C0FF26] border-[#7F39EC]"
-                              : ""
-                            }`
-                          }`}
+                            : `cursor-pointer hover:bg-[#D9C0FF26] ${
+                                contestType === "cpm"
+                                  ? "bg-[#D9C0FF26] border-[#7F39EC]"
+                                  : ""
+                              }`
+                        }`}
                       >
                         <RadioGroupItem
                           value="cpm"
@@ -7195,9 +9218,9 @@ export default function CreateContestPage({
                                                       (item) =>
                                                         !(
                                                           item.category ===
-                                                          category.id &&
+                                                            category.id &&
                                                           item.subcategory ===
-                                                          subcategory
+                                                            subcategory
                                                         )
                                                     )
                                                   );
@@ -7493,7 +9516,7 @@ export default function CreateContestPage({
                             const isPartiallySelected =
                               selectedCountriesInRegion.length > 0 &&
                               selectedCountriesInRegion.length <
-                              countriesArray.length;
+                                countriesArray.length;
                             const hasAnySelected =
                               selectedCountriesInRegion.length > 0;
 
@@ -7643,12 +9666,13 @@ export default function CreateContestPage({
               <div className="space-y-2">
                 <Label>Thumbnail</Label>
                 <div
-                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive
-                    ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
-                    : isDark
+                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
+                    isDragActive
+                      ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
+                      : isDark
                       ? "border-slate-600 bg-[#170337]"
                       : "border-gray-300 bg-white"
-                    }`}
+                  }`}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -7685,8 +9709,8 @@ export default function CreateContestPage({
                             : thumbnail?.name || "Saved thumbnail"}
                           {thumbnail?.size
                             ? ` · ${(thumbnail.size / (1024 * 1024)).toFixed(
-                              2
-                            )}MB`
+                                2
+                              )}MB`
                             : ""}
                         </p>
                         <Button
@@ -7758,12 +9782,13 @@ export default function CreateContestPage({
                     </div>
                   )}
                 <div
-                  className={`flex gap-2 ${formFeedback &&
+                  className={`flex gap-2 ${
+                    formFeedback &&
                     formFeedbackType === "error" &&
                     step !== "basics"
-                    ? "ml-auto"
-                    : "ml-auto"
-                    }`}
+                      ? "ml-auto"
+                      : "ml-auto"
+                  }`}
                 >
                   <button
                     className={cn(
@@ -7776,8 +9801,8 @@ export default function CreateContestPage({
                     disabled={isLoading || !title.trim()}
                   >
                     {isLoading &&
-                      uploadProgress &&
-                      uploadProgress.includes("draft") ? (
+                    uploadProgress &&
+                    uploadProgress.includes("draft") ? (
                       <div className="flex items-center gap-2">
                         <span>{uploadProgress}</span>
                         <Progress
@@ -7929,7 +9954,7 @@ export default function CreateContestPage({
                 <>
                   {/* Keywords section */}
                   <div className="space-y-3 mt-6">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-2">
                         <h3 className="text-lg font-medium">Keywords</h3>
                         {/* <span className="text-red-500 font-bold text-lg">*</span> */}
@@ -8044,7 +10069,7 @@ export default function CreateContestPage({
 
                   {/* Mentions section */}
                   <div className="space-y-3 mt-6">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-2">
                         <h3 className="text-lg font-medium">Mentions</h3>
                       </div>
@@ -8161,9 +10186,11 @@ export default function CreateContestPage({
 
                   {/* Max Participants section */}
                   <div className="space-y-3 mt-6">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-medium">Max Participants</h3>
+                        <h3 className="text-lg font-medium">
+                          Max Participants
+                        </h3>
                       </div>
                       <p
                         className={cn(
@@ -8171,7 +10198,8 @@ export default function CreateContestPage({
                           isDark ? "text-gray-300" : "text-gray-500"
                         )}
                       >
-                        Optional: Limit the maximum number of participants for this campaign
+                        Optional: Limit the maximum number of participants for
+                        this campaign
                       </p>
                     </div>
                     <Input
@@ -8180,7 +10208,9 @@ export default function CreateContestPage({
                       value={maxParticipants}
                       onChange={(e) => {
                         const value = e.target.value;
-                        setMaxParticipants(value === "" ? "" : parseInt(value, 10));
+                        setMaxParticipants(
+                          value === "" ? "" : parseInt(value, 10)
+                        );
                       }}
                       placeholder="No limit (leave empty)"
                       className={cn(
@@ -8302,18 +10332,19 @@ export default function CreateContestPage({
                   className={cn(
                     "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
                     !(formFeedback && formFeedbackType === "error") &&
-                    (isDark
-                      ? "border-gray-300 text-gray-300"
-                      : "border-[#4A00BE] text-[#4A00BE]")
+                      (isDark
+                        ? "border-gray-300 text-gray-300"
+                        : "border-[#4A00BE] text-[#4A00BE]")
                   )}
                 >
                   Back
                 </button>
                 <div
-                  className={`flex gap-2 ${formFeedback && formFeedbackType === "error"
-                    ? "ml-4"
-                    : "ml-auto"
-                    }`}
+                  className={`flex gap-2 ${
+                    formFeedback && formFeedbackType === "error"
+                      ? "ml-4"
+                      : "ml-auto"
+                  }`}
                 >
                   <button
                     className={cn(
@@ -8326,8 +10357,8 @@ export default function CreateContestPage({
                     disabled={isLoading || !title.trim()}
                   >
                     {isLoading &&
-                      uploadProgress &&
-                      uploadProgress.includes("draft") ? (
+                    uploadProgress &&
+                    uploadProgress.includes("draft") ? (
                       <div className="flex items-center gap-2">
                         <span>{uploadProgress}</span>
                         <Progress
@@ -8404,12 +10435,13 @@ export default function CreateContestPage({
                   {/* Asset Upload */}
                   <div className="flex flex-col gap-6">
                     <div
-                      className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive
-                        ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
-                        : isDark
+                      className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
+                        isDragActive
+                          ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
+                          : isDark
                           ? "border-slate-600 bg-[#170337]"
                           : "border-gray-300 bg-white"
-                        }`}
+                      }`}
                       onClick={() => resourceFileRef.current?.click()}
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
@@ -8421,15 +10453,15 @@ export default function CreateContestPage({
                       {resourceFile ? (
                         <div className="relative flex items-center gap-3">
                           {resourceFile.type.startsWith("image/") &&
-                            resourceFilePreview ? (
+                          resourceFilePreview ? (
                             <img
                               src={resourceFilePreview}
                               alt="Preview"
                               className="w-16 h-16 object-cover rounded mr-3"
                             />
                           ) : resourceFile.name
-                            .toLowerCase()
-                            .endsWith(".pdf") ? (
+                              .toLowerCase()
+                              .endsWith(".pdf") ? (
                             <span className="inline-block mr-2 align-middle">
                               <svg
                                 width="40"
@@ -8462,8 +10494,8 @@ export default function CreateContestPage({
                               </svg>
                             </span>
                           ) : /\.(mp4|mov|avi|webm)$/i.test(
-                            resourceFile.name
-                          ) ? (
+                              resourceFile.name
+                            ) ? (
                             <span className="inline-block mr-2 align-middle">
                               <svg
                                 width="40"
@@ -8563,8 +10595,8 @@ export default function CreateContestPage({
                             <div className="text-xs text-gray-500">
                               {resourceFile.size >= 1024 * 1024
                                 ? (resourceFile.size / (1024 * 1024)).toFixed(
-                                  2
-                                ) + " MB"
+                                    2
+                                  ) + " MB"
                                 : (resourceFile.size / 1024).toFixed(2) + " KB"}
                             </div>
                             {resourceDescription && (
@@ -9017,17 +11049,19 @@ export default function CreateContestPage({
                                   { ...inspirationLinks[0], url },
                                 ]);
                               } else {
-                                setInspirationLinks([
-                                  { url, description: "" },
-                                ]);
+                                setInspirationLinks([{ url, description: "" }]);
                               }
                               setInspirationError(null);
                             }}
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="raidTweetDescription" className="mb-[2px]">
-                            Tweet Description <span className="text-red-500">*</span>
+                          <Label
+                            htmlFor="raidTweetDescription"
+                            className="mb-[2px]"
+                          >
+                            Tweet Description{" "}
+                            <span className="text-red-500">*</span>
                           </Label>
                           <Input
                             id="raidTweetDescription"
@@ -9045,9 +11079,7 @@ export default function CreateContestPage({
                                   { ...inspirationLinks[0], description },
                                 ]);
                               } else {
-                                setInspirationLinks([
-                                  { url: "", description },
-                                ]);
+                                setInspirationLinks([{ url: "", description }]);
                               }
                               setInspirationError(null);
                             }}
@@ -9063,8 +11095,12 @@ export default function CreateContestPage({
                       // Full UI for Awareness: Add button and list
                       <>
                         <div className="flex flex-col gap-2">
-                          <Label htmlFor="inspirationUrlInput" className="mb-[2px]">
-                            Inspiration Link <span className="text-red-500">*</span>
+                          <Label
+                            htmlFor="inspirationUrlInput"
+                            className="mb-[2px]"
+                          >
+                            Inspiration Link{" "}
+                            <span className="text-red-500">*</span>
                           </Label>
                           <Input
                             id="inspirationUrlInput"
@@ -9077,7 +11113,9 @@ export default function CreateContestPage({
                                 ? "bg-[#180438] border border-gray-600"
                                 : "bg-white"
                             )}
-                            onChange={(e) => setNewInspirationUrl(e.target.value)}
+                            onChange={(e) =>
+                              setNewInspirationUrl(e.target.value)
+                            }
                           />
                           <Label
                             htmlFor="inspirationDescriptionInput"
@@ -9151,7 +11189,9 @@ export default function CreateContestPage({
                                     rel="noopener noreferrer"
                                     className={cn(
                                       "font-medium hover:underline break-all",
-                                      isDark ? "text-purple-400" : "text-blue-600"
+                                      isDark
+                                        ? "text-purple-400"
+                                        : "text-blue-600"
                                     )}
                                   >
                                     {item.url}
@@ -9238,7 +11278,9 @@ export default function CreateContestPage({
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label htmlFor="targetRetweets">Target reposts/retweets</Label>
+                          <Label htmlFor="targetRetweets">
+                            Target reposts/retweets
+                          </Label>
                           <Input
                             id="targetRetweets"
                             type="number"
@@ -9260,7 +11302,9 @@ export default function CreateContestPage({
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label htmlFor="targetQuoteReposts">Target quote reposts</Label>
+                          <Label htmlFor="targetQuoteReposts">
+                            Target quote reposts
+                          </Label>
                           <Input
                             id="targetQuoteReposts"
                             type="number"
@@ -9395,11 +11439,11 @@ export default function CreateContestPage({
                                       href={
                                         item.url.includes("[creator]")
                                           ? item.url.replace(
-                                            /\[creator\]/gi,
-                                            encodeURIComponent(
-                                              currentUserFirstName
+                                              /\[creator\]/gi,
+                                              encodeURIComponent(
+                                                currentUserFirstName
+                                              )
                                             )
-                                          )
                                           : item.url
                                       }
                                       target="_blank"
@@ -9413,9 +11457,9 @@ export default function CreateContestPage({
                                     >
                                       {item.url.includes("[creator]")
                                         ? item.url.replace(
-                                          /\[creator\]/gi,
-                                          currentUserFirstName
-                                        )
+                                            /\[creator\]/gi,
+                                            currentUserFirstName
+                                          )
                                         : item.url}
                                     </a>
                                     <div
@@ -9474,8 +11518,8 @@ export default function CreateContestPage({
                         disabled={isLoading || !title.trim()}
                       >
                         {isLoading &&
-                          uploadProgress &&
-                          uploadProgress.includes("draft") ? (
+                        uploadProgress &&
+                        uploadProgress.includes("draft") ? (
                           <div className="flex items-center gap-2">
                             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                             <span>Saving...</span>
@@ -9548,9 +11592,43 @@ export default function CreateContestPage({
               <ContestPaymentSelection
                 contestAmount={
                   contestType === "leaderboard"
-                    ? totalPrizePool / 100 // Convert cents to dollars
+                    ? (() => {
+                        // For leaderboard contests, charge prize pool + total budget (if flat fee bonus is enabled)
+                        const prizePoolDollars = totalPrizePool / 100;
+                        const flatFeeBonusEnabled =
+                          flatFeeBonus &&
+                          parseFloat(flatFeeBonus.toString()) > 0;
+                        const totalBudgetDollars =
+                          flatFeeBonusEnabled &&
+                          totalBudget &&
+                          parseFloat(totalBudget.toString()) > 0
+                            ? parseFloat(totalBudget.toString())
+                            : 0;
+                        return prizePoolDollars + totalBudgetDollars;
+                      })()
                     : parseFloat(totalBudget.toString()) || 0
                 } // Budget is already in dollars
+                prizePoolAmount={
+                  contestType === "leaderboard"
+                    ? totalPrizePool / 100
+                    : undefined
+                }
+                bonusBudgetAmount={
+                  contestType === "leaderboard"
+                    ? (() => {
+                        const flatFeeBonusEnabled =
+                          flatFeeBonus &&
+                          parseFloat(flatFeeBonus.toString()) > 0;
+                        const totalBudgetDollars =
+                          flatFeeBonusEnabled &&
+                          totalBudget &&
+                          parseFloat(totalBudget.toString()) > 0
+                            ? parseFloat(totalBudget.toString())
+                            : 0;
+                        return totalBudgetDollars || undefined;
+                      })()
+                    : undefined
+                }
                 contestTitle={title || "Untitled Contest"}
                 contestId={draftId || undefined}
                 commissionPercentage={

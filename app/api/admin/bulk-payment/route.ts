@@ -27,19 +27,24 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const {
-      submission_ids,
-      payment_type,
-      contest_id,
-      creator_id,
-    } = body;
+    const { submission_ids, payment_type, contest_id, creator_id } = body;
 
-    if (!submission_ids || !Array.isArray(submission_ids) || submission_ids.length === 0) {
-      return NextResponse.json({ error: "submission_ids is required and must be a non-empty array" }, { status: 400 });
+    if (
+      !submission_ids ||
+      !Array.isArray(submission_ids) ||
+      submission_ids.length === 0
+    ) {
+      return NextResponse.json(
+        { error: "submission_ids is required and must be a non-empty array" },
+        { status: 400 }
+      );
     }
 
     if (!["standard", "bonus", "both"].includes(payment_type)) {
-      return NextResponse.json({ error: "payment_type must be standard, bonus, or both" }, { status: 400 });
+      return NextResponse.json(
+        { error: "payment_type must be standard, bonus, or both" },
+        { status: 400 }
+      );
     }
 
     // Fetch all submissions
@@ -50,7 +55,10 @@ export async function POST(request: NextRequest) {
       .eq("contest_id", contest_id);
 
     if (submissionsError || !submissions || submissions.length === 0) {
-      return NextResponse.json({ error: "Failed to fetch submissions" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Failed to fetch submissions" },
+        { status: 500 }
+      );
     }
 
     // Fetch contest details
@@ -65,60 +73,110 @@ export async function POST(request: NextRequest) {
     }
 
     // Only allow payments when contest status is verification_complete
-    if (contest.post_contest_status !== 'verification_complete') {
-      return NextResponse.json({ 
-        error: 'Payments can only be processed when contest status is \'verification_complete\'' 
-      }, { status: 400 });
+    if (contest.post_contest_status !== "verification_complete") {
+      return NextResponse.json(
+        {
+          error:
+            "Payments can only be processed when contest status is 'verification_complete'",
+        },
+        { status: 400 }
+      );
     }
 
     // Filter to verified submissions only
-    const verifiedSubmissions = submissions.filter(s => s.status === "verified");
+    const verifiedSubmissions = submissions.filter(
+      (s) => s.status === "verified"
+    );
 
     if (verifiedSubmissions.length === 0) {
-      return NextResponse.json({ error: "No verified submissions found" }, { status: 400 });
+      return NextResponse.json(
+        { error: "No verified submissions found" },
+        { status: 400 }
+      );
     }
 
     // Sort by submission time (earliest first)
-    const sortedSubmissions = verifiedSubmissions.sort((a, b) => 
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    const sortedSubmissions = verifiedSubmissions.sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
 
     // Get flat fee bonus and total budget
-    const contestDetails = contest.contest_type === "cpm"
-      ? (contest.contest_based_details as any)?.cpm_contest
-      : (contest.contest_based_details as any)?.leaderboard_contest;
-    
+    const contestDetails =
+      contest.contest_type === "cpm"
+        ? (contest.contest_based_details as any)?.cpm_contest
+        : (contest.contest_based_details as any)?.leaderboard_contest;
+
     const flatFeeBonus = contestDetails?.flat_fee_bonus || 0;
     const totalBudget = contestDetails?.total_budget || null;
+    const flatFeeBonusCap = contestDetails?.flat_fee_bonus_cap || null;
 
     const maxEarnings = contest.max_earnings_per_creator || null;
 
-    // For leaderboard contests with total_budget, check if budget would be exceeded
-    if (contest.contest_type === "leaderboard" && totalBudget && (payment_type === "bonus" || payment_type === "both")) {
+    // Check bonus budget/cap before processing
+    if (
+      (payment_type === "bonus" || payment_type === "both") &&
+      flatFeeBonus > 0
+    ) {
       // Calculate current bonus spending
       const { data: bonusSpendingData } = await supabaseAdmin
-        .from('submissions')
-        .select('bonus_amount')
-        .eq('contest_id', contest_id)
-        .eq('bonus_paid', true);
-      
-      const currentBonusSpent = (bonusSpendingData || [])
-        .reduce((sum, sub) => sum + (sub.bonus_amount || 0), 0);
-      
-      // Calculate potential bonus spending for this bulk payment
-      const potentialBonusSpending = verifiedSubmissions.length * flatFeeBonus;
-      
-      if (currentBonusSpent + potentialBonusSpending > totalBudget) {
-        return NextResponse.json({
-          error: 'Total budget would be exceeded',
-          details: {
-            currentSpent: currentBonusSpent,
-            potentialSpending: potentialBonusSpending,
-            budgetLimit: totalBudget,
-            remaining: totalBudget - currentBonusSpent,
-            maxSubmissions: Math.floor((totalBudget - currentBonusSpent) / flatFeeBonus)
-          }
-        }, { status: 400 });
+        .from("submissions")
+        .select("bonus_amount")
+        .eq("contest_id", contest_id)
+        .eq("bonus_paid", true);
+
+      const currentBonusSpent = (bonusSpendingData || []).reduce(
+        (sum, sub) => sum + (sub.bonus_amount || 0),
+        0
+      );
+
+      // Calculate potential bonus spending for this bulk payment (only unpaid bonuses)
+      const unpaidBonusSubmissions = verifiedSubmissions.filter(
+        (s) => !s.bonus_paid
+      );
+      const potentialBonusSpending =
+        unpaidBonusSubmissions.length * flatFeeBonus;
+
+      // For leaderboard contests with total_budget, check if budget would be exceeded
+      if (contest.contest_type === "leaderboard" && totalBudget) {
+        if (currentBonusSpent + potentialBonusSpending > totalBudget) {
+          return NextResponse.json(
+            {
+              error: "Total budget would be exceeded",
+              details: {
+                currentSpent: currentBonusSpent,
+                potentialSpending: potentialBonusSpending,
+                budgetLimit: totalBudget,
+                remaining: totalBudget - currentBonusSpent,
+                maxSubmissions: Math.floor(
+                  (totalBudget - currentBonusSpent) / flatFeeBonus
+                ),
+              },
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      // For CPM contests with flat_fee_bonus_cap, check if cap would be exceeded
+      if (contest.contest_type === "cpm" && flatFeeBonusCap) {
+        if (currentBonusSpent + potentialBonusSpending > flatFeeBonusCap) {
+          return NextResponse.json(
+            {
+              error: "Flat fee bonus cap would be exceeded",
+              details: {
+                currentSpent: currentBonusSpent,
+                potentialSpending: potentialBonusSpending,
+                capLimit: flatFeeBonusCap,
+                remaining: flatFeeBonusCap - currentBonusSpent,
+                maxSubmissions: Math.floor(
+                  (flatFeeBonusCap - currentBonusSpent) / flatFeeBonus
+                ),
+              },
+            },
+            { status: 400 }
+          );
+        }
       }
     }
 
@@ -138,7 +196,8 @@ export async function POST(request: NextRequest) {
       .eq("creator_id", creator_id)
       .eq("paid", true);
 
-    const alreadyPaidAmount = previousSubmissions?.reduce((sum, s) => sum + (s.earnings || 0), 0) || 0;
+    const alreadyPaidAmount =
+      previousSubmissions?.reduce((sum, s) => sum + (s.earnings || 0), 0) || 0;
     runningTotal = alreadyPaidAmount;
 
     for (const sub of sortedSubmissions) {
@@ -150,7 +209,7 @@ export async function POST(request: NextRequest) {
 
       // Calculate CPM earnings for this submission
       let submissionEarnings = 0;
-      
+
       if (payment_type !== "bonus") {
         // Use stored earnings or calculate from views
         submissionEarnings = sub.earnings || 0;
@@ -160,19 +219,26 @@ export async function POST(request: NextRequest) {
           const cpmConfig = (contest.contest_based_details as any)?.cpm_contest;
           if (cpmConfig?.cpm_rate_usd) {
             let effectiveViews = sub.views || 0;
-            
+
             // Apply min_views threshold
-            if (cpmConfig.min_views != null && effectiveViews < cpmConfig.min_views) {
+            if (
+              cpmConfig.min_views != null &&
+              effectiveViews < cpmConfig.min_views
+            ) {
               effectiveViews = 0;
             }
-            
+
             // Apply max_views cap
-            if (cpmConfig.max_views != null && effectiveViews > cpmConfig.max_views) {
+            if (
+              cpmConfig.max_views != null &&
+              effectiveViews > cpmConfig.max_views
+            ) {
               effectiveViews = cpmConfig.max_views;
             }
-            
+
             // Calculate earnings: (views * CPM rate) / 1000, convert to cents
-            const calculatedEarnings = (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
+            const calculatedEarnings =
+              (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
             submissionEarnings = Math.round(calculatedEarnings);
           }
         }
@@ -198,8 +264,28 @@ export async function POST(request: NextRequest) {
       // Calculate bonus
       let submissionBonus = 0;
       if (payment_type !== "standard" && flatFeeBonus > 0 && !sub.bonus_paid) {
-        submissionBonus = flatFeeBonus;
-        totalBonus += submissionBonus;
+        // Check if adding this bonus would exceed the cap/budget
+        let wouldExceedCap = false;
+
+        if (contest.contest_type === "leaderboard" && totalBudget) {
+          const remainingBudget = totalBudget - totalBonus;
+          if (flatFeeBonus > remainingBudget) {
+            wouldExceedCap = true;
+          }
+        } else if (contest.contest_type === "cpm" && flatFeeBonusCap) {
+          const remainingCap = flatFeeBonusCap - totalBonus;
+          if (flatFeeBonus > remainingCap) {
+            wouldExceedCap = true;
+          }
+        }
+
+        if (!wouldExceedCap) {
+          submissionBonus = flatFeeBonus;
+          totalBonus += submissionBonus;
+        } else {
+          // Cap reached, skip bonus for remaining submissions
+          skippedCount++;
+        }
       }
 
       // Add to breakdown
@@ -220,16 +306,22 @@ export async function POST(request: NextRequest) {
     const totalAmount = totalCPM + totalBonus;
 
     if (totalAmount === 0) {
-      return NextResponse.json({ 
-        error: "No payments to process. All submissions may be already paid or cap reached." 
-      }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            "No payments to process. All submissions may be already paid or cap reached.",
+        },
+        { status: 400 }
+      );
     }
 
     // Credit creator wallet
     const creditResult = await creditCreatorWithdrawableBalance(
       creator_id,
       totalAmount,
-      `Bulk payment for ${paidCount} submissions in contest: ${contest.title || "Contest"}`,
+      `Bulk payment for ${paidCount} submissions in contest: ${
+        contest.title || "Contest"
+      }`,
       {
         remarks: `Bulk payment: ${payment_type}`,
         metadata: {
@@ -245,32 +337,36 @@ export async function POST(request: NextRequest) {
     );
 
     if (!creditResult.success) {
-      return NextResponse.json({ error: `Failed to credit wallet: ${creditResult.error}` }, { status: 500 });
+      return NextResponse.json(
+        { error: `Failed to credit wallet: ${creditResult.error}` },
+        { status: 500 }
+      );
     }
 
     // Update all submissions with earnings and payment status
-    const submissionUpdates = breakdown.map(item => ({
+    const submissionUpdates = breakdown.map((item) => ({
       id: item.submission_id,
       cpm_amount: item.cpm_amount,
       bonus_amount: item.bonus_amount,
       paid: payment_type !== "bonus" ? true : undefined,
       paid_at: payment_type !== "bonus" ? new Date().toISOString() : undefined,
       bonus_paid: payment_type !== "standard" ? true : undefined,
-      bonus_paid_at: payment_type !== "standard" ? new Date().toISOString() : undefined,
+      bonus_paid_at:
+        payment_type !== "standard" ? new Date().toISOString() : undefined,
     }));
 
     // Update each submission
     for (const update of submissionUpdates) {
       const updatePayload: any = {};
-      
+
       // Always update earnings (CPM amount) and status if paying standard or both
       if (payment_type !== "bonus") {
         updatePayload.earnings = update.cpm_amount;
         updatePayload.paid = update.paid;
         updatePayload.paid_at = update.paid_at;
-        updatePayload.status = 'paid';  // Update status to 'paid'
+        updatePayload.status = "paid"; // Update status to 'paid'
       }
-      
+
       // Update bonus payment status and amount
       if (update.bonus_paid !== undefined) {
         updatePayload.bonus_paid = update.bonus_paid;
@@ -300,10 +396,11 @@ export async function POST(request: NextRequest) {
         breakdown: breakdown,
         transaction_id: creditResult.transactionId,
         cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
-        remaining_cap: maxEarnings ? Math.max(0, maxEarnings - runningTotal) : null,
+        remaining_cap: maxEarnings
+          ? Math.max(0, maxEarnings - runningTotal)
+          : null,
       },
     });
-
   } catch (error: any) {
     console.error("Error processing bulk payment:", error);
     return NextResponse.json(
@@ -312,4 +409,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

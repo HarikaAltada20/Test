@@ -106,9 +106,14 @@ export function SubscriptionSuccessClient({
                                 <div className="border-t pt-4">
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
-                                            <p className="text-sm text-gray-600">Amount Charged</p>
+                                            <p className="text-sm text-gray-600">
+                                                {subscriptionData.status === 'trialing' ? 'Trial Amount' : 'Amount Charged'}
+                                            </p>
                                             <p className="font-semibold">
-                                                {formatCurrencyFromCents(subscriptionData.amount)}
+                                                {subscriptionData.status === 'trialing' 
+                                                    ? '$0.00' 
+                                                    : formatCurrencyFromCents(subscriptionData.amount)
+                                                }
                                             </p>
                                         </div>
                                         <div>

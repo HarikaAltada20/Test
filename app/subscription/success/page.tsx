@@ -79,7 +79,7 @@ export default async function SubscriptionSuccessPage({
                         id: subscription.id,
                         status: subscription.status,
                         planName: plan.displayName || 'Subscription Plan',
-                        amount: subscription.items?.data[0]?.price?.unit_amount || 0,
+                        amount: subscription.status === 'trialing' ? 0 : (subscription.items?.data[0]?.price?.unit_amount || 0),
                         currency: subscription.items?.data[0]?.price?.currency || 'usd',
                         interval: interval,
                         currentPeriodStart: startDate.toISOString(),

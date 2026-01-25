@@ -1,12 +1,12 @@
 /**
  * Platform Configuration - Scalable system for social media platforms
- * 
+ *
  * This file defines all supported platforms and their properties.
- * To add a new platform (e.g., LinkedIn), add it to the PLATFORMS object
+ * To add a new platform, add it to the PLATFORMS object
  * and update the related types.
  */
 
-export type PlatformType = "youtube" | "instagram" | "twitter" | "linkedin";
+export type PlatformType = "youtube" | "instagram" | "twitter";
 
 export type ContestFormat = "video" | "text_image";
 
@@ -52,21 +52,14 @@ export const PLATFORMS: Record<PlatformType, PlatformConfig> = {
     contentType: "text",
     iconColor: "#1DA1F2",
   },
-  linkedin: {
-    id: "linkedin",
-    name: "linkedin",
-    displayName: "LinkedIn",
-    supportedFormats: ["text_image"],
-    requiresOAuth: true,
-    contentType: "text",
-    iconColor: "#0077B5",
-  },
 };
 
 /**
  * Get platform config by ID
  */
-export function getPlatformConfig(platformId: string | null | undefined): PlatformConfig | null {
+export function getPlatformConfig(
+  platformId: string | null | undefined
+): PlatformConfig | null {
   if (!platformId) return null;
   const normalized = platformId.toLowerCase() as PlatformType;
   return PLATFORMS[normalized] || null;
@@ -76,7 +69,9 @@ export function getPlatformConfig(platformId: string | null | undefined): Platfo
  * Get all platforms that support a specific format
  */
 export function getPlatformsByFormat(format: ContestFormat): PlatformConfig[] {
-  return Object.values(PLATFORMS).filter((p) => p.supportedFormats.includes(format));
+  return Object.values(PLATFORMS).filter((p) =>
+    p.supportedFormats.includes(format)
+  );
 }
 
 /**
@@ -96,7 +91,10 @@ export function getTextImagePlatforms(): PlatformConfig[] {
 /**
  * Check if platform supports format
  */
-export function platformSupportsFormat(platformId: string | null | undefined, format: ContestFormat): boolean {
+export function platformSupportsFormat(
+  platformId: string | null | undefined,
+  format: ContestFormat
+): boolean {
   const config = getPlatformConfig(platformId);
   return config ? config.supportedFormats.includes(format) : false;
 }
@@ -112,4 +110,3 @@ export type PlatformFilterType = "all" | PlatformType;
 export function getAllPlatformIds(): PlatformType[] {
   return Object.keys(PLATFORMS) as PlatformType[];
 }
-
