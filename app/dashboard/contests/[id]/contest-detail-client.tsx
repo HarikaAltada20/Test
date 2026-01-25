@@ -261,6 +261,13 @@ interface ContestDetailClientProps {
   >;
 }
 
+const sanitizeTwitterList = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is string => typeof item === "string" && item.trim() !== ""
+  );
+};
+
 export default function ContestDetailClient({
   contest,
   initialSubmissions,
@@ -351,6 +358,25 @@ export default function ContestDetailClient({
     }
     return false; // Default to light mode
   });
+
+  const twitterCampaignDetails =
+    currentContest.contest_based_details?.twitter_campaign;
+  const adminTwitterKeywords = sanitizeTwitterList(
+    twitterCampaignDetails?.keywords
+  );
+  const adminTwitterMentions = sanitizeTwitterList(
+    twitterCampaignDetails?.mentions
+  );
+  const hasTwitterRequirements =
+    adminTwitterKeywords.length > 0 || adminTwitterMentions.length > 0;
+
+  const isTwitterPlatform =
+    currentContest.platform?.toLowerCase() === "twitter" ||
+    currentContest.platform?.toLowerCase() === "x";
+  const isTwitterCpmCampaign =
+    currentContest?.contest_type === "cpm" &&
+    isTwitterPlatform &&
+    currentContest?.contest_format === "text_image";
 
   // Refresh metrics state
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
@@ -4732,7 +4758,7 @@ export default function ContestDetailClient({
                               currentContest.contest_based_details.cpm_contest
                                 .cpm_rate_usd
                             ).toFixed(2)}{" "}
-                            per 1000 views
+                            per 1000 {isTwitterCpmCampaign ? "points" : "views"}
                           </span>
                         </div>
                         <div
@@ -6550,6 +6576,84 @@ export default function ContestDetailClient({
                           __html: (currentContest as any).rules_html,
                         }}
                       />
+                    </div>
+                  </div>
+                )}
+
+                {hasTwitterRequirements && (
+                  <div
+                    className={cn(
+                      "rounded-xl p-4 border space-y-3",
+                      isDark
+                        ? "bg-slate-900/40 border-slate-700"
+                        : "bg-slate-50 border-slate-200"
+                    )}
+                  >
+                    <h4
+                      className={cn(
+                        "font-semibold text-sm flex items-center gap-2",
+                        isDark ? "text-slate-100" : "text-slate-900"
+                      )}
+                    >
+                      Required Keywords & Mentions
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {adminTwitterKeywords.length > 0 && (
+                        <div>
+                          <p
+                            className={cn(
+                              "text-xs uppercase tracking-wide font-medium mb-1",
+                              isDark ? "text-slate-300" : "text-slate-600"
+                            )}
+                          >
+                            Keywords & Hashtags
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {adminTwitterKeywords.map((keyword, idx) => (
+                              <Badge
+                                key={`admin-keyword-${keyword}-${idx}`}
+                                variant="outline"
+                                className={cn(
+                                  "rounded-full text-xs px-3 py-1",
+                                  isDark
+                                    ? "border-slate-600 text-slate-100"
+                                    : "border-slate-300 text-slate-800"
+                                )}
+                              >
+                                {keyword}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {adminTwitterMentions.length > 0 && (
+                        <div>
+                          <p
+                            className={cn(
+                              "text-xs uppercase tracking-wide font-medium mb-1",
+                              isDark ? "text-slate-300" : "text-slate-600"
+                            )}
+                          >
+                            Accounts to Mention
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {adminTwitterMentions.map((mention, idx) => (
+                              <Badge
+                                key={`admin-mention-${mention}-${idx}`}
+                                variant="outline"
+                                className={cn(
+                                  "rounded-full text-xs px-3 py-1",
+                                  isDark
+                                    ? "border-slate-600 text-slate-100"
+                                    : "border-slate-300 text-slate-800"
+                                )}
+                              >
+                                {mention}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
