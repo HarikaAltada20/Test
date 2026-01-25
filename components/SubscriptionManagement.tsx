@@ -254,6 +254,13 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
       // For users without any subscription (new users)
       if (!currentPlan && !currentSubscription) {
         // Use the create subscription API for new users
+        const trialDays = isEligibleForTrial(targetPlan) ? targetPlan.trialDays : undefined;
+
+        console.log(`🔍 Creating subscription for plan ${planId}:`);
+        console.log(`  - Target plan:`, targetPlan);
+        console.log(`  - Trial eligible:`, isEligibleForTrial(targetPlan));
+        console.log(`  - Trial days:`, trialDays);
+        console.log(`  - Plan price:`, targetPlan.price);
 
         const response = await fetch("/api/subscriptions/create", {
           method: "POST",
@@ -262,6 +269,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             productId: planId,
             priceId: targetPlan.prices?.monthly?.id,
             upgradeType: "immediate",
+            trialDays,
           }),
         });
 
@@ -283,6 +291,16 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
       // For existing users with subscriptions, use upgrade API
       if (!currentPlan) return;
 
+      // Check if user is on free plan and eligible for trial
+      const trialDays = (isOnFreePlan() && isEligibleForTrial(targetPlan)) ? targetPlan.trialDays : undefined;
+
+      console.log(`🔍 Upgrading subscription for plan ${planId}:`);
+      console.log(`  - Target plan:`, targetPlan);
+      console.log(`  - Current plan:`, currentPlan);
+      console.log(`  - Is on free plan:`, isOnFreePlan());
+      console.log(`  - Trial eligible:`, isEligibleForTrial(targetPlan));
+      console.log(`  - Trial days:`, trialDays);
+
       const response = await fetch("/api/subscriptions/upgrade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -290,6 +308,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
           targetProductId: planId,
           targetPriceId: targetPlan.prices?.monthly?.id,
           upgradeType: "immediate",
+          trialDays,
         }),
       });
 
@@ -395,7 +414,52 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
   };
 
   const isOnFreePlan = () => {
-    return !currentSubscription || currentSubscription.id === "free-plan";
+    // Check if no subscription at all
+    if (!currentSubscription) {
+      return true;
+    }
+    
+    // Check if explicitly free-plan
+    if (currentSubscription.id === "free-plan") {
+      return true;
+    }
+    
+    // Check if current plan is Explorer (free plan)
+    if (currentPlan && currentPlan.name === "EXPLORER") {
+      return true;
+    }
+    
+    // Check if current plan has price 0 (free plan)
+    if (currentPlan && currentPlan.price === 0) {
+      return true;
+    }
+    
+    return false;
+  };
+
+  const isEligibleForTrial = (plan: SubscriptionPlan) => {
+    // Only new users (no subscription) or users on free plans are eligible for trials
+    if (!isOnFreePlan()) {
+      return false;
+    }
+    
+    // Only plans with trialDays are eligible
+    if (!plan.trialDays || plan.trialDays <= 0) {
+      return false;
+    }
+    
+    // Only paid plans are eligible for trials
+    if (plan.price === 0) {
+      return false;
+    }
+    
+    return true;
+  };
+
+  const getTrialDisplayText = (plan: SubscriptionPlan) => {
+    if (!isEligibleForTrial(plan)) return null;
+    
+    return `${plan.trialDays}-day free trial`;
   };
 
   const getPlanIcon = (planName: string) => {
@@ -1165,6 +1229,11 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                       {plan.price > 0 ? "/month" : ""}
                     </span>
                   </div>
+                  {getTrialDisplayText(plan) && (
+                    <div className="mt-2 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                      {getTrialDisplayText(plan)}
+                    </div>
+                  )}
                   <p className="text-md py-3 text-gray-400">
                     {plan.features.description}
                   </p>
@@ -1220,12 +1289,23 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                                   <Check className="h-4 w-4 mr-2" />
                                   Start Free
                                 </>
+                              ) : isEligibleForTrial(plan) ? (
+                                <>
+                                  <Gift className="h-4 w-4 mr-2" />
+                                  Start Free Trial
+                                </>
                               ) : (
                                 <>
                                   <CreditCard className="h-4 w-4 mr-2" />
                                   Subscribe
                                 </>
                               )
+                            ) : isOnFreePlan() && isEligibleForTrial(plan) ? (
+                              // Users on free plans (including Explorer) eligible for trials
+                              <>
+                                <Gift className="h-4 w-4 mr-2" />
+                                Start Free Trial
+                              </>
                             ) : currentPlan &&
                               plan.price > currentPlan.price ? (
                               <>

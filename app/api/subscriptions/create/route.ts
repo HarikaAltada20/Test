@@ -29,6 +29,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { productId, priceId, upgradeType = 'immediate', scheduledDate, trialDays } = body;
 
+    // Validate trial days if provided
+    if (trialDays !== undefined) {
+      if (typeof trialDays !== 'number' || trialDays < 0 || trialDays > 365) {
+        return NextResponse.json({ error: 'Invalid trial days. Must be between 0 and 365 days.' }, { status: 400 });
+      }
+    }
 
     // Validate required fields
     if (!productId || !priceId) {

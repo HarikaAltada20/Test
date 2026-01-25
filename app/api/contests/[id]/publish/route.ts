@@ -17,13 +17,27 @@ export async function POST(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        // Check if user is admin
+        const { data: userData } = await supabase
+            .from('users')
+            .select('user_type')
+            .eq('id', user.id)
+            .single();
+
+        const isAdmin = userData?.user_type === 'admin';
+
         // Get contest to verify ownership and status
-        const { data: contest, error: contestError } = await supabase
+        let contestQuery = supabase
             .from("contests")
             .select("*")
-            .eq("id", contestId)
-            .eq("advertiser_id", user.id)
-            .single();
+            .eq("id", contestId);
+
+        // Only check ownership if not admin
+        if (!isAdmin) {
+            contestQuery = contestQuery.eq("advertiser_id", user.id);
+        }
+
+        const { data: contest, error: contestError } = await contestQuery.single();
 
         if (contestError || !contest) {
             return NextResponse.json({ error: "Contest not found" }, { status: 404 });

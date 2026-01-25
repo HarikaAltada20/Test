@@ -238,25 +238,35 @@ interface ContestDetailClientProps {
   contestId: string;
   isAdminView?: boolean;
   user?: any; // Add user prop for dynamic [creator] replacement
-  creatorModerationData?: Record<string, {
-    moderation_status?: string;
-    rejection_reason?: string | null;
-    manual_points_adjustment?: number;
-    manual_points_reason?: string | null;
-    total_points?: number;
-    total_eligible_tweets?: number;
-    total_likes?: number;
-    total_replies?: number;
-    total_retweets?: number;
-    total_quote_reposts?: number;
-    total_impressions?: number;
-    current_rank?: number;
-    paid?: boolean;
-    paid_at?: string | null;
-    earnings?: number;
-    paid_rank?: number | null;
-  }>;
+  creatorModerationData?: Record<
+    string,
+    {
+      moderation_status?: string;
+      rejection_reason?: string | null;
+      manual_points_adjustment?: number;
+      manual_points_reason?: string | null;
+      total_points?: number;
+      total_eligible_tweets?: number;
+      total_likes?: number;
+      total_replies?: number;
+      total_retweets?: number;
+      total_quote_reposts?: number;
+      total_impressions?: number;
+      current_rank?: number;
+      paid?: boolean;
+      paid_at?: string | null;
+      earnings?: number;
+      paid_rank?: number | null;
+    }
+  >;
 }
+
+const sanitizeTwitterList = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is string => typeof item === "string" && item.trim() !== ""
+  );
+};
 
 export default function ContestDetailClient({
   contest,
@@ -349,12 +359,57 @@ export default function ContestDetailClient({
     return false; // Default to light mode
   });
 
+  const twitterCampaignDetails =
+    currentContest.contest_based_details?.twitter_campaign;
+  const adminTwitterKeywords = sanitizeTwitterList(
+    twitterCampaignDetails?.keywords
+  );
+  const adminTwitterMentions = sanitizeTwitterList(
+    twitterCampaignDetails?.mentions
+  );
+  const hasTwitterRequirements =
+    adminTwitterKeywords.length > 0 || adminTwitterMentions.length > 0;
+
+  const isTwitterPlatform =
+    currentContest.platform?.toLowerCase() === "twitter" ||
+    currentContest.platform?.toLowerCase() === "x";
+  const isTwitterCpmCampaign =
+    currentContest?.contest_type === "cpm" &&
+    isTwitterPlatform &&
+    currentContest?.contest_format === "text_image";
+
   // Refresh metrics state
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
 
   // Twitter campaign metrics state
   const [twitterMetrics, setTwitterMetrics] = useState<any>(null);
   const [loadingMetrics, setLoadingMetrics] = useState(false);
+
+  const markCreatorSubmissionsVerifiedLocally = (
+    creatorId: string | null | undefined
+  ) => {
+    if (!creatorId) return;
+
+    const isTwitterCpm =
+      currentContest?.contest_type === "cpm" &&
+      (currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+      currentContest?.contest_format === "text_image";
+
+    if (!isTwitterCpm) return;
+
+    setCurrentSubmissions((prev) =>
+      prev.map((submission) =>
+        submission.creator_id === creatorId
+          ? {
+              ...submission,
+              status: "verified",
+              moderation_status: "verified",
+            }
+          : submission
+      )
+    );
+  };
 
   // Rejection modal state
   const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
@@ -384,20 +439,48 @@ export default function ContestDetailClient({
   const [pendingPaymentSubmission, setPendingPaymentSubmission] = useState<
     string | null
   >(null);
-  const [pendingTwitterPaymentCreator, setPendingTwitterPaymentCreator] = useState<
-    string | null
-  >(null);
+  const [pendingTwitterPaymentCreator, setPendingTwitterPaymentCreator] =
+    useState<string | null>(null);
+  const [manualAdjustmentOverrides, setManualAdjustmentOverrides] = useState<
+    Record<string, number>
+  >({});
+  const getCreatorManualAdjustment = useCallback(
+    (creatorId?: string | null) => {
+      if (!creatorId) return 0;
+      const baseAdjustment =
+        creatorModerationData?.[creatorId]?.manual_points_adjustment || 0;
+      const overrideAdjustment = manualAdjustmentOverrides[creatorId] || 0;
+      return baseAdjustment + overrideAdjustment;
+    },
+    [creatorModerationData, manualAdjustmentOverrides]
+  );
+  const creatorManualPointsAdjustments = useMemo(() => {
+    const adjustments: Record<string, number> = {};
+    const seenCreators = new Set<string>();
+    (currentSubmissions || []).forEach((submission) => {
+      const creatorId = submission.creator_id;
+      if (!creatorId || seenCreators.has(creatorId)) return;
+      seenCreators.add(creatorId);
+
+      const adjustment = getCreatorManualAdjustment(creatorId);
+      if (adjustment !== 0) {
+        adjustments[creatorId] = adjustment;
+      }
+    });
+    return adjustments;
+  }, [currentSubmissions, getCreatorManualAdjustment]);
   const [confirmReversal, setConfirmReversal] = useState<{
     id: string;
     target: "verified" | "pending" | "rejected";
     needRejectionReason?: boolean;
   } | null>(null);
-  const [confirmTwitterCreatorReversal, setConfirmTwitterCreatorReversal] = useState<{
-    creatorId: string;
-    action: "approve" | "reject";
-    needRejectionReason?: boolean;
-    creatorUsername?: string;
-  } | null>(null);
+  const [confirmTwitterCreatorReversal, setConfirmTwitterCreatorReversal] =
+    useState<{
+      creatorId: string;
+      action: "approve" | "reject";
+      needRejectionReason?: boolean;
+      creatorUsername?: string;
+    } | null>(null);
   const [activeStatusTab, setActiveStatusTab] = useState<
     "all" | "pending" | "verified" | "rejected" | "paid" | "verified_or_paid"
   >("all");
@@ -458,7 +541,7 @@ export default function ContestDetailClient({
   const getStatus = (submission: Submission) => {
     const isTwitterTweet = (submission as any).is_twitter_tweet === true;
     return isTwitterTweet
-      ? ((submission as any).moderation_status || "pending")
+      ? (submission as any).moderation_status || "pending"
       : submission.status;
   };
 
@@ -522,28 +605,30 @@ export default function ContestDetailClient({
     currentPage * itemsPerPage
   );
 
- // Filter submissions for analytics based on active analytics tab
+  // Filter submissions for analytics based on active analytics tab
   // For Twitter tweets, use moderation_status; for regular submissions, use status
-  const filteredAnalyticsSubmissions = currentSubmissions.filter((submission) => {
-    const status = getStatus(submission);
+  const filteredAnalyticsSubmissions = currentSubmissions.filter(
+    (submission) => {
+      const status = getStatus(submission);
 
-    if (activeAnalyticsTab === "all") return true;
-    if (activeAnalyticsTab === "verified_or_paid") {
-      return status === "verified" || status === "paid";
+      if (activeAnalyticsTab === "all") return true;
+      if (activeAnalyticsTab === "verified_or_paid") {
+        return status === "verified" || status === "paid";
+      }
+      return status === activeAnalyticsTab;
     }
-    return status === activeAnalyticsTab;
-  });
+  );
 
   // Creator-wise grouping logic
   const groupSubmissionsByCreator = useMemo(() => {
-    if (!filteredSubmissions || viewMode !== "creator-wise") return null;
+    if (!filteredSubmissions) return [];
 
     // Check if this is a Twitter leaderboard campaign
     const isTwitterLeaderboard =
-      ((currentContest?.platform?.toLowerCase() === "twitter" ||
+      (currentContest?.platform?.toLowerCase() === "twitter" ||
         currentContest?.platform?.toLowerCase() === "x") &&
-        currentContest?.contest_format === "text_image" &&
-        currentContest?.contest_type === "leaderboard");
+      currentContest?.contest_format === "text_image" &&
+      currentContest?.contest_type === "leaderboard";
 
     // For Twitter leaderboard campaigns, use data directly from twitter_campaign_leaderboard
     if (isTwitterLeaderboard) {
@@ -567,35 +652,120 @@ export default function ContestDetailClient({
 
       creatorIds.forEach((creatorId) => {
         const leaderboardData = creatorModerationData[creatorId] || {};
-        const creatorSubmissions = filteredSubmissions.filter((s: any) => s.creator_id === creatorId);
+        const creatorSubmissions = filteredSubmissions.filter(
+          (s: any) => s.creator_id === creatorId
+        );
         const firstSubmission = creatorSubmissions[0];
+        const submissionManualPointsTotal = creatorSubmissions.reduce(
+          (sum: number, submission: any) => {
+            const submissionManualPoints =
+              (submission as any).manual_points_adjustment ||
+              submission.other_stats?.manual_points_adjustment ||
+              0;
+            return sum + submissionManualPoints;
+          },
+          0
+        );
+        const creatorManualAdjustment =
+          getCreatorManualAdjustment(creatorId) || 0;
+        const manualPointsAdjustmentTotal =
+          creatorManualAdjustment + submissionManualPointsTotal;
+
+        // Calculate base_points from submissions (for raid campaigns, this correctly uses base_points from other_stats)
+        // For leaderboard, we need to sum base_points from all eligible submissions
+        let calculatedBasePoints = 0;
+        creatorSubmissions.forEach((submission: any) => {
+          const status =
+            (submission.is_twitter_tweet && submission.moderation_status) ||
+            submission.status;
+          // Only count pending or verified submissions (not rejected)
+          if (status !== "rejected") {
+            const submissionBasePoints =
+              submission.other_stats?.base_points || 0;
+            calculatedBasePoints += submissionBasePoints;
+
+            // DEBUG: Log each submission's base points contribution for Twitter CPM
+            if (
+              currentContest?.contest_type === "cpm" &&
+              currentContest?.platform === "twitter"
+            ) {
+              console.log(
+                `[contest-detail-client] Adding base points for submission ${submission.id}:`,
+                {
+                  submissionId: submission.id,
+                  basePoints: submissionBasePoints,
+                  otherStats: submission.other_stats,
+                  status: status,
+                  runningTotal: calculatedBasePoints,
+                }
+              );
+            }
+          }
+        });
+
+        // If we have leaderboard data but no submissions in the current filter, use leaderboard calculation
+        // For raid campaigns, total_points includes base + bonus + manual, so we can't just subtract manual
+        // Instead, use the calculated base_points from submissions, or fallback to a safer calculation
+        const basePoints =
+          calculatedBasePoints > 0
+            ? calculatedBasePoints
+            : Math.max(
+                0,
+                (leaderboardData.total_points || 0) -
+                  (leaderboardData.manual_points_adjustment || 0)
+              );
+
+        const verifiedSubmissionCount = creatorSubmissions.filter(
+          (submission: any) => {
+            const status =
+              (submission.is_twitter_tweet &&
+                (submission as any).moderation_status) ||
+              submission.status;
+            return (
+              status === "verified" ||
+              status === "approved" ||
+              status === "paid"
+            );
+          }
+        ).length;
 
         grouped[creatorId] = {
           creator: {
             id: creatorId,
             username: firstSubmission?.creator?.username || "Unknown",
-            profile_picture_url: firstSubmission?.creator?.profile_picture_url || null,
+            profile_picture_url:
+              firstSubmission?.creator?.profile_picture_url || null,
             full_name: firstSubmission?.creator?.full_name || null,
           },
           submissions: creatorSubmissions,
-          totalCount: leaderboardData.total_eligible_tweets || creatorSubmissions.length,
+          totalCount:
+            leaderboardData.total_eligible_tweets || creatorSubmissions.length,
           statusCounts: {
             all: creatorSubmissions.length,
             verified: creatorSubmissions.filter((s: any) => {
-              const status = (s.is_twitter_tweet && (s as any).moderation_status) || s.status;
+              const status =
+                (s.is_twitter_tweet && (s as any).moderation_status) ||
+                s.status;
               return status === "verified";
             }).length,
             paid: creatorSubmissions.filter((s: any) => s.paid).length,
-            pending: creatorSubmissions.filter((s: any) =>
-              (s.is_twitter_tweet && (!(s as any).moderation_status || (s as any).moderation_status === "pending")) ||
-              (!s.is_twitter_tweet && s.status === "pending")
+            pending: creatorSubmissions.filter(
+              (s: any) =>
+                (s.is_twitter_tweet &&
+                  (!(s as any).moderation_status ||
+                    (s as any).moderation_status === "pending")) ||
+                (!s.is_twitter_tweet && s.status === "pending")
             ).length,
-            rejected: creatorSubmissions.filter((s: any) =>
-              (s.is_twitter_tweet && (s as any).moderation_status === "rejected") ||
-              (!s.is_twitter_tweet && s.status === "rejected")
+            rejected: creatorSubmissions.filter(
+              (s: any) =>
+                (s.is_twitter_tweet &&
+                  (s as any).moderation_status === "rejected") ||
+                (!s.is_twitter_tweet && s.status === "rejected")
             ).length,
             verified_paid: creatorSubmissions.filter((s: any) => {
-              const status = (s.is_twitter_tweet && (s as any).moderation_status) || s.status;
+              const status =
+                (s.is_twitter_tweet && (s as any).moderation_status) ||
+                s.status;
               return status === "verified" && s.paid;
             }).length,
           },
@@ -611,30 +781,36 @@ export default function ContestDetailClient({
             quote_reposts: leaderboardData.total_quote_reposts || 0,
             impressions: leaderboardData.total_impressions || 0,
             points: leaderboardData.total_points || 0,
-            base_points: (leaderboardData.total_points || 0) - (leaderboardData.manual_points_adjustment || 0),
-            manual_points_adjustment: leaderboardData.manual_points_adjustment || 0,
+            base_points: basePoints,
+            manual_points_adjustment: manualPointsAdjustmentTotal,
             manual_points_reason: leaderboardData.manual_points_reason || null,
+            tweet_manual_points_adjustment: submissionManualPointsTotal,
+            creator_manual_points_adjustment: creatorManualAdjustment,
           },
           earnings: { expected: 0, granted: 0 },
           earningsBeforeCap: 0,
           bonus: { expected: 0, granted: 0 },
-          firstSubmittedAt: creatorSubmissions.length > 0
-            ? creatorSubmissions[0].created_at
-            : new Date().toISOString(),
+          firstSubmittedAt:
+            creatorSubmissions.length > 0
+              ? creatorSubmissions[0].created_at
+              : new Date().toISOString(),
           isCapped: false,
-          creator_moderation_status: leaderboardData.moderation_status || "pending",
+          creator_moderation_status:
+            leaderboardData.moderation_status || "pending",
           creator_rejection_reason: leaderboardData.rejection_reason || null,
           current_rank: leaderboardData.current_rank || null,
           paid: leaderboardData.paid || false,
           paid_at: leaderboardData.paid_at || null,
           earnings_from_db: leaderboardData.earnings || 0,
           paid_rank: leaderboardData.paid_rank || null,
+          eligibleTweets: Math.max(0, verifiedSubmissionCount),
         };
       });
 
       // Calculate earnings based on rank for Twitter leaderboard campaigns
       // Only consider verified creators when calculating ranks (same as YouTube/Instagram)
-      const contestDetails = currentContest?.contest_based_details?.leaderboard_contest;
+      const contestDetails =
+        currentContest?.contest_based_details?.leaderboard_contest;
       const prizes = contestDetails?.prizes || [];
 
       // Filter to only verified creators and sort by points to recalculate ranks
@@ -653,25 +829,59 @@ export default function ContestDetailClient({
       // Assign expected earnings based on recalculated rank among verified creators only
       verifiedCreators.forEach((group: any, index: number) => {
         const verifiedRank = index + 1; // Rank among verified creators only (1, 2, 3, ...)
-        const prizeForRank = prizes.find((p: any) => p.position === verifiedRank);
+        const prizeForRank = prizes.find(
+          (p: any) => p.position === verifiedRank
+        );
         if (prizeForRank) {
           group.earnings.expected = prizeForRank.amount;
           // Use paid status from leaderboard (creator-level payment)
-          if (group.paid && group.earnings_from_db && group.earnings_from_db > 0) {
+          if (
+            group.paid &&
+            group.earnings_from_db &&
+            group.earnings_from_db > 0
+          ) {
             group.earnings.granted = group.earnings_from_db; // Use actual earnings from database
           }
         }
       });
 
+      const leaderboardDetails =
+        currentContest?.contest_based_details?.leaderboard_contest;
+      const leaderboardFlatFeeBonus = leaderboardDetails?.flat_fee_bonus || 0;
+      if (leaderboardFlatFeeBonus > 0) {
+        const leaderboardTotalBudget = leaderboardDetails?.total_budget;
+        const leaderboardBonusBudget =
+          leaderboardDetails?.flat_fee_bonus_cap ??
+          leaderboardTotalBudget ??
+          Number.MAX_SAFE_INTEGER;
+        let currentTotalExpectedBonus = 0;
+
+        Object.values(grouped).forEach((group: any) => {
+          const eligibleTweets = group.eligibleTweets || 0;
+          if (eligibleTweets <= 0) return;
+          const remainingBudget =
+            leaderboardBonusBudget - currentTotalExpectedBonus;
+          if (remainingBudget <= 0) return;
+
+          const expectedBonus = eligibleTweets * leaderboardFlatFeeBonus;
+          const bonusToAssign = Math.min(expectedBonus, remainingBudget);
+          if (bonusToAssign <= 0) return;
+
+          group.bonus.expected = bonusToAssign;
+          currentTotalExpectedBonus += bonusToAssign;
+        });
+      }
+
       // Filter out groups with no submissions when status filter is active (to avoid undefined/empty groups)
       const groupsArray = Object.values(grouped);
       if (activeStatusTab !== "all") {
-        return groupsArray.filter((group: any) => group.submissions && group.submissions.length > 0);
+        return groupsArray.filter(
+          (group: any) => group.submissions && group.submissions.length > 0
+        );
       }
 
       return groupsArray;
     }
-
 
     // For non-Twitter leaderboard campaigns, use the original aggregation logic
     const grouped = filteredSubmissions.reduce((acc: any, submission: any) => {
@@ -680,6 +890,7 @@ export default function ContestDetailClient({
       if (!acc[creatorId]) {
         // Get creator-level moderation data if available
         const creatorModeration = creatorModerationData[creatorId] || {};
+        const creatorManualAdjustment = getCreatorManualAdjustment(creatorId);
         acc[creatorId] = {
           creator: {
             id: creatorId,
@@ -714,8 +925,13 @@ export default function ContestDetailClient({
             impressions: 0,
             points: 0,
             base_points: 0,
-            manual_points_adjustment: 0,
-            manual_points_reason: null as string | null,
+            // Seed manual points from creator-level moderation (e.g. Twitter leaderboard / CPM adjustments)
+            // Tweet-level manual adjustments will be aggregated separately.
+            manual_points_adjustment: creatorManualAdjustment,
+            creator_manual_points_adjustment: creatorManualAdjustment,
+            tweet_manual_points_adjustment: 0,
+            manual_points_reason:
+              creatorModeration.manual_points_reason || (null as string | null),
           },
           earnings: { expected: 0, granted: 0 },
           earningsBeforeCap: 0,
@@ -743,150 +959,137 @@ export default function ContestDetailClient({
         : submission.status?.toLowerCase() || "pending";
 
       // Map Twitter moderation_status to standard status for counting
-      const normalizedStatus = isTwitterTweet
-        ? status === "approved"
-          ? "verified"
-          : status === "rejected"
-          ? "rejected"
-          : "pending"
-        : status;
+      let normalizedStatus = status;
+      if (isTwitterTweet) {
+        if (status === "approved" || status === "verified") {
+          normalizedStatus = "verified";
+        } else if (status === "rejected") {
+          normalizedStatus = "rejected";
+        } else {
+          normalizedStatus = "pending";
+        }
+      }
 
       group.statusCounts.all++;
       if (normalizedStatus === "verified" || normalizedStatus === "approved") {
         group.statusCounts.verified++;
         if (submission.paid) group.statusCounts.verified_paid++;
-      }
-      if (submission.paid) group.statusCounts.paid++;
-      if (normalizedStatus === "pending") group.statusCounts.pending++;
-      if (normalizedStatus === "rejected") group.statusCounts.rejected++;
 
-      // Aggregate metrics
-      group.metrics.views += submission.views || 0;
+        // Get flat_fee_bonus from the correct nested location
+        const flatFeeBonus =
+          currentContest?.contest_type === "cpm"
+            ? (currentContest?.contest_based_details as any)?.cpm_contest
+                ?.flat_fee_bonus || 0
+            : (currentContest?.contest_based_details as any)
+                ?.leaderboard_contest?.flat_fee_bonus || 0;
 
-      // Reuse isTwitterTweet from above (already declared)
-      if (isTwitterTweet) {
-        // Aggregate Twitter-specific metrics
-        group.metrics.likes += submission.other_stats?.likes || 0;
-        group.metrics.comments += submission.other_stats?.replies || 0;
-        group.metrics.retweets =
-          (group.metrics.retweets || 0) +
-          (submission.other_stats?.retweets || 0);
-        group.metrics.quote_reposts =
-          (group.metrics.quote_reposts || 0) +
-          (submission.other_stats?.quote_reposts || 0);
-        group.metrics.impressions =
-          (group.metrics.impressions || 0) +
-          (submission.other_stats?.impressions || 0);
-        // Don't accumulate points field - it's the total (base + manual), which causes double-counting
-        // Only accumulate base_points and manual_points_adjustment separately
-        // Use base_points directly, don't fallback to points (which is total)
-        group.metrics.base_points =
-          (group.metrics.base_points || 0) +
-          (submission.other_stats?.base_points || 0);
-        group.metrics.manual_points_adjustment =
-          (group.metrics.manual_points_adjustment || 0) +
-          ((submission as any).manual_points_adjustment || 0);
-        // Store manual points reason (use the latest one if multiple)
-        if ((submission as any).manual_points_reason) {
-          group.metrics.manual_points_reason = (
-            submission as any
-          ).manual_points_reason;
-        }
-      } else {
-        // Aggregate YouTube/Instagram metrics
-        group.metrics.likes +=
-          submission.other_stats?.youtube?.likes ||
-          submission.other_stats?.instagram?.likes ||
-          0;
-        group.metrics.comments +=
-          submission.other_stats?.youtube?.comments ||
-          submission.other_stats?.instagram?.comments ||
-          0;
-        group.metrics.shares += submission.other_stats?.instagram?.shares || 0;
-        group.metrics.saves += submission.other_stats?.instagram?.saves || 0;
-        group.metrics.reach += submission.other_stats?.instagram?.reach || 0;
-        group.metrics.interactions +=
-          submission.other_stats?.instagram?.total_interactions || 0;
-        // Aggregate watch time metrics for Instagram
-        const instagramStats = submission.other_stats?.instagram || {};
-        const avgWatchTime = instagramStats.avg_watch_time_ms || 0;
-        const totalWatchTime = instagramStats.total_watch_time_ms || 0;
-        // Sum average watch times (we'll calculate the mean average when displaying)
-        group.metrics.avg_watch_time_ms += avgWatchTime;
-        // Sum total watch times (this is cumulative across all submissions)
-        group.metrics.total_watch_time_ms += totalWatchTime;
-      }
+        // Calculate bonus with budget constraints
+        if (flatFeeBonus > 0) {
+          // Check budget constraints before adding expected bonus
+          const totalBudget =
+            currentContest?.contest_type === "cpm"
+              ? (currentContest?.contest_based_details as any)?.cpm_contest
+                  ?.total_budget || 0
+              : (currentContest?.contest_based_details as any)
+                  ?.leaderboard_contest?.total_budget || 0;
 
-      // Calculate earnings and bonus
-      let expectedEarnings = submission.earnings || 0;
+          // For CPM contests, check flat_fee_bonus_cap if configured
+          const bonusBudget =
+            currentContest?.contest_type === "cpm"
+              ? (currentContest?.contest_based_details as any)?.cpm_contest
+                  ?.flat_fee_bonus_cap || totalBudget
+              : totalBudget;
 
-      // If earnings not stored, calculate dynamically for CPM contests
-      if (!expectedEarnings && currentContest?.contest_type === "cpm") {
-        const cpmConfig = (currentContest?.contest_based_details as any)
-          ?.cpm_contest;
-        if (cpmConfig?.cpm_rate_usd) {
-          let effectiveViews = submission.views || 0;
+          // Calculate current total expected bonuses across all creators processed so far
+          let currentTotalExpectedBonus = 0;
+          Object.values(acc).forEach((g: any) => {
+            currentTotalExpectedBonus += g.bonus.expected;
+          });
 
-          // Apply min_views threshold
-          if (
-            cpmConfig.min_views != null &&
-            effectiveViews < cpmConfig.min_views
-          ) {
-            effectiveViews = 0;
-          }
+          // Calculate remaining budget for bonuses
+          const remainingBudget = bonusBudget - currentTotalExpectedBonus;
 
-          // Apply max_views cap
-          if (
-            cpmConfig.max_views != null &&
-            effectiveViews > cpmConfig.max_views
-          ) {
-            effectiveViews = cpmConfig.max_views;
-          }
-
-          // Calculate earnings: (views * CPM rate) / 1000, convert to cents
-          const calculatedEarnings =
-            (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
-          expectedEarnings = Math.round(calculatedEarnings);
-        }
-      }
-
-      group.earnings.expected += expectedEarnings;
-
-      // For granted earnings, use ACTUAL earnings from database (which respects cap)
-      if (submission.paid) {
-        // For Twitter leaderboard, prize is per creator, so we'll calculate granted earnings after grouping
-        // For other contests, accumulate earnings per submission
-        if (!isTwitterTweet) {
-          group.earnings.granted += submission.earnings || 0;
-        } else {
-          // For Twitter leaderboard, mark that this creator has paid submissions
-          // We'll set the granted earnings to the prize amount after determining creator rank
-          if (!(group as any).hasPaidSubmissions) {
-            (group as any).hasPaidSubmissions = true;
-            // Store the earnings from the paid submission (should be the prize amount)
-            (group as any).paidEarnings = submission.earnings || 0;
+          if (remainingBudget > 0) {
+            if (remainingBudget >= flatFeeBonus) {
+              // Full bonus can be granted
+              group.bonus.expected += flatFeeBonus;
+            } else {
+              // Only partial bonus remaining - distribute the remaining amount
+              group.bonus.expected += remainingBudget;
+            }
           }
         }
-      }
-
-      // Track uncapped earnings for display purposes
-      group.earningsBeforeCap += expectedEarnings;
-
-      // Get flat_fee_bonus from the correct nested location
-      const flatFeeBonus =
-        currentContest?.contest_type === "cpm"
-          ? (currentContest?.contest_based_details as any)?.cpm_contest
-              ?.flat_fee_bonus || 0
-          : (currentContest?.contest_based_details as any)?.leaderboard_contest
-              ?.flat_fee_bonus || 0;
-
-      if (flatFeeBonus > 0 && (status === "verified" || status === "paid")) {
-        group.bonus.expected += flatFeeBonus;
       }
       if (submission.bonus_paid) {
         // Use actual bonus_amount from database if available
+        const flatFeeBonus =
+          currentContest?.contest_type === "cpm"
+            ? (currentContest?.contest_based_details as any)?.cpm_contest
+                ?.flat_fee_bonus || 0
+            : (currentContest?.contest_based_details as any)
+                ?.leaderboard_contest?.flat_fee_bonus || 0;
         const actualBonus = (submission as any).bonus_amount || flatFeeBonus;
         group.bonus.granted += actualBonus;
+      }
+
+      // ACCUMULATE METRICS from each submission - THIS WAS MISSING!
+      if (isTwitterTweet) {
+        // For Twitter tweets, accumulate Twitter-specific metrics
+        group.metrics.likes += submission.other_stats?.likes || 0;
+        group.metrics.comments += submission.other_stats?.replies || 0;
+        group.metrics.retweets += submission.other_stats?.retweets || 0;
+        group.metrics.quote_reposts +=
+          submission.other_stats?.quote_reposts || 0;
+        group.metrics.impressions += submission.other_stats?.impressions || 0;
+
+        // For Twitter CPM contests, accumulate points and base_points
+        const submissionBasePoints = submission.other_stats?.base_points || 0;
+        const submissionManualPoints = Number(
+          (submission as any).manual_points_adjustment ??
+            submission.other_stats?.manual_points_adjustment ??
+            0
+        );
+        const submissionTotalPoints = submission.other_stats?.points || 0;
+
+        group.metrics.base_points += submissionBasePoints;
+        group.metrics.points += submissionTotalPoints;
+
+        group.metrics.tweet_manual_points_adjustment += submissionManualPoints;
+
+        if (
+          currentContest?.contest_type === "cpm" &&
+          currentContest?.platform === "twitter"
+        ) {
+          console.log(
+            `[contest-detail-client] Accumulating metrics for Twitter CPM submission ${submission.id}:`,
+            {
+              submissionId: submission.id,
+              creatorId: creatorId,
+              basePoints: submissionBasePoints,
+              manualPoints: submissionManualPoints,
+              totalPoints: submissionTotalPoints,
+              runningBasePoints: group.metrics.base_points,
+              runningPoints: group.metrics.points,
+              runningManualPoints:
+                group.metrics.creator_manual_points_adjustment +
+                group.metrics.tweet_manual_points_adjustment,
+              otherStats: submission.other_stats,
+            }
+          );
+        }
+      } else {
+        // For non-Twitter submissions, accumulate regular metrics
+        group.metrics.views += submission.views || 0;
+        group.metrics.likes += submission.other_stats?.likes || 0;
+        group.metrics.comments += submission.other_stats?.comments || 0;
+        group.metrics.shares += submission.other_stats?.shares || 0;
+        group.metrics.saves += submission.other_stats?.saves || 0;
+        group.metrics.reach += submission.other_stats?.reach || 0;
+        group.metrics.interactions += submission.other_stats?.interactions || 0;
+
+        // For regular submissions, accumulate base_points and points
+        group.metrics.base_points += submission.other_stats?.base_points || 0;
+        group.metrics.points += submission.other_stats?.points || 0;
       }
 
       // Track earliest submission
@@ -896,6 +1099,53 @@ export default function ContestDetailClient({
 
       return acc;
     }, {});
+
+    Object.values(grouped).forEach((group: any) => {
+      const creatorId = group.creator?.id;
+      const creatorManualAdjustment = getCreatorManualAdjustment(creatorId);
+      const tweetManualAdjustment =
+        group.metrics.tweet_manual_points_adjustment || 0;
+      group.metrics.creator_manual_points_adjustment = creatorManualAdjustment;
+      group.metrics.manual_points_adjustment =
+        creatorManualAdjustment + tweetManualAdjustment;
+      group.metrics.manual_points_reason =
+        creatorModerationData?.[creatorId]?.manual_points_reason ||
+        group.metrics.manual_points_reason;
+    });
+
+    const isTwitterContestForPoints =
+      (currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+      currentContest?.contest_format === "text_image";
+
+    if (isTwitterContestForPoints) {
+      Object.values(grouped).forEach((group: any) => {
+        const calculatedTotalPoints =
+          (group.metrics.base_points || 0) +
+          (group.metrics.manual_points_adjustment || 0);
+
+        if (
+          currentContest?.contest_type === "cpm" &&
+          currentContest?.platform?.toLowerCase() === "twitter"
+        ) {
+          console.log(
+            `[contest-detail-client] Final points calculation for Twitter CPM creator ${group.creator.id}:`,
+            {
+              creatorId: group.creator.id,
+              basePoints: group.metrics.base_points,
+              manualPointsAdjustment: group.metrics.manual_points_adjustment,
+              calculatedTotalPoints: calculatedTotalPoints,
+              currentPoints: group.metrics.points,
+              willOverwrite: group.metrics.points !== calculatedTotalPoints,
+            }
+          );
+        }
+
+        if (group.metrics.points !== calculatedTotalPoints) {
+          group.metrics.points = calculatedTotalPoints;
+        }
+      });
+    }
 
     // For Twitter leaderboard contests, calculate expected earnings based on creator rank
     // Note: isTwitterLeaderboard was already checked above, but we need to check again for non-leaderboard path
@@ -942,9 +1192,128 @@ export default function ContestDetailClient({
       });
     }
 
-    // Apply earnings cap per creator for expected earnings display
+    // Calculate earnings for Twitter CPM contests based on CPM rate and points
+    const isTwitterCpmContest =
+      (currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+      currentContest?.contest_format === "text_image" &&
+      currentContest?.contest_type === "cpm";
+
+    if (isTwitterCpmContest) {
+      const cpmConfig = (currentContest?.contest_based_details as any)
+        ?.cpm_contest;
+      const cpmRate = cpmConfig?.cpm_rate_usd || 0;
+      const maxEarningsPerCreator = cpmConfig?.max_earnings_per_creator || null;
+
+      if (cpmRate > 0) {
+        Object.values(grouped).forEach((group: any) => {
+          const hasVerifiedSubmissions = group.statusCounts?.verified > 0;
+          const creatorStatus = group.creator_moderation_status;
+          const isCreatorEligible =
+            hasVerifiedSubmissions || creatorStatus === "verified";
+
+          if (!isCreatorEligible) {
+            group.earnings.expected = 0;
+            return;
+          }
+
+          // Calculate earnings based on total points (base + manual)
+          const totalPoints = group.metrics.points || 0;
+          const calculatedEarnings = (totalPoints * cpmRate) / 1000; // Convert to dollars
+          const earningsInCents = Math.round(calculatedEarnings * 100); // Convert to cents
+
+          // Apply creator cap if configured
+          let finalExpectedEarnings = earningsInCents;
+          if (
+            maxEarningsPerCreator &&
+            earningsInCents > maxEarningsPerCreator
+          ) {
+            finalExpectedEarnings = maxEarningsPerCreator;
+            group.isCapped = true;
+          }
+
+          group.earnings.expected = finalExpectedEarnings;
+
+          // DEBUG: Log earnings calculation for Twitter CPM
+          console.log(
+            `[contest-detail-client] Calculated earnings for Twitter CPM creator ${group.creator.id}:`,
+            {
+              creatorId: group.creator.id,
+              totalPoints: totalPoints,
+              cpmRate: cpmRate,
+              calculatedEarnings: calculatedEarnings,
+              earningsInCents: earningsInCents,
+              maxEarningsPerCreator: maxEarningsPerCreator,
+              finalExpectedEarnings: finalExpectedEarnings,
+              isCapped: group.isCapped,
+            }
+          );
+        });
+      }
+    }
+
+    // Calculate bonus for Twitter CPM contests based on flat_fee_bonus
+    if (isTwitterCpmContest) {
+      const cpmConfig = (currentContest?.contest_based_details as any)
+        ?.cpm_contest;
+      const flatFeeBonus = cpmConfig?.flat_fee_bonus || 0;
+      const totalBudget = cpmConfig?.total_budget || 0;
+      const bonusBudget = cpmConfig?.flat_fee_bonus_cap || totalBudget;
+
+      if (flatFeeBonus > 0) {
+        // Calculate current total expected bonuses across all creators
+        let currentTotalExpectedBonus = 0;
+        Object.values(grouped).forEach((group: any) => {
+          currentTotalExpectedBonus += group.bonus.expected;
+        });
+
+        // Calculate remaining budget for bonuses
+        const remainingBudget = bonusBudget - currentTotalExpectedBonus;
+
+        // Assign bonus to verified creators only
+        Object.values(grouped).forEach((group: any) => {
+          // For Twitter CPM contests, check if creator has verified submissions
+          // rather than relying on creator_moderation_status which might not be set
+          const hasVerifiedSubmissions = group.statusCounts.verified > 0;
+          const isVerified =
+            hasVerifiedSubmissions ||
+            group.creator_moderation_status === "verified";
+
+          if (isVerified && remainingBudget > 0) {
+            if (remainingBudget >= flatFeeBonus) {
+              // Full bonus can be granted
+              group.bonus.expected = flatFeeBonus;
+              currentTotalExpectedBonus += flatFeeBonus;
+            } else {
+              // Only partial bonus remaining - distribute the remaining amount
+              group.bonus.expected = remainingBudget;
+              currentTotalExpectedBonus = 0; // Budget exhausted
+            }
+          }
+
+          // DEBUG: Log bonus calculation for Twitter CPM
+          console.log(
+            `[contest-detail-client] Calculated bonus for Twitter CPM creator ${group.creator.id}:`,
+            {
+              creatorId: group.creator.id,
+              creatorStatus: group.creator_moderation_status,
+              hasVerifiedSubmissions: hasVerifiedSubmissions,
+              isVerified: isVerified,
+              statusCounts: group.statusCounts,
+              flatFeeBonus: flatFeeBonus,
+              totalBudget: totalBudget,
+              bonusBudget: bonusBudget,
+              remainingBudget: remainingBudget,
+              expectedBonus: group.bonus.expected,
+            }
+          );
+        });
+      }
+    }
+
+    // Apply earnings cap per creator for expected earnings display (for non-CPM contests)
     const maxEarnings = currentContest?.max_earnings_per_creator;
-    if (maxEarnings && maxEarnings > 0) {
+    if (maxEarnings && maxEarnings > 0 && !isTwitterCpmContest) {
       Object.values(grouped).forEach((group: any) => {
         if (group.earnings.expected > maxEarnings) {
           group.isCapped = true;
@@ -956,7 +1325,14 @@ export default function ContestDetailClient({
     }
 
     return Object.values(grouped);
-  }, [filteredSubmissions, viewMode, currentContest, activeStatusTab]);
+  }, [
+    filteredSubmissions,
+    currentContest,
+    activeStatusTab,
+    creatorModerationData,
+    manualAdjustmentOverrides,
+    getCreatorManualAdjustment,
+  ]);
 
   // Creator ranking for Twitter leaderboard contests (based on total points per creator)
   const creatorRankingMap = useMemo(() => {
@@ -1063,13 +1439,14 @@ export default function ContestDetailClient({
         if (!creatorId) return false;
 
         // Check all submissions for this creator (not filtered ones)
-        const creatorAllSubmissions = currentSubmissions.filter((s: any) =>
-          s.creator_id === creatorId && (s as any).is_twitter_tweet === true
+        const creatorAllSubmissions = currentSubmissions.filter(
+          (s: any) =>
+            s.creator_id === creatorId && (s as any).is_twitter_tweet === true
         );
 
         // Check if creator has at least one eligible tweet
-        const hasEligibleTweet = creatorAllSubmissions.some((s: any) =>
-          (s as any).filter_status === "eligible"
+        const hasEligibleTweet = creatorAllSubmissions.some(
+          (s: any) => (s as any).filter_status === "eligible"
         );
 
         if (activeEligibilityTab === "eligible") {
@@ -1095,7 +1472,13 @@ export default function ContestDetailClient({
     }
 
     return filtered;
-  }, [sortedCreatorGroups, participantFilter, activeEligibilityTab, currentContest, currentSubmissions]);
+  }, [
+    sortedCreatorGroups,
+    participantFilter,
+    activeEligibilityTab,
+    currentContest,
+    currentSubmissions,
+  ]);
 
   // Pagination calculations for creator-wise view
   const creatorWiseTotalPages = filteredCreatorGroups
@@ -1301,20 +1684,24 @@ export default function ContestDetailClient({
     // Check if this is a Twitter tweet - if so, use Twitter moderation endpoint
     const submission = currentSubmissions.find((s) => s.id === submissionId);
     if ((submission as any)?.is_twitter_tweet) {
-      // Map status to Twitter moderation action
       if (newStatus === "verified") {
         await handleModerateTwitterTweet(submissionId, "approve");
-      } else if (newStatus === "rejected") {
-        await handleModerateTwitterTweet(submissionId, "reject");
-      } else if (newStatus === "pending") {
-        await handleModerateTwitterTweet(submissionId, "pending");
-      } else {
-        toast({
-          title: "Error",
-          description: `Action "${newStatus}" is not supported for Twitter tweets`,
-          variant: "destructive",
-        });
+        return;
       }
+      if (newStatus === "rejected") {
+        await handleModerateTwitterTweet(submissionId, "reject");
+        return;
+      }
+      if (newStatus === "pending") {
+        await handleModerateTwitterTweet(submissionId, "pending");
+        return;
+      }
+
+      toast({
+        title: "Error",
+        description: `Action "${newStatus}" is not supported for Twitter tweets`,
+        variant: "destructive",
+      });
       return;
     }
 
@@ -1452,6 +1839,31 @@ export default function ContestDetailClient({
       const toastConfig = getToastConfig(newStatus);
       console.log("🎉 Calling toast with config:", toastConfig);
       toast(toastConfig);
+
+      if (
+        ["cpm", "leaderboard"].includes(currentContest?.contest_type || "") &&
+        currentContest?.platform &&
+        ["youtube", "instagram"].some((platform) =>
+          currentContest.platform?.toLowerCase().includes(platform)
+        ) &&
+        (newStatus === "verified" || newStatus === "pending")
+      ) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("contests:refresh", {
+            detail: {
+              contestId,
+              submissionId,
+              newStatus,
+            },
+          })
+        );
+      }
     } catch (error: any) {
       console.error("Error updating submission status:", error);
 
@@ -1579,18 +1991,21 @@ export default function ContestDetailClient({
   ) => {
     setIsLoadingSubmission((prev) => ({ ...prev, [creatorId]: true }));
     try {
-      const response = await fetch(`/api/contests/${contestId}/pay-twitter-creator`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          creatorId,
-          amountInCents: paymentDetails.amountInCents,
-          isCustom: paymentDetails.isCustom,
-          customRemarks: paymentDetails.customRemarks,
-        }),
-      });
+      const response = await fetch(
+        `/api/contests/${contestId}/pay-twitter-creator`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            creatorId,
+            amountInCents: paymentDetails.amountInCents,
+            isCustom: paymentDetails.isCustom,
+            customRemarks: paymentDetails.customRemarks,
+          }),
+        }
+      );
 
       const result = await response.json();
 
@@ -2133,22 +2548,25 @@ export default function ContestDetailClient({
 
   // Helper function to determine if refresh should be disabled and why
   const getRefreshButtonState = () => {
-    const isLocked = 
+    const isLocked =
       currentContest.post_contest_status === "in_review" ||
       currentContest.post_contest_status === "verification_complete" ||
       currentContest.post_contest_status === "payouts_processed";
-    
-    const isDisabled = isRefreshingMetrics || !cooldownInfo.canRefresh || isLocked;
-    
+
+    const isDisabled =
+      isRefreshingMetrics || !cooldownInfo.canRefresh || isLocked;
+
     let disabledReason = "";
     if (isRefreshingMetrics) {
       disabledReason = "Refreshing metrics...";
     } else if (isLocked) {
       disabledReason = "Metrics are locked after contest review begins";
     } else if (!cooldownInfo.canRefresh) {
-      disabledReason = `Please wait ${cooldownInfo.remainingMinutes} more minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`;
+      disabledReason = `Please wait ${
+        cooldownInfo.remainingMinutes
+      } more minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`;
     }
-    
+
     return { isDisabled, disabledReason };
   };
 
@@ -2386,9 +2804,14 @@ export default function ContestDetailClient({
         prev.map((sub) =>
           sub.id === tweetId
             ? {
-              ...sub,
-              moderation_status: action === "approve" ? "verified" : action === "reject" ? "rejected" : "pending",
-            }
+                ...sub,
+                moderation_status:
+                  action === "approve"
+                    ? "verified"
+                    : action === "reject"
+                    ? "rejected"
+                    : "pending",
+              }
             : sub
         )
       );
@@ -2423,14 +2846,15 @@ export default function ContestDetailClient({
   // Handle Twitter creator reversal confirmation
   const handleConfirmTwitterCreatorReversal = async () => {
     if (!confirmTwitterCreatorReversal) return;
-    const { creatorId, action, needRejectionReason, creatorUsername } = confirmTwitterCreatorReversal;
+    const { creatorId, action, needRejectionReason, creatorUsername } =
+      confirmTwitterCreatorReversal;
     setConfirmTwitterCreatorReversal(null);
 
     if (needRejectionReason) {
       // After confirming reversal, open rejection reason modal
       setPendingTwitterRejection({
         id: creatorId,
-        type: 'creator',
+        type: "creator",
         creatorId: creatorId,
         creatorUsername: creatorUsername,
       });
@@ -2462,16 +2886,25 @@ export default function ContestDetailClient({
         throw new Error(error.error || `Failed to ${action} creator`);
       }
 
+      if (action === "approve") {
+        markCreatorSubmissionsVerifiedLocally(creatorId);
+      }
+
       toast({
         title: "Success",
-        description: `Creator ${action === "approve" ? "approved" : "rejected"} and payment reversed successfully`,
+        description: `Creator ${
+          action === "approve" ? "approved" : "rejected"
+        } and payment reversed successfully`,
       });
 
       setTimeout(() => {
         window.location.reload();
       }, 1000);
     } catch (error: any) {
-      console.error(`Error ${action === "approve" ? "approving" : "rejecting"} creator:`, error);
+      console.error(
+        `Error ${action === "approve" ? "approving" : "rejecting"} creator:`,
+        error
+      );
       toast({
         title: "Error",
         description: error.message || `Failed to ${action} creator`,
@@ -2611,6 +3044,17 @@ export default function ContestDetailClient({
         title: "Success",
         description: `Points adjusted successfully`,
       });
+
+      if (
+        pendingManualPointsSubmission.type === "leaderboard" &&
+        pendingManualPointsSubmission.creatorId
+      ) {
+        const creatorId = pendingManualPointsSubmission.creatorId;
+        setManualAdjustmentOverrides((prev) => ({
+          ...prev,
+          [creatorId]: (prev[creatorId] || 0) + points,
+        }));
+      }
 
       setManualPointsModalOpen(false);
       setPendingManualPointsSubmission(null);
@@ -3651,6 +4095,9 @@ export default function ContestDetailClient({
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}
+                  creatorManualPointsAdjustments={
+                    creatorManualPointsAdjustments
+                  }
                 />
               </div>
             </div>
@@ -4311,7 +4758,7 @@ export default function ContestDetailClient({
                               currentContest.contest_based_details.cpm_contest
                                 .cpm_rate_usd
                             ).toFixed(2)}{" "}
-                            per 1000 views
+                            per 1000 {isTwitterCpmCampaign ? "points" : "views"}
                           </span>
                         </div>
                         <div
@@ -4411,6 +4858,1258 @@ export default function ContestDetailClient({
                       </div>
                     </div>
                   )}
+
+                {/* Points Configuration */}
+                {(() => {
+                  // Check for Twitter CPM points config
+                  const twitterPointsConfig =
+                    currentContest.contest_based_details?.twitter_campaign
+                      ?.points_config;
+                  // Check for CPM contest points config
+                  const cpmPointsConfig =
+                    currentContest.contest_based_details?.cpm_contest
+                      ?.points_config;
+
+                  const hasPointsConfig =
+                    (twitterPointsConfig &&
+                      Object.keys(twitterPointsConfig).length > 0) ||
+                    (cpmPointsConfig &&
+                      Object.keys(cpmPointsConfig).length > 0);
+
+                  if (!hasPointsConfig) return null;
+
+                  return (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-lg text-foreground">
+                        Points Configuration
+                      </h3>
+                      <div className="space-y-4">
+                        {/* Twitter CPM Points Config */}
+                        {twitterPointsConfig && (
+                          <div className="space-y-3">
+                            <h4 className="text-sm font-medium text-foreground/80">
+                              Base Weights
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {twitterPointsConfig.likes_weight != null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Likes Weight:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {typeof twitterPointsConfig.likes_weight ===
+                                    "number"
+                                      ? twitterPointsConfig.likes_weight.toFixed(
+                                          2
+                                        )
+                                      : twitterPointsConfig.likes_weight}
+                                  </span>
+                                </div>
+                              )}
+                              {twitterPointsConfig.comments_weight != null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Comments Weight:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {typeof twitterPointsConfig.comments_weight ===
+                                    "object"
+                                      ? twitterPointsConfig.comments_weight.base_weight?.toFixed(
+                                          2
+                                        ) || "N/A"
+                                      : typeof twitterPointsConfig.comments_weight ===
+                                        "number"
+                                      ? twitterPointsConfig.comments_weight.toFixed(
+                                          2
+                                        )
+                                      : twitterPointsConfig.comments_weight}
+                                  </span>
+                                </div>
+                              )}
+                              {twitterPointsConfig.retweets_weight != null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Retweets Weight:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {typeof twitterPointsConfig.retweets_weight ===
+                                    "object"
+                                      ? twitterPointsConfig.retweets_weight.base_weight?.toFixed(
+                                          2
+                                        ) || "N/A"
+                                      : typeof twitterPointsConfig.retweets_weight ===
+                                        "number"
+                                      ? twitterPointsConfig.retweets_weight.toFixed(
+                                          2
+                                        )
+                                      : twitterPointsConfig.retweets_weight}
+                                  </span>
+                                </div>
+                              )}
+                              {twitterPointsConfig.quote_reposts_weight !=
+                                null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Quote Reposts Weight:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {typeof twitterPointsConfig.quote_reposts_weight ===
+                                    "object"
+                                      ? twitterPointsConfig.quote_reposts_weight.base_weight?.toFixed(
+                                          2
+                                        ) || "N/A"
+                                      : typeof twitterPointsConfig.quote_reposts_weight ===
+                                        "number"
+                                      ? twitterPointsConfig.quote_reposts_weight.toFixed(
+                                          2
+                                        )
+                                      : twitterPointsConfig.quote_reposts_weight}
+                                  </span>
+                                </div>
+                              )}
+                              {twitterPointsConfig.impressions_weight !=
+                                null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Impressions Weight:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {typeof twitterPointsConfig.impressions_weight ===
+                                    "number"
+                                      ? twitterPointsConfig.impressions_weight.toFixed(
+                                          2
+                                        )
+                                      : twitterPointsConfig.impressions_weight}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Engagement Multipliers */}
+                            {(() => {
+                              const commentsWeightObj =
+                                typeof twitterPointsConfig.comments_weight ===
+                                "object"
+                                  ? twitterPointsConfig.comments_weight
+                                  : null;
+                              const retweetsWeightObj =
+                                typeof twitterPointsConfig.retweets_weight ===
+                                "object"
+                                  ? twitterPointsConfig.retweets_weight
+                                  : null;
+                              const quoteRepostsWeightObj =
+                                typeof twitterPointsConfig.quote_reposts_weight ===
+                                "object"
+                                  ? twitterPointsConfig.quote_reposts_weight
+                                  : null;
+
+                              const hasMultipliers =
+                                (commentsWeightObj &&
+                                  Object.keys(commentsWeightObj).some(
+                                    (k) => k !== "base_weight"
+                                  )) ||
+                                (retweetsWeightObj &&
+                                  Object.keys(retweetsWeightObj).some(
+                                    (k) => k !== "base_weight"
+                                  )) ||
+                                (quoteRepostsWeightObj &&
+                                  Object.keys(quoteRepostsWeightObj).some(
+                                    (k) => k !== "base_weight"
+                                  ));
+
+                              if (!hasMultipliers) return null;
+
+                              return (
+                                <div className="space-y-3 mt-4">
+                                  <h4 className="text-sm font-medium text-foreground/80">
+                                    Engagement Multipliers
+                                  </h4>
+
+                                  {/* Comment Multipliers */}
+                                  {commentsWeightObj &&
+                                    Object.keys(commentsWeightObj).some(
+                                      (k) => k !== "base_weight"
+                                    ) && (
+                                      <div className="space-y-2">
+                                        <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
+                                          Comment Engagement
+                                        </h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                          {commentsWeightObj.likes_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Likes:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  commentsWeightObj.likes_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                          {commentsWeightObj.replies_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Replies:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  commentsWeightObj.replies_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                          {commentsWeightObj.impressions_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Impressions:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  commentsWeightObj.impressions_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                          {commentsWeightObj.retweets_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Retweets:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  commentsWeightObj.retweets_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                          {commentsWeightObj.quote_reposts_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Quote Reposts:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  commentsWeightObj.quote_reposts_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                  {/* Retweet Multipliers */}
+                                  {retweetsWeightObj &&
+                                    Object.keys(retweetsWeightObj).some(
+                                      (k) => k !== "base_weight"
+                                    ) && (
+                                      <div className="space-y-2">
+                                        <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
+                                          Retweet Engagement
+                                        </h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                          {retweetsWeightObj.likes_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Likes:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  retweetsWeightObj.likes_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                          {retweetsWeightObj.replies_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Replies:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  retweetsWeightObj.replies_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                          {retweetsWeightObj.impressions_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Impressions:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  retweetsWeightObj.impressions_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                          {retweetsWeightObj.retweets_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Retweets:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  retweetsWeightObj.retweets_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                          {retweetsWeightObj.quote_reposts_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Quote Reposts:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  retweetsWeightObj.quote_reposts_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                  {/* Quote Repost Multipliers */}
+                                  {quoteRepostsWeightObj &&
+                                    Object.keys(quoteRepostsWeightObj).some(
+                                      (k) => k !== "base_weight"
+                                    ) && (
+                                      <div className="space-y-2">
+                                        <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
+                                          Quote Repost Engagement
+                                        </h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                          {quoteRepostsWeightObj.likes_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Likes:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  quoteRepostsWeightObj.likes_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                          {quoteRepostsWeightObj.replies_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Replies:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  quoteRepostsWeightObj.replies_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                          {quoteRepostsWeightObj.impressions_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Impressions:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  quoteRepostsWeightObj.impressions_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                          {quoteRepostsWeightObj.retweets_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Retweets:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  quoteRepostsWeightObj.retweets_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                          {quoteRepostsWeightObj.quote_reposts_multiplier !=
+                                            null && (
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700"
+                                                )}
+                                              >
+                                                Quote Reposts:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  quoteRepostsWeightObj.quote_reposts_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+
+                        {/* CPM Contest Points Config */}
+                        {cpmPointsConfig && (
+                          <div className="space-y-3">
+                            <h4 className="text-sm font-medium text-foreground/80">
+                              Base Points
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {cpmPointsConfig.comment_base_points != null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Comment Base Points:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {cpmPointsConfig.comment_base_points}
+                                  </span>
+                                </div>
+                              )}
+                              {cpmPointsConfig.retweet_base_points != null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Retweet Base Points:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {cpmPointsConfig.retweet_base_points}
+                                  </span>
+                                </div>
+                              )}
+                              {cpmPointsConfig.quote_repost_base_points !=
+                                null && (
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black"
+                                    )}
+                                  >
+                                    Quote Repost Base Points:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {cpmPointsConfig.quote_repost_base_points}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Engagement Multipliers for CPM */}
+                            {(() => {
+                              const hasCommentMultipliers =
+                                cpmPointsConfig.comment_likes_multiplier !=
+                                  null ||
+                                cpmPointsConfig.comment_replies_multiplier !=
+                                  null ||
+                                cpmPointsConfig.comment_impressions_multiplier !=
+                                  null ||
+                                cpmPointsConfig.comment_retweets_multiplier !=
+                                  null ||
+                                cpmPointsConfig.comment_quote_reposts_multiplier !=
+                                  null;
+
+                              const hasRetweetMultipliers =
+                                cpmPointsConfig.retweet_likes_multiplier !=
+                                  null ||
+                                cpmPointsConfig.retweet_replies_multiplier !=
+                                  null ||
+                                cpmPointsConfig.retweet_impressions_multiplier !=
+                                  null ||
+                                cpmPointsConfig.retweet_retweets_multiplier !=
+                                  null ||
+                                cpmPointsConfig.retweet_quote_reposts_multiplier !=
+                                  null;
+
+                              const hasQuoteRepostMultipliers =
+                                cpmPointsConfig.quote_repost_likes_multiplier !=
+                                  null ||
+                                cpmPointsConfig.quote_repost_replies_multiplier !=
+                                  null ||
+                                cpmPointsConfig.quote_repost_impressions_multiplier !=
+                                  null ||
+                                cpmPointsConfig.quote_repost_retweets_multiplier !=
+                                  null ||
+                                cpmPointsConfig.quote_repost_quote_reposts_multiplier !=
+                                  null;
+
+                              if (
+                                !hasCommentMultipliers &&
+                                !hasRetweetMultipliers &&
+                                !hasQuoteRepostMultipliers
+                              )
+                                return null;
+
+                              return (
+                                <div className="space-y-3 mt-4">
+                                  <h4 className="text-sm font-medium text-foreground/80">
+                                    Engagement Multipliers
+                                  </h4>
+
+                                  {/* Comment Multipliers */}
+                                  {hasCommentMultipliers && (
+                                    <div className="space-y-2">
+                                      <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
+                                        Comment Engagement
+                                      </h5>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                        {cpmPointsConfig.comment_likes_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Likes:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.comment_likes_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.comment_replies_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Replies:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.comment_replies_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.comment_impressions_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Impressions:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.comment_impressions_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.comment_retweets_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Retweets:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.comment_retweets_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.comment_quote_reposts_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Quote Reposts:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.comment_quote_reposts_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Retweet Multipliers */}
+                                  {hasRetweetMultipliers && (
+                                    <div className="space-y-2">
+                                      <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
+                                        Retweet Engagement
+                                      </h5>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                        {cpmPointsConfig.retweet_likes_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Likes:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.retweet_likes_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.retweet_replies_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Replies:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.retweet_replies_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.retweet_impressions_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Impressions:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.retweet_impressions_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.retweet_retweets_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Retweets:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.retweet_retweets_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.retweet_quote_reposts_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Quote Reposts:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.retweet_quote_reposts_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Quote Repost Multipliers */}
+                                  {hasQuoteRepostMultipliers && (
+                                    <div className="space-y-2">
+                                      <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
+                                        Quote Repost Engagement
+                                      </h5>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                        {cpmPointsConfig.quote_repost_likes_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Likes:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.quote_repost_likes_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.quote_repost_replies_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Replies:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.quote_repost_replies_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.quote_repost_impressions_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Impressions:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.quote_repost_impressions_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.quote_repost_retweets_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Retweets:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.quote_repost_retweets_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                        {cpmPointsConfig.quote_repost_quote_reposts_multiplier !=
+                                          null && (
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300"
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700"
+                                              )}
+                                            >
+                                              Quote Reposts:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.quote_repost_quote_reposts_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Payment Information */}
                 {(currentContest as any).payment_details && (
@@ -4881,6 +6580,84 @@ export default function ContestDetailClient({
                   </div>
                 )}
 
+                {hasTwitterRequirements && (
+                  <div
+                    className={cn(
+                      "rounded-xl p-4 border space-y-3",
+                      isDark
+                        ? "bg-slate-900/40 border-slate-700"
+                        : "bg-slate-50 border-slate-200"
+                    )}
+                  >
+                    <h4
+                      className={cn(
+                        "font-semibold text-sm flex items-center gap-2",
+                        isDark ? "text-slate-100" : "text-slate-900"
+                      )}
+                    >
+                      Required Keywords & Mentions
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {adminTwitterKeywords.length > 0 && (
+                        <div>
+                          <p
+                            className={cn(
+                              "text-xs uppercase tracking-wide font-medium mb-1",
+                              isDark ? "text-slate-300" : "text-slate-600"
+                            )}
+                          >
+                            Keywords & Hashtags
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {adminTwitterKeywords.map((keyword, idx) => (
+                              <Badge
+                                key={`admin-keyword-${keyword}-${idx}`}
+                                variant="outline"
+                                className={cn(
+                                  "rounded-full text-xs px-3 py-1",
+                                  isDark
+                                    ? "border-slate-600 text-slate-100"
+                                    : "border-slate-300 text-slate-800"
+                                )}
+                              >
+                                {keyword}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {adminTwitterMentions.length > 0 && (
+                        <div>
+                          <p
+                            className={cn(
+                              "text-xs uppercase tracking-wide font-medium mb-1",
+                              isDark ? "text-slate-300" : "text-slate-600"
+                            )}
+                          >
+                            Accounts to Mention
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {adminTwitterMentions.map((mention, idx) => (
+                              <Badge
+                                key={`admin-mention-${mention}-${idx}`}
+                                variant="outline"
+                                className={cn(
+                                  "rounded-full text-xs px-3 py-1",
+                                  isDark
+                                    ? "border-slate-600 text-slate-100"
+                                    : "border-slate-300 text-slate-800"
+                                )}
+                              >
+                                {mention}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* New Features Sections (2025-10-01) */}
                 {/* Content Type Section */}
                 {(currentContest as any).content_type && (
@@ -5131,6 +6908,46 @@ export default function ContestDetailClient({
                         verified submission, regardless of views or ranking!
                         Paid after the contest ends along with other earnings.
                       </p>
+                      {/* Flat Fee Bonus Cap (for CPM contests) */}
+                      {currentContest.contest_type === "cpm" &&
+                        (
+                          currentContest.contest_based_details
+                            ?.cpm_contest as any
+                        )?.flat_fee_bonus_cap && (
+                          <div
+                            className={cn(
+                              "mt-3 pt-3 border-t",
+                              isDark
+                                ? "border-green-700/50"
+                                : "border-green-200"
+                            )}
+                          >
+                            <p
+                              className={cn(
+                                "text-sm font-medium",
+                                isDark ? "text-green-200" : "text-green-800"
+                              )}
+                            >
+                              💰 Flat Fee Bonus Cap:{" "}
+                              {formatMoney(
+                                (
+                                  currentContest.contest_based_details
+                                    ?.cpm_contest as any
+                                )?.flat_fee_bonus_cap
+                              )}
+                            </p>
+                            <p
+                              className={cn(
+                                "text-xs mt-1",
+                                isDark ? "text-green-400" : "text-green-600"
+                              )}
+                            >
+                              Maximum total flat fee bonus to distribute across
+                              all creators. Once this cap is reached, no more
+                              flat fee bonuses will be given.
+                            </p>
+                          </div>
+                        )}
                     </div>
                   </div>
                 )}
@@ -5859,7 +7676,8 @@ export default function ContestDetailClient({
                       </div>
                       <div className="flex items-center gap-3">
                         {(() => {
-                          const { isDisabled, disabledReason } = getRefreshButtonState();
+                          const { isDisabled, disabledReason } =
+                            getRefreshButtonState();
                           return (
                             <button
                               onClick={handleRefreshMetrics}
@@ -5870,7 +7688,10 @@ export default function ContestDetailClient({
                                   ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
                                   : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]"
                               )}
-                              title={disabledReason || "Refresh metrics and leaderboard"}
+                              title={
+                                disabledReason ||
+                                "Refresh metrics and leaderboard"
+                              }
                             >
                               {isRefreshingMetrics ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -5954,7 +7775,9 @@ export default function ContestDetailClient({
                             {
                               currentSubmissions.filter((s) => {
                                 const status = getStatus(s);
-                                return status === "verified" || status === "paid";
+                                return (
+                                  status === "verified" || status === "paid"
+                                );
                               }).length
                             }
                           </Badge>
@@ -6092,9 +7915,9 @@ export default function ContestDetailClient({
                 </div>
 
                 {/* Eligibility Filter Tabs - Only for Twitter campaigns */}
-                {((currentContest?.platform?.toLowerCase() === "twitter" ||
+                {(currentContest?.platform?.toLowerCase() === "twitter" ||
                   currentContest?.platform?.toLowerCase() === "x") &&
-                  currentContest?.contest_format === "text_image") && (
+                  currentContest?.contest_format === "text_image" && (
                     <div>
                       <div className="py-2">
                         <Tabs
@@ -6116,7 +7939,9 @@ export default function ContestDetailClient({
                             >
                               <div className="flex items-center gap-1">
                                 <Users className="h-3.5 w-3.5 mr-1" />
-                                <span className="text-[13px] font-medium">All</span>
+                                <span className="text-[13px] font-medium">
+                                  All
+                                </span>
                               </div>
                               <Badge
                                 variant="secondary"
@@ -6145,7 +7970,9 @@ export default function ContestDetailClient({
                             >
                               <div className="flex items-center gap-1">
                                 <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                                <span className="text-[13px] font-medium">Eligible</span>
+                                <span className="text-[13px] font-medium">
+                                  Eligible
+                                </span>
                               </div>
                               <Badge
                                 variant="secondary"
@@ -6176,7 +8003,9 @@ export default function ContestDetailClient({
                             >
                               <div className="flex items-center gap-1">
                                 <XCircle className="h-3.5 w-3.5 mr-1" />
-                                <span className="text-[13px] font-medium">Not Eligible</span>
+                                <span className="text-[13px] font-medium">
+                                  Not Eligible
+                                </span>
                               </div>
                               <Badge
                                 variant="secondary"
@@ -6263,7 +8092,9 @@ export default function ContestDetailClient({
                               <SelectTrigger
                                 className={cn(
                                   "h-12 w-full sm:w-[220px]",
-                                  isDark ? "border-gray-500" : "border-slate-300"
+                                  isDark
+                                    ? "border-gray-500"
+                                    : "border-slate-300"
                                 )}
                               >
                                 <SelectValue placeholder="Sort submissions" />
@@ -6384,7 +8215,7 @@ export default function ContestDetailClient({
                                   {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
                                 </>
                               )}
-                              {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
+                              {/* Show reward columns for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
                               {!(
                                 (currentContest.platform?.toLowerCase() ===
                                   "twitter" ||
@@ -6398,7 +8229,8 @@ export default function ContestDetailClient({
                                   currentContest.platform?.toLowerCase() ===
                                     "x") &&
                                 currentContest.contest_format ===
-                                  "text_image") ? (
+                                  "text_image") ||
+                              currentContest.contest_type === "cpm" ? (
                                 <>
                                   <TableHead className="text-center">
                                     Expected Reward
@@ -6440,7 +8272,9 @@ export default function ContestDetailClient({
                                 isLoadingSubmission[submission.id] || false;
                               const rank = globalIndex + 1;
                               // Check if tweet is deleted (filter_status === "deleted")
-                              const isDeleted = isTwitterTweet && (submission as any).filter_status === "deleted";
+                              const isDeleted =
+                                isTwitterTweet &&
+                                (submission as any).filter_status === "deleted";
 
                               // Compute expected and granted rewards separately
                               const getExpectedReward = () => {
@@ -6510,29 +8344,61 @@ export default function ContestDetailClient({
                                   const cpmConfig =
                                     currentContest.contest_based_details
                                       ?.cpm_contest;
-                                  const views = submission.views || 0;
                                   if (cpmConfig?.cpm_rate_usd) {
-                                    let effectiveViews = views;
-                                    if (
-                                      cpmConfig.min_views != null &&
-                                      views < cpmConfig.min_views
-                                    ) {
-                                      effectiveViews = 0;
-                                    } else if (
-                                      cpmConfig.max_views != null &&
-                                      views > cpmConfig.max_views
-                                    ) {
-                                      effectiveViews = cpmConfig.max_views;
+                                    // For Twitter CPM contests, use total points
+                                    // For other platforms, use views
+                                    const isTwitterCpm =
+                                      isTwitterTweet &&
+                                      (currentContest.platform?.toLowerCase() ===
+                                        "twitter" ||
+                                        currentContest.platform?.toLowerCase() ===
+                                          "x") &&
+                                      currentContest.contest_format ===
+                                        "text_image";
+
+                                    if (isTwitterCpm) {
+                                      // Calculate total points: base_points + manual_points_adjustment
+                                      const totalPoints =
+                                        (submission.other_stats?.base_points ||
+                                          0) +
+                                        ((submission as any)
+                                          .manual_points_adjustment || 0);
+                                      // Calculate expected reward: total points * cpm rate / 1000
+                                      const calculatedEarnings =
+                                        (totalPoints * cpmConfig.cpm_rate_usd) /
+                                        1000;
+                                      return {
+                                        amount: calculatedEarnings,
+                                        label: "Expected",
+                                        className:
+                                          "text-slate-700 font-semibold",
+                                      };
+                                    } else {
+                                      // For non-Twitter CPM contests, use views
+                                      const views = submission.views || 0;
+                                      let effectiveViews = views;
+                                      if (
+                                        cpmConfig.min_views != null &&
+                                        views < cpmConfig.min_views
+                                      ) {
+                                        effectiveViews = 0;
+                                      } else if (
+                                        cpmConfig.max_views != null &&
+                                        views > cpmConfig.max_views
+                                      ) {
+                                        effectiveViews = cpmConfig.max_views;
+                                      }
+                                      const calculatedEarnings =
+                                        (effectiveViews *
+                                          cpmConfig.cpm_rate_usd) /
+                                        1000;
+                                      return {
+                                        amount: calculatedEarnings,
+                                        label: "Expected",
+                                        className:
+                                          "text-slate-700 font-semibold",
+                                      };
                                     }
-                                    const calculatedEarnings =
-                                      (effectiveViews *
-                                        cpmConfig.cpm_rate_usd) /
-                                      1000;
-                                    return {
-                                      amount: calculatedEarnings,
-                                      label: "Expected",
-                                      className: "text-slate-700 font-semibold",
-                                    };
                                   }
                                   return {
                                     amount: 0,
@@ -6638,10 +8504,11 @@ export default function ContestDetailClient({
                                     "transition-colors duration-200",
                                     isDeleted && "opacity-60",
                                     isDark ? "" : "bg-white hover:bg-slate-100",
-                                    rank <= 3 && !isDeleted &&
-                                    (isDark
-                                      ? "bg-gradient-to-r from-violet-900/20 to-transparent border-l-4 border-l-violet-400"
-                                      : "bg-gradient-to-r from-yellow-50 to-transparent border-l-4 border-l-yellow-400")
+                                    rank <= 3 &&
+                                      !isDeleted &&
+                                      (isDark
+                                        ? "bg-gradient-to-r from-violet-900/20 to-transparent border-l-4 border-l-violet-400"
+                                        : "bg-gradient-to-r from-yellow-50 to-transparent border-l-4 border-l-yellow-400")
                                   )}
                                 >
                                   <TableCell className="font-bold text-center">
@@ -6820,7 +8687,9 @@ export default function ContestDetailClient({
                                         <p
                                           className={cn(
                                             "text-sm line-clamp-3",
-                                            isDark ? "text-white" : "text-slate-900"
+                                            isDark
+                                              ? "text-white"
+                                              : "text-slate-900"
                                           )}
                                           title={
                                             submission.other_stats
@@ -7332,7 +9201,7 @@ export default function ContestDetailClient({
                                                                         </TableCell> */}
                                     </>
                                   )}
-                                  {/* Show reward cells for leaderboard contests, hide for Twitter CPM campaigns */}
+                                  {/* Show reward cells for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
                                   {!(
                                     (currentContest.platform?.toLowerCase() ===
                                       "twitter" ||
@@ -7348,7 +9217,8 @@ export default function ContestDetailClient({
                                       currentContest.platform?.toLowerCase() ===
                                         "x") &&
                                     currentContest.contest_format ===
-                                      "text_image") ? (
+                                      "text_image") ||
+                                  currentContest.contest_type === "cpm" ? (
                                     <>
                                       <TableCell className="text-center">
                                         <div className="flex flex-col items-center">
@@ -7594,24 +9464,6 @@ export default function ContestDetailClient({
                                               <Star className="h-4 w-4 mr-2" />
                                               Adjust Tweet Points
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                              disabled={isLoading}
-                                              onClick={() => {
-                                                setPendingManualPointsSubmission(
-                                                  {
-                                                    id: submission.id,
-                                                    type: "leaderboard",
-                                                    creatorId:
-                                                      submission.creator_id ||
-                                                      undefined,
-                                                  }
-                                                );
-                                                setManualPointsModalOpen(true);
-                                              }}
-                                            >
-                                              <Users className="h-4 w-4 mr-2" />
-                                              Adjust Creator Points (All Tweets)
-                                            </DropdownMenuItem>
                                           </>
                                         ) : (
                                           <>
@@ -7719,7 +9571,7 @@ export default function ContestDetailClient({
                                           submission.status !== "paid" &&
                                           isAdminView &&
                                           currentContest.post_contest_status ===
-                                          "verification_complete" && (
+                                            "verification_complete" && (
                                             <>
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -7964,7 +9816,7 @@ export default function ContestDetailClient({
                                       )}
                                     </>
                                   )}
-                                  {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
+                                  {/* Show reward columns for leaderboard and CPM contests */}
                                   {!(
                                     (currentContest.platform?.toLowerCase() ===
                                       "twitter" ||
@@ -7973,8 +9825,9 @@ export default function ContestDetailClient({
                                     currentContest.contest_format ===
                                       "text_image"
                                   ) ||
-                                  (currentContest.contest_type ===
-                                    "leaderboard" &&
+                                  ((currentContest.contest_type ===
+                                    "leaderboard" ||
+                                    currentContest.contest_type === "cpm") &&
                                     (currentContest.platform?.toLowerCase() ===
                                       "twitter" ||
                                       currentContest.platform?.toLowerCase() ===
@@ -8011,18 +9864,20 @@ export default function ContestDetailClient({
                                       </TableHead>
                                     </>
                                   )}
-                                  {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard campaigns */}
+                                  {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard and CPM campaigns */}
                                   {(currentContest.platform?.toLowerCase() ===
                                     "twitter" ||
                                     currentContest.platform?.toLowerCase() ===
                                       "x") &&
                                     currentContest.contest_format ===
                                       "text_image" &&
-                                    currentContest.contest_type ===
-                                      "leaderboard" && (
+                                    (currentContest.contest_type ===
+                                      "leaderboard" ||
+                                      currentContest.contest_type ===
+                                        "cpm") && (
                                       <>
                                         <TableHead className="text-center">
-                                          Manual Points Adjustment
+                                          Creator Manual Points Adjustment
                                         </TableHead>
                                         <TableHead className="text-center">
                                           Manual Points Reason
@@ -8061,6 +9916,14 @@ export default function ContestDetailClient({
                                         (creatorWisePage - 1) *
                                           creatorWiseItemsPerPage +
                                         index;
+                                      const hasVerifiedOrPaidSubmissions =
+                                        (group.statusCounts?.verified || 0) >
+                                          0 ||
+                                        (group.statusCounts?.paid || 0) > 0;
+                                      const bonusExpectedForDisplay =
+                                        hasVerifiedOrPaidSubmissions
+                                          ? group.bonus.expected
+                                          : 0;
                                       return (
                                         <TableRow key={group.creator.id}>
                                           <TableCell className="font-medium">
@@ -8109,7 +9972,10 @@ export default function ContestDetailClient({
                                                     <Badge className="bg-blue-500 text-white text-xs">
                                                       Paid
                                                     </Badge>
-                                                  ) : group.creator_moderation_status === "verified" || group.statusCounts.verified > 0 ? (
+                                                  ) : group.creator_moderation_status ===
+                                                      "verified" ||
+                                                    group.statusCounts
+                                                      .verified > 0 ? (
                                                     <Badge className="bg-green-500 text-white text-xs">
                                                       Verified
                                                     </Badge>
@@ -8259,47 +10125,48 @@ export default function ContestDetailClient({
                                                 </div>
                                               </TableCell>
                                               {/* Manual Points */}
-                                              <TableCell className="text-center">
-                                                <div className="flex flex-col items-center">
-                                                  <span
-                                                    className={cn(
-                                                      "font-bold text-sm",
-                                                      group.metrics
-                                                        .manual_points_adjustment >
-                                                        0
-                                                        ? "text-green-600"
-                                                        : group.metrics
-                                                            .manual_points_adjustment <
-                                                          0
-                                                        ? "text-red-600"
-                                                        : isDark
-                                                        ? "text-white"
-                                                        : "text-slate-900"
-                                                    )}
-                                                  >
-                                                    {group.metrics
-                                                      .manual_points_adjustment >
-                                                    0
-                                                      ? "+"
-                                                      : ""}
-                                                    {formatMetricValue(
-                                                      group.metrics
-                                                        .manual_points_adjustment ||
-                                                        0
-                                                    )}
-                                                  </span>
-                                                  <span
-                                                    className={cn(
-                                                      "text-xs",
-                                                      isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-500"
-                                                    )}
-                                                  >
-                                                    manual
-                                                  </span>
-                                                </div>
-                                              </TableCell>
+                                              {(() => {
+                                                const tweetManualPoints =
+                                                  group.metrics
+                                                    .tweet_manual_points_adjustment ||
+                                                  0;
+                                                return (
+                                                  <TableCell className="text-center">
+                                                    <div className="flex flex-col items-center">
+                                                      <span
+                                                        className={cn(
+                                                          "font-bold text-sm",
+                                                          tweetManualPoints > 0
+                                                            ? "text-green-600"
+                                                            : tweetManualPoints <
+                                                              0
+                                                            ? "text-red-600"
+                                                            : isDark
+                                                            ? "text-white"
+                                                            : "text-slate-900"
+                                                        )}
+                                                      >
+                                                        {tweetManualPoints > 0
+                                                          ? "+"
+                                                          : ""}
+                                                        {formatMetricValue(
+                                                          tweetManualPoints
+                                                        )}
+                                                      </span>
+                                                      <span
+                                                        className={cn(
+                                                          "text-xs",
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                        )}
+                                                      >
+                                                        manual
+                                                      </span>
+                                                    </div>
+                                                  </TableCell>
+                                                );
+                                              })()}
                                               <TableCell className="text-center">
                                                 {formatMetricValue(
                                                   group.metrics.likes || 0
@@ -8423,7 +10290,7 @@ export default function ContestDetailClient({
                                               )}
                                             </>
                                           )}
-                                          {/* Show reward columns for leaderboard contests, hide for Twitter CPM campaigns */}
+                                          {/* Show reward columns for leaderboard and CPM contests */}
                                           {!(
                                             (currentContest.platform?.toLowerCase() ===
                                               "twitter" ||
@@ -8432,8 +10299,10 @@ export default function ContestDetailClient({
                                             currentContest.contest_format ===
                                               "text_image"
                                           ) ||
-                                          (currentContest.contest_type ===
-                                            "leaderboard" &&
+                                          ((currentContest.contest_type ===
+                                            "leaderboard" ||
+                                            currentContest.contest_type ===
+                                              "cpm") &&
                                             (currentContest.platform?.toLowerCase() ===
                                               "twitter" ||
                                               currentContest.platform?.toLowerCase() ===
@@ -8483,7 +10352,7 @@ export default function ContestDetailClient({
                                             <>
                                               <TableCell className="text-center font-medium">
                                                 {formatMoney(
-                                                  group.bonus.expected
+                                                  bonusExpectedForDisplay
                                                 )}
                                               </TableCell>
                                               <TableCell className="text-center font-medium text-green-600">
@@ -8493,15 +10362,17 @@ export default function ContestDetailClient({
                                               </TableCell>
                                             </>
                                           )}
-                                          {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard campaigns */}
+                                          {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard and CPM campaigns */}
                                           {(currentContest.platform?.toLowerCase() ===
                                             "twitter" ||
                                             currentContest.platform?.toLowerCase() ===
                                               "x") &&
                                             currentContest.contest_format ===
                                               "text_image" &&
-                                            currentContest.contest_type ===
-                                              "leaderboard" && (
+                                            (currentContest.contest_type ===
+                                              "leaderboard" ||
+                                              currentContest.contest_type ===
+                                                "cpm") && (
                                               <>
                                                 <TableCell className="text-center">
                                                   <div className="flex flex-col items-center">
@@ -8509,11 +10380,11 @@ export default function ContestDetailClient({
                                                       className={cn(
                                                         "font-semibold text-sm",
                                                         group.metrics
-                                                          .manual_points_adjustment >
+                                                          .creator_manual_points_adjustment >
                                                           0
                                                           ? "text-green-600"
                                                           : group.metrics
-                                                              .manual_points_adjustment <
+                                                              .creator_manual_points_adjustment <
                                                             0
                                                           ? "text-red-600"
                                                           : isDark
@@ -8522,13 +10393,13 @@ export default function ContestDetailClient({
                                                       )}
                                                     >
                                                       {group.metrics
-                                                        .manual_points_adjustment >
+                                                        .creator_manual_points_adjustment >
                                                       0
                                                         ? "+"
                                                         : ""}
                                                       {formatMetricValue(
                                                         group.metrics
-                                                          .manual_points_adjustment ||
+                                                          .creator_manual_points_adjustment ||
                                                           0
                                                       )}
                                                     </span>
@@ -8642,9 +10513,12 @@ export default function ContestDetailClient({
                                                   View All ({group.totalCount})
                                                 </Button>
                                                 {/* Creator moderation and payment options for Twitter campaigns */}
-                                                {((currentContest.platform?.toLowerCase() === "twitter" ||
-                                                  currentContest.platform?.toLowerCase() === "x") &&
-                                                  currentContest.contest_format === "text_image") && (
+                                                {(currentContest.platform?.toLowerCase() ===
+                                                  "twitter" ||
+                                                  currentContest.platform?.toLowerCase() ===
+                                                    "x") &&
+                                                  currentContest.contest_format ===
+                                                    "text_image" && (
                                                     <DropdownMenu>
                                                       <DropdownMenuTrigger
                                                         asChild
@@ -8658,39 +10532,74 @@ export default function ContestDetailClient({
                                                         </Button>
                                                       </DropdownMenuTrigger>
                                                       <DropdownMenuContent align="end">
-                                                        {group.creator_moderation_status !== "verified" && (
+                                                        {group.creator_moderation_status !==
+                                                          "verified" && (
                                                           <DropdownMenuItem
                                                             onClick={() => {
                                                               if (group.paid) {
                                                                 // Show reversal confirmation for paid creators
-                                                                setConfirmTwitterCreatorReversal({
-                                                                  creatorId: group.creator.id,
-                                                                  action: "approve",
-                                                                });
+                                                                setConfirmTwitterCreatorReversal(
+                                                                  {
+                                                                    creatorId:
+                                                                      group
+                                                                        .creator
+                                                                        .id,
+                                                                    action:
+                                                                      "approve",
+                                                                  }
+                                                                );
                                                               } else {
                                                                 // Direct approval for non-paid creators
                                                                 (async () => {
                                                                   try {
-                                                                    const response = await fetch(
-                                                                      `/api/contests/${contestId}/moderate-creator`,
-                                                                      {
-                                                                        method: "POST",
-                                                                        headers: { "Content-Type": "application/json" },
-                                                                        body: JSON.stringify({
-                                                                          creatorId: group.creator.id,
-                                                                          action: "approve",
-                                                                        }),
-                                                                      }
-                                                                    );
-                                                                    if (response.ok) {
+                                                                    const response =
+                                                                      await fetch(
+                                                                        `/api/contests/${contestId}/moderate-creator`,
+                                                                        {
+                                                                          method:
+                                                                            "POST",
+                                                                          headers:
+                                                                            {
+                                                                              "Content-Type":
+                                                                                "application/json",
+                                                                            },
+                                                                          body: JSON.stringify(
+                                                                            {
+                                                                              creatorId:
+                                                                                group
+                                                                                  .creator
+                                                                                  .id,
+                                                                              action:
+                                                                                "approve",
+                                                                            }
+                                                                          ),
+                                                                        }
+                                                                      );
+                                                                    if (
+                                                                      response.ok
+                                                                    ) {
+                                                                      markCreatorSubmissionsVerifiedLocally(
+                                                                        group
+                                                                          .creator
+                                                                          .id
+                                                                      );
                                                                       window.location.reload();
                                                                     } else {
-                                                                      const error = await response.json();
-                                                                      alert(error.error || "Failed to approve creator");
+                                                                      const error =
+                                                                        await response.json();
+                                                                      alert(
+                                                                        error.error ||
+                                                                          "Failed to approve creator"
+                                                                      );
                                                                     }
                                                                   } catch (error) {
-                                                                    console.error("Error approving creator:", error);
-                                                                    alert("Failed to approve creator");
+                                                                    console.error(
+                                                                      "Error approving creator:",
+                                                                      error
+                                                                    );
+                                                                    alert(
+                                                                      "Failed to approve creator"
+                                                                    );
                                                                   }
                                                                 })();
                                                               }
@@ -8701,25 +10610,75 @@ export default function ContestDetailClient({
                                                             Approve Creator
                                                           </DropdownMenuItem>
                                                         )}
+
+                                                        <DropdownMenuItem
+                                                          onClick={() => {
+                                                            const firstSubmission =
+                                                              group
+                                                                .submissions?.[0];
+                                                            if (
+                                                              !firstSubmission
+                                                            )
+                                                              return;
+
+                                                            setPendingManualPointsSubmission(
+                                                              {
+                                                                id: firstSubmission.id,
+                                                                type: "leaderboard",
+                                                                creatorId:
+                                                                  group.creator
+                                                                    .id,
+                                                              }
+                                                            );
+                                                            setManualPointsModalOpen(
+                                                              true
+                                                            );
+                                                          }}
+                                                        >
+                                                          <Users className="h-4 w-4 mr-2" />
+                                                          Adjust Creator Points
+                                                        </DropdownMenuItem>
+
                                                         <DropdownMenuItem
                                                           onClick={() => {
                                                             if (group.paid) {
                                                               // Show reversal confirmation for paid creators
-                                                              setConfirmTwitterCreatorReversal({
-                                                                creatorId: group.creator.id,
-                                                                action: "reject",
-                                                                needRejectionReason: true,
-                                                                creatorUsername: group.creator.username,
-                                                              });
+                                                              setConfirmTwitterCreatorReversal(
+                                                                {
+                                                                  creatorId:
+                                                                    group
+                                                                      .creator
+                                                                      .id,
+                                                                  action:
+                                                                    "reject",
+                                                                  needRejectionReason:
+                                                                    true,
+                                                                  creatorUsername:
+                                                                    group
+                                                                      .creator
+                                                                      .username,
+                                                                }
+                                                              );
                                                             } else {
                                                               // Direct rejection for non-paid creators
-                                                              setPendingTwitterRejection({
-                                                                id: group.creator.id,
-                                                                type: 'creator',
-                                                                creatorId: group.creator.id,
-                                                                creatorUsername: group.creator.username,
-                                                              });
-                                                              setTwitterRejectionModalOpen(true);
+                                                              setPendingTwitterRejection(
+                                                                {
+                                                                  id: group
+                                                                    .creator.id,
+                                                                  type: "creator",
+                                                                  creatorId:
+                                                                    group
+                                                                      .creator
+                                                                      .id,
+                                                                  creatorUsername:
+                                                                    group
+                                                                      .creator
+                                                                      .username,
+                                                                }
+                                                              );
+                                                              setTwitterRejectionModalOpen(
+                                                                true
+                                                              );
                                                             }
                                                           }}
                                                           className="text-red-600"
@@ -8728,63 +10687,132 @@ export default function ContestDetailClient({
                                                           Reject Creator
                                                         </DropdownMenuItem>
                                                         {/* Payment options for Twitter creators */}
-                                                        {currentContest.post_contest_status === "verification_complete" &&
+                                                        {currentContest.post_contest_status ===
+                                                          "verification_complete" &&
                                                           !group.paid &&
                                                           isAdminView &&
-                                                          currentContest.contest_type === "leaderboard" && (
+                                                          currentContest.contest_type ===
+                                                            "leaderboard" && (
                                                             <>
                                                               <DropdownMenuSeparator />
                                                               <DropdownMenuItem
                                                                 onClick={async () => {
-                                                                  setIsLoadingSubmission((prev) => ({ ...prev, [group.creator.id]: true }));
+                                                                  setIsLoadingSubmission(
+                                                                    (prev) => ({
+                                                                      ...prev,
+                                                                      [group
+                                                                        .creator
+                                                                        .id]:
+                                                                        true,
+                                                                    })
+                                                                  );
                                                                   try {
-                                                                    const response = await fetch(
-                                                                      `/api/contests/${contestId}/pay-twitter-creator`,
-                                                                      {
-                                                                        method: "POST",
-                                                                        headers: { "Content-Type": "application/json" },
-                                                                        body: JSON.stringify({
-                                                                          creatorId: group.creator.id,
-                                                                        }),
-                                                                      }
-                                                                    );
-                                                                    if (!response.ok) {
-                                                                      const error = await response.json();
-                                                                      throw new Error(error.error || "Failed to process payment");
+                                                                    const response =
+                                                                      await fetch(
+                                                                        `/api/contests/${contestId}/pay-twitter-creator`,
+                                                                        {
+                                                                          method:
+                                                                            "POST",
+                                                                          headers:
+                                                                            {
+                                                                              "Content-Type":
+                                                                                "application/json",
+                                                                            },
+                                                                          body: JSON.stringify(
+                                                                            {
+                                                                              creatorId:
+                                                                                group
+                                                                                  .creator
+                                                                                  .id,
+                                                                            }
+                                                                          ),
+                                                                        }
+                                                                      );
+                                                                    if (
+                                                                      !response.ok
+                                                                    ) {
+                                                                      const error =
+                                                                        await response.json();
+                                                                      throw new Error(
+                                                                        error.error ||
+                                                                          "Failed to process payment"
+                                                                      );
                                                                     }
                                                                     toast({
-                                                                      title: "Success",
-                                                                      description: "Creator payment processed successfully",
-                                                                      variant: "default",
+                                                                      title:
+                                                                        "Success",
+                                                                      description:
+                                                                        "Creator payment processed successfully",
+                                                                      variant:
+                                                                        "default",
                                                                     });
-                                                                    setTimeout(() => {
-                                                                      window.location.reload();
-                                                                    }, 1000);
+                                                                    setTimeout(
+                                                                      () => {
+                                                                        window.location.reload();
+                                                                      },
+                                                                      1000
+                                                                    );
                                                                   } catch (error: any) {
-                                                                    console.error("Error paying Twitter creator:", error);
+                                                                    console.error(
+                                                                      "Error paying Twitter creator:",
+                                                                      error
+                                                                    );
                                                                     toast({
-                                                                      title: "Error",
-                                                                      description: error.message || "Failed to process payment",
-                                                                      variant: "destructive",
+                                                                      title:
+                                                                        "Error",
+                                                                      description:
+                                                                        error.message ||
+                                                                        "Failed to process payment",
+                                                                      variant:
+                                                                        "destructive",
                                                                     });
                                                                   } finally {
-                                                                    setIsLoadingSubmission((prev) => ({ ...prev, [group.creator.id]: false }));
+                                                                    setIsLoadingSubmission(
+                                                                      (
+                                                                        prev
+                                                                      ) => ({
+                                                                        ...prev,
+                                                                        [group
+                                                                          .creator
+                                                                          .id]:
+                                                                          false,
+                                                                      })
+                                                                    );
                                                                   }
                                                                 }}
-                                                                disabled={isLoadingSubmission[group.creator.id]}
+                                                                disabled={
+                                                                  isLoadingSubmission[
+                                                                    group
+                                                                      .creator
+                                                                      .id
+                                                                  ]
+                                                                }
                                                               >
                                                                 <DollarSign className="h-4 w-4 mr-2" />
                                                                 Mark as Paid
                                                               </DropdownMenuItem>
                                                               <DropdownMenuItem
                                                                 onClick={() => {
-                                                                  setPendingTwitterPaymentCreator(group.creator.id);
-                                                                  setPaymentModalOpen(true);
+                                                                  setPendingTwitterPaymentCreator(
+                                                                    group
+                                                                      .creator
+                                                                      .id
+                                                                  );
+                                                                  setPaymentModalOpen(
+                                                                    true
+                                                                  );
                                                                 }}
-                                                                disabled={isLoadingSubmission[group.creator.id]}
+                                                                disabled={
+                                                                  isLoadingSubmission[
+                                                                    group
+                                                                      .creator
+                                                                      .id
+                                                                  ]
+                                                                }
                                                               >
                                                                 <DollarSign className="h-4 w-4 mr-2" />
-                                                                Mark as Custom Paid
+                                                                Mark as Custom
+                                                                Paid
                                                               </DropdownMenuItem>
                                                             </>
                                                           )}
@@ -9055,6 +11083,18 @@ export default function ContestDetailClient({
                         total_points: 0,
                       };
 
+                      // Determine if this contest uses points-based payouts (leaderboard or CPM)
+                      const isTwitterPointsContest =
+                        (currentContest?.platform?.toLowerCase() ===
+                          "twitter" ||
+                          currentContest?.platform?.toLowerCase() === "x") &&
+                        currentContest?.contest_format === "text_image" &&
+                        (currentContest?.contest_type === "leaderboard" ||
+                          currentContest?.contest_type === "cpm");
+
+                      // Track creator ids present in the filtered submissions
+                      const filteredCreatorIds = new Set<string>();
+
                       filteredAnalyticsSubmissions.forEach((sub: any) => {
                         const isTwitterTweet =
                           sub.is_twitter_tweet === true ||
@@ -9068,11 +11108,55 @@ export default function ContestDetailClient({
                           metrics.total_quote_reposts +=
                             sub.other_stats.quote_reposts || 0;
                           metrics.total_impressions += sub.views || 0;
-                          metrics.total_points +=
-                            (sub.other_stats.points || 0) +
-                            (sub.other_stats.manual_points_adjustment || 0);
+
+                          // Calculate points as base_points + manual adjustment (avoid double counting)
+                          const basePoints =
+                            typeof sub.other_stats.base_points === "number"
+                              ? sub.other_stats.base_points
+                              : sub.other_stats.points || 0;
+                          const manualPoints =
+                            typeof sub.other_stats.manual_points_adjustment ===
+                            "number"
+                              ? sub.other_stats.manual_points_adjustment
+                              : 0;
+                          metrics.total_points += basePoints + manualPoints;
+
+                          if (sub.creator_id) {
+                            filteredCreatorIds.add(sub.creator_id);
+                          }
                         }
                       });
+
+                      // Prefer leaderboard totals (which already include creator-level manual adjustments)
+                      if (isTwitterPointsContest) {
+                        let leaderboardPointsTotal = 0;
+                        let hasLeaderboardPoints = false;
+
+                        Object.entries(creatorModerationData || {}).forEach(
+                          ([creatorId, data]) => {
+                            if (
+                              activeAnalyticsTab !== "all" &&
+                              filteredCreatorIds.size > 0 &&
+                              !filteredCreatorIds.has(creatorId)
+                            ) {
+                              return;
+                            }
+
+                            const entryPoints =
+                              typeof data.total_points === "number"
+                                ? data.total_points
+                                : null;
+                            if (entryPoints !== null) {
+                              leaderboardPointsTotal += entryPoints;
+                              hasLeaderboardPoints = true;
+                            }
+                          }
+                        );
+
+                        if (hasLeaderboardPoints) {
+                          metrics.total_points = leaderboardPointsTotal;
+                        }
+                      }
 
                       return metrics;
                     };
@@ -9406,12 +11490,23 @@ export default function ContestDetailClient({
                                     </h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
                                       {twitterMetrics.target_current_likes !==
-                                        null && (() => {
-                                          const current = twitterMetrics.target_current_likes || 0;
+                                        null &&
+                                        (() => {
+                                          const current =
+                                            twitterMetrics.target_current_likes ||
+                                            0;
                                           const target = targetLikes;
-                                          const isReached = target !== null && current >= target;
-                                          const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
-                                          
+                                          const isReached =
+                                            target !== null &&
+                                            current >= target;
+                                          const progress =
+                                            target !== null && target > 0
+                                              ? Math.min(
+                                                  100,
+                                                  (current / target) * 100
+                                                )
+                                              : 0;
+
                                           return (
                                             <div
                                               className={cn(
@@ -9460,16 +11555,20 @@ export default function ContestDetailClient({
                                                             : "text-slate-500"
                                                         )}
                                                       >
-                                                        of {target.toLocaleString()} target
+                                                        of{" "}
+                                                        {target.toLocaleString()}{" "}
+                                                        target
                                                       </p>
                                                     )}
                                                   </div>
-                                                  <div className={cn(
-                                                    "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
-                                                    isReached
-                                                      ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                      : "bg-gradient-to-br from-pink-500 to-rose-600"
-                                                  )}>
+                                                  <div
+                                                    className={cn(
+                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                      isReached
+                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                        : "bg-gradient-to-br from-pink-500 to-rose-600"
+                                                    )}
+                                                  >
                                                     {isReached ? (
                                                       <CheckCircle2 className="h-7 w-7" />
                                                     ) : (
@@ -9477,41 +11576,64 @@ export default function ContestDetailClient({
                                                     )}
                                                   </div>
                                                 </div>
-                                                {target !== null && target > 0 && (
-                                                  <div className="mt-3">
-                                                    <div className={cn(
-                                                      "h-2 rounded-full overflow-hidden",
-                                                      isDark ? "bg-slate-700" : "bg-slate-200"
-                                                    )}>
+                                                {target !== null &&
+                                                  target > 0 && (
+                                                    <div className="mt-3">
                                                       <div
                                                         className={cn(
-                                                          "h-full transition-all duration-500",
-                                                          isReached
-                                                            ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                            : "bg-gradient-to-r from-pink-500 to-rose-600"
+                                                          "h-2 rounded-full overflow-hidden",
+                                                          isDark
+                                                            ? "bg-slate-700"
+                                                            : "bg-slate-200"
                                                         )}
-                                                        style={{ width: `${progress}%` }}
-                                                      />
+                                                      >
+                                                        <div
+                                                          className={cn(
+                                                            "h-full transition-all duration-500",
+                                                            isReached
+                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                              : "bg-gradient-to-r from-pink-500 to-rose-600"
+                                                          )}
+                                                          style={{
+                                                            width: `${progress}%`,
+                                                          }}
+                                                        />
+                                                      </div>
+                                                      <p
+                                                        className={cn(
+                                                          "text-xs mt-1 text-center",
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                        )}
+                                                      >
+                                                        {progress.toFixed(0)}%
+                                                        complete
+                                                      </p>
                                                     </div>
-                                                    <p className={cn(
-                                                      "text-xs mt-1 text-center",
-                                                      isDark ? "text-slate-400" : "text-slate-500"
-                                                    )}>
-                                                      {progress.toFixed(0)}% complete
-                                                    </p>
-                                                  </div>
-                                                )}
+                                                  )}
                                               </CardContent>
                                             </div>
                                           );
                                         })()}
                                       {twitterMetrics.target_current_comments !==
-                                        null && (() => {
-                                          const current = twitterMetrics.target_current_comments || 0;
+                                        null &&
+                                        (() => {
+                                          const current =
+                                            twitterMetrics.target_current_comments ||
+                                            0;
                                           const target = targetComments;
-                                          const isReached = target !== null && current >= target;
-                                          const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
-                                          
+                                          const isReached =
+                                            target !== null &&
+                                            current >= target;
+                                          const progress =
+                                            target !== null && target > 0
+                                              ? Math.min(
+                                                  100,
+                                                  (current / target) * 100
+                                                )
+                                              : 0;
+
                                           return (
                                             <div
                                               className={cn(
@@ -9560,16 +11682,20 @@ export default function ContestDetailClient({
                                                             : "text-slate-500"
                                                         )}
                                                       >
-                                                        of {target.toLocaleString()} target
+                                                        of{" "}
+                                                        {target.toLocaleString()}{" "}
+                                                        target
                                                       </p>
                                                     )}
                                                   </div>
-                                                  <div className={cn(
-                                                    "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
-                                                    isReached
-                                                      ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                      : "bg-gradient-to-br from-orange-500 to-amber-600"
-                                                  )}>
+                                                  <div
+                                                    className={cn(
+                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                      isReached
+                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                        : "bg-gradient-to-br from-orange-500 to-amber-600"
+                                                    )}
+                                                  >
                                                     {isReached ? (
                                                       <CheckCircle2 className="h-7 w-7" />
                                                     ) : (
@@ -9577,41 +11703,64 @@ export default function ContestDetailClient({
                                                     )}
                                                   </div>
                                                 </div>
-                                                {target !== null && target > 0 && (
-                                                  <div className="mt-3">
-                                                    <div className={cn(
-                                                      "h-2 rounded-full overflow-hidden",
-                                                      isDark ? "bg-slate-700" : "bg-slate-200"
-                                                    )}>
+                                                {target !== null &&
+                                                  target > 0 && (
+                                                    <div className="mt-3">
                                                       <div
                                                         className={cn(
-                                                          "h-full transition-all duration-500",
-                                                          isReached
-                                                            ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                            : "bg-gradient-to-r from-orange-500 to-amber-600"
+                                                          "h-2 rounded-full overflow-hidden",
+                                                          isDark
+                                                            ? "bg-slate-700"
+                                                            : "bg-slate-200"
                                                         )}
-                                                        style={{ width: `${progress}%` }}
-                                                      />
+                                                      >
+                                                        <div
+                                                          className={cn(
+                                                            "h-full transition-all duration-500",
+                                                            isReached
+                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                              : "bg-gradient-to-r from-orange-500 to-amber-600"
+                                                          )}
+                                                          style={{
+                                                            width: `${progress}%`,
+                                                          }}
+                                                        />
+                                                      </div>
+                                                      <p
+                                                        className={cn(
+                                                          "text-xs mt-1 text-center",
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                        )}
+                                                      >
+                                                        {progress.toFixed(0)}%
+                                                        complete
+                                                      </p>
                                                     </div>
-                                                    <p className={cn(
-                                                      "text-xs mt-1 text-center",
-                                                      isDark ? "text-slate-400" : "text-slate-500"
-                                                    )}>
-                                                      {progress.toFixed(0)}% complete
-                                                    </p>
-                                                  </div>
-                                                )}
+                                                  )}
                                               </CardContent>
                                             </div>
                                           );
                                         })()}
                                       {twitterMetrics.target_current_retweets !==
-                                        null && (() => {
-                                          const current = twitterMetrics.target_current_retweets || 0;
+                                        null &&
+                                        (() => {
+                                          const current =
+                                            twitterMetrics.target_current_retweets ||
+                                            0;
                                           const target = targetRetweets;
-                                          const isReached = target !== null && current >= target;
-                                          const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
-                                          
+                                          const isReached =
+                                            target !== null &&
+                                            current >= target;
+                                          const progress =
+                                            target !== null && target > 0
+                                              ? Math.min(
+                                                  100,
+                                                  (current / target) * 100
+                                                )
+                                              : 0;
+
                                           return (
                                             <div
                                               className={cn(
@@ -9660,16 +11809,20 @@ export default function ContestDetailClient({
                                                             : "text-slate-500"
                                                         )}
                                                       >
-                                                        of {target.toLocaleString()} target
+                                                        of{" "}
+                                                        {target.toLocaleString()}{" "}
+                                                        target
                                                       </p>
                                                     )}
                                                   </div>
-                                                  <div className={cn(
-                                                    "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
-                                                    isReached
-                                                      ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                      : "bg-gradient-to-br from-cyan-500 to-teal-600"
-                                                  )}>
+                                                  <div
+                                                    className={cn(
+                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                      isReached
+                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                        : "bg-gradient-to-br from-cyan-500 to-teal-600"
+                                                    )}
+                                                  >
                                                     {isReached ? (
                                                       <CheckCircle2 className="h-7 w-7" />
                                                     ) : (
@@ -9677,41 +11830,64 @@ export default function ContestDetailClient({
                                                     )}
                                                   </div>
                                                 </div>
-                                                {target !== null && target > 0 && (
-                                                  <div className="mt-3">
-                                                    <div className={cn(
-                                                      "h-2 rounded-full overflow-hidden",
-                                                      isDark ? "bg-slate-700" : "bg-slate-200"
-                                                    )}>
+                                                {target !== null &&
+                                                  target > 0 && (
+                                                    <div className="mt-3">
                                                       <div
                                                         className={cn(
-                                                          "h-full transition-all duration-500",
-                                                          isReached
-                                                            ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                            : "bg-gradient-to-r from-cyan-500 to-teal-600"
+                                                          "h-2 rounded-full overflow-hidden",
+                                                          isDark
+                                                            ? "bg-slate-700"
+                                                            : "bg-slate-200"
                                                         )}
-                                                        style={{ width: `${progress}%` }}
-                                                      />
+                                                      >
+                                                        <div
+                                                          className={cn(
+                                                            "h-full transition-all duration-500",
+                                                            isReached
+                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                              : "bg-gradient-to-r from-cyan-500 to-teal-600"
+                                                          )}
+                                                          style={{
+                                                            width: `${progress}%`,
+                                                          }}
+                                                        />
+                                                      </div>
+                                                      <p
+                                                        className={cn(
+                                                          "text-xs mt-1 text-center",
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                        )}
+                                                      >
+                                                        {progress.toFixed(0)}%
+                                                        complete
+                                                      </p>
                                                     </div>
-                                                    <p className={cn(
-                                                      "text-xs mt-1 text-center",
-                                                      isDark ? "text-slate-400" : "text-slate-500"
-                                                    )}>
-                                                      {progress.toFixed(0)}% complete
-                                                    </p>
-                                                  </div>
-                                                )}
+                                                  )}
                                               </CardContent>
                                             </div>
                                           );
                                         })()}
                                       {twitterMetrics.target_current_quote_reposts !==
-                                        null && (() => {
-                                          const current = twitterMetrics.target_current_quote_reposts || 0;
+                                        null &&
+                                        (() => {
+                                          const current =
+                                            twitterMetrics.target_current_quote_reposts ||
+                                            0;
                                           const target = targetQuoteReposts;
-                                          const isReached = target !== null && current >= target;
-                                          const progress = target !== null && target > 0 ? Math.min(100, (current / target) * 100) : 0;
-                                          
+                                          const isReached =
+                                            target !== null &&
+                                            current >= target;
+                                          const progress =
+                                            target !== null && target > 0
+                                              ? Math.min(
+                                                  100,
+                                                  (current / target) * 100
+                                                )
+                                              : 0;
+
                                           return (
                                             <div
                                               className={cn(
@@ -9760,16 +11936,20 @@ export default function ContestDetailClient({
                                                             : "text-slate-500"
                                                         )}
                                                       >
-                                                        of {target.toLocaleString()} target
+                                                        of{" "}
+                                                        {target.toLocaleString()}{" "}
+                                                        target
                                                       </p>
                                                     )}
                                                   </div>
-                                                  <div className={cn(
-                                                    "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
-                                                    isReached
-                                                      ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                      : "bg-gradient-to-br from-indigo-500 to-violet-600"
-                                                  )}>
+                                                  <div
+                                                    className={cn(
+                                                      "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                                                      isReached
+                                                        ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                                                        : "bg-gradient-to-br from-indigo-500 to-violet-600"
+                                                    )}
+                                                  >
                                                     {isReached ? (
                                                       <CheckCircle2 className="h-7 w-7" />
                                                     ) : (
@@ -9777,30 +11957,42 @@ export default function ContestDetailClient({
                                                     )}
                                                   </div>
                                                 </div>
-                                                {target !== null && target > 0 && (
-                                                  <div className="mt-3">
-                                                    <div className={cn(
-                                                      "h-2 rounded-full overflow-hidden",
-                                                      isDark ? "bg-slate-700" : "bg-slate-200"
-                                                    )}>
+                                                {target !== null &&
+                                                  target > 0 && (
+                                                    <div className="mt-3">
                                                       <div
                                                         className={cn(
-                                                          "h-full transition-all duration-500",
-                                                          isReached
-                                                            ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                            : "bg-gradient-to-r from-indigo-500 to-violet-600"
+                                                          "h-2 rounded-full overflow-hidden",
+                                                          isDark
+                                                            ? "bg-slate-700"
+                                                            : "bg-slate-200"
                                                         )}
-                                                        style={{ width: `${progress}%` }}
-                                                      />
+                                                      >
+                                                        <div
+                                                          className={cn(
+                                                            "h-full transition-all duration-500",
+                                                            isReached
+                                                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
+                                                              : "bg-gradient-to-r from-indigo-500 to-violet-600"
+                                                          )}
+                                                          style={{
+                                                            width: `${progress}%`,
+                                                          }}
+                                                        />
+                                                      </div>
+                                                      <p
+                                                        className={cn(
+                                                          "text-xs mt-1 text-center",
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                        )}
+                                                      >
+                                                        {progress.toFixed(0)}%
+                                                        complete
+                                                      </p>
                                                     </div>
-                                                    <p className={cn(
-                                                      "text-xs mt-1 text-center",
-                                                      isDark ? "text-slate-400" : "text-slate-500"
-                                                    )}>
-                                                      {progress.toFixed(0)}% complete
-                                                    </p>
-                                                  </div>
-                                                )}
+                                                  )}
                                               </CardContent>
                                             </div>
                                           );
@@ -10431,6 +12623,251 @@ export default function ContestDetailClient({
                     </div>
                   </div>
 
+                  {/* Twitter Points Statistics - For Twitter contests */}
+                  {(currentContest?.platform?.toLowerCase() === "twitter" ||
+                    currentContest?.platform?.toLowerCase() === "x") &&
+                    currentContest?.contest_format === "text_image" && (
+                      <div className="mt-8">
+                        <h3 className="font-medium mb-4">Points Statistics</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                          {/* Total Points */}
+                          <div
+                            className={cn(
+                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              isDark
+                                ? "bg-[#170337] border border-[#D1B7F9]"
+                                : "bg-white"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-600"
+                                  )}
+                                >
+                                  Total Points
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-2xl font-bold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {(() => {
+                                    // Correct calculation:
+                                    // - Sum base points from all tweets
+                                    // - Add creator-wise manual adjustment ONCE per creator (if present)
+                                    // - Add tweet-level manual adjustments (sum across tweets)
+
+                                    const twitterSubs = (
+                                      filteredAnalyticsSubmissions || []
+                                    ).filter(
+                                      (s) =>
+                                        (s as any).is_twitter_tweet === true
+                                    );
+
+                                    const baseTotal = twitterSubs.reduce(
+                                      (sum, s) =>
+                                        sum + (s.other_stats?.base_points || 0),
+                                      0
+                                    );
+
+                                    const tweetManualTotal = twitterSubs.reduce(
+                                      (sum, s) =>
+                                        sum +
+                                        ((s as any).manual_points_adjustment ||
+                                          0),
+                                      0
+                                    );
+
+                                    const creatorIds = new Set<string>();
+                                    twitterSubs.forEach((s) => {
+                                      if (s.creator_id)
+                                        creatorIds.add(s.creator_id);
+                                    });
+
+                                    const creatorManualTotal = Array.from(
+                                      creatorIds
+                                    ).reduce(
+                                      (sum, creatorId) =>
+                                        sum +
+                                        getCreatorManualAdjustment(creatorId),
+                                      0
+                                    );
+
+                                    const totalPoints =
+                                      baseTotal +
+                                      tweetManualTotal +
+                                      creatorManualTotal;
+
+                                    return totalPoints.toLocaleString();
+                                  })()}
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-xs text-gray-500 mt-1",
+                                    isDark ? "text-white" : "text-gray-500"
+                                  )}
+                                >
+                                  Base + Manual Adjustments
+                                </p>
+                              </div>
+                              <div
+                                className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark
+                                    ? "bg-purple-900/50 text-purple-300"
+                                    : "bg-purple-100 text-purple-600"
+                                )}
+                              >
+                                <Trophy className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Base Points */}
+                          <div
+                            className={cn(
+                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              isDark
+                                ? "bg-[#170337] border border-[#D1B7F9]"
+                                : "bg-white"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-600"
+                                  )}
+                                >
+                                  Base Points
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-2xl font-bold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {filteredAnalyticsSubmissions
+                                    ?.reduce((sum, s) => {
+                                      const isTwitterTweet =
+                                        (s as any).is_twitter_tweet === true;
+                                      if (!isTwitterTweet) return sum;
+                                      return (
+                                        sum + (s.other_stats?.base_points || 0)
+                                      );
+                                    }, 0)
+                                    .toLocaleString() || 0}
+                                </p>
+                              </div>
+                              <div
+                                className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark
+                                    ? "bg-blue-900/50 text-blue-300"
+                                    : "bg-blue-100 text-blue-600"
+                                )}
+                              >
+                                <Star className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Manual Adjustments */}
+                          <div
+                            className={cn(
+                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              isDark
+                                ? "bg-[#170337] border border-[#D1B7F9]"
+                                : "bg-white"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-600"
+                                  )}
+                                >
+                                  Manual Adjustments
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-2xl font-bold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
+                                  {(() => {
+                                    // Calculate total manual adjustments
+                                    // For creator-wise adjustments, sum from creatorModerationData
+                                    // For submission-level adjustments, sum from submissions
+                                    const twitterSubs = (
+                                      filteredAnalyticsSubmissions || []
+                                    ).filter(
+                                      (s) =>
+                                        (s as any).is_twitter_tweet === true
+                                    );
+
+                                    const creatorIds = new Set<string>();
+                                    twitterSubs.forEach((s) => {
+                                      if (s.creator_id)
+                                        creatorIds.add(s.creator_id);
+                                    });
+
+                                    const creatorManualTotal = Array.from(
+                                      creatorIds
+                                    ).reduce(
+                                      (sum, creatorId) =>
+                                        sum +
+                                        (creatorModerationData?.[creatorId]
+                                          ?.manual_points_adjustment || 0),
+                                      0
+                                    );
+
+                                    const tweetManualTotal = twitterSubs.reduce(
+                                      (sum, s) =>
+                                        sum +
+                                        ((s as any).manual_points_adjustment ||
+                                          0),
+                                      0
+                                    );
+
+                                    const totalManual =
+                                      creatorManualTotal + tweetManualTotal;
+
+                                    return totalManual.toLocaleString();
+                                  })()}
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-xs text-gray-500 mt-1",
+                                    isDark ? "text-white" : "text-gray-500"
+                                  )}
+                                >
+                                  Creator-wise + Tweet-level
+                                </p>
+                              </div>
+                              <div
+                                className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark
+                                    ? "bg-green-900/50 text-green-400"
+                                    : "bg-green-100 text-green-600"
+                                )}
+                              >
+                                <Edit className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                   {/* ROI/Benefit Analysis - Collapsible Section */}
                   <div className="mt-8">
                     <details className="group">
@@ -11055,8 +13492,10 @@ export default function ContestDetailClient({
         }}
         onConfirm={handlePaymentConfirm}
         isLoading={
-          (pendingPaymentSubmission && isLoadingSubmission[pendingPaymentSubmission || ""]) ||
-          (pendingTwitterPaymentCreator && isLoadingSubmission[pendingTwitterPaymentCreator || ""]) ||
+          (pendingPaymentSubmission &&
+            isLoadingSubmission[pendingPaymentSubmission || ""]) ||
+          (pendingTwitterPaymentCreator &&
+            isLoadingSubmission[pendingTwitterPaymentCreator || ""]) ||
           false
         }
         initialMode="custom"
@@ -11065,48 +13504,95 @@ export default function ContestDetailClient({
       />
 
       {/* Manual Points Adjustment Modal */}
-      <ManualPointsModal
-        isOpen={manualPointsModalOpen}
-        onClose={() => {
-          setManualPointsModalOpen(false);
-          setPendingManualPointsSubmission(null);
-        }}
-        onConfirm={handleManualPointsConfirm}
-        isLoading={
-          pendingManualPointsSubmission
-            ? isLoadingSubmission[pendingManualPointsSubmission.id] || false
-            : false
-        }
-        adjustmentType={pendingManualPointsSubmission?.type || "tweet"}
-        currentPoints={
-          pendingManualPointsSubmission
-            ? (() => {
-                const submission = currentSubmissions.find(
-                  (s) => s.id === pendingManualPointsSubmission.id
+      {(() => {
+        const manualStats = pendingManualPointsSubmission
+          ? (() => {
+              if (pendingManualPointsSubmission.type === "leaderboard") {
+                const creatorGroup = (groupSubmissionsByCreator as any[])?.find(
+                  (g) =>
+                    g.creator?.id === pendingManualPointsSubmission.creatorId
                 );
-                if (pendingManualPointsSubmission.type === "leaderboard") {
-                  // Get total points from leaderboard (would need to fetch or calculate)
-                  return submission?.other_stats?.points || 0;
-                }
-                return submission?.other_stats?.points || 0;
-              })()
-            : 0
-        }
-        creatorName={
-          pendingManualPointsSubmission
-            ? (() => {
-                const submission = currentSubmissions.find(
-                  (s) => s.id === pendingManualPointsSubmission.id
-                );
-                return (
-                  submission?.creator_display_name ||
-                  submission?.creator_username ||
-                  undefined
-                );
-              })()
-            : undefined
-        }
-      />
+                const submission =
+                  creatorGroup?.submissions?.[0] ||
+                  currentSubmissions.find(
+                    (s) => s.id === pendingManualPointsSubmission.id
+                  );
+                const basePoints = creatorGroup?.metrics?.base_points || 0;
+                const tweetManualPoints =
+                  creatorGroup?.metrics?.tweet_manual_points_adjustment || 0;
+                const creatorAdjustment =
+                  creatorGroup?.metrics?.creator_manual_points_adjustment || 0;
+                const totalPoints =
+                  creatorGroup?.metrics?.points ??
+                  basePoints + tweetManualPoints + creatorAdjustment;
+
+                return {
+                  totalPoints,
+                  basePoints,
+                  manualPoints: tweetManualPoints,
+                  creatorManualPointsAdjustment: creatorAdjustment,
+                  submission,
+                };
+              }
+
+              const submission = currentSubmissions.find(
+                (s) => s.id === pendingManualPointsSubmission.id
+              );
+              if (!submission) {
+                return {
+                  totalPoints: 0,
+                  basePoints: 0,
+                  manualPoints: 0,
+                  creatorManualPointsAdjustment: 0,
+                  submission: undefined,
+                };
+              }
+              const basePoints = submission.other_stats?.base_points || 0;
+              const manualPointValue =
+                submission.manual_points_adjustment ??
+                (submission.other_stats?.manual_points_adjustment || 0);
+              const totalPoints =
+                submission.other_stats?.points || basePoints + manualPointValue;
+
+              return {
+                totalPoints,
+                basePoints,
+                manualPoints: manualPointValue,
+                creatorManualPointsAdjustment: 0,
+                submission,
+              };
+            })()
+          : null;
+
+        return (
+          <ManualPointsModal
+            isOpen={manualPointsModalOpen}
+            onClose={() => {
+              setManualPointsModalOpen(false);
+              setPendingManualPointsSubmission(null);
+            }}
+            onConfirm={handleManualPointsConfirm}
+            isLoading={
+              pendingManualPointsSubmission
+                ? isLoadingSubmission[pendingManualPointsSubmission.id] || false
+                : false
+            }
+            adjustmentType={pendingManualPointsSubmission?.type || "tweet"}
+            currentPoints={manualStats?.totalPoints ?? 0}
+            totalPoints={manualStats?.totalPoints}
+            basePoints={manualStats?.basePoints}
+            manualPoints={manualStats?.manualPoints}
+            creatorManualPointsAdjustment={
+              manualStats?.creatorManualPointsAdjustment
+            }
+            creatorName={
+              manualStats?.submission?.creator_display_name ||
+              manualStats?.submission?.creator_username ||
+              undefined
+            }
+          />
+        );
+      })()}
 
       {/* Reversal confirmation dialog for submissions */}
       <Dialog
@@ -11168,8 +13654,8 @@ export default function ContestDetailClient({
           </DialogHeader>
           <div className="space-y-3 text-md ">
             <p>
-              Changing creator status from Paid will reverse the credited amount from
-              the creator's wallet and remove related reward transactions.
+              Changing creator status from Paid will reverse the credited amount
+              from the creator's wallet and remove related reward transactions.
             </p>
             <p className="font-medium">This action cannot be undone.</p>
           </div>

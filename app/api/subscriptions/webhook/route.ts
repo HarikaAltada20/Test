@@ -825,17 +825,22 @@ async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string
       console.log(`✅ Found product: ${productId} (${productName}) - Amount: ${priceAmount} cents`);
     }
 
+    // Determine actual price amount based on subscription status
+    // During trial, price_amount should be 0, otherwise use the plan price
+    const actualPriceAmount = (activeSubscription.status === 'trialing') ? 0 : priceAmount;
+    console.log(`💰 Price calculation: Plan amount=${priceAmount}, Status=${activeSubscription.status}, Actual amount=${actualPriceAmount}`);
+
     // Determine if this is a downgrade by comparing amounts
     const currentAmount = currentProfile?.subscription_info?.price_amount || 0;
-    const isDowngrade = priceAmount < currentAmount;
-    console.log(`💰 Price comparison: ${currentAmount} → ${priceAmount} (${isDowngrade ? 'DOWNGRADE' : 'UPGRADE/SAME'})`);
+    const isDowngrade = actualPriceAmount < currentAmount;
+    console.log(`💰 Price comparison: ${currentAmount} → ${actualPriceAmount} (${isDowngrade ? 'DOWNGRADE' : 'UPGRADE/SAME'})`);
 
     // Update subscription_info JSONB field with correct structure using subscription table data
     const newSubscriptionInfo = {
       product_id: productId,
       price_id: activeSubscription.price_id,
       subscription_id: activeSubscription.id,
-      price_amount: priceAmount,
+      price_amount: actualPriceAmount,
       status: activeSubscription.status,
       current_period_start: activeSubscription.current_period_start,
       current_period_end: activeSubscription.current_period_end,
@@ -967,12 +972,17 @@ async function updateAdvertiserProfileWithCurrentSubscription(userId: string) {
       priceAmount = priceData.unit_amount;
     }
 
+    // Determine actual price amount based on subscription status
+    // During trial, price_amount should be 0, otherwise use the plan price
+    const actualPriceAmount = (activeSubscription.status === 'trialing') ? 0 : priceAmount;
+    console.log(`💰 Current subscription price calculation: Plan amount=${priceAmount}, Status=${activeSubscription.status}, Actual amount=${actualPriceAmount}`);
+
     // Update subscription_info with current active subscription data
     const currentSubscriptionInfo = {
       product_id: productId,
       price_id: activeSubscription.price_id,
       subscription_id: activeSubscription.id,
-      price_amount: priceAmount,
+      price_amount: actualPriceAmount,
       status: activeSubscription.status,
       current_period_start: activeSubscription.current_period_start,
       current_period_end: activeSubscription.current_period_end,

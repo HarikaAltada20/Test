@@ -98,11 +98,29 @@ export async function POST(
     const supabaseAdmin = createAdminClient();
 
     if (adjustmentType === "twitter_tweet") {
-      // Update Twitter tweet manual points
+      // Read current manual adjustment so we can apply incremental changes
+      const { data: tweet } = await supabaseAdmin
+        .from("twitter_campaign_tweets")
+        .select("creator_id, manual_points_adjustment")
+        .eq("id", tweetId)
+        .eq("contest_id", contestId)
+        .maybeSingle();
+
+      if (!tweet) {
+        return NextResponse.json(
+          { error: "Tweet not found" },
+          { status: 404 }
+        );
+      }
+
+      const currentManualAdjustment = tweet.manual_points_adjustment ?? 0;
+      const newManualAdjustment = currentManualAdjustment + points;
+
+      // Apply update using aggregated manual total
       const { error: updateError } = await supabaseAdmin
         .from("twitter_campaign_tweets")
         .update({
-          manual_points_adjustment: points,
+          manual_points_adjustment: newManualAdjustment,
           manual_points_reason: reason,
         })
         .eq("id", tweetId)
@@ -116,23 +134,30 @@ export async function POST(
         );
       }
 
-      // Recalculate leaderboard for this creator
-      // Get the creator_id from the tweet
-      const { data: tweet } = await supabaseAdmin
-        .from("twitter_campaign_tweets")
-        .select("creator_id")
-        .eq("id", tweetId)
-        .single();
-
-      if (tweet?.creator_id) {
-        await recalculateTwitterLeaderboard(contestId, tweet.creator_id, supabaseAdmin);
+      if (tweet.creator_id) {
+        await recalculateTwitterLeaderboard(
+          contestId,
+          tweet.creator_id,
+          supabaseAdmin
+        );
       }
     } else if (adjustmentType === "twitter_leaderboard") {
+      // Read leaderboard entry so we can increment the manual adjustment value
+      const { data: leaderboardEntry } = await supabaseAdmin
+        .from("twitter_campaign_leaderboard")
+        .select("manual_points_adjustment")
+        .eq("contest_id", contestId)
+        .eq("creator_id", creatorId)
+        .maybeSingle();
+
+      const currentManualAdjustment = leaderboardEntry?.manual_points_adjustment ?? 0;
+      const newManualAdjustment = currentManualAdjustment + points;
+
       // Update leaderboard manual points (applies to all tweets for this creator)
       const { error: updateError } = await supabaseAdmin
         .from("twitter_campaign_leaderboard")
         .update({
-          manual_points_adjustment: points,
+          manual_points_adjustment: newManualAdjustment,
           manual_points_reason: reason,
         })
         .eq("contest_id", contestId)
