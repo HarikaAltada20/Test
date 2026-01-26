@@ -302,7 +302,12 @@ export default function ManualPointsModal({
                 }
                 value={points}
                 onChange={(e) => setPoints(e.target.value)}
-                className="pr-12"
+           
+                className={cn("pr-12",
+                  isDark
+                    ? "bg-[#06021d] border border-gray-600 text-white"
+                    : "bg-white text-gray-900"
+                )}
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
                 points
