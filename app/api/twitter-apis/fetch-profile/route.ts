@@ -15,13 +15,26 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let screenname: string | undefined;
+  
   try {
     const body = await request.json();
-    const screenname = (body?.screenname || "").trim();
+    screenname = (body?.screenname || "").trim();
 
     if (!screenname) {
       return NextResponse.json(
         { error: "Missing screenname" },
+        { status: 400 }
+      );
+    }
+
+    // Validate screenname format (Twitter usernames are alphanumeric, underscore, max 15 chars)
+    // Remove @ if present
+    screenname = screenname.replace(/^@/, '');
+    
+    if (!/^[a-zA-Z0-9_]{1,15}$/.test(screenname)) {
+      return NextResponse.json(
+        { error: "Invalid Twitter username format" },
         { status: 400 }
       );
     }
@@ -32,11 +45,28 @@ export async function POST(request: NextRequest) {
       params: { screenname },
     });
 
-    const data = response.data;
+    const data = response?.data;
 
-    if (!data || data.status !== "active") {
+    // Check if response data exists
+    if (!data) {
+      console.error("RapidAPI returned empty response data", {
+        status: response?.status,
+        statusText: response?.statusText,
+        headers: response?.headers,
+      });
       return NextResponse.json(
-        { error: "Unable to fetch active X profile" },
+        { error: "Empty response from Twitter API" },
+        { status: 502 }
+      );
+    }
+
+    // Check if profile is active
+    if (data.status !== "active") {
+      return NextResponse.json(
+        { 
+          error: "Unable to fetch active X profile",
+          details: data.status ? `Profile status: ${data.status}` : "Profile not found or inactive"
+        },
         { status: 404 }
       );
     }
@@ -44,9 +74,66 @@ export async function POST(request: NextRequest) {
     // Return full data so client can pick what it needs
     return NextResponse.json(data, { status: 200 });
   } catch (error: any) {
-    console.error("Error fetching Twitter profile via RapidAPI:", error);
+    // Enhanced error logging
+    console.error("Error fetching Twitter profile via RapidAPI:", {
+      message: error?.message,
+      status: error?.response?.status,
+      statusText: error?.response?.statusText,
+      data: error?.response?.data,
+      code: error?.code,
+      stack: error?.stack,
+      screenname: screenname || "unknown",
+    });
+
+    // Handle axios-specific errors
+    if (error?.response) {
+      // API responded with error status
+      const status = error.response.status;
+      const errorData = error.response.data;
+      
+      if (status === 403 || status === 401) {
+        return NextResponse.json(
+          { 
+            error: "Authentication failed with RapidAPI. Please check API keys.",
+            details: errorData?.message || "Forbidden"
+          },
+          { status: 403 }
+        );
+      }
+      
+      if (status === 429) {
+        return NextResponse.json(
+          { 
+            error: "Rate limit exceeded. Please try again later.",
+            details: errorData?.message || "Too many requests"
+          },
+          { status: 429 }
+        );
+      }
+
+      return NextResponse.json(
+        { 
+          error: errorData?.message || `RapidAPI returned error: ${status}`,
+          details: errorData
+        },
+        { status: status >= 400 && status < 600 ? status : 500 }
+      );
+    }
+
+    // Handle network errors
+    if (error?.code === "ECONNREFUSED" || error?.code === "ENOTFOUND") {
+      return NextResponse.json(
+        { error: "Failed to connect to RapidAPI service" },
+        { status: 503 }
+      );
+    }
+
+    // Generic error fallback
     return NextResponse.json(
-      { error: error?.message || "Failed to fetch Twitter profile" },
+      { 
+        error: error?.message || "Failed to fetch Twitter profile",
+        type: error?.name || "UnknownError"
+      },
       { status: 500 }
     );
   }

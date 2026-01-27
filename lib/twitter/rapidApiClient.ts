@@ -85,14 +85,65 @@ export async function rapidApiRequest<T = any>(
     };
 
     try {
+      // Ensure URL is properly formatted using WHATWG URL API
+      let url = config.url;
+      if (!url || typeof url !== 'string') {
+        throw new Error('Invalid URL in rapidApiRequest config');
+      }
+
+      // If params are provided, construct URL with query string using WHATWG URL API
+      if (config.params && Object.keys(config.params).length > 0) {
+        try {
+          const urlObj = new URL(url);
+          Object.entries(config.params).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
+              urlObj.searchParams.append(key, String(value));
+            }
+          });
+          url = urlObj.toString();
+        } catch (urlError: any) {
+          throw new Error(`Failed to construct URL with params: ${urlError?.message}`);
+        }
+      }
+
+      // Create request config without params (since we've added them to URL)
+      const { params, ...requestConfig } = config;
+      
       const response = await axios.request<T>({
-        ...config,
+        ...requestConfig,
+        url,
         headers: requestHeaders,
       });
       rotationIndex = keyIndex;
       return response;
-    } catch (error) {
+    } catch (error: any) {
       lastError = error;
+      
+      // Enhanced error logging
+      if (error?.response) {
+        console.error(`[rapidApiClient] RapidAPI request failed:`, {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data,
+          url: config.url,
+          keyIndex,
+        });
+      } else if (error?.request) {
+        console.error(`[rapidApiClient] RapidAPI request failed (no response):`, {
+          message: error.message,
+          code: error.code,
+          url: config.url,
+          keyIndex,
+        });
+      } else {
+        console.error(`[rapidApiClient] RapidAPI request error:`, {
+          message: error?.message,
+          stack: error?.stack,
+          url: config.url,
+          keyIndex,
+        });
+      }
+      
       if (isRateLimitError(error)) {
         console.warn(
           `[rapidApiClient] RapidAPI key #${keyIndex} rate-limited; trying next key`
