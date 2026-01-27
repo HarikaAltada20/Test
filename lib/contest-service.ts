@@ -214,7 +214,9 @@ async function enrichContestWithCalculatedBudgets(
     const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
       submissions,
       cpmDetails.cpm_rate_usd,
-      cpmDetails.max_earnings_per_creator,
+      contest.max_earnings_per_creator ||
+        cpmDetails.max_earnings_per_creator ||
+        null,
       cpmDetails.min_views,
       cpmDetails.max_views,
       cpmDetails.flat_fee_bonus || 0,
