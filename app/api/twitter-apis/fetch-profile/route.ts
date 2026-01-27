@@ -92,10 +92,30 @@ export async function POST(request: NextRequest) {
       const errorData = error.response.data;
       
       if (status === 403 || status === 401) {
+        // Check if it's a subscription error
+        const errorMessage = errorData?.message || "";
+        const isSubscriptionError = 
+          errorMessage.toLowerCase().includes("not subscribed") ||
+          errorMessage.toLowerCase().includes("subscription") ||
+          errorMessage.toLowerCase().includes("not authorized to access") ||
+          errorMessage.toLowerCase().includes("you are not subscribed");
+        
+        if (isSubscriptionError) {
+          return NextResponse.json(
+            { 
+              error: "RapidAPI subscription required",
+              details: "The API key is not subscribed to the Twitter API. Please subscribe to the Twitter API on RapidAPI to use this feature.",
+              rapidApiMessage: errorMessage || "You are not subscribed to this API."
+            },
+            { status: 403 }
+          );
+        }
+        
+        // Regular authentication/authorization error
         return NextResponse.json(
           { 
             error: "Authentication failed with RapidAPI. Please check API keys.",
-            details: errorData?.message || "Forbidden"
+            details: errorMessage || "Forbidden"
           },
           { status: 403 }
         );
