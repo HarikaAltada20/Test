@@ -697,6 +697,9 @@ export async function POST(
         },
       ])
     );
+    const existingTweetCreatorMap = new Map(
+      (existingTweets || []).map((t: any) => [t.tweet_id, t.creator_id || null])
+    );
 
     const existingTweetCountsByCreator = new Map<string, number>();
     if (existingTweets) {
@@ -716,6 +719,7 @@ export async function POST(
 
     // Track which tweet_ids we see in the fresh API response
     const freshTweetIds = new Set<string>();
+    const fetchedCreatorIds = new Set<string>();
 
     const allDetails: any[] = [];
     let totalFetched = 0;
@@ -800,24 +804,16 @@ export async function POST(
           : Number.POSITIVE_INFINITY;
         const maxTweetsAllowedForCreator = isSingleSubmissionContest
           ? 1
-          : availableSlots;
+          : shouldEnforceSubmissionLimit
+          ? availableSlots > 0
+            ? availableSlots
+            : maxSubmissionsPerCreator
+          : Number.POSITIVE_INFINITY;
 
         if (shouldEnforceSubmissionLimit && availableSlots <= 0) {
           console.log(
-            `[twitter-refresh-tweets] Creator ${cleanUsername} (${creatorId}) has already reached the submission limit (${maxSubmissionsPerCreator}). Skipping fetch.`
+            `[twitter-refresh-tweets] Creator ${cleanUsername} (${creatorId}) has already reached the submission limit (${maxSubmissionsPerCreator}). Still fetching to replace older submissions if newer ones exist.`
           );
-          return {
-            username: cleanUsername,
-            participant,
-            rawCount: 0,
-            normalizedCount: 0,
-            filteredCount: 0,
-            allTweets: [],
-            filteredTweets: [],
-            totalFetched: 0,
-            totalFiltered: 0,
-            submissionLimitReached: true,
-          };
         }
 
         // Get join date for this participant
@@ -938,6 +934,9 @@ export async function POST(
         );
 
         const timeline = allTimelineTweets;
+        if (participant.creator_id) {
+          fetchedCreatorIds.add(participant.creator_id);
+        }
 
         for (const rawTweet of timeline) {
           const rawTweetId =
@@ -1580,9 +1579,18 @@ export async function POST(
     );
 
     // Log tweets that weren't found for debugging, but don't mark as deleted
-    const tweetsNotInFreshResponse = Array.from(
-      existingTweetsMap.keys()
-    ).filter((tweetId) => !freshTweetIds.has(tweetId));
+    const tweetsNotInFreshResponse = Array.from(existingTweetsMap.keys()).filter(
+      (tweetId) => {
+        const creatorId = existingTweetCreatorMap.get(tweetId);
+        if (!creatorId) {
+          return false;
+        }
+        if (!fetchedCreatorIds.has(creatorId)) {
+          return false;
+        }
+        return !freshTweetIds.has(tweetId);
+      }
+    );
 
     if (tweetsNotInFreshResponse.length > 0) {
       console.log(
@@ -1684,7 +1692,7 @@ export async function POST(
             );
           } else if (fallbackTweets) {
             const promotionCount = new Map<string, number>();
-            const toPromote = new Map<string, string>();
+            const toPromote: Array<{ creatorId: string; tweetId: string }> = [];
             for (const row of fallbackTweets as any[]) {
               const creatorId = row.creator_id as string | null;
               const tweetId = row.tweet_id as string | null;
@@ -1693,11 +1701,10 @@ export async function POST(
               const promotedSoFar = promotionCount.get(creatorId) || 0;
               if (promotedSoFar >= deletedSlots) continue;
               promotionCount.set(creatorId, promotedSoFar + 1);
-              toPromote.set(`${creatorId}-${promotedSoFar}`, tweetId);
+              toPromote.push({ creatorId, tweetId });
             }
 
-            for (const [key, tweetId] of toPromote.entries()) {
-              const [creatorId] = key.split("-");
+            for (const { creatorId, tweetId } of toPromote) {
               try {
                 const { error: promoteError } = await supabaseAdmin
                   .from("twitter_campaign_tweets")

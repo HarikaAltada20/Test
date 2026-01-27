@@ -1203,7 +1203,10 @@ export default function ContestDetailClient({
       const cpmConfig = (currentContest?.contest_based_details as any)
         ?.cpm_contest;
       const cpmRate = cpmConfig?.cpm_rate_usd || 0;
-      const maxEarningsPerCreator = cpmConfig?.max_earnings_per_creator || null;
+      const maxEarningsPerCreator =
+        currentContest?.max_earnings_per_creator ??
+        cpmConfig?.max_earnings_per_creator ??
+        null;
 
       if (cpmRate > 0) {
         Object.values(grouped).forEach((group: any) => {
@@ -1221,6 +1224,7 @@ export default function ContestDetailClient({
           const totalPoints = group.metrics.points || 0;
           const calculatedEarnings = (totalPoints * cpmRate) / 1000; // Convert to dollars
           const earningsInCents = Math.round(calculatedEarnings * 100); // Convert to cents
+          group.earningsBeforeCap = earningsInCents;
 
           // Apply creator cap if configured
           let finalExpectedEarnings = earningsInCents;
@@ -1317,6 +1321,7 @@ export default function ContestDetailClient({
       Object.values(grouped).forEach((group: any) => {
         if (group.earnings.expected > maxEarnings) {
           group.isCapped = true;
+          group.earningsBeforeCap = group.earnings.expected;
           // Cap the expected earnings (performance-based only, bonus remains separate)
           group.earnings.expected = maxEarnings;
         }
