@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   if (!hasRapidApiKeys) {
-    // Log environment check for debugging
+    // Log environment check for debugging (server-side only)
     const envCheck = {
       TWITTER_RAPIDAPI_KEYS: process.env.TWITTER_RAPIDAPI_KEYS ? "set" : "not set",
       RAPIDAPI_KEYS: process.env.RAPIDAPI_KEYS ? "set" : "not set",
@@ -23,11 +23,11 @@ export async function POST(request: NextRequest) {
       envCheck
     );
     
+    // Generic user-facing error (no RapidAPI mention)
     return NextResponse.json(
       { 
-        error: "Twitter RapidAPI keys are not configured on the server",
-        details: "Please configure TWITTER_RAPIDAPI_KEYS, RAPIDAPI_KEYS, TWITTER_RAPIDAPI_KEY, or RAPIDAPI_KEY environment variable in your deployment platform (Vercel, etc.)",
-        environment: process.env.NODE_ENV || "unknown"
+        error: "Twitter API service is temporarily unavailable",
+        details: "Please try again later or contact support if the issue persists."
       },
       { status: 500 }
     );
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
         headers: response?.headers,
       });
       return NextResponse.json(
-        { error: "Empty response from Twitter API" },
+        { error: "Unable to fetch Twitter profile. Please try again." },
         { status: 502 }
       );
     }
@@ -92,8 +92,8 @@ export async function POST(request: NextRequest) {
     // Return full data so client can pick what it needs
     return NextResponse.json(data, { status: 200 });
   } catch (error: any) {
-    // Enhanced error logging
-    console.error("Error fetching Twitter profile via RapidAPI:", {
+    // Enhanced error logging (server-side only - includes RapidAPI details)
+    console.error("Error fetching Twitter profile:", {
       message: error?.message,
       status: error?.response?.status,
       statusText: error?.response?.statusText,
@@ -119,11 +119,11 @@ export async function POST(request: NextRequest) {
           errorMessage.toLowerCase().includes("you are not subscribed");
         
         if (isSubscriptionError) {
+          // Generic user-facing error (no RapidAPI mention)
           return NextResponse.json(
             { 
-              error: "RapidAPI subscription required",
-              details: "The API key is not subscribed to the Twitter API. Please subscribe to the Twitter API on RapidAPI to use this feature.",
-              rapidApiMessage: errorMessage || "You are not subscribed to this API."
+              error: "Twitter API service unavailable",
+              details: "The Twitter API service is currently unavailable. Please try again later."
             },
             { status: 403 }
           );
@@ -132,8 +132,8 @@ export async function POST(request: NextRequest) {
         // Regular authentication/authorization error
         return NextResponse.json(
           { 
-            error: "Authentication failed with RapidAPI. Please check API keys.",
-            details: errorMessage || "Forbidden"
+            error: "Unable to authenticate with Twitter API",
+            details: "Please try again later or contact support if the issue persists."
           },
           { status: 403 }
         );
@@ -143,16 +143,17 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { 
             error: "Rate limit exceeded. Please try again later.",
-            details: errorData?.message || "Too many requests"
+            details: "Too many requests. Please wait a few minutes before trying again."
           },
           { status: 429 }
         );
       }
 
+      // Generic error for other status codes
       return NextResponse.json(
         { 
-          error: errorData?.message || `RapidAPI returned error: ${status}`,
-          details: errorData
+          error: "Unable to fetch Twitter profile",
+          details: "An error occurred while fetching the profile. Please try again later."
         },
         { status: status >= 400 && status < 600 ? status : 500 }
       );
@@ -161,7 +162,10 @@ export async function POST(request: NextRequest) {
     // Handle network errors
     if (error?.code === "ECONNREFUSED" || error?.code === "ENOTFOUND") {
       return NextResponse.json(
-        { error: "Failed to connect to RapidAPI service" },
+        { 
+          error: "Unable to connect to Twitter API",
+          details: "The Twitter API service is temporarily unavailable. Please try again later."
+        },
         { status: 503 }
       );
     }
@@ -169,8 +173,8 @@ export async function POST(request: NextRequest) {
     // Generic error fallback
     return NextResponse.json(
       { 
-        error: error?.message || "Failed to fetch Twitter profile",
-        type: error?.name || "UnknownError"
+        error: "Failed to fetch Twitter profile",
+        details: "An unexpected error occurred. Please try again later."
       },
       { status: 500 }
     );
