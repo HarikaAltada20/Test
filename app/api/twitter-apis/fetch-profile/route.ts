@@ -9,8 +9,26 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   if (!hasRapidApiKeys) {
+    // Log environment check for debugging
+    const envCheck = {
+      TWITTER_RAPIDAPI_KEYS: process.env.TWITTER_RAPIDAPI_KEYS ? "set" : "not set",
+      RAPIDAPI_KEYS: process.env.RAPIDAPI_KEYS ? "set" : "not set",
+      TWITTER_RAPIDAPI_KEY: process.env.TWITTER_RAPIDAPI_KEY ? "set" : "not set",
+      RAPIDAPI_KEY: process.env.RAPIDAPI_KEY ? "set" : "not set",
+      NODE_ENV: process.env.NODE_ENV || "not set",
+    };
+    
+    console.error(
+      "[fetch-profile] Twitter RapidAPI keys not configured. Environment check:",
+      envCheck
+    );
+    
     return NextResponse.json(
-      { error: "Twitter RapidAPI keys are not configured on the server" },
+      { 
+        error: "Twitter RapidAPI keys are not configured on the server",
+        details: "Please configure TWITTER_RAPIDAPI_KEYS, RAPIDAPI_KEYS, TWITTER_RAPIDAPI_KEY, or RAPIDAPI_KEY environment variable in your deployment platform (Vercel, etc.)",
+        environment: process.env.NODE_ENV || "unknown"
+      },
       { status: 500 }
     );
   }

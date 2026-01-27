@@ -34,8 +34,20 @@ if (fallbackSingleKey) {
 const RAPIDAPI_KEYS = Array.from(new Set(combinedKeys)).filter(Boolean);
 
 if (RAPIDAPI_KEYS.length === 0) {
-  console.warn(
-    "[rapidApiClient] No RapidAPI keys configured (TWITTER_RAPIDAPI_KEYS / RAPIDAPI_KEYS / TWITTER_RAPIDAPI_KEY / RAPIDAPI_KEY)"
+  const envCheck = {
+    TWITTER_RAPIDAPI_KEYS: process.env.TWITTER_RAPIDAPI_KEYS ? "set" : "not set",
+    RAPIDAPI_KEYS: process.env.RAPIDAPI_KEYS ? "set" : "not set",
+    TWITTER_RAPIDAPI_KEY: process.env.TWITTER_RAPIDAPI_KEY ? "set" : "not set",
+    RAPIDAPI_KEY: process.env.RAPIDAPI_KEY ? "set" : "not set",
+    NODE_ENV: process.env.NODE_ENV || "not set",
+  };
+  
+  console.error(
+    "[rapidApiClient] No RapidAPI keys configured. Environment check:",
+    envCheck
+  );
+  console.error(
+    "[rapidApiClient] Please set one of: TWITTER_RAPIDAPI_KEYS, RAPIDAPI_KEYS, TWITTER_RAPIDAPI_KEY, or RAPIDAPI_KEY"
   );
 }
 
