@@ -76,6 +76,7 @@ interface Submission {
   manual_points_adjustment?: number;
   manual_points_reason?: string | null;
   tweet_id?: string;
+  filter_status?: string | null;
 }
 
 interface CreatorSubmissionsModalProps {
@@ -1313,6 +1314,12 @@ export function CreatorSubmissionsModal({
                     const manualPointsAdjustment =
                       submission.manual_points_adjustment || 0;
                     const totalPoints = basePoints + manualPointsAdjustment;
+                    const filterStatus =
+                      submission.filter_status ||
+                      submission.other_stats?.filter_status ||
+                      null;
+                    const isDeletedTweet =
+                      isTwitterTweet && filterStatus === "deleted";
 
                     // Get pre-calculated expected reward (with cap applied in submission time order)
                     const expectedReward =
@@ -1351,7 +1358,10 @@ export function CreatorSubmissionsModal({
                     return (
                       <TableRow
                         key={submission.id}
-                        className={cn(isDark ? "text-white" : "text-gray-700")}
+                        className={cn(
+                          isDark ? "text-white" : "text-gray-700",
+                          isDeletedTweet && "opacity-60"
+                        )}
                       >
                         <TableCell>
                           <Checkbox
@@ -1406,6 +1416,14 @@ export function CreatorSubmissionsModal({
                                       ? "RETWEET"
                                       : "TWEET"}
                                   </Badge>
+                                  {isDeletedTweet && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs px-2 py-0.5 bg-red-100 text-red-700 border-red-300"
+                                    >
+                                      DELETED
+                                    </Badge>
+                                  )}
                                   <span
                                     className={cn(
                                       "text-xs",
