@@ -1167,6 +1167,14 @@ export function CreatorSubmissionsModal({
                           isDark ? "bg-[#391A6A] " : "bg-gray-50"
                         )}
                       >
+                        Reward Granted
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
                         Manual Points Reason
                       </TableHead>
                     </>
@@ -1272,7 +1280,7 @@ export function CreatorSubmissionsModal({
                     <TableCell
                       colSpan={
                         isTwitterTextImageContest
-                          ? 16 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Manual Points Reason, Status, Submitted, Actions
+                          ? 16 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Submitted, Actions
                           : hasBonus
                           ? 13 // Checkbox, #, Content, Views, Likes, Comments, Expected Reward, Reward Granted, Bonus Expected, Bonus Granted, Status, Submitted, Actions
                           : 11 // Checkbox, #, Content, Views, Likes, Comments, Expected Reward, Reward Granted, Status, Submitted, Actions
@@ -1654,6 +1662,9 @@ export function CreatorSubmissionsModal({
                             </TableCell>
                             <TableCell className="text-center font-medium text-sm">
                               {formatCurrency(expectedRewardForDisplay)}
+                            </TableCell>
+                            <TableCell className="text-center font-medium text-green-600">
+                              {grantedReward > 0 ? formatCurrency(grantedReward) : "-"}
                             </TableCell>
                             {/* Manual Points Reason */}
                             <TableCell className="text-center">
