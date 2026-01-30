@@ -5,6 +5,14 @@ import {
   Submission,
 } from "@/lib/contest-utils";
 import { createClient } from "@/utils/supabase/server";
+import {
+  contestCache,
+  contestDetailsCache,
+  getContestsCacheKey,
+  getContestDetailsCacheKey,
+  clearContestsCache,
+} from "@/lib/cache-utils";
+
 
 type ContestWithDetails = {
   id: string;
@@ -32,6 +40,13 @@ async function fetchContestsWithDetails(
   supabase: SupabaseClient,
   options: FetchContestsOptions = {}
 ) {
+  const cacheKey = getContestsCacheKey(options);
+  const cachedData = contestCache.get<ContestWithDetails[]>(cacheKey);
+
+  if (cachedData) {
+    return cachedData;
+  }
+
   const selectClause = options.includeAdvertiserProfile
     ? SELECT_WITH_ADVERTISER_PROFILE
     : DEFAULT_SELECT;
@@ -48,6 +63,8 @@ async function fetchContestsWithDetails(
   const { data = [] } = (await query) as unknown as {
     data: ContestWithDetails[];
   };
+
+  contestCache.set(cacheKey, data);
   return data;
 }
 
@@ -55,6 +72,13 @@ async function enrichContestWithCalculatedBudgets(
   contest: ContestWithDetails,
   supabase: SupabaseClient
 ) {
+  const cacheKey = getContestDetailsCacheKey(contest.id);
+  const cachedData = contestDetailsCache.get<ContestWithDetails>(cacheKey);
+
+  if (cachedData) {
+    return cachedData;
+  }
+
   let updatedContest: ContestWithDetails = {
     ...contest,
     contest_based_details: contest.contest_based_details || {},
@@ -214,7 +238,9 @@ async function enrichContestWithCalculatedBudgets(
     const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
       submissions,
       cpmDetails.cpm_rate_usd,
-      cpmDetails.max_earnings_per_creator,
+      contest.max_earnings_per_creator ||
+        cpmDetails.max_earnings_per_creator ||
+        null,
       cpmDetails.min_views,
       cpmDetails.max_views,
       cpmDetails.flat_fee_bonus || 0,
@@ -321,6 +347,7 @@ async function enrichContestWithCalculatedBudgets(
     updatedContest.status = "unknown";
   }
 
+  contestDetailsCache.set(cacheKey, updatedContest);
   return updatedContest;
 }
 
@@ -334,9 +361,10 @@ export async function getAdvertiserContestsWithCalculatedBudgets(
   });
 
   const contestsWithCalculatedBudgets = await Promise.all(
-    contestsData.map((contest) =>
-      enrichContestWithCalculatedBudgets(contest, supabase)
-    )
+    contestsData.map(async (contest) => {
+      const enrichedContest = await enrichContestWithCalculatedBudgets(contest, supabase);
+      return enrichedContest;
+    })
   );
 
   return contestsWithCalculatedBudgets;
@@ -351,9 +379,10 @@ export async function getAllContestsWithCalculatedBudgets(
   });
 
   const contestsWithCalculatedBudgets = await Promise.all(
-    contestsData.map((contest) =>
-      enrichContestWithCalculatedBudgets(contest, supabase)
-    )
+    contestsData.map(async (contest) => {
+      const enrichedContest = await enrichContestWithCalculatedBudgets(contest, supabase);
+      return enrichedContest;
+    })
   );
 
   return contestsWithCalculatedBudgets;

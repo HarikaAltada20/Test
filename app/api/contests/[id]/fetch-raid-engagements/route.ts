@@ -70,7 +70,7 @@ export async function POST(
     // 1. Get contest and check if it's a raid campaign
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
-      .select("id, contest_type, contest_based_details, start_date")
+      .select("id, contest_type, contest_based_details, start_date, max_submissions_per_creator")
       .eq("id", contestId)
       .maybeSingle();
 
@@ -99,6 +99,26 @@ export async function POST(
     const twitterCampaign = contest.contest_based_details?.twitter_campaign;
     const raidTarget = twitterCampaign?.raid_target;
     const pointsConfig = twitterCampaign?.points_config || {};
+
+    // Configure submission limits
+    const maxSubmissionsPerCreator =
+      typeof contest?.max_submissions_per_creator === "number" &&
+      contest.max_submissions_per_creator > 0
+        ? contest.max_submissions_per_creator
+        : Number.POSITIVE_INFINITY;
+    const hasSubmissionLimit = Number.isFinite(maxSubmissionsPerCreator);
+    const isSingleSubmissionContest =
+      hasSubmissionLimit && maxSubmissionsPerCreator === 1;
+
+    console.log(
+      `[fetch-raid-engagements] Submission limits for contest ${contestId}:`,
+      {
+        max_submissions_per_creator: contest?.max_submissions_per_creator,
+        maxSubmissionsPerCreator,
+        hasSubmissionLimit,
+        isSingleSubmissionContest,
+      }
+    );
 
     // Load brand-provided base points and multipliers for CPM contests
     // For CPM contests, use brand-provided values; otherwise use hardcoded RAID_POINTS_CONFIG
@@ -1094,7 +1114,19 @@ export async function POST(
     console.log(
       `[fetch-raid-engagements] Total direct engagements found: ${allEngagementTweets.length}`
     );
-    const timeline = allEngagementTweets;
+    
+    // Sort engagements by created_at (newest to oldest) for consistent ordering
+    const sortedEngagements = [...allEngagementTweets].sort((a, b) => {
+      const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return dateB - dateA; // Newest first
+    });
+    
+    console.log(
+      `[fetch-raid-engagements] Sorted engagements from newest to oldest`
+    );
+    
+    const timeline = sortedEngagements;
 
     // 5. Update target tweet metrics in metrics table (target_current_*)
     // Handle different field names from API
@@ -1344,6 +1376,27 @@ export async function POST(
 
     console.log(
       `[fetch-raid-engagements] Found ${existingEngagementsMap.size} existing raid engagements to preserve moderation for`
+    );
+
+    // Count existing raid engagements per creator for submission limit enforcement
+    const existingRaidEngagementCountsByCreator = new Map<string, number>();
+    if (existingRaidEngagements) {
+      existingRaidEngagements.forEach((engagement: any) => {
+        if (!engagement.creator_id || !engagement.is_eligible) {
+          return;
+        }
+        const currentCount =
+          existingRaidEngagementCountsByCreator.get(engagement.creator_id) || 0;
+        existingRaidEngagementCountsByCreator.set(
+          engagement.creator_id,
+          currentCount + 1
+        );
+      });
+    }
+
+    console.log(
+      `[fetch-raid-engagements] Existing raid engagement counts:`,
+      Array.from(existingRaidEngagementCountsByCreator.entries())
     );
 
     // Track which tweet_ids we see in the fresh API response
@@ -1669,6 +1722,111 @@ export async function POST(
 
     // 8. Calculate total_* metrics from all participant engagements
     // This aggregates likes/replies/retweets/quotes/impressions from participant's engagements
+    
+    // ============================================================================
+    // ENFORCE SUBMISSION LIMITS: Replace older raid engagements with newer ones
+    // This ensures creators can always have their newest engagements count toward the limit
+    // ============================================================================
+    const enforceRaidSubmissionLimit = async () => {
+      if (!hasSubmissionLimit) {
+        return;
+      }
+
+      console.log(
+        `[fetch-raid-engagements] Enforcing raid submission cap (${maxSubmissionsPerCreator}) per creator`
+      );
+
+      const { data: eligibleRaidEngagements, error: eligibleRaidEngagementsError } =
+        await supabaseAdmin
+          .from("twitter_campaign_tweets")
+          .select("creator_id, tweet_id, tweet_created_at")
+          .eq("contest_id", contestId)
+          .eq("is_eligible", true)
+          .not("target_tweet_id", "is", null) // Only raid engagements
+          .order("creator_id", { ascending: true })
+          .order("tweet_created_at", { ascending: false }); // Newest first
+
+      if (eligibleRaidEngagementsError) {
+        console.error(
+          "[fetch-raid-engagements] Failed to load eligible raid engagements for submission cap enforcement",
+          {
+            contestId,
+            error: eligibleRaidEngagementsError,
+          }
+        );
+        return;
+      }
+
+      const raidEngagementsToDemote: string[] = [];
+      const raidCountsByCreator = new Map<string, number>();
+
+      (eligibleRaidEngagements || []).forEach((row: any) => {
+        const creatorId = row.creator_id as string | null;
+        const tweetId = row.tweet_id as string | null;
+
+        if (!creatorId || !tweetId) return;
+
+        const currentCount = raidCountsByCreator.get(creatorId) || 0;
+        if (currentCount >= maxSubmissionsPerCreator) {
+          raidEngagementsToDemote.push(tweetId);
+        } else {
+          raidCountsByCreator.set(creatorId, currentCount + 1);
+        }
+      });
+
+      if (raidEngagementsToDemote.length === 0) {
+        console.log(
+          `[fetch-raid-engagements] No raid engagements needed demotion for submission cap (${maxSubmissionsPerCreator})`
+        );
+        return;
+      }
+
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < raidEngagementsToDemote.length; i += CHUNK_SIZE) {
+        const chunk = raidEngagementsToDemote.slice(i, i + CHUNK_SIZE);
+        try {
+          const { error: demoteError } = await supabaseAdmin
+            .from("twitter_campaign_tweets")
+            .update({
+              is_eligible: false,
+              filter_status: "filtered_out",
+              eligibility_reason:
+                "Replaced by newer raid engagements due to submission cap",
+            })
+            .eq("contest_id", contestId)
+            .in("tweet_id", chunk)
+            .not("target_tweet_id", "is", null) // Only raid engagements
+            .eq("is_eligible", true);
+
+          if (demoteError) {
+            console.error(
+              "[fetch-raid-engagements] Failed to demote raid engagements for submission cap",
+              {
+                contestId,
+                chunkSize: chunk.length,
+                error: demoteError,
+              }
+            );
+          } else {
+            console.log(
+              `[fetch-raid-engagements] Demoted ${chunk.length} raid engagements to comply with submission cap`
+            );
+          }
+        } catch (demoteException) {
+          console.error(
+            "[fetch-raid-engagements] Unexpected error while demoting raid engagements for submission cap",
+            {
+              contestId,
+              chunk: chunk,
+              error: demoteException,
+            }
+          );
+        }
+      }
+    };
+
+    await enforceRaidSubmissionLimit();
+
     const { data: allRaidEngagements } = await supabaseAdmin
       .from("twitter_campaign_tweets")
       .select("likes, replies, retweets, quote_reposts, impressions, points")

@@ -49,7 +49,12 @@ import {
   BarChart3,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import { cn, formatLocalDateTime, formatTimeAgo } from "@/lib/utils";
+import {
+  cn,
+  formatLocalDateTime,
+  formatTimeAgo,
+  isContestEnded,
+} from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { renderStatusBadge } from "@/lib/status-badges";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -529,6 +534,11 @@ export function ContestClientPage({
   const handleRefreshMetrics = async () => {
     if (!contest?.id) return;
 
+    const contestHasEnded = isContestEnded(contest.status);
+    if (contestHasEnded) {
+      return;
+    }
+
     setIsRefreshingMetrics(true);
 
     try {
@@ -595,13 +605,19 @@ export function ContestClientPage({
       contest.post_contest_status === "in_review" ||
       contest.post_contest_status === "verification_complete" ||
       contest.post_contest_status === "payouts_processed";
+    const contestHasEnded = isContestEnded(contest.status);
 
     const isDisabled =
-      isRefreshingMetrics || !cooldownInfo.canRefresh || isLocked;
+      isRefreshingMetrics ||
+      !cooldownInfo.canRefresh ||
+      isLocked ||
+      contestHasEnded;
 
     let disabledReason = "";
     if (isRefreshingMetrics) {
       disabledReason = "Refreshing metrics...";
+    } else if (contestHasEnded) {
+      disabledReason = "Contest has ended";
     } else if (isLocked) {
       disabledReason = "Metrics are locked after contest review begins";
     } else if (!cooldownInfo.canRefresh) {
@@ -610,7 +626,12 @@ export function ContestClientPage({
       )}`;
     }
 
-    return { isDisabled, disabledReason, cooldownInfo };
+    return {
+      isDisabled,
+      disabledReason,
+      cooldownInfo,
+      isContestEnded: contestHasEnded,
+    };
   };
 
   const fetchLeaderboard = async (pageToFetch: number = 1) => {
@@ -5281,6 +5302,8 @@ export function ContestClientPage({
                   showHeader={true}
                   lastMetricsUpdated={contest?.last_metrics_updated}
                   cooldownType="opportunities"
+                  contestStatus={contest?.status}
+                  disableRefreshWhenContestEnded
                 />
               </div>
             </TabPanel>
@@ -6578,8 +6601,26 @@ export function ContestClientPage({
 
                     {/* Leaderboard Metrics - Moved after user's rank card for better UX */}
                     {(() => {
-                      const { isDisabled, disabledReason, cooldownInfo } =
-                        getRefreshButtonState();
+                      const {
+                        isDisabled,
+                        disabledReason,
+                        cooldownInfo,
+                        isContestEnded,
+                      } = getRefreshButtonState();
+                      const refreshLabelLarge = isRefreshingMetrics
+                        ? "Updating..."
+                        : isContestEnded
+                        ? "Contest Ended"
+                        : !cooldownInfo?.canRefresh
+                        ? `Wait ${cooldownInfo?.remainingMinutes}m`
+                        : "Refresh Metrics";
+                      const refreshLabelSmall = isRefreshingMetrics
+                        ? "Updating..."
+                        : isContestEnded
+                        ? "Contest Ended"
+                        : !cooldownInfo?.canRefresh
+                        ? `${cooldownInfo?.remainingMinutes}m`
+                        : "Refresh";
                       return (
                         <div
                           className={cn(
@@ -6647,18 +6688,10 @@ export function ContestClientPage({
                               <RefreshCw className="h-4 w-4" />
                             )}
                             <span className="hidden sm:inline">
-                              {isRefreshingMetrics
-                                ? "Updating..."
-                                : !cooldownInfo?.canRefresh
-                                ? `Wait ${cooldownInfo?.remainingMinutes}m`
-                                : "Refresh Metrics"}
+                              {refreshLabelLarge}
                             </span>
                             <span className="sm:hidden">
-                              {isRefreshingMetrics
-                                ? "Updating..."
-                                : !cooldownInfo?.canRefresh
-                                ? `${cooldownInfo?.remainingMinutes}m`
-                                : "Refresh"}
+                              {refreshLabelSmall}
                             </span>
                           </Button>
                         </div>

@@ -799,9 +799,23 @@ export function ContestListClient({
                   ) && "bg-[#7F39EC] text-white"
                 )}
               >
-                {contest.status === "active"
-                  ? "Live"
-                  : contest.status || "Unknown"}
+                {(() => {
+                  if (contest.status === "active") {
+                    return "Live";
+                  }
+                  if (contest.status === "upcoming") {
+                    return "Upcoming";
+                  }
+                  if (contest.status === "ended") {
+                    // Show "paid" for contests with completed verification
+                    if (contest.post_contest_status === "verification_complete" || contest.post_contest_status === "payouts_processed") {
+                      return "paid";
+                    }
+                    // Show "completed" for ended contests
+                    return "completed";
+                  }
+                  return contest.status || "Unknown";
+                })()}
               </Badge>
             </div>
           </div>
@@ -1559,7 +1573,14 @@ export function ContestListClient({
                   : contest.status === "upcoming"
                   ? "Upcoming"
                   : contest.status === "ended"
-                  ? "Ended"
+                  ? (() => {
+                      // Show "paid" for contests with completed verification
+                      if (contest.post_contest_status === "verification_complete" || contest.post_contest_status === "payouts_processed") {
+                        return "paid";
+                      }
+                      // Show "completed" for ended contests
+                      return "completed";
+                    })()
                   : contest.status || "Unknown"}
               </Badge>
             </div>

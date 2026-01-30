@@ -21,13 +21,14 @@ export async function GET(
     }
 
     const supabase = await createClient();
-    
+
     const url = new URL(req.url);
     const creatorId = url.searchParams.get("creatorId"); // Optional filter by creator
     const page = Number(url.searchParams.get("page") ?? 1);
     const limit = Number(url.searchParams.get("limit") ?? 50);
     const safePage = Number.isFinite(page) && page > 0 ? page : 1;
-    const safeLimit = Number.isFinite(limit) && limit > 0 && limit <= 100 ? limit : 50;
+    const safeLimit =
+      Number.isFinite(limit) && limit > 0 && limit <= 100 ? limit : 50;
     const offset = (safePage - 1) * safeLimit;
 
     // First, fetch participants to get join dates
@@ -38,7 +39,10 @@ export async function GET(
       .eq("is_active", true);
 
     if (participantsError) {
-      console.error("[twitter-feed] Error fetching participants", participantsError);
+      console.error(
+        "[twitter-feed] Error fetching participants",
+        participantsError
+      );
     }
 
     // Create a map of creator_id -> joined_at
@@ -55,10 +59,13 @@ export async function GET(
     // Use * for main table to get all columns (including all metrics), then join creator
     let query = supabase
       .from("twitter_campaign_tweets")
-      .select(`
+      .select(
+        `
         *,
         creator:users!twitter_campaign_tweets_creator_id_fkey(id, username, full_name, profile_picture_url)
-      `, { count: "exact" })
+      `,
+        { count: "exact" }
+      )
       .eq("contest_id", contestId)
       .eq("is_eligible", true)
       .order("tweet_created_at", { ascending: false });
@@ -79,9 +86,9 @@ export async function GET(
         errorHint: error.hint,
       });
       return NextResponse.json(
-        { 
+        {
           error: "Failed to fetch tweets",
-          details: error.message || "Unknown error"
+          details: error.message || "Unknown error",
         },
         { status: 500 }
       );
@@ -94,9 +101,9 @@ export async function GET(
         // If creator is not in participants (shouldn't happen), exclude
         return false;
       }
-      
+
       const tweetCreatedAt = new Date(tweet.tweet_created_at);
-      
+
       // Only include tweets created on or after the join date
       return tweetCreatedAt >= joinDate;
     });
@@ -108,11 +115,13 @@ export async function GET(
     // We need to apply the same join date filter here
     const { data: creatorsData, error: creatorsError } = await supabase
       .from("twitter_campaign_tweets")
-      .select(`
+      .select(
+        `
         creator_id,
         tweet_created_at,
         creator:users!twitter_campaign_tweets_creator_id_fkey(id, username, full_name, profile_picture_url)
-      `)
+      `
+      )
       .eq("contest_id", contestId)
       .eq("is_eligible", true);
 
@@ -130,7 +139,7 @@ export async function GET(
         }
 
         const tweetCreatedAt = new Date(item.tweet_created_at);
-        
+
         // Only count tweets created on or after join date
         if (tweetCreatedAt < joinDate) {
           continue;
@@ -153,8 +162,8 @@ export async function GET(
       }
     }
 
-    const creators = Array.from(creatorMap.values()).sort((a, b) => 
-      (b.tweetCount || 0) - (a.tweetCount || 0)
+    const creators = Array.from(creatorMap.values()).sort(
+      (a, b) => (b.tweetCount || 0) - (a.tweetCount || 0)
     );
 
     // Use filtered count for pagination
