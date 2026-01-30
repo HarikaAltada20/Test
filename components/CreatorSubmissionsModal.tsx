@@ -76,6 +76,7 @@ interface Submission {
   manual_points_adjustment?: number;
   manual_points_reason?: string | null;
   tweet_id?: string;
+  filter_status?: string | null;
 }
 
 interface CreatorSubmissionsModalProps {
@@ -410,6 +411,43 @@ export function CreatorSubmissionsModal({
     return `$${(cents / 100).toFixed(2)}`;
   };
 
+  const calculateSubmissionBaseExpectedReward = (submission: Submission) => {
+    let baseExpectedReward = submission.earnings || 0;
+    if (contest?.contest_type === "cpm" && !baseExpectedReward) {
+      const cpmConfig = (contest?.contest_based_details as any)?.cpm_contest;
+      const cpmRateUsd = cpmConfig?.cpm_rate_usd;
+      if (cpmRateUsd) {
+        const platform = (submission.platform || "").toLowerCase();
+        const isTwitterSubmission =
+          submission.is_twitter_tweet === true ||
+          platform === "twitter" ||
+          platform === "x";
+
+        if (isTwitterSubmission) {
+          const basePoints = submission.other_stats?.base_points || 0;
+          const manualAdjustment = submission.manual_points_adjustment || 0;
+          const totalPoints = Math.max(basePoints + manualAdjustment, 0);
+          const calculatedEarnings =
+            (totalPoints * cpmRateUsd * 100) / 1000;
+          baseExpectedReward = Math.round(calculatedEarnings);
+        } else {
+          let effectiveViews = submission.views || 0;
+          if (cpmConfig?.min_views != null && effectiveViews < cpmConfig.min_views) {
+            effectiveViews = 0;
+          }
+          if (cpmConfig?.max_views != null && effectiveViews > cpmConfig.max_views) {
+            effectiveViews = cpmConfig.max_views;
+          }
+          const calculatedEarnings =
+            (effectiveViews * cpmRateUsd * 100) / 1000;
+          baseExpectedReward = Math.round(calculatedEarnings);
+        }
+      }
+    }
+
+    return Math.max(baseExpectedReward, 0);
+  };
+
   // Get flat_fee_bonus from the correct nested location based on contest type
   const getFlatFeeBonus = () => {
     if (contest?.contest_type === "cpm") {
@@ -548,6 +586,9 @@ export function CreatorSubmissionsModal({
     });
   }
 
+  let creatorCapApplied = false;
+  let cappedTwitterSubmissionId: string | null = null;
+
   if (maxEarningsPerCreator && maxEarningsPerCreator > 0) {
     // Sort by created_at to apply cap in submission order
     const submissionsByTime = [...sortedSubmissions].sort((a, b) => {
@@ -559,35 +600,7 @@ export function CreatorSubmissionsModal({
     let runningTotal = 0;
 
     submissionsByTime.forEach((sub) => {
-      // Calculate base expected reward
-      let baseExpectedReward = sub.earnings || 0;
-
-      if (!baseExpectedReward && contest?.contest_type === "cpm") {
-        const cpmConfig = (contest?.contest_based_details as any)?.cpm_contest;
-        if (cpmConfig?.cpm_rate_usd) {
-          let effectiveViews = sub.views || 0;
-
-          if (
-            cpmConfig.min_views != null &&
-            effectiveViews < cpmConfig.min_views
-          ) {
-            effectiveViews = 0;
-          }
-
-          if (
-            cpmConfig.max_views != null &&
-            effectiveViews > cpmConfig.max_views
-          ) {
-            effectiveViews = cpmConfig.max_views;
-          }
-
-          const calculatedEarnings =
-            (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
-          baseExpectedReward = Math.round(calculatedEarnings);
-        }
-      }
-
-      // Apply cap
+      const baseExpectedReward = calculateSubmissionBaseExpectedReward(sub);
       const remainingCap = maxEarningsPerCreator - runningTotal;
       let cappedExpectedReward = baseExpectedReward;
 
@@ -598,38 +611,22 @@ export function CreatorSubmissionsModal({
       }
 
       expectedRewardsMap.set(sub.id, cappedExpectedReward);
-      runningTotal += Math.min(baseExpectedReward, Math.max(0, remainingCap));
+      const amountApplied = Math.min(baseExpectedReward, Math.max(0, remainingCap));
+      runningTotal += amountApplied;
+
+      if (
+        !creatorCapApplied &&
+        cappedExpectedReward < baseExpectedReward &&
+        sub.is_twitter_tweet === true
+      ) {
+        creatorCapApplied = true;
+        cappedTwitterSubmissionId = sub.id;
+      }
     });
   } else {
     // No cap - use base expected rewards
     sortedSubmissions.forEach((sub) => {
-      let baseExpectedReward = sub.earnings || 0;
-
-      if (!baseExpectedReward && contest?.contest_type === "cpm") {
-        const cpmConfig = (contest?.contest_based_details as any)?.cpm_contest;
-        if (cpmConfig?.cpm_rate_usd) {
-          let effectiveViews = sub.views || 0;
-
-          if (
-            cpmConfig.min_views != null &&
-            effectiveViews < cpmConfig.min_views
-          ) {
-            effectiveViews = 0;
-          }
-
-          if (
-            cpmConfig.max_views != null &&
-            effectiveViews > cpmConfig.max_views
-          ) {
-            effectiveViews = cpmConfig.max_views;
-          }
-
-          const calculatedEarnings =
-            (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
-          baseExpectedReward = Math.round(calculatedEarnings);
-        }
-      }
-
+      const baseExpectedReward = calculateSubmissionBaseExpectedReward(sub);
       expectedRewardsMap.set(sub.id, baseExpectedReward);
     });
   }
@@ -1162,6 +1159,22 @@ export function CreatorSubmissionsModal({
                           isDark ? "bg-[#391A6A] " : "bg-gray-50"
                         )}
                       >
+                        Expected Reward
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
+                        Reward Granted
+                      </TableHead>
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        )}
+                      >
                         Manual Points Reason
                       </TableHead>
                     </>
@@ -1267,7 +1280,7 @@ export function CreatorSubmissionsModal({
                     <TableCell
                       colSpan={
                         isTwitterTextImageContest
-                          ? 15 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Manual Points Reason, Status, Submitted, Actions
+                          ? 16 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Submitted, Actions
                           : hasBonus
                           ? 13 // Checkbox, #, Content, Views, Likes, Comments, Expected Reward, Reward Granted, Bonus Expected, Bonus Granted, Status, Submitted, Actions
                           : 11 // Checkbox, #, Content, Views, Likes, Comments, Expected Reward, Reward Granted, Status, Submitted, Actions
@@ -1309,11 +1322,26 @@ export function CreatorSubmissionsModal({
                     const manualPointsAdjustment =
                       submission.manual_points_adjustment || 0;
                     const totalPoints = basePoints + manualPointsAdjustment;
+                    const filterStatus =
+                      submission.filter_status ||
+                      submission.other_stats?.filter_status ||
+                      null;
+                    const isDeletedTweet =
+                      isTwitterTweet && filterStatus === "deleted";
 
                     // Get pre-calculated expected reward (with cap applied in submission time order)
-                    // Note: Twitter tweets don't have rewards, so expectedReward will be 0
                     const expectedReward =
                       expectedRewardsMap.get(submission.id) || 0;
+                    let expectedRewardForDisplay = expectedReward;
+
+                    if (creatorCapApplied && submission.is_twitter_tweet) {
+                      if (submission.id === cappedTwitterSubmissionId) {
+                        expectedRewardForDisplay =
+                          maxEarningsPerCreator || expectedReward;
+                      } else {
+                        expectedRewardForDisplay = 0;
+                      }
+                    }
 
                     // Use ACTUAL earnings from database for granted reward (respects cap)
                     // Note: Twitter tweets don't have earnings/rewards
@@ -1338,7 +1366,10 @@ export function CreatorSubmissionsModal({
                     return (
                       <TableRow
                         key={submission.id}
-                        className={cn(isDark ? "text-white" : "text-gray-700")}
+                        className={cn(
+                          isDark ? "text-white" : "text-gray-700",
+                          isDeletedTweet && "opacity-60"
+                        )}
                       >
                         <TableCell>
                           <Checkbox
@@ -1393,6 +1424,14 @@ export function CreatorSubmissionsModal({
                                       ? "RETWEET"
                                       : "TWEET"}
                                   </Badge>
+                                  {isDeletedTweet && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs px-2 py-0.5 bg-red-100 text-red-700 border-red-300"
+                                    >
+                                      DELETED
+                                    </Badge>
+                                  )}
                                   <span
                                     className={cn(
                                       "text-xs",
@@ -1620,6 +1659,12 @@ export function CreatorSubmissionsModal({
                                   impressions
                                 </span>
                               </div>
+                            </TableCell>
+                            <TableCell className="text-center font-medium text-sm">
+                              {formatCurrency(expectedRewardForDisplay)}
+                            </TableCell>
+                            <TableCell className="text-center font-medium text-green-600">
+                              {grantedReward > 0 ? formatCurrency(grantedReward) : "-"}
                             </TableCell>
                             {/* Manual Points Reason */}
                             <TableCell className="text-center">
