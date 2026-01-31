@@ -191,7 +191,7 @@ const moderationStatusConfig = {
 const contestStatusConfig = {
   upcoming: { label: "Upcoming", color: "bg-purple-500", icon: Calendar },
   active: { label: "Active", color: "bg-green-600", icon: PlayCircle },
-  ended: { label: "Ended", color: "bg-gray-600", icon: StopCircle },
+  ended: { label: "completed", color: "bg-gray-600", icon: StopCircle },
 };
 
 const getBudgetTrackerValues = (
@@ -746,7 +746,7 @@ export function ContestListClient({
           className: "bg-green-600 border-green-600 text-white",
         };
       return {
-        text: "Ended",
+        text: "completed",
         className: "bg-gray-500 border-gray-500 text-white",
       };
     }
@@ -2689,7 +2689,7 @@ export function ContestListClient({
                 Upcoming
               </SelectItem>
               <SelectItem isDark={isDark} value="ended">
-                Ended
+                completed
               </SelectItem>
             </SelectContent>
           </Select>

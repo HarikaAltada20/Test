@@ -10,8 +10,6 @@ import {
   Crown,
   Sparkles,
   Trophy,
-  Pen,
-  Users,
 } from "lucide-react";
 import CtcBanner from "@/components/CtcBanner";
 import NumbersSection from "@/components/NumberSection";
@@ -47,41 +45,6 @@ import BrandGetStartedButton from "@/components/BrandGetStartedButton";
 //       "You set the prize pool for your contest. Payments to winning creators are handled securely through our platform. Our pricing is transparent, typically involving a platform fee on top of the prize money you allocate for creators.",
 //   },
 // ];
-const Brandsteps = [
-  {
-    number: "1",
-    title: "Create Your Contest",
-    description:
-      "Set up your contest by defining your brief, rules, and prize pool. Choose between Leaderboard or CPM contest models based on your campaign goals. Our intuitive platform makes it easy to launch and attract the perfect creators for your brand.",
-    icon: <Pen className="h-8 w-8" />,
-    gradient: "from-violet-600 to-purple-600",
-    color: "bg-[#7F39EC87] border-4 border-[#7F39EC]",
-  },
-  {
-    number: "2",
-    title: "Creators Submit Content",
-    description:
-      "Access a vibrant network of creators who will submit content based on your brief. You can review, provide feedback, and ensure the content aligns with your brand's vision.",
-    icon: <Users className="h-8 w-8" />,
-    gradient: "from-blue-600 to-indigo-600",
-    color: "bg-[#444DE787] border-4 border-[#454DE5]",
-  },
-  {
-    number: "3",
-    title: "Reward Top Performers",
-    description:
-      "Reward creators based on their content's views, engagement, or ranking in the contest. Choose the model that works best for your objectives: Leaderboard-based contests: Creators are ranked by their views, and payouts are based on their ranking. This motivates creators to compete for the top spots, ensuring high-quality, impactful content for your brand. CPM-based contests: Creators earn based on the number of views their content receives, regardless of their ranking. Ideal for high-volume content generation, this model rewards creators purely for engagement through views, without the pressure of ranking.",
-    icon: <Trophy className="h-8 w-8" />,
-    gradient: "from-amber-600 to-orange-600",
-    color: "bg-[#E75D0D8F] border-4 border-[#E65D09]",
-  },
-];
-const images: string[] = [
-  "/images/f51c4c5af9b9b5ab2e591a2decd387ff602702a8.avif",
-  "/images/Property 1=Rectangle 2725.avif",
-  "/images/f96e2b44b8e51e5813eb9cc1fa2600d8249d865b.avif",
-];
-
 const brandImages: string[] = [
   "/images/song-gpt.logo.avif",
   "/images/vows-streams-logo.avif",
@@ -147,15 +110,15 @@ export default function BrandsClient() {
     };
   }, []);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // Immediately change image index and set fade true
-      setCurrentIndex((prev) => (prev + 1) % images.length);
-      setFade(true);
-    }, 4000);
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     // Immediately change image index and set fade true
+  //     setCurrentIndex((prev) => (prev + 1) % images.length);
+  //     setFade(true);
+  //   }, 4000);
 
-    return () => clearInterval(interval);
-  }, []);
+  //   return () => clearInterval(interval);
+  // }, []);
 
   useEffect(() => {
     const handleResize = () => {
@@ -467,97 +430,87 @@ export default function BrandsClient() {
             </div>
           </div>
         </section>
-        {/* Gaming How It Works */}
-
-        <section
-          className="py-16 px-4 md:px-16 xl:px-4 text-white"
-          ref={howItWorksRef}
-        >
-          <div className="container mx-auto max-w-[1250px]">
-            <h2
-              className={`text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-10 ${
+        {/* Campaign Process Cards */}
+        <section ref={howItWorksRef} className="py-12 sm:py-16 px-4 md:px-8 xl:px-4 text-white">
+          <div className="container mx-auto max-w-[1380px]">
+            <h2   className={`text-center text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold mb-8 sm:mb-12 ${
                 howItWorksAnimated ? "slide-up" : "hide-before-animate"
               }`}
-              style={{ animationDelay: "0.1s" }}
-            >
-              How it works
+              style={{ animationDelay: "0.1s" }}>
+              How it Works
             </h2>
+           
 
-            <div className="grid lg:grid-cols-2 gap-10 items-start">
-              {/* Steps */}
-              <div className="space-y-16 sm:space-y-20 lg:space-y-[160px] relative z-10">
-                {Brandsteps.map((step, index) => (
-                  <div
-                    key={index}
-                    className="flex items-start gap-4 sm:gap-6 relative"
-                  >
-                    {/* Circle */}
-                    <div
-                      className={`w-12 h-12 sm:w-16 sm:h-16 md:w-[90px] md:h-[90px] rounded-full flex items-center justify-center text-white font-bold text-lg sm:text-xl md:text-2xl ${step.color} flex-shrink-0 relative z-10`}
-                    >
-                      {step.number}
-                    </div>
+            <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                {
+                  id: "1",
+                  title: "Create a Contest",
+                  description: "Set your brief, budget, duration, and payout model (Leaderboard or CPM). Choose platforms like Instagram, YouTube, or Twitter (X).",
+                  image: "/images/contest.avif",
+                  number: "1",
+                },
+                {
+                  id: "2",
+                  title: "Creators Publish Content",
+                  description: "Creators publish organic content on their own accounts, sharing videos on Instagram and YouTube and tweets on Twitter",
+                  image: "/images/creators-publish-content.avif",
+                  number: "2",
+                },
+                {
+                  id: "3",
+                  title: "Performance Is Tracked",
+                  description: "Performance is tracked automatically using platform APIs: views on Instagram and YouTube, and engagement points on Twitter based on likes, reposts, replies, and quotes.",
+                  image: "/images/performance-tracked.avif",
+                  number: "3",
+                },
+                {
+                  id: "4",
+                  title: "Pay Only for Performance",
+                  description: "Leaderboard: Top creators get paid. CPM: Pay per 1,000 views for Instagram & YouTube, per 1,000 engagement points for Twitter.",
+                  image: "/images/cpm.avif",
+                  number: "4",
+                },
+              ].map((item) => (
+                <div
+                  key={item.id}
+                  className="group relative rounded-2xl border border-[#7F39EC]/70 bg-black/80 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_26px_70px_rgba(76,35,141,0.6)] hover:border-[#7F39EC] hover:ring-2 hover:ring-[#7F39EC]/60"
+                >
+                  {/* subtle purple glow (stronger on hover) */}
+                  <div className="pointer-events-none absolute inset-px rounded-2xl opacity-60 group-hover:opacity-100 transition-opacity duration-500 bg-[radial-gradient(circle_at_top,_rgba(127,57,236,0.32),_transparent_60%),radial-gradient(circle_at_bottom,_rgba(76,35,141,0.38),_transparent_55%)]" />
 
-                    {/* Dotted line */}
-                    {index < Brandsteps.length - 1 && (
-                      <div
-                        className="hidden lg:block absolute left-6 md:left-[45px] w-px border-l-2 border-dotted border-gray-500 z-0"
-                        style={{
-                          top: "90px",
-                          height:
-                            index === 0
-                              ? windowWidth < 1100
-                                ? "320px" // 1000–1099px
-                                : windowWidth < 1250
-                                ? "300px" // 1100–1249px
-                                : "266px" // ≥1250px
-                              : index === 1
-                              ? windowWidth < 1100
-                                ? "270px" // 1000–1099px
-                                : windowWidth < 1250
-                                ? "280px" // 1100–1249px
-                                : "250px" // ≥1250px
-                              : index === 2
-                              ? windowWidth < 1100
-                                ? "300px" // 1000–1099px
-                                : windowWidth < 1250
-                                ? "270px" // 1100–1249px
-                                : "180px" // ≥1250px
-                              : "40px",
-                        }}
-                      />
-                    )}
+                  <div className="relative w-full h-full lg:h-64 bg-slate-900/10 overflow-hidden">
+                    {/* light gradient only at bottom for text readability */}
+                    <div className="pointer-events-none absolute inset-0" />
+                    <img
+                      src={item.image}
+                      alt={item.title}
+                      className="w-full h-full object-contain object-center group-hover:scale-[1.06] transition-transform duration-700 ease-out"
+                      style={{
+                        imageRendering: 'auto',
+                      }}
+                    />
 
-                    <div>
-                      {/* Icon */}
-                      <div className="mb-4 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center border border-white rounded-md">
-                        <span className="text-white">{step.icon}</span>
-                      </div>
-
-                      <h3 className="font-bold text-xl sm:text-2xl md:text-3xl">
-                        {step.title}
-                      </h3>
-                      <p className="mt-2 sm:mt-4 text-base text-md md:text-lg text-gray-300">
-                        {step.description}
-                      </p>
-                    </div>
+                  
+                   
                   </div>
-                ))}
-              </div>
 
-              {/* Image */}
-              <div className="relative w-full h-64 sm:h-96 md:h-[600px] lg:h-[900px] rounded-xl overflow-hidden">
-                <Image
-                  key={currentIndex}
-                  src={images[currentIndex]}
-                  alt={`Step Image ${currentIndex + 1}`}
-                  fill
-                  className={`object-cover rounded-xl transition-opacity duration-500 ${
-                    fade ? "opacity-100" : "opacity-0"
-                  }`}
-                  priority
-                />
-              </div>
+                  <div className="relative p-4 sm:p-5 lg:p-6 flex flex-col gap-3 sm:gap-4 flex-1">
+                    {/* accent bar */}
+                    <div className="h-0.5 w-10 rounded-full bg-gradient-to-r from-[#4C238D] via-[#7F39EC] to-fuchsia-400 mb-1 group-hover:w-16 transition-all duration-500" />
+
+                    <h3 className="font-semibold text-sm sm:text-base lg:text-lg line-clamp-2 text-slate-50 group-hover:text-[#C4A3FF] transition-colors duration-300">
+                      {item.title}
+                    </h3>
+
+                    <p className="text-xs sm:text-sm lg:text-base text-slate-300/90 leading-relaxed line-clamp-4 sm:line-clamp-6 group-hover:text-slate-100 transition-colors">
+                      {item.description}
+                    </p>
+
+                   
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </section>
