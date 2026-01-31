@@ -485,7 +485,7 @@ export default function BrandsClient() {
                     <img
                       src={item.image}
                       alt={item.title}
-                      className="w-full h-full object-contain object-center group-hover:scale-[1.06] transition-transform duration-700 ease-out"
+                      className="w-full h-full lg:object-contain xl:object-cover object-center group-hover:scale-[1.06] transition-transform duration-700 ease-out"
                       style={{
                         imageRendering: 'auto',
                       }}
