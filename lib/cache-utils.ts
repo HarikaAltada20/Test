@@ -114,7 +114,8 @@ class MemoryCache {
 // Create singleton instances for different cache buckets
 export const leaderboardCache = new MemoryCache(600000); // 10 minutes TTL
 export const adminLeaderboardCache = new MemoryCache(600000); // 10 minutes TTL
-
+export const contestCache = new MemoryCache(300000); // 5 minutes TTL
+export const contestDetailsCache = new MemoryCache(300000); // 5 minutes TTL
 /**
  * Generate cache key for leaderboard queries
  */
@@ -163,4 +164,32 @@ export function getPlatformSubmissionsCacheKey(platform: string): string {
 export function clearLeaderboardCache(): void {
   leaderboardCache.clearPrefix("leaderboard:");
   adminLeaderboardCache.clearPrefix("admin_leaderboard:");
+}
+
+
+/**
+ * Generate cache key for contests queries
+ */
+export function getContestsCacheKey(params: {
+  advertiserId?: string;
+  includeAdvertiserProfile?: boolean;
+}): string {
+  const { advertiserId = "all", includeAdvertiserProfile = false } = params;
+  return `contests:list:${advertiserId}:${includeAdvertiserProfile}`;
+}
+
+/**
+ * Generate cache key for single contest details
+ */
+export function getContestDetailsCacheKey(contestId: string): string {
+  return `contests:details:${contestId}`;
+}
+
+/**
+ * Clear all contests-related cache
+ */
+export function clearContestsCache(): number {
+  const listCount = contestCache.clearPrefix("contests:list:");
+  const detailsCount = contestDetailsCache.clearPrefix("contests:details:");
+  return listCount + detailsCount;
 }

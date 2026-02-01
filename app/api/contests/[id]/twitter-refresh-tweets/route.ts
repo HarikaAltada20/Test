@@ -50,21 +50,21 @@ export async function POST(
       // We do NOT fetch the participant's entire timeline
       try {
         // Construct URL from request headers (same approach as twitter-refresh-feed)
-        const baseUrl = request.headers.get('host');
-        const protocol = request.headers.get('x-forwarded-proto') || 'http';
+        const baseUrl = request.headers.get("host");
+        const protocol = request.headers.get("x-forwarded-proto") || "http";
         const raidUrl = `${protocol}://${baseUrl}/api/contests/${contestId}/fetch-raid-engagements`;
-        
+
         // Forward cookies from original request to maintain authentication
-        const cookieHeader = request.headers.get('cookie');
-        
+        const cookieHeader = request.headers.get("cookie");
+
         const raidResponse = await fetch(raidUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(cookieHeader ? { 'Cookie': cookieHeader } : {}),
+            ...(cookieHeader ? { Cookie: cookieHeader } : {}),
           },
         });
-        
+
         // Check if the response is OK before parsing
         if (!raidResponse.ok) {
           const errorText = await raidResponse.text();
@@ -72,26 +72,26 @@ export async function POST(
           try {
             errorData = JSON.parse(errorText);
           } catch {
-            errorData = { error: errorText || "Failed to fetch raid engagements" };
+            errorData = {
+              error: errorText || "Failed to fetch raid engagements",
+            };
           }
           console.error(
             "[twitter-refresh-tweets] Raid engagements fetch failed:",
             errorData
           );
-          return NextResponse.json(
-            {
-              success: true,
-              contestId,
-              participantsCount: 0,
-              tweetsFetched: 0,
-              tweetsFiltered: 0,
-              details: [],
-              isRaidCampaign: true,
-              raidEngagements: errorData,
-            }
-          );
+          return NextResponse.json({
+            success: true,
+            contestId,
+            participantsCount: 0,
+            tweetsFetched: 0,
+            tweetsFiltered: 0,
+            details: [],
+            isRaidCampaign: true,
+            raidEngagements: errorData,
+          });
         }
-        
+
         const raidData = await raidResponse.json();
         console.log(
           "[twitter-refresh-tweets] Raid engagements fetched:",
@@ -115,20 +115,19 @@ export async function POST(
           raidError
         );
         // For raid campaigns, if fetch fails, return error (don't fall through to regular tweet fetching)
-        return NextResponse.json(
-          {
-            success: true,
-            contestId,
-            participantsCount: 0,
-            tweetsFetched: 0,
-            tweetsFiltered: 0,
-            details: [],
-            isRaidCampaign: true,
-            raidEngagements: {
-              error: raidError instanceof Error ? raidError.message : "Unknown error",
-            },
-          }
-        );
+        return NextResponse.json({
+          success: true,
+          contestId,
+          participantsCount: 0,
+          tweetsFetched: 0,
+          tweetsFiltered: 0,
+          details: [],
+          isRaidCampaign: true,
+          raidEngagements: {
+            error:
+              raidError instanceof Error ? raidError.message : "Unknown error",
+          },
+        });
       }
     }
 
@@ -247,7 +246,9 @@ export async function POST(
     // Always fetch from contest data (JSONB) to get complete config including allowed_tweet_types
     const { data: contestData, error: contestError } = await supabase
       .from("contests")
-      .select("contest_based_details, contest_type, platform")
+      .select(
+        "contest_based_details, contest_type, platform, max_submissions_per_creator"
+      )
       .eq("id", contestId)
       .maybeSingle();
 
@@ -637,6 +638,14 @@ export async function POST(
     }
 
     const campaignHashtags: string[] = []; // no separate hashtags array from client for now
+    const maxSubmissionsPerCreator =
+      typeof contestData?.max_submissions_per_creator === "number" &&
+      contestData.max_submissions_per_creator > 0
+        ? contestData.max_submissions_per_creator
+        : Number.POSITIVE_INFINITY;
+    const hasSubmissionLimit = Number.isFinite(maxSubmissionsPerCreator);
+    const isSingleSubmissionContest =
+      hasSubmissionLimit && maxSubmissionsPerCreator === 1;
 
     console.log(
       "[twitter-refresh-tweets] Campaign details (from contest JSONB)",
@@ -664,7 +673,7 @@ export async function POST(
       await supabaseAdmin
         .from("twitter_campaign_tweets")
         .select(
-          "tweet_id, moderation_status, manual_points_adjustment, manual_points_reason, is_eligible"
+          "tweet_id, creator_id, moderation_status, manual_points_adjustment, manual_points_reason, is_eligible"
         )
         .eq("contest_id", contestId)
         .is("target_tweet_id", null); // Only awareness tweets (raid tweets have target_tweet_id set)
@@ -688,6 +697,21 @@ export async function POST(
         },
       ])
     );
+    const existingTweetCreatorMap = new Map(
+      (existingTweets || []).map((t: any) => [t.tweet_id, t.creator_id || null])
+    );
+
+    const existingTweetCountsByCreator = new Map<string, number>();
+    if (existingTweets) {
+      existingTweets.forEach((tweet: any) => {
+        if (!tweet.creator_id || !tweet.is_eligible) {
+          return;
+        }
+        const currentCount =
+          existingTweetCountsByCreator.get(tweet.creator_id) || 0;
+        existingTweetCountsByCreator.set(tweet.creator_id, currentCount + 1);
+      });
+    }
 
     console.log(
       `[twitter-refresh-tweets] Found ${existingTweetsMap.size} existing tweets to preserve moderation for`
@@ -695,6 +719,7 @@ export async function POST(
 
     // Track which tweet_ids we see in the fresh API response
     const freshTweetIds = new Set<string>();
+    const fetchedCreatorIds = new Set<string>();
 
     const allDetails: any[] = [];
     let totalFetched = 0;
@@ -768,6 +793,28 @@ export async function POST(
 
         // Remove @ if present to get a clean screen name
         const cleanUsername = username.replace("@", "");
+        const creatorId = participant.creator_id;
+        const creatorExistingCount = creatorId
+          ? existingTweetCountsByCreator.get(creatorId) || 0
+          : 0;
+        const shouldEnforceSubmissionLimit =
+          hasSubmissionLimit && !!creatorId && !isSingleSubmissionContest;
+        const availableSlots = shouldEnforceSubmissionLimit
+          ? Math.max(maxSubmissionsPerCreator - creatorExistingCount, 0)
+          : Number.POSITIVE_INFINITY;
+        const maxTweetsAllowedForCreator = isSingleSubmissionContest
+          ? 1
+          : shouldEnforceSubmissionLimit
+          ? availableSlots > 0
+            ? availableSlots
+            : maxSubmissionsPerCreator
+          : Number.POSITIVE_INFINITY;
+
+        if (shouldEnforceSubmissionLimit && availableSlots <= 0) {
+          console.log(
+            `[twitter-refresh-tweets] Creator ${cleanUsername} (${creatorId}) has already reached the submission limit (${maxSubmissionsPerCreator}). Still fetching to replace older submissions if newer ones exist.`
+          );
+        }
 
         // Get join date for this participant
         const joinDate = participant.joined_at
@@ -887,6 +934,17 @@ export async function POST(
         );
 
         const timeline = allTimelineTweets;
+        if (participant.creator_id) {
+          fetchedCreatorIds.add(participant.creator_id);
+        }
+
+        for (const rawTweet of timeline) {
+          const rawTweetId =
+            rawTweet?.tweet_id || rawTweet?.id_str || rawTweet?.id;
+          if (rawTweetId) {
+            freshTweetIds.add(rawTweetId);
+          }
+        }
 
         // Filter tweets to only include those created on or after join date
         const filteredTimeline = joinDate
@@ -1039,15 +1097,56 @@ export async function POST(
           validTweets
         );
 
+        const sortedFilteredTweets = [...campaignFilteredTweets].sort(
+          (a, b) => {
+            const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return dateB - dateA;
+          }
+        );
+        for (const tweet of sortedFilteredTweets) {
+          if (tweet.tweet_id) {
+            freshTweetIds.add(tweet.tweet_id);
+          }
+        }
+        sortedFilteredTweets.forEach((tweet: any) => {
+          if (tweet.tweet_id) {
+            freshTweetIds.add(tweet.tweet_id);
+          }
+        });
+        const tweetsToProcess = Number.isFinite(maxTweetsAllowedForCreator)
+          ? sortedFilteredTweets.slice(0, maxTweetsAllowedForCreator)
+          : sortedFilteredTweets;
+
+        if (
+          Number.isFinite(maxTweetsAllowedForCreator) &&
+          tweetsToProcess.length < sortedFilteredTweets.length
+        ) {
+          console.log(
+            `[twitter-refresh-tweets] Limited ${cleanUsername} to ${tweetsToProcess.length} tweets due to submission cap (${maxSubmissionsPerCreator}).`
+          );
+        }
+
+        if (
+          shouldEnforceSubmissionLimit &&
+          creatorId &&
+          tweetsToProcess.length > 0
+        ) {
+          existingTweetCountsByCreator.set(
+            creatorId,
+            creatorExistingCount + tweetsToProcess.length
+          );
+        }
+
         console.log(
           "[twitter-refresh-tweets] Campaign-matching tweets for user",
           cleanUsername,
-          campaignFilteredTweets
+          tweetsToProcess
         );
 
         // OPTIMIZATION: Collect tweets for batch upserting instead of individual upserts
         // This is 60-80% faster for large datasets (100+ participants with 100+ tweets)
-        for (const t of campaignFilteredTweets) {
+        for (const t of tweetsToProcess) {
           try {
             const tweetUrl = `https://x.com/${cleanUsername}/status/${t.tweet_id}`;
 
@@ -1259,9 +1358,9 @@ export async function POST(
           participant,
           rawCount: timeline.length, // raw items returned by RapidAPI
           normalizedCount: mappedTweets.length, // mapped/normalized tweets
-          filteredCount: campaignFilteredTweets.length, // tweets matching campaign rules
+          filteredCount: tweetsToProcess.length, // tweets matching campaign rules
           allTweets: validTweets, // all valid tweets before campaign filters
-          filteredTweets: campaignFilteredTweets, // tweets after keyword/mention filters
+          filteredTweets: tweetsToProcess, // tweets after keyword/mention filters
         });
 
         return {
@@ -1269,11 +1368,11 @@ export async function POST(
           participant,
           rawCount: allTimelineTweets.length, // total raw items from all pages
           normalizedCount: mappedTweets.length, // mapped/normalized tweets (after join date filter)
-          filteredCount: campaignFilteredTweets.length, // tweets matching campaign rules
+          filteredCount: tweetsToProcess.length, // tweets matching campaign rules
           allTweets: validTweets, // all valid tweets before campaign filters
-          filteredTweets: campaignFilteredTweets, // tweets after keyword/mention filters
+          filteredTweets: tweetsToProcess, // tweets after keyword/mention filters
           totalFetched: allTimelineTweets.length, // total fetched from all pages
-          totalFiltered: campaignFilteredTweets.length, // total after all filters
+          totalFiltered: tweetsToProcess.length, // total after all filters
         };
       });
 
@@ -1370,29 +1469,289 @@ export async function POST(
       console.log(`[twitter-refresh-tweets] No tweets to upsert`);
     }
 
+    const enforceSubmissionLimit = async () => {
+      if (!hasSubmissionLimit) {
+        return;
+      }
+
+      console.log(
+        `[twitter-refresh-tweets] Enforcing submission cap (${maxSubmissionsPerCreator}) per creator`
+      );
+
+      const { data: eligibleTweets, error: eligibleTweetsError } =
+        await supabaseAdmin
+          .from("twitter_campaign_tweets")
+          .select("creator_id, tweet_id, tweet_created_at")
+          .eq("contest_id", contestId)
+          .eq("is_eligible", true)
+          .is("target_tweet_id", null)
+          .order("creator_id", { ascending: true })
+          .order("tweet_created_at", { ascending: false });
+
+      if (eligibleTweetsError) {
+        console.error(
+          "[twitter-refresh-tweets] Failed to load eligible tweets for submission cap enforcement",
+          {
+            contestId,
+            error: eligibleTweetsError,
+          }
+        );
+        return;
+      }
+
+      const tweetsToDemote: string[] = [];
+      const countsByCreator = new Map<string, number>();
+
+      (eligibleTweets || []).forEach((row: any) => {
+        const creatorId = row.creator_id as string | null;
+        const tweetId = row.tweet_id as string | null;
+
+        if (!creatorId || !tweetId) return;
+
+        const currentCount = countsByCreator.get(creatorId) || 0;
+        if (currentCount >= maxSubmissionsPerCreator) {
+          tweetsToDemote.push(tweetId);
+        } else {
+          countsByCreator.set(creatorId, currentCount + 1);
+        }
+      });
+
+      if (tweetsToDemote.length === 0) {
+        console.log(
+          `[twitter-refresh-tweets] No tweets needed demotion for submission cap (${maxSubmissionsPerCreator})`
+        );
+        return;
+      }
+
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < tweetsToDemote.length; i += CHUNK_SIZE) {
+        const chunk = tweetsToDemote.slice(i, i + CHUNK_SIZE);
+        try {
+          const { error: demoteError } = await supabaseAdmin
+            .from("twitter_campaign_tweets")
+            .update({
+              is_eligible: false,
+              filter_status: "filtered_out",
+              eligibility_reason:
+                "Replaced by newer submissions due to submission cap",
+            })
+            .eq("contest_id", contestId)
+            .in("tweet_id", chunk)
+            .is("target_tweet_id", null)
+            .eq("is_eligible", true);
+
+          if (demoteError) {
+            console.error(
+              "[twitter-refresh-tweets] Failed to demote tweets for submission cap",
+              {
+                contestId,
+                chunkSize: chunk.length,
+                error: demoteError,
+              }
+            );
+          } else {
+            console.log(
+              `[twitter-refresh-tweets] Demoted ${chunk.length} tweets to comply with submission cap`
+            );
+          }
+        } catch (demoteException) {
+          console.error(
+            "[twitter-refresh-tweets] Unexpected error while demoting tweets for submission cap",
+            {
+              contestId,
+              chunk: chunk,
+              error: demoteException,
+            }
+          );
+        }
+      }
+    };
+
+    await enforceSubmissionLimit();
+
     // ============================================================================
-    // NOTE: We do NOT mark tweets as deleted even after pagination
-    // Even though we fetch all tweets up to join date via pagination, there could still be:
-    // 1. API rate limits or temporary issues preventing complete fetch
-    // 2. Edge cases where tweets exist but aren't returned by the API
-    // 3. Tweets that were filtered out but still exist on Twitter
-    //
-    // We'll keep existing tweets as-is if they're not found, rather than marking as deleted
+    // NOTE: We only delete tweets that were present but no longer returned by the fresh fetch.
+    // This ensures timeline hiccups (rate limits/pagination) do not remove valid tweets, while
+    // still keeping the database clean when tweets actually disappear from Twitter.
     // ============================================================================
     console.log(
-      `[twitter-refresh-tweets] Skipping deletion marking - keeping existing tweets as-is even if not found`
+      `[twitter-refresh-tweets] Checking for tweets that vanished from Twitter`
     );
 
     // Log tweets that weren't found for debugging, but don't mark as deleted
-    const tweetsNotInFreshResponse = Array.from(
-      existingTweetsMap.keys()
-    ).filter((tweetId) => !freshTweetIds.has(tweetId));
+    const tweetsNotInFreshResponse = Array.from(existingTweetsMap.keys()).filter(
+      (tweetId) => {
+        const creatorId = existingTweetCreatorMap.get(tweetId);
+        if (!creatorId) {
+          return false;
+        }
+        if (!fetchedCreatorIds.has(creatorId)) {
+          return false;
+        }
+        return !freshTweetIds.has(tweetId);
+      }
+    );
 
     if (tweetsNotInFreshResponse.length > 0) {
       console.log(
-        `[twitter-refresh-tweets] Note: ${tweetsNotInFreshResponse.length} tweets were not found in fresh paginated fetch, but keeping them as-is (may be due to API issues or edge cases)`
+        `[twitter-refresh-tweets] Removing ${tweetsNotInFreshResponse.length} tweets that no longer appear in the API response`
       );
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < tweetsNotInFreshResponse.length; i += CHUNK_SIZE) {
+        const chunk = tweetsNotInFreshResponse.slice(i, i + CHUNK_SIZE);
+        const creatorsToRefresh = new Set<string>();
+        const deletedCountByCreator = new Map<string, number>();
+
+        const { data: tweetsToDelete, error: metadataError } =
+          await supabaseAdmin
+            .from("twitter_campaign_tweets")
+            .select("tweet_id, creator_id")
+            .eq("contest_id", contestId)
+            .in("tweet_id", chunk)
+            .is("target_tweet_id", null);
+
+        if (metadataError) {
+          console.error(
+            "[twitter-refresh-tweets] Failed to load metadata for removed tweets",
+            {
+              contestId,
+              chunkSize: chunk.length,
+              error: metadataError,
+            }
+          );
+        } else if (Array.isArray(tweetsToDelete)) {
+          tweetsToDelete.forEach((row: any) => {
+            if (row.creator_id) {
+              creatorsToRefresh.add(row.creator_id);
+              const prev = deletedCountByCreator.get(row.creator_id) || 0;
+              deletedCountByCreator.set(row.creator_id, prev + 1);
+            }
+          });
+        }
+
+        try {
+          const nowIso = new Date().toISOString();
+          const { error: deleteError } = await supabaseAdmin
+            .from("twitter_campaign_tweets")
+            .update({
+              is_deleted: true,
+              deleted_at: nowIso,
+              deletion_detected_at: nowIso,
+              is_eligible: false,
+              filter_status: "deleted",
+              eligibility_reason: "Tweet no longer exists on Twitter",
+            })
+            .eq("contest_id", contestId)
+            .in("tweet_id", chunk)
+            .is("target_tweet_id", null);
+
+          if (deleteError) {
+            console.error(
+              "[twitter-refresh-tweets] Failed to delete removed tweets",
+              {
+                contestId,
+                chunkSize: chunk.length,
+                error: deleteError,
+              }
+            );
+          } else {
+            console.log(
+              `[twitter-refresh-tweets] Deleted ${chunk.length} tweets that were removed from Twitter`
+            );
+          }
+        } catch (deleteException) {
+          console.error(
+            "[twitter-refresh-tweets] Unexpected error while deleting removed tweets",
+            {
+              contestId,
+              chunkSize: chunk.length,
+              error: deleteException,
+            }
+          );
+        }
+
+        if (hasSubmissionLimit && creatorsToRefresh.size > 0) {
+          const { data: fallbackTweets, error: fallbackError } =
+            await supabaseAdmin
+              .from("twitter_campaign_tweets")
+              .select("creator_id, tweet_id, tweet_created_at")
+              .eq("contest_id", contestId)
+              .is("target_tweet_id", null)
+              .eq("filter_status", "filtered_out")
+              .in("creator_id", Array.from(creatorsToRefresh))
+              .order("creator_id", { ascending: true })
+              .order("tweet_created_at", { ascending: false });
+
+          if (fallbackError) {
+            console.error(
+              "[twitter-refresh-tweets] Failed to load fallback filtered tweets",
+              {
+                contestId,
+                error: fallbackError,
+              }
+            );
+          } else if (fallbackTweets) {
+            const promotionCount = new Map<string, number>();
+            const toPromote: Array<{ creatorId: string; tweetId: string }> = [];
+            for (const row of fallbackTweets as any[]) {
+              const creatorId = row.creator_id as string | null;
+              const tweetId = row.tweet_id as string | null;
+              if (!creatorId || !tweetId) continue;
+              const deletedSlots = deletedCountByCreator.get(creatorId) || 0;
+              const promotedSoFar = promotionCount.get(creatorId) || 0;
+              if (promotedSoFar >= deletedSlots) continue;
+              promotionCount.set(creatorId, promotedSoFar + 1);
+              toPromote.push({ creatorId, tweetId });
+            }
+
+            for (const { creatorId, tweetId } of toPromote) {
+              try {
+                const { error: promoteError } = await supabaseAdmin
+                  .from("twitter_campaign_tweets")
+                  .update({
+                    is_eligible: true,
+                    filter_status: "eligible",
+                    eligibility_reason:
+                      "Promoted after newer tweet was removed from Twitter",
+                  })
+                  .eq("contest_id", contestId)
+                  .eq("creator_id", creatorId)
+                  .eq("tweet_id", tweetId)
+                  .is("target_tweet_id", null);
+
+                if (promoteError) {
+                  console.error(
+                    "[twitter-refresh-tweets] Failed to promote fallback tweet to eligible",
+                    {
+                      contestId,
+                      creatorId,
+                      tweetId,
+                      error: promoteError,
+                    }
+                  );
+                } else {
+                  console.log(
+                    `[twitter-refresh-tweets] Promoted ${tweetId} for creator ${creatorId} after deleting a newer tweet`
+                  );
+                }
+              } catch (promoteException) {
+                console.error(
+                  "[twitter-refresh-tweets] Unexpected error while promoting fallback tweet",
+                  {
+                    contestId,
+                    creatorId,
+                    tweetId,
+                    error: promoteException,
+                  }
+                );
+              }
+            }
+          }
+        }
+      }
     }
+
+    await enforceSubmissionLimit();
 
     // NOTE: We also skip marking tweets as "filtered_out" if they're not in fresh response
     // because the same reasons apply - not found doesn't mean they don't match rules

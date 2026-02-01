@@ -155,6 +155,7 @@ export default async function ContestDetailPage({
         { count: "exact" }
       )
       .eq("contest_id", contestId)
+      .neq("filter_status", "filtered_out")
       // Don't filter by is_eligible - include all tweets so rejected ones are visible for status changes
       .order("tweet_created_at", { ascending: false })
       .range(0, INITIAL_TWEET_LIMIT - 1); // Only fetch first page
@@ -192,6 +193,7 @@ export default async function ContestDetailPage({
           { count: "exact" }
         )
         .eq("contest_id", contestId)
+        .neq("filter_status", "filtered_out")
         // Don't filter by is_eligible - include all tweets so rejected ones are visible for status changes
         .order("tweet_created_at", { ascending: false })
         .range(0, INITIAL_TWEET_LIMIT - 1); // Only fetch first page

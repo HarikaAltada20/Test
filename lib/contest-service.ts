@@ -5,6 +5,14 @@ import {
   Submission,
 } from "@/lib/contest-utils";
 import { createClient } from "@/utils/supabase/server";
+import {
+  contestCache,
+  contestDetailsCache,
+  getContestsCacheKey,
+  getContestDetailsCacheKey,
+  clearContestsCache,
+} from "@/lib/cache-utils";
+
 
 type ContestWithDetails = {
   id: string;
@@ -32,6 +40,13 @@ async function fetchContestsWithDetails(
   supabase: SupabaseClient,
   options: FetchContestsOptions = {}
 ) {
+  const cacheKey = getContestsCacheKey(options);
+  const cachedData = contestCache.get<ContestWithDetails[]>(cacheKey);
+
+  if (cachedData) {
+    return cachedData;
+  }
+
   const selectClause = options.includeAdvertiserProfile
     ? SELECT_WITH_ADVERTISER_PROFILE
     : DEFAULT_SELECT;
@@ -48,6 +63,8 @@ async function fetchContestsWithDetails(
   const { data = [] } = (await query) as unknown as {
     data: ContestWithDetails[];
   };
+
+  contestCache.set(cacheKey, data);
   return data;
 }
 
@@ -55,6 +72,13 @@ async function enrichContestWithCalculatedBudgets(
   contest: ContestWithDetails,
   supabase: SupabaseClient
 ) {
+  const cacheKey = getContestDetailsCacheKey(contest.id);
+  const cachedData = contestDetailsCache.get<ContestWithDetails>(cacheKey);
+
+  if (cachedData) {
+    return cachedData;
+  }
+
   let updatedContest: ContestWithDetails = {
     ...contest,
     contest_based_details: contest.contest_based_details || {},
@@ -96,10 +120,11 @@ async function enrichContestWithCalculatedBudgets(
     if (isTwitterTextImage) {
       const { data: twitterTweets, error: twitterError } = await supabase
         .from("twitter_campaign_tweets")
-        .select("id, creator_id, tweet_created_at, moderation_status")
+        .select("id, creator_id, tweet_created_at, moderation_status, filter_status")
         .eq("contest_id", contest.id)
         .eq("is_eligible", true)
-        .in("moderation_status", ["verified", "paid"]);
+        .in("moderation_status", ["verified", "paid"])
+        .neq("filter_status", "filtered_out");
 
       if (!twitterError && twitterTweets) {
         leaderboardSubmissions = twitterTweets
@@ -109,6 +134,7 @@ async function enrichContestWithCalculatedBudgets(
             creator_id: tweet.creator_id,
             created_at: tweet.tweet_created_at || new Date().toISOString(),
             status: tweet.moderation_status,
+            filter_status: tweet.filter_status,
             paid: tweet.moderation_status === "paid",
             earnings: null,
             bonus_paid: false,
@@ -171,11 +197,13 @@ async function enrichContestWithCalculatedBudgets(
             tweet_created_at,
             points,
             moderation_status,
-            manual_points_adjustment
+            manual_points_adjustment,
+            filter_status
           `
       )
       .eq("contest_id", contest.id)
-      .in("moderation_status", ["verified", "paid"]);
+      .in("moderation_status", ["verified", "paid"])
+      .neq("filter_status", "filtered_out");
 
     const submissions =
       (twitterTweets?.map((tweet) => ({
@@ -184,6 +212,7 @@ async function enrichContestWithCalculatedBudgets(
         created_at: tweet.tweet_created_at,
         platform: "twitter",
         status: tweet.moderation_status,
+        filter_status: tweet.filter_status,
         paid: tweet.moderation_status === "paid",
         earnings: null,
         bonus_paid: false,
@@ -214,7 +243,9 @@ async function enrichContestWithCalculatedBudgets(
     const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
       submissions,
       cpmDetails.cpm_rate_usd,
-      cpmDetails.max_earnings_per_creator,
+      contest.max_earnings_per_creator ||
+        cpmDetails.max_earnings_per_creator ||
+        null,
       cpmDetails.min_views,
       cpmDetails.max_views,
       cpmDetails.flat_fee_bonus || 0,
@@ -321,6 +352,7 @@ async function enrichContestWithCalculatedBudgets(
     updatedContest.status = "unknown";
   }
 
+  contestDetailsCache.set(cacheKey, updatedContest);
   return updatedContest;
 }
 
@@ -334,9 +366,10 @@ export async function getAdvertiserContestsWithCalculatedBudgets(
   });
 
   const contestsWithCalculatedBudgets = await Promise.all(
-    contestsData.map((contest) =>
-      enrichContestWithCalculatedBudgets(contest, supabase)
-    )
+    contestsData.map(async (contest) => {
+      const enrichedContest = await enrichContestWithCalculatedBudgets(contest, supabase);
+      return enrichedContest;
+    })
   );
 
   return contestsWithCalculatedBudgets;
@@ -351,9 +384,10 @@ export async function getAllContestsWithCalculatedBudgets(
   });
 
   const contestsWithCalculatedBudgets = await Promise.all(
-    contestsData.map((contest) =>
-      enrichContestWithCalculatedBudgets(contest, supabase)
-    )
+    contestsData.map(async (contest) => {
+      const enrichedContest = await enrichContestWithCalculatedBudgets(contest, supabase);
+      return enrichedContest;
+    })
   );
 
   return contestsWithCalculatedBudgets;

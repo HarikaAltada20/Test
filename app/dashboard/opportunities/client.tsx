@@ -735,7 +735,9 @@ export default function OpportunitiesPage({
               const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
                 submissions,
                 cpmDetails.cpm_rate_usd,
-                cpmDetails.max_earnings_per_creator,
+                contest.max_earnings_per_creator ||
+                  cpmDetails.max_earnings_per_creator ||
+                  null,
                 cpmDetails.min_views,
                 cpmDetails.max_views,
                 cpmDetails.flat_fee_bonus || 0,
@@ -1300,12 +1302,12 @@ export default function OpportunitiesPage({
                 : contest.status === "upcoming"
                 ? "Upcoming"
                 : contest.status === "ended"
-                ? "Ended"
+                ? "completed"
                 : contest.status || "Unknown"}
             </Badge>
             {contest.post_contest_status === "payouts_processed" && (
               <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
-                Completed
+                paid
               </Badge>
             )}
           </div>
@@ -2193,11 +2195,11 @@ export default function OpportunitiesPage({
                           ) && "bg-[#7F39EC] text-white"
                         )}
                       >
-                        {contest.status === "active" ? "Live" : contest.status}
+                        {contest.status === "active" ? "Live" : contest.status === "upcoming" ? "Upcoming" : contest.status === "ended" ? "completed" : contest.status}
                       </Badge>
                       {contest.post_contest_status === "payouts_processed" && (
                         <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
-                          Completed
+                          paid
                         </Badge>
                       )}
                     </div>
