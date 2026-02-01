@@ -6,6 +6,7 @@ export interface Submission {
   creator_id: string;
   created_at: string;
   status?: string;
+  filter_status?: string;
   views?: number;
   platform?: string;
   other_stats?: any;
@@ -23,10 +24,11 @@ export function calculateLeaderboardBudgetSpent(
 ): number {
   if (!submissions?.length || flatFeeBonus <= 0) return 0;
 
-  // Filter to verified or paid submissions
+  // Filter to verified or paid submissions, but exclude filtered_out ones
   const relevantSubmissions = submissions.filter((s) => {
     const status = s.status?.toLowerCase();
-    return status === "verified" || status === "paid";
+    const filterStatus = s.filter_status?.toLowerCase();
+    return (status === "verified" || status === "paid") && filterStatus !== "filtered_out";
   });
 
   // Sort by created_at to respect "first submitted, first paid" logic
@@ -88,10 +90,11 @@ export function calculateTwitterCpmBudgetSpent(
     flatFeeBonus && flatFeeBonus > 0 ? flatFeeBonus / 100 : 0;
   const bonusCapInDollars = flatFeeBonusCap ? flatFeeBonusCap / 100 : null;
 
-  // Filter to verified or paid submissions
+  // Filter to verified or paid submissions, but exclude filtered_out ones
   const relevantSubmissions = submissions.filter((s) => {
     const status = s.status?.toLowerCase();
-    return status === "verified" || status === "paid";
+    const filterStatus = s.filter_status?.toLowerCase();
+    return (status === "verified" || status === "paid") && filterStatus !== "filtered_out";
   });
 
   // Sort by created_at to respect "first submitted, first paid" logic
