@@ -120,10 +120,11 @@ async function enrichContestWithCalculatedBudgets(
     if (isTwitterTextImage) {
       const { data: twitterTweets, error: twitterError } = await supabase
         .from("twitter_campaign_tweets")
-        .select("id, creator_id, tweet_created_at, moderation_status")
+        .select("id, creator_id, tweet_created_at, moderation_status, filter_status")
         .eq("contest_id", contest.id)
         .eq("is_eligible", true)
-        .in("moderation_status", ["verified", "paid"]);
+        .in("moderation_status", ["verified", "paid"])
+        .neq("filter_status", "filtered_out");
 
       if (!twitterError && twitterTweets) {
         leaderboardSubmissions = twitterTweets
@@ -133,6 +134,7 @@ async function enrichContestWithCalculatedBudgets(
             creator_id: tweet.creator_id,
             created_at: tweet.tweet_created_at || new Date().toISOString(),
             status: tweet.moderation_status,
+            filter_status: tweet.filter_status,
             paid: tweet.moderation_status === "paid",
             earnings: null,
             bonus_paid: false,
@@ -195,11 +197,13 @@ async function enrichContestWithCalculatedBudgets(
             tweet_created_at,
             points,
             moderation_status,
-            manual_points_adjustment
+            manual_points_adjustment,
+            filter_status
           `
       )
       .eq("contest_id", contest.id)
-      .in("moderation_status", ["verified", "paid"]);
+      .in("moderation_status", ["verified", "paid"])
+      .neq("filter_status", "filtered_out");
 
     const submissions =
       (twitterTweets?.map((tweet) => ({
@@ -208,6 +212,7 @@ async function enrichContestWithCalculatedBudgets(
         created_at: tweet.tweet_created_at,
         platform: "twitter",
         status: tweet.moderation_status,
+        filter_status: tweet.filter_status,
         paid: tweet.moderation_status === "paid",
         earnings: null,
         bonus_paid: false,

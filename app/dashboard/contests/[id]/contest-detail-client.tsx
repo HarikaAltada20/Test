@@ -1855,6 +1855,10 @@ export default function ContestDetailClient({
       console.log("🎉 Calling toast with config:", toastConfig);
       toast(toastConfig);
 
+      // Clear contest cache and refresh contest list to update budget tracker
+      console.log("[contest-detail-client] Dispatching contests:refresh event from handleUpdateSubmissionStatus...");
+      window.dispatchEvent(new CustomEvent("contests:refresh"));
+
       if (
         ["cpm", "leaderboard"].includes(currentContest?.contest_type || "") &&
         currentContest?.platform &&
@@ -2874,6 +2878,10 @@ export default function ContestDetailClient({
             : "set to pending"
         } successfully`,
       });
+
+      // Clear contest cache and refresh contest list to update budget tracker
+      console.log("[contest-detail-client] Dispatching contests:refresh event from handleModerateTwitterTweet...");
+      window.dispatchEvent(new CustomEvent("contests:refresh"));
 
       // Refresh page after a delay
       setTimeout(() => {

@@ -188,7 +188,8 @@ export function getContestDetailsCacheKey(contestId: string): string {
 /**
  * Clear all contests-related cache
  */
-export function clearContestsCache(): void {
-  contestCache.clearPrefix("contests:list:");
-  contestDetailsCache.clearPrefix("contests:details:");
+export function clearContestsCache(): number {
+  const listCount = contestCache.clearPrefix("contests:list:");
+  const detailsCount = contestDetailsCache.clearPrefix("contests:details:");
+  return listCount + detailsCount;
 }

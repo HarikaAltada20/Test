@@ -191,7 +191,7 @@ const moderationStatusConfig = {
 const contestStatusConfig = {
   upcoming: { label: "Upcoming", color: "bg-purple-500", icon: Calendar },
   active: { label: "Active", color: "bg-green-600", icon: PlayCircle },
-  ended: { label: "Ended", color: "bg-gray-600", icon: StopCircle },
+  ended: { label: "completed", color: "bg-gray-600", icon: StopCircle },
 };
 
 const getBudgetTrackerValues = (
@@ -272,7 +272,10 @@ export function ContestListClient({
       return;
     }
     try {
-      const response = await fetch("/api/contests/list", {
+      // Add cache-busting timestamp to ensure fresh data
+      const timestamp = Date.now();
+      console.log(`[ContestListClient] Fetching contests with timestamp: ${timestamp}`);
+      const response = await fetch(`/api/contests/list?t=${timestamp}`, {
         cache: "no-store",
       });
       if (!response.ok) {
@@ -283,12 +286,26 @@ export function ContestListClient({
         return;
       }
       const payload = await response.json();
+      console.log("[ContestListClient] Received fresh contests data:", payload.contests?.length, "contests");
+      
       if (!Array.isArray(payload?.contests)) {
         return;
       }
       if (!isMountedRef.current) {
         return;
       }
+      
+      // Log budget spent values for debugging
+      payload.contests.forEach((contest: any, index: number) => {
+        if (contest.contest_type === "cpm") {
+          console.log(`[ContestListClient] CPM Contest ${index + 1} (${contest.id}): budget_spent =`, 
+            contest.contest_based_details?.cpm_contest?.budget_spent);
+        } else if (contest.contest_type === "leaderboard") {
+          console.log(`[ContestListClient] Leaderboard Contest ${index + 1} (${contest.id}): budget_spent =`, 
+            contest.contest_based_details?.leaderboard_contest?.budget_spent);
+        }
+      });
+      
       setContests(payload.contests);
     } catch (error) {
       console.error("[ContestListClient] Error refreshing contests:", error);
@@ -321,7 +338,19 @@ export function ContestListClient({
       return;
     }
 
-    const handleContestRefresh = () => {
+    const handleContestRefresh = async () => {
+      console.log("[ContestListClient] Handling contest refresh event...");
+      try {
+        // Clear server-side cache first
+        console.log("[ContestListClient] Clearing server-side cache...");
+        const cacheResponse = await fetch("/api/contests/clear-cache", { method: "POST" });
+        const cacheResult = await cacheResponse.json();
+        console.log("[ContestListClient] Cache clear result:", cacheResult);
+      } catch (error) {
+        console.error("[ContestListClient] Failed to clear cache:", error);
+      }
+      // Then fetch latest contests with updated budget calculations
+      console.log("[ContestListClient] Fetching latest contests...");
       fetchLatestContests();
     };
 
@@ -746,7 +775,7 @@ export function ContestListClient({
           className: "bg-green-600 border-green-600 text-white",
         };
       return {
-        text: "Ended",
+        text: "completed",
         className: "bg-gray-500 border-gray-500 text-white",
       };
     }
@@ -2689,7 +2718,7 @@ export function ContestListClient({
                 Upcoming
               </SelectItem>
               <SelectItem isDark={isDark} value="ended">
-                Ended
+                completed
               </SelectItem>
             </SelectContent>
           </Select>
