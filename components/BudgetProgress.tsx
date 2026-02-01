@@ -86,10 +86,11 @@ export function BudgetProgress({
       { cpmTotal: number; bonusTotal: number }
     >();
 
-    // Filter to verified or paid submissions
+    // Filter to verified or paid submissions, but exclude filtered_out ones
     const relevantSubmissions = submissions.filter((s) => {
       const status = (s as any).status?.toLowerCase();
-      return status === "verified" || status === "paid";
+      const filterStatus = (s as any).filter_status?.toLowerCase();
+      return (status === "verified" || status === "paid") && filterStatus !== "filtered_out";
     });
 
     // Sort by created_at to respect "first submitted, first paid" logic

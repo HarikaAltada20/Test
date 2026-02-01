@@ -76,10 +76,11 @@ export async function GET(request: Request) {
         const { data: twitterTweets, error: tweetsError } = await supabaseAdmin
           .from("twitter_campaign_tweets")
           .select(
-            "id, creator_id, tweet_created_at, points, moderation_status, manual_points_adjustment"
+            "id, creator_id, tweet_created_at, points, moderation_status, manual_points_adjustment, filter_status"
           )
           .eq("contest_id", contest.id)
-          .in("moderation_status", ["verified", "paid"]);
+          .in("moderation_status", ["verified", "paid"])
+          .neq("filter_status", "filtered_out");
 
         if (tweetsError) {
           console.error(
@@ -97,6 +98,7 @@ export async function GET(request: Request) {
             created_at: tweet.tweet_created_at,
             platform: "twitter",
             status: tweet.moderation_status,
+            filter_status: tweet.filter_status,
             paid: tweet.moderation_status === "paid",
             earnings: null, // Twitter uses points, not direct earnings
             bonus_paid: false,
