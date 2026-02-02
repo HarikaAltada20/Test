@@ -247,7 +247,7 @@ export function ContestListClient({
   // New: contest format filter (all / text-image / video)
   const [contestFormatFilter, setContestFormatFilter] = useState<
     "all" | "text_image" | "video"
-  >("video");
+  >("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [filteredAndSortedContests, setFilteredAndSortedContests] = useState<
     Contest[]
@@ -296,17 +296,17 @@ export function ContestListClient({
       }
       
       // Log budget spent values for debugging
-      payload.contests.forEach((contest: any, index: number) => {
-        if (contest.contest_type === "cpm") {
-          console.log(`[ContestListClient] CPM Contest ${index + 1} (${contest.id}): budget_spent =`, 
-            contest.contest_based_details?.cpm_contest?.budget_spent);
-        } else if (contest.contest_type === "leaderboard") {
-          console.log(`[ContestListClient] Leaderboard Contest ${index + 1} (${contest.id}): budget_spent =`, 
-            contest.contest_based_details?.leaderboard_contest?.budget_spent);
-        }
-      });
+      // payload.contests.forEach((contest: any, index: number) => {
+      //   if (contest.contest_type === "cpm") {
+      //     console.log(`[ContestListClient] CPM Contest ${index + 1} (${contest.id}): budget_spent =`, 
+      //       contest.contest_based_details?.cpm_contest?.budget_spent);
+      //   } else if (contest.contest_type === "leaderboard") {
+      //     console.log(`[ContestListClient] Leaderboard Contest ${index + 1} (${contest.id}): budget_spent =`, 
+      //       contest.contest_based_details?.leaderboard_contest?.budget_spent);
+      //   }
+      // });
       
-      setContests(payload.contests);
+      // setContests(payload.contests);
     } catch (error) {
       console.error("[ContestListClient] Error refreshing contests:", error);
     }
@@ -346,6 +346,9 @@ export function ContestListClient({
         const cacheResponse = await fetch("/api/contests/clear-cache", { method: "POST" });
         const cacheResult = await cacheResponse.json();
         console.log("[ContestListClient] Cache clear result:", cacheResult);
+        
+        // Add a small delay to ensure cache clearing is fully processed
+        await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
         console.error("[ContestListClient] Failed to clear cache:", error);
       }
@@ -360,45 +363,73 @@ export function ContestListClient({
     };
   }, [fetchLatestContests, isAdminView]);
 
-  const availablePlatforms = useMemo(() => {
-    const platforms = new Set(
-      contests.map((c) => c.platform).filter(Boolean) as string[]
-    );
-    return ["all", ...Array.from(platforms)];
-  }, [contests]);
+  // Helper function to get contests filtered by format
+  const getContestsByFormat = useCallback((contestsList: Contest[], format: string) => {
+    return contestsList.filter((contest) => {
+      const fmt = contest.contest_format?.toLowerCase() || "";
+      
+      if (format === "all") {
+        return true; // Show all contests
+      } else if (format === "text_image") {
+        // Treat missing/unknown format as text/image by default
+        return (
+          fmt === "text_image" ||
+          fmt === "text-image" ||
+          fmt === "text" ||
+          fmt === "image" ||
+          fmt === ""
+        );
+      } else if (format === "video") {
+        return fmt === "video";
+      }
+      return true;
+    });
+  }, []);
 
   // Group contests by moderation status and contest lifecycle
   const contestsByStatus = useMemo(() => {
+    // First filter contests by format
+    const filteredContests = getContestsByFormat(contests, contestFormatFilter);
+    
     const groups = {
-      all: contests,
-      draft: contests.filter((c) => c.moderation_status === "draft"),
-      pending_approval: contests.filter(
+      all: filteredContests,
+      draft: filteredContests.filter((c) => c.moderation_status === "draft"),
+      pending_approval: filteredContests.filter(
         (c) => c.moderation_status === "pending_approval"
       ),
-      ready: contests.filter((c) => c.moderation_status === "approved"),
-      active: contests.filter(
+      ready: filteredContests.filter((c) => c.moderation_status === "approved"),
+      active: filteredContests.filter(
         (c) =>
           c.moderation_status === "published" &&
           (c.status === "active" || c.status === "upcoming")
       ),
-      pending_verification: contests.filter(
+      pending_verification: filteredContests.filter(
         (c) =>
           c.moderation_status === "published" &&
           c.status === "ended" &&
           c.post_contest_status !== "verification_complete" &&
           c.post_contest_status !== "payouts_processed"
       ),
-      done: contests.filter(
+      done: filteredContests.filter(
         (c) =>
           c.moderation_status === "published" &&
           c.status === "ended" &&
           (c.post_contest_status === "verification_complete" ||
             c.post_contest_status === "payouts_processed")
       ),
-      rejected: contests.filter((c) => c.moderation_status === "rejected"),
+      rejected: filteredContests.filter((c) => c.moderation_status === "rejected"),
     };
     return groups;
-  }, [contests]);
+  }, [contests, contestFormatFilter, getContestsByFormat]);
+
+  const availablePlatforms = useMemo(() => {
+    // Get contests for the current tab
+    const contestsForCurrentTab = contestsByStatus[selectedTab as keyof typeof contestsByStatus] || [];
+    const platforms = new Set(
+      contestsForCurrentTab.map((c) => c.platform).filter(Boolean) as string[]
+    );
+    return ["all", ...Array.from(platforms)];
+  }, [contestsByStatus, selectedTab]);
 
   // Read and react to mode changes from data attribute with immediate updates
   useLayoutEffect(() => {
@@ -571,25 +602,6 @@ export function ContestListClient({
       contestsToDisplay = contestsToDisplay.filter(
         (contest) => contest.contest_type === contestTypeFilter
       );
-    }
-
-    // Apply contest format filter (text/image vs video)
-    if (contestFormatFilter !== "all") {
-      contestsToDisplay = contestsToDisplay.filter((contest) => {
-        const fmt = contest.contest_format?.toLowerCase() || "";
-        if (contestFormatFilter === "text_image") {
-          // Treat missing/unknown format as text/image by default
-          return (
-            fmt === "text_image" ||
-            fmt === "text-image" ||
-            fmt === "text" ||
-            fmt === "image" ||
-            fmt === ""
-          );
-        }
-        // video filter
-        return fmt === "video";
-      });
     }
 
     // Sorting - exact copy from opportunities
@@ -2558,8 +2570,26 @@ export function ContestListClient({
             />
           </div>
           <div className="flex gap-2">
-            {/* Format Toggle: Text/Image contests vs Video contests */}
+            {/* Format Toggle: All / Text/Image contests vs Video contests */}
             <div className="flex items-center gap-1 border border-gray-400 rounded-md p-1">
+              <button
+                type="button"
+                onClick={() => setContestFormatFilter("all")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                  contestFormatFilter === "all"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                    ? "text-gray-300 hover:text-white"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="All contests"
+              >
+                <LayoutGrid className="h-4 w-4" />
+                <span className="inline">All</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setContestFormatFilter("text_image")}
@@ -2576,7 +2606,7 @@ export function ContestListClient({
                 title="Text/Image contests"
               >
                 <FileText className="h-4 w-4" />
-                <span className="hidden sm:inline">Text/Image contests</span>
+                <span className="inline">Text/Image contests</span>
               </button>
               <button
                 type="button"
@@ -2594,7 +2624,7 @@ export function ContestListClient({
                 title="Video contests"
               >
                 <PlayCircle className="h-4 w-4" />
-                <span className="hidden sm:inline">Video contests</span>
+                <span className="inline">Video contests</span>
               </button>
             </div>
 

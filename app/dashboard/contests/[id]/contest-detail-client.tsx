@@ -1858,6 +1858,15 @@ export default function ContestDetailClient({
       // Clear contest cache and refresh contest list to update budget tracker
       console.log("[contest-detail-client] Dispatching contests:refresh event from handleUpdateSubmissionStatus...");
       window.dispatchEvent(new CustomEvent("contests:refresh"));
+      
+      // Also directly call the clear cache API to ensure it happens
+      try {
+        console.log("[contest-detail-client] Directly calling clear cache API...");
+        await fetch("/api/contests/clear-cache", { method: "POST" });
+        console.log("[contest-detail-client] Direct cache clear completed");
+      } catch (error) {
+        console.error("[contest-detail-client] Direct cache clear failed:", error);
+      }
 
       if (
         ["cpm", "leaderboard"].includes(currentContest?.contest_type || "") &&
@@ -2882,6 +2891,15 @@ export default function ContestDetailClient({
       // Clear contest cache and refresh contest list to update budget tracker
       console.log("[contest-detail-client] Dispatching contests:refresh event from handleModerateTwitterTweet...");
       window.dispatchEvent(new CustomEvent("contests:refresh"));
+      
+      // Also directly call the clear cache API to ensure it happens
+      try {
+        console.log("[contest-detail-client] Directly calling clear cache API from Twitter moderation...");
+        await fetch("/api/contests/clear-cache", { method: "POST" });
+        console.log("[contest-detail-client] Direct cache clear completed from Twitter moderation");
+      } catch (error) {
+        console.error("[contest-detail-client] Direct cache clear failed from Twitter moderation:", error);
+      }
 
       // Refresh page after a delay
       setTimeout(() => {
