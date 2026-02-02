@@ -95,6 +95,22 @@ const getBudgetTrackerValues = (
   return { spent: clampedSpent, percentage, remaining };
 };
 
+// Helper function to get contests filtered by media type
+const getContestsByMediaType = (contests: any[], mediaType: string) => {
+  return contests.filter((contest) => {
+    const format = contest.contest_format;
+    
+    if (mediaType === "all") {
+      return true; // Show all contests
+    } else if (mediaType === "media") {
+      return format === "video";
+    } else if (mediaType === "text") {
+      return format === "text_image";
+    }
+    return true;
+  });
+};
+
 export default function OpportunitiesPage({
   user,
 }: {
@@ -137,40 +153,46 @@ export default function OpportunitiesPage({
     return adjustmentMap;
   };
 
+  const [mediaType, setMediaType] = useState("all");
+  
+  // Calculate filtered contests by media type for tab counts
+  const filteredContestsByMediaType = getContestsByMediaType(availableContests, mediaType);
+  
   const tabs = [
     {
       id: "all",
       label: "All",
-      count: availableContests.filter(
+      count: filteredContestsByMediaType.filter(
         (c) => c.moderation_status === "published" && c.status
       ).length,
     },
     {
       id: "live",
       label: "Live",
-      count: availableContests.filter(
+      count: filteredContestsByMediaType.filter(
         (c) => c.moderation_status === "published" && c.status === "active"
       ).length,
     },
     {
       id: "upcoming",
       label: "Upcoming",
-      count: availableContests.filter(
+      count: filteredContestsByMediaType.filter(
         (c) => c.moderation_status === "published" && c.status === "upcoming"
       ).length,
     },
     {
       id: "completed",
       label: "Completed",
-      count: availableContests.filter(
+      count: filteredContestsByMediaType.filter(
         (c) =>
           c.moderation_status === "published" &&
           c.post_contest_status === "payouts_processed"
       ).length,
     },
   ];
-  const [mediaType, setMediaType] = useState("media");
+  
   const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: "all" });
+  
   // New state variables for filters and sorting
   const [statusFilter, setStatusFilter] = useState<StatusFilterType>("all");
   const [platformFilter, setPlatformFilter] =
@@ -830,41 +852,7 @@ export default function OpportunitiesPage({
           }
         );
 
-        const demoTwitterContest = {
-          id: "demo-twitter-campaign",
-          title: "Demo Twitter Campaign",
-          platform: "twitter",
-          status: "active",
-          thumbnail_url: null,
-          contest_type: "cpm",
-          contest_based_details: {
-            cpm_contest: {
-              cpm_rate_usd: 5,
-              total_budget: 50000,
-              budget_spent: 0,
-              flat_fee_bonus: 0,
-            },
-            leaderboard_contest: null,
-          },
-          live_submission_count: 0,
-          categories: [],
-          subcategories: {},
-          interests: [],
-          bonus_details: null,
-          region: {},
-          multiple_submissions_enabled: false,
-          max_submissions_per_creator: 1,
-          start_date: "2025-01-01T09:00:00.000Z",
-          end_date: "2025-01-31T23:59:59.000Z",
-          post_contest_status: null,
-          is_demo: true,
-        } as any;
-
-        const contestsWithDemo = [
-          demoTwitterContest,
-          ...regionFilteredContests,
-        ];
-        setAvailableContests(contestsWithDemo);
+        setAvailableContests(regionFilteredContests);
       }
     } catch (error) {
       console.error("Unexpected error in fetchData:", error);
@@ -1060,12 +1048,16 @@ export default function OpportunitiesPage({
     }
 
     // Media type based on contest content format
+    // mediaType === "all"   => show all contests (both text and video)
     // mediaType === "media" => show only contests with content_format === "video"
     // mediaType === "text"  => show only contests with content_format === "text_image"
     contestsToDisplay = contestsToDisplay.filter((contest) => {
       const format = contest.contest_format;
 
-      if (mediaType === "media") {
+      if (mediaType === "all") {
+        // Show all contests (both text and video)
+        return true;
+      } else if (mediaType === "media") {
         if (format !== "video") return false;
       } else if (mediaType === "text") {
         if (format !== "text_image") return false;
@@ -1905,6 +1897,24 @@ export default function OpportunitiesPage({
           <div className="flex gap-2 items-center">
             <div className="flex items-center gap-1 border border-gray-400 rounded-md p-1">
               <button
+                onClick={() => setMediaType("all")}
+                className={cn(
+                  "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
+                  mediaType === "all"
+                    ? isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#7F39EC] text-white"
+                    : isDark
+                    ? "text-gray-300 hover:text-white"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                )}
+                title="All Opportunities"
+              >
+                <LayoutGrid className="h-4 w-4 mr-2" />
+                <span>All</span>
+                
+              </button>
+              <button
                 onClick={() => setMediaType("text")}
                 className={cn(
                   "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
@@ -2056,15 +2066,28 @@ export default function OpportunitiesPage({
               All Platforms
             </SelectItem>
 
-            {mediaType == "media" && (
-              <SelectItem value="youtube" isDark={isDark}>
-                YouTube
-              </SelectItem>
+            {mediaType == "all" && (
+              <>
+                <SelectItem value="youtube" isDark={isDark}>
+                  YouTube
+                </SelectItem>
+                <SelectItem value="instagram" isDark={isDark}>
+                  Instagram
+                </SelectItem>
+                <SelectItem value="twitter" isDark={isDark}>
+                  Twitter
+                </SelectItem>
+              </>
             )}
             {mediaType == "media" && (
-              <SelectItem value="instagram" isDark={isDark}>
-                Instagram
-              </SelectItem>
+              <>
+                <SelectItem value="youtube" isDark={isDark}>
+                  YouTube
+                </SelectItem>
+                <SelectItem value="instagram" isDark={isDark}>
+                  Instagram
+                </SelectItem>
+              </>
             )}
             {mediaType == "text" && (
               <SelectItem value="twitter" isDark={isDark}>
