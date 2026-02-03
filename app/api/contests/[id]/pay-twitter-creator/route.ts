@@ -113,7 +113,7 @@ export async function POST(
       await supabaseAdmin
         .from("twitter_campaign_leaderboard")
         .select(
-          "id, creator_id, current_rank, total_points, paid, earnings, paid_rank"
+          "id, creator_id, current_rank, total_points, paid, earnings, paid_rank, moderation_status"
         )
         .eq("contest_id", contestId)
         .eq("creator_id", creatorId)
@@ -123,6 +123,17 @@ export async function POST(
       return NextResponse.json(
         { error: "Creator not found in leaderboard for this contest" },
         { status: 404 }
+      );
+    }
+
+    // Block payment for rejected creators to avoid inconsistent state
+    if (leaderboardEntry.moderation_status === "rejected") {
+      return NextResponse.json(
+        {
+          error:
+            "Cannot pay a rejected creator. Approve the creator first, then process payment.",
+        },
+        { status: 400 }
       );
     }
 
@@ -287,6 +298,7 @@ export async function POST(
       paid_at: new Date().toISOString(),
       earnings: rewardAmount,
       paid_rank: leaderboardEntry.current_rank, // Store rank at payment time for audit
+      moderation_status: "paid", // Update status to paid
     };
 
     const { error: updateError } = await supabaseAdmin
@@ -303,6 +315,23 @@ export async function POST(
         { error: "Failed to update leaderboard payment status" },
         { status: 500 }
       );
+    }
+
+    // Update all tweets from this creator to 'paid' status (consistent with reject/verify flows)
+    const { error: tweetsUpdateError } = await supabaseAdmin
+      .from("twitter_campaign_tweets")
+      .update({ moderation_status: "paid" })
+      .eq("contest_id", contestId)
+      .eq("creator_id", creatorId)
+      .neq("moderation_status", "rejected"); // Don't update rejected tweets
+
+    if (tweetsUpdateError) {
+      console.error(
+        "[pay-twitter-creator] Error updating tweets:",
+        tweetsUpdateError
+      );
+      // Don't fail the entire payment if tweet update fails, just log it
+      // The leaderboard is the source of truth for payment status
     }
 
     return NextResponse.json({

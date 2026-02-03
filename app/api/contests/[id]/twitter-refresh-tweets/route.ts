@@ -1767,13 +1767,15 @@ export async function POST(
     );
 
     // Separate regular tweets from raid engagements
+    // NOTE: Include ALL non-rejected tweets, not just is_eligible=true
+    // This ensures manual points and base points are counted for manually-approved creators
     const { data: regularTweets, error: regularTweetsError } = await supabase
       .from("twitter_campaign_tweets")
       .select(
-        "creator_id, likes, replies, retweets, quote_reposts, impressions, points, target_tweet_id, moderation_status, manual_points_adjustment"
+        "creator_id, likes, replies, retweets, quote_reposts, impressions, points, target_tweet_id, moderation_status, manual_points_adjustment, is_eligible"
       )
       .eq("contest_id", contestId)
-      .eq("is_eligible", true);
+      .neq("moderation_status", "rejected");
 
     if (regularTweetsError) {
       console.error(
@@ -1828,7 +1830,12 @@ export async function POST(
         const basePoints = row.points || 0;
         const manualAdjustment = row.manual_points_adjustment || 0;
         existing.total_points += basePoints + manualAdjustment;
-        existing.total_eligible_tweets += 1;
+        
+        // Only count as eligible if is_eligible flag is true
+        // Note: we're still including the points for all non-rejected tweets
+        if (row.is_eligible) {
+          existing.total_eligible_tweets += 1;
+        }
         existing.total_likes += row.likes || 0;
         existing.total_replies += row.replies || 0;
         existing.total_retweets += row.retweets || 0;
