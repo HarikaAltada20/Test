@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { createClient as createAdminSupabaseClient } from '@supabase/supabase-js';
 import { METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES, METRICS_REFRESH_COOLDOWN_MS_BRAND, METRICS_REFRESH_COOLDOWN_MS_ADMIN } from '@/lib/constants';
 import { verifyAdminAccess } from '@/utils/admin-auth';
+import { isMetricsQueueEnabled, enqueueMetricsRefreshJob } from '@/lib/queue/metrics-refresh-queue';
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +28,10 @@ export async function POST(
     // Check if user is admin
     const { isAdmin } = await verifyAdminAccess();
 
-    // Get contest details including last metrics update time and advertiser_id
+    // Get contest details including last metrics update time, advertiser_id, and campaign type (for queue)
     const { data: contest, error: contestError } = await supabase
       .from('contests')
-      .select('id, title, platform, last_metrics_updated, advertiser_id')
+      .select('id, title, platform, last_metrics_updated, advertiser_id, contest_based_details')
       .eq('id', contestId)
       .single();
 
@@ -62,36 +64,100 @@ export async function POST(
       }
     }
 
-    // This triggers Twitter API calls via twitter-refresh-tweets endpoint
+    // When caller is a creator (opportunities side), refresh only that creator's tweets (always sync)
+    const creatorOnly = !isAdmin && !isOwner;
+
+    // Full refresh (brand/admin): use Redis queue when enabled to avoid timeout
+    if (!creatorOnly && isMetricsQueueEnabled()) {
+      const supabaseAdmin = createAdminSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+      const platform = (contest?.platform ?? '').toString().toLowerCase();
+      const isTwitterPlatform = platform === 'twitter' || platform === 'x';
+      const campaignType =
+        (contest as { contest_based_details?: { twitter_campaign?: { campaign_type?: string } } })
+          ?.contest_based_details?.twitter_campaign?.campaign_type ?? '';
+      const isRaidCampaign =
+        isTwitterPlatform &&
+        typeof campaignType === 'string' &&
+        campaignType.toLowerCase().trim() === 'raid';
+
+      let job: { contestId: string; isRaid: true } | { contestId: string; isRaid: false; batchIndex: number; totalBatches: number };
+      if (isRaidCampaign) {
+        job = { contestId, isRaid: true };
+      } else {
+        const { count } = await supabaseAdmin
+          .from('twitter_campaign_participants')
+          .select('*', { count: 'exact', head: true })
+          .eq('contest_id', contestId)
+          .eq('is_active', true);
+        const BATCH_SIZE = 20;
+        const participantCount = count ?? 0;
+        const totalBatches = Math.max(1, Math.ceil(participantCount / BATCH_SIZE));
+        job = { contestId, isRaid: false, batchIndex: 0, totalBatches };
+      }
+
+      const enqueueResult = await enqueueMetricsRefreshJob(job);
+      if (enqueueResult.error) {
+        console.error(`[twitter-refresh-feed] Enqueue failed for ${contestId}:`, enqueueResult.error);
+        // Fall through to sync refresh below
+      } else {
+        console.log(`[twitter-refresh-feed] Enqueued job for contest ${contestId} (full refresh)`);
+        const host = request.headers.get('host');
+        const protocol = request.headers.get('x-forwarded-proto') || 'http';
+        const processUrl = host ? `${protocol}://${host}/api/cron/process-metrics-queue` : '';
+        if (processUrl) {
+          fetch(processUrl, {
+            method: 'POST',
+            headers: process.env.CRON_SECRET
+              ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
+              : {},
+          }).catch((e) => console.warn('[twitter-refresh-feed] Trigger process-metrics-queue failed:', e));
+        }
+        return NextResponse.json({
+          success: true,
+          queued: true,
+          message: 'Feed refresh started in background. Page will reload when done.',
+          contestId,
+          contestTitle: contest.title,
+          nextRefreshAvailable: new Date(now.getTime() + cooldownMs).toISOString(),
+          lastMetricsUpdated: contest.last_metrics_updated || null,
+        });
+      }
+    }
+
+    // Sync path: creator-only or queue disabled
     const baseUrl = request.headers.get('host');
     const protocol = request.headers.get('x-forwarded-proto') || 'http';
     const refreshUrl = `${protocol}://${baseUrl}/api/contests/${contestId}/twitter-refresh-tweets`;
+    const body: { creatorId?: string } = creatorOnly ? { creatorId: user.id } : {};
 
-    console.log(`Manual feed refresh triggered for contest ${contestId} (${contest.title})`);
+    console.log(
+      `Manual feed refresh triggered for contest ${contestId} (${contest.title})${creatorOnly ? ` creatorOnly=${user.id}` : ' sync'}`
+    );
 
-    // Forward cookies from original request to maintain authentication
     const cookieHeader = request.headers.get('cookie');
     const refreshResponse = await fetch(refreshUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(cookieHeader ? { 'Cookie': cookieHeader } : {}),
+        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
       },
+      body: JSON.stringify(body),
     });
 
     if (!refreshResponse.ok) {
       const errorText = await refreshResponse.text();
       console.error(`Twitter refresh failed for contest ${contestId}:`, errorText);
-      return NextResponse.json({ 
-        error: 'Failed to refresh Twitter feed' 
+      return NextResponse.json({
+        error: 'Failed to refresh Twitter feed',
       }, { status: 500 });
     }
 
     const refreshResult = await refreshResponse.json();
-
     console.log(`Successfully refreshed Twitter feed for contest ${contestId}`);
 
-    // Get updated contest data to return last_metrics_updated
     const { data: updatedContest } = await supabase
       .from('contests')
       .select('last_metrics_updated')
@@ -105,7 +171,7 @@ export async function POST(
       contestTitle: contest.title,
       nextRefreshAvailable: new Date(now.getTime() + cooldownMs).toISOString(),
       lastMetricsUpdated: updatedContest?.last_metrics_updated || null,
-      refreshResult
+      refreshResult,
     });
 
   } catch (error: any) {

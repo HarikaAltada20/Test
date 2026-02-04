@@ -33,6 +33,8 @@ export interface TwitterFeedProps {
   cooldownType?: "opportunities" | "brand" | "admin"; // "opportunities" for creators (1 hour), "brand" for brands (3 minutes), "admin" for admins (1 minute)
   contestStatus?: string | null;
   disableRefreshWhenContestEnded?: boolean;
+  /** When set (e.g. opportunities/creator view), only load and show this creator's tweets. Hides creator filter. */
+  creatorOnlyUserId?: string | null;
 }
 
 export interface TwitterTweet {
@@ -78,13 +80,15 @@ export function TwitterFeed({
   cooldownType = "opportunities", // Default to opportunities (creators) - 1 hour cooldown
   contestStatus,
   disableRefreshWhenContestEnded = false,
+  creatorOnlyUserId = null,
 }: TwitterFeedProps) {
   const { toast } = useToast();
   const [tweets, setTweets] = useState<TwitterTweet[]>([]);
   const [creators, setCreators] = useState<TwitterCreator[]>([]);
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(
-    null
+    creatorOnlyUserId ?? null
   );
+  const effectiveCreatorId = creatorOnlyUserId ?? selectedCreatorId;
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -179,22 +183,29 @@ export function TwitterFeed({
     return () => clearInterval(interval);
   }, [currentLastMetricsUpdated]);
 
+  // When creatorOnlyUserId is set (e.g. opportunities), keep filter locked to that creator
+  useEffect(() => {
+    if (creatorOnlyUserId) {
+      setSelectedCreatorId(creatorOnlyUserId);
+    }
+  }, [creatorOnlyUserId]);
+
   // Load tweets only if not already loaded (to avoid refetching on tab switch)
   // IMPORTANT: This only reads from database - NO Twitter API calls
   // Twitter API calls ONLY happen when refresh buttons are clicked
   useEffect(() => {
     // Track if tweets have been loaded for current contest/creator combination
-    const feedKey = `${contestId}-${selectedCreatorId || "all"}`;
+    const feedKey = `${contestId}-${effectiveCreatorId || "all"}`;
     const hasLoaded = tweetsLoadedRef.current === feedKey;
 
     // Only load if we haven't loaded for this contest/creator combination yet
     // This reads from DB only - saves API calls
     if (!hasLoaded) {
-      loadTweets(1, selectedCreatorId);
+      loadTweets(1, effectiveCreatorId);
       tweetsLoadedRef.current = feedKey;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCreatorId, contestId]);
+  }, [effectiveCreatorId, contestId]);
 
   // IMPORTANT: This is the ONLY function that triggers Twitter API calls
   // This is called ONLY when the "Refresh Feed" button is clicked
@@ -231,8 +242,8 @@ export function TwitterFeed({
     }
 
     setIsRefreshingFeed(true);
+    let result: { queued?: boolean; error?: string } | undefined = undefined;
     try {
-      // This endpoint triggers Twitter API calls via twitter-refresh-tweets
       const response = await fetch(
         `/api/contests/${contestId}/twitter-refresh-feed`,
         {
@@ -243,37 +254,56 @@ export function TwitterFeed({
         }
       );
 
-      const result = await response.json();
+      result = await response.json();
 
       if (!response.ok) {
-        // If it's a cooldown error, show the message
         if (response.status === 429) {
           toast({
             title: "Please Wait",
-            description: result.error || "Please wait before refreshing again",
+            description: result?.error || "Please wait before refreshing again",
             variant: "destructive",
           });
         } else {
-          throw new Error(result.error || "Failed to refresh feed");
+          throw new Error(result?.error || "Failed to refresh feed");
         }
         return;
       }
 
-      toast({
-        title: "Success!",
-        description: "Twitter feed refreshed successfully",
-      });
-
-      // Update last_metrics_updated if provided in response
-      if (result.lastMetricsUpdated) {
-        setCurrentLastMetricsUpdated(result.lastMetricsUpdated);
+      if (result?.queued) {
+        // Feed refresh queued; poll until done then reload
+        const previousUpdated = currentLastMetricsUpdated ?? null;
+        const pollIntervalMs = 3000;
+        const pollMaxMs = 120000;
+        const startedAt = Date.now();
+        const pollTimer = setInterval(async () => {
+          if (Date.now() - startedAt > pollMaxMs) {
+            clearInterval(pollTimer);
+            setIsRefreshingFeed(false);
+            return;
+          }
+          try {
+            const res = await fetch(
+              `/api/contests/${contestId}/last-metrics-updated`
+            );
+            if (!res.ok) return;
+            const data = await res.json();
+            const newUpdated = data.last_metrics_updated ?? null;
+            if (newUpdated && newUpdated !== previousUpdated) {
+              clearInterval(pollTimer);
+              setIsRefreshingFeed(false);
+              window.location.reload();
+            }
+          } catch {
+            // ignore
+          }
+        }, pollIntervalMs);
+      } else {
+        toast({
+          title: "Success!",
+          description: "Twitter feed refreshed successfully",
+        });
+        setTimeout(() => window.location.reload(), 1200);
       }
-
-      // Reset loaded flag and reload tweets after refresh
-      const feedKey = `${contestId}-${selectedCreatorId || "all"}`;
-      tweetsLoadedRef.current = null;
-      await loadTweets(currentPage, selectedCreatorId);
-      tweetsLoadedRef.current = feedKey;
     } catch (error: any) {
       console.error("Error refreshing feed:", error);
       toast({
@@ -282,7 +312,9 @@ export function TwitterFeed({
         variant: "destructive",
       });
     } finally {
-      setIsRefreshingFeed(false);
+      if (!result?.queued) {
+        setIsRefreshingFeed(false);
+      }
     }
   };
 
@@ -620,11 +652,11 @@ export function TwitterFeed({
                 hasPreviousPage={currentPage > 1}
                 onPageChange={(page) => {
                   setCurrentPage(page);
-                  loadTweets(page, selectedCreatorId, pageLimit);
+                  loadTweets(page, effectiveCreatorId, pageLimit);
                 }}
                 onLimitChange={(limit) => {
                   setPageLimit(limit);
-                  loadTweets(1, selectedCreatorId, limit);
+                  loadTweets(1, effectiveCreatorId, limit);
                 }}
                 loading={isLoading}
                 isDark={isDark}
@@ -638,8 +670,8 @@ export function TwitterFeed({
           )}
         </div>
 
-        {/* Creator Sidebar */}
-        {creators.length > 0 && (
+        {/* Creator Sidebar - hide when showing only one creator (e.g. opportunities) */}
+        {creators.length > 0 && !creatorOnlyUserId && (
           <div
             className={cn(
               "w-64 border rounded-lg p-4",

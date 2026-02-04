@@ -6,8 +6,16 @@ import {
   rapidApiHost,
   rapidApiRequest,
 } from "@/lib/twitter/rapidApiClient";
+import {
+  initBatchState,
+  mergeBatchState,
+  getBatchState,
+  clearBatchState,
+} from "@/lib/queue/metrics-refresh-queue";
 
 export const dynamic = "force-dynamic";
+
+const BATCH_SIZE = 20; // Process 20 participants per queue batch (must match refresh-metrics)
 
 // IMPORTANT: This is the ONLY endpoint that makes Twitter API calls
 // This is called ONLY when:
@@ -18,15 +26,46 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const refreshTweetsStartMs = Date.now();
   try {
-    const supabase = await createClient();
-    const { data: auth } = await supabase.auth.getUser();
-
-    if (!auth.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const { id: contestId } = await params;
+
+    // Queue (worker) requests: verify CRON_SECRET and skip user auth
+    const fromQueueHeader = request.headers.get("x-from-queue") === "1";
+    let bodyFromQueue = false;
+    let queueBatchIndex: number | undefined;
+    let queueTotalBatches: number | undefined;
+    let bodyCreatorId: string | undefined;
+    try {
+      const bodyParsed = await request.clone().json();
+      bodyFromQueue = bodyParsed?.fromQueue === true;
+      queueBatchIndex =
+        typeof bodyParsed?.batchIndex === "number" ? bodyParsed.batchIndex : undefined;
+      queueTotalBatches =
+        typeof bodyParsed?.totalBatches === "number" ? bodyParsed.totalBatches : undefined;
+      if (typeof bodyParsed?.creatorId === "string" && bodyParsed.creatorId.trim()) {
+        bodyCreatorId = bodyParsed.creatorId.trim();
+      }
+    } catch {
+      // ignore
+    }
+    const fromQueue = fromQueueHeader && bodyFromQueue && queueBatchIndex !== undefined && queueTotalBatches !== undefined;
+    // Single-creator mode: only refresh tweets for this creator (e.g. opportunities "Refresh Feed")
+    const creatorIdOnly = !fromQueue && bodyCreatorId;
+
+    const supabase = await createClient();
+    if (fromQueue) {
+      const cronSecret = process.env.CRON_SECRET;
+      const authHeader = request.headers.get("authorization");
+      if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+        return NextResponse.json({ error: "Unauthorized (queue)" }, { status: 401 });
+      }
+    } else {
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+    }
 
     // Check if this is a raid campaign and fetch raid engagements first
     const supabaseAdmin = createAdminSupabaseClient(
@@ -40,13 +79,17 @@ export async function POST(
       .eq("id", contestId)
       .maybeSingle();
 
+    const platform = (contestCheck?.platform ?? "").toString().toLowerCase();
+    const isTwitterPlatform = platform === "twitter" || platform === "x";
+    const campaignTypeValue =
+      contestCheck?.contest_based_details?.twitter_campaign?.campaign_type ?? "";
     const isRaidCampaign =
-      contestCheck?.platform === "twitter" &&
-      contestCheck?.contest_based_details?.twitter_campaign?.campaign_type ===
-        "raid";
+      isTwitterPlatform &&
+      typeof campaignTypeValue === "string" &&
+      campaignTypeValue.toLowerCase().trim() === "raid";
 
-    if (isRaidCampaign) {
-      // For raid campaigns, we ONLY fetch engagements on the target tweet
+    if (isRaidCampaign && !fromQueue) {
+      // Raid campaign (user-triggered only): run fetch-raid-engagements, NOT twitter-refresh-tweets
       // We do NOT fetch the participant's entire timeline
       try {
         // Construct URL from request headers (same approach as twitter-refresh-feed)
@@ -131,7 +174,7 @@ export async function POST(
       }
     }
 
-    // Optional payload from client: twitter_keywords and twitter_mentions
+    // Optional payload from client: twitter_keywords, twitter_mentions; or from queue: fromQueue, batchIndex, totalBatches
     let bodyKeywords: string[] = [];
     let bodyMentions: string[] = [];
     try {
@@ -142,10 +185,12 @@ export async function POST(
       bodyMentions = Array.isArray(body?.twitter_mentions)
         ? body.twitter_mentions
         : [];
-      console.log(
-        "[twitter-refresh-tweets] Received campaign keywords/mentions from client:",
-        { bodyKeywords, bodyMentions }
-      );
+      if (!fromQueue) {
+        console.log(
+          "[twitter-refresh-tweets] Received campaign keywords/mentions from client:",
+          { bodyKeywords, bodyMentions }
+        );
+      }
     } catch {
       // No JSON body provided; ignore
     }
@@ -206,7 +251,7 @@ export async function POST(
     );
 
     // Filter out rejected creators from participants
-    const activeParticipants = participants.filter(
+    let activeParticipants = participants.filter(
       (p) => !rejectedCreatorIds.has(p.creator_id)
     );
 
@@ -225,11 +270,64 @@ export async function POST(
       });
     }
 
-    console.log(
-      "[twitter-refresh-tweets] Fetched participants",
-      contestId,
-      activeParticipants
-    );
+    // Single-creator mode (e.g. opportunities "Refresh Feed"): only refresh this creator's tweets
+    if (creatorIdOnly && bodyCreatorId) {
+      activeParticipants = activeParticipants.filter(
+        (p) => p.creator_id === bodyCreatorId
+      );
+      if (activeParticipants.length === 0) {
+        console.log(
+          "[twitter-refresh-tweets] creatorIdOnly: no active participant for creator",
+          bodyCreatorId,
+          contestId
+        );
+        return NextResponse.json({
+          success: true,
+          contestId,
+          participantsCount: 0,
+          tweetsFetched: 0,
+          tweetsFiltered: 0,
+          details: [],
+          creatorIdOnly: true,
+        });
+      }
+      console.log(
+        "[twitter-refresh-tweets] creatorIdOnly: refreshing 1 participant",
+        bodyCreatorId,
+        contestId
+      );
+    }
+
+    // Queue batch mode: process only this batch of participants
+    if (fromQueue && queueBatchIndex !== undefined && queueTotalBatches !== undefined) {
+      const start = queueBatchIndex * BATCH_SIZE;
+      const end = (queueBatchIndex + 1) * BATCH_SIZE;
+      activeParticipants = activeParticipants.slice(start, end);
+      if (activeParticipants.length === 0) {
+        const hasMore = queueBatchIndex + 1 < queueTotalBatches;
+        return NextResponse.json({
+          success: true,
+          contestId,
+          participantsCount: 0,
+          tweetsFetched: 0,
+          tweetsFiltered: 0,
+          details: [],
+          hasMore,
+        });
+      }
+      if (queueBatchIndex === 0) {
+        await initBatchState(contestId);
+      }
+      console.log(
+        `[twitter-refresh-tweets] Queue batch ${queueBatchIndex + 1}/${queueTotalBatches} (${activeParticipants.length} participants)`
+      );
+    } else {
+      console.log(
+        "[twitter-refresh-tweets] Fetched participants",
+        contestId,
+        activeParticipants
+      );
+    }
 
     // Get Twitter campaign config from JSONB (single source of truth)
     let campaignKeywords: string[] = bodyKeywords.filter(Boolean);
@@ -741,7 +839,6 @@ export async function POST(
     // - Increased batch size from 10 to 20 for better parallelization
     // - Tweets are collected and batch upserted instead of individual upserts
     // ============================================================================
-    const BATCH_SIZE = 20; // Process 20 participants in parallel (increased from 10)
     const TWEET_UPSERT_CHUNK_SIZE = 500; // Batch upsert tweets in chunks of 500
     const participantBatches: (typeof activeParticipants)[] = [];
 
@@ -1469,6 +1566,39 @@ export async function POST(
       console.log(`[twitter-refresh-tweets] No tweets to upsert`);
     }
 
+    // Queue batch mode: merge this batch's freshTweetIds/fetchedCreatorIds into Redis
+    const isLastQueueBatch =
+      fromQueue &&
+      queueBatchIndex !== undefined &&
+      queueTotalBatches !== undefined &&
+      queueBatchIndex === queueTotalBatches - 1;
+    if (fromQueue && queueBatchIndex !== undefined && queueTotalBatches !== undefined) {
+      await mergeBatchState(
+        contestId,
+        Array.from(freshTweetIds),
+        Array.from(fetchedCreatorIds)
+      );
+      if (!isLastQueueBatch) {
+        return NextResponse.json({
+          success: true,
+          contestId,
+          participantsCount: activeParticipants.length,
+          tweetsFetched: totalFetched,
+          tweetsFiltered: totalFiltered,
+          details: allDetails,
+          hasMore: true,
+        });
+      }
+      // Last batch: load merged state from Redis for "delete vanished" and final steps
+      const mergedState = await getBatchState(contestId);
+      if (mergedState) {
+        freshTweetIds.clear();
+        mergedState.freshTweetIds.forEach((id) => freshTweetIds.add(id));
+        fetchedCreatorIds.clear();
+        mergedState.fetchedCreatorIds.forEach((id) => fetchedCreatorIds.add(id));
+      }
+    }
+
     const enforceSubmissionLimit = async () => {
       if (!hasSubmissionLimit) {
         return;
@@ -2045,6 +2175,14 @@ export async function POST(
       }
     );
 
+    if (fromQueue && isLastQueueBatch) {
+      await clearBatchState(contestId);
+    }
+
+    const elapsedMs = Date.now() - refreshTweetsStartMs;
+    console.log(
+      `[twitter-refresh-tweets] contestId=${contestId} refresh completed in ${elapsedMs}ms participants=${activeParticipants.length} tweetsFetched=${totalFetched} fromQueue=${fromQueue}`
+    );
     return NextResponse.json({
       success: true,
       contestId,
@@ -2054,9 +2192,14 @@ export async function POST(
       details: allDetails,
       participantsRaw: activeParticipants,
       lastMetricsUpdated: currentTime,
+      ...(fromQueue ? { hasMore: false } : {}),
     });
   } catch (error: any) {
-    console.error("[twitter-refresh-tweets] Unexpected error", error);
+    const errorElapsedMs = Date.now() - refreshTweetsStartMs;
+    console.error(
+      `[twitter-refresh-tweets] Unexpected error after ${errorElapsedMs}ms:`,
+      error
+    );
     return NextResponse.json(
       { error: error?.message || "Unexpected error" },
       { status: 500 }
