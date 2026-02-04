@@ -521,6 +521,33 @@ export default async function ContestDetailPage({
 
         // Get moderation_status (default to "pending" if column doesn't exist)
         const moderationStatus = (tweet as any).moderation_status || "pending";
+        const isCpm = contestData.contest_type === "cpm";
+        const cpmRate =
+          (contestData.contest_based_details as any)?.cpm_contest
+            ?.cpm_rate_usd || 0;
+        // CPM per-tweet: only this tweet's reward when this tweet is paid; leaderboard: creator-level paid/earnings
+        const creatorLeaderboard = actualCreatorProfileId
+          ? creatorModerationData[actualCreatorProfileId]
+          : undefined;
+        const creatorPaid = creatorLeaderboard?.paid ?? false;
+        const creatorEarnings = creatorLeaderboard?.earnings ?? null;
+        const creatorPaidAt = creatorLeaderboard?.paid_at ?? null;
+        const tweetPaid = moderationStatus === "paid";
+        // Include manual_points_adjustment so Reward Granted matches expected reward
+        const tweetTotalPoints =
+          (tweet.points || 0) + (tweet.manual_points_adjustment || 0);
+        const tweetEarningsCents =
+          isCpm && tweetPaid && cpmRate > 0
+            ? Math.round((tweetTotalPoints * cpmRate / 1000) * 100)
+            : null;
+        const paid = isCpm ? tweetPaid : creatorPaid;
+        const earnings =
+          isCpm && tweetPaid
+            ? tweetEarningsCents
+            : creatorPaid && creatorEarnings != null
+              ? creatorEarnings
+              : null;
+        const paidAt = isCpm ? null : creatorPaidAt;
 
         return {
           id: tweet.id,
@@ -528,7 +555,7 @@ export default async function ContestDetailPage({
           content_link: tweet.tweet_url,
           status: moderationStatus, // Use moderation_status as status
           views: tweet.impressions || 0,
-          earnings: null, // Twitter campaigns don't use earnings
+          earnings: earnings,
           other_stats: {
             likes: tweet.likes || 0,
             replies: tweet.replies || 0,
@@ -545,8 +572,8 @@ export default async function ContestDetailPage({
           platform: "twitter",
           video_thumbnail_url: null,
           video_title: tweet.tweet_text?.substring(0, 100) || null,
-          paid: false,
-          paid_at: null,
+          paid,
+          paid_at: paidAt,
           bonus_paid: false,
           bonus_paid_at: null,
           creator_display_name: creatorDisplayName,

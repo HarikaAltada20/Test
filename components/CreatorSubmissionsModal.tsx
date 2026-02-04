@@ -72,7 +72,7 @@ interface Submission {
   other_stats: any;
   // Twitter-specific fields
   is_twitter_tweet?: boolean;
-  moderation_status?: "pending" | "approved" | "rejected";
+  moderation_status?: "pending" | "approved" | "rejected" | "verified" | "paid";
   manual_points_adjustment?: number;
   manual_points_reason?: string | null;
   tweet_id?: string;
@@ -427,19 +427,23 @@ export function CreatorSubmissionsModal({
           const basePoints = submission.other_stats?.base_points || 0;
           const manualAdjustment = submission.manual_points_adjustment || 0;
           const totalPoints = Math.max(basePoints + manualAdjustment, 0);
-          const calculatedEarnings =
-            (totalPoints * cpmRateUsd * 100) / 1000;
+          const calculatedEarnings = (totalPoints * cpmRateUsd * 100) / 1000;
           baseExpectedReward = Math.round(calculatedEarnings);
         } else {
           let effectiveViews = submission.views || 0;
-          if (cpmConfig?.min_views != null && effectiveViews < cpmConfig.min_views) {
+          if (
+            cpmConfig?.min_views != null &&
+            effectiveViews < cpmConfig.min_views
+          ) {
             effectiveViews = 0;
           }
-          if (cpmConfig?.max_views != null && effectiveViews > cpmConfig.max_views) {
+          if (
+            cpmConfig?.max_views != null &&
+            effectiveViews > cpmConfig.max_views
+          ) {
             effectiveViews = cpmConfig.max_views;
           }
-          const calculatedEarnings =
-            (effectiveViews * cpmRateUsd * 100) / 1000;
+          const calculatedEarnings = (effectiveViews * cpmRateUsd * 100) / 1000;
           baseExpectedReward = Math.round(calculatedEarnings);
         }
       }
@@ -611,7 +615,10 @@ export function CreatorSubmissionsModal({
       }
 
       expectedRewardsMap.set(sub.id, cappedExpectedReward);
-      const amountApplied = Math.min(baseExpectedReward, Math.max(0, remainingCap));
+      const amountApplied = Math.min(
+        baseExpectedReward,
+        Math.max(0, remainingCap)
+      );
       runningTotal += amountApplied;
 
       if (
@@ -1343,10 +1350,26 @@ export function CreatorSubmissionsModal({
                       }
                     }
 
-                    // Use ACTUAL earnings from database for granted reward (respects cap)
-                    // Note: Twitter tweets don't have earnings/rewards
-                    const grantedReward = submission.paid
-                      ? submission.earnings || 0
+                    // Use ACTUAL earnings for granted reward (includes custom pay amount)
+                    // For Twitter CPM: treat as paid when paid flag or moderation_status is 'paid'
+                    // Prefer: explicit paid/granted amount (custom pay) > submission.earnings > expected reward
+                    const statusForGranted = getNormalizedSubmissionStatus(
+                      submission
+                    );
+                    const isPaidForGranted =
+                      submission.paid ||
+                      (isTwitterTweet && statusForGranted === "paid");
+                    const explicitPaidAmount =
+                      (submission as any).granted_amount_cents ??
+                      (submission as any).paid_amount_cents ??
+                      submission.other_stats?.paid_amount_cents ??
+                      submission.other_stats?.granted_amount_cents;
+                    const grantedReward = isPaidForGranted
+                      ? (explicitPaidAmount != null && explicitPaidAmount > 0
+                          ? Number(explicitPaidAmount)
+                          : submission.earnings && submission.earnings > 0
+                            ? submission.earnings
+                            : expectedReward)
                       : 0;
                     const expectedBonus =
                       expectedBonusMap.get(submission.id) || 0;
@@ -1664,7 +1687,9 @@ export function CreatorSubmissionsModal({
                               {formatCurrency(expectedRewardForDisplay)}
                             </TableCell>
                             <TableCell className="text-center font-medium text-green-600">
-                              {grantedReward > 0 ? formatCurrency(grantedReward) : "-"}
+                              {grantedReward > 0
+                                ? formatCurrency(grantedReward)
+                                : "-"}
                             </TableCell>
                             {/* Manual Points Reason */}
                             <TableCell className="text-center">
@@ -1864,11 +1889,11 @@ export function CreatorSubmissionsModal({
                                   </>
                                 )}
 
-                              {/* Payment options only for non-Twitter submissions */}
+                              {/* Payment options: verified submissions (including Twitter CPM/leaderboard) */}
                               {contest?.post_contest_status ===
                                 "verification_complete" &&
-                                !isTwitterTweet &&
-                                submission.status === "verified" &&
+                                getNormalizedSubmissionStatus(submission) ===
+                                  "verified" &&
                                 !submission.paid &&
                                 isAdminView && (
                                   <>

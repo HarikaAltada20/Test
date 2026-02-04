@@ -62,11 +62,11 @@ export async function POST(
       );
     }
 
-    // Get contest to verify it's a Twitter contest
+    // Get contest to verify it's a Twitter contest (include max_earnings_per_creator for CPM cap)
     const { data: contest, error: contestError } = await supabase
       .from("contests")
       .select(
-        "id, title, advertiser_id, platform, contest_type, contest_based_details, post_contest_status"
+        "id, title, advertiser_id, platform, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator"
       )
       .eq("id", contestId)
       .single();
@@ -180,7 +180,7 @@ export async function POST(
 
       rewardAmount = prizeForRank.amount; // Already in cents
     } else if (contest.contest_type === "cpm") {
-      // CPM-based Twitter contest: pay based on total_points and CPM rate
+      // CPM-based Twitter contest: pay based on total_points and CPM rate (match expected reward in UI)
       if (!cpmContest || typeof cpmContest.cpm_rate_usd !== "number") {
         return NextResponse.json(
           { error: "CPM configuration is missing for this contest" },
@@ -192,6 +192,17 @@ export async function POST(
       const rate = cpmContest.cpm_rate_usd; // dollars per 1000 points
       // Convert to cents: (points / 1000) * rate (USD) * 100
       rewardAmount = Math.round((totalPoints * rate * 100) / 1000);
+      // Apply max_earnings_per_creator cap so credited amount = expected reward shown in modal
+      const maxEarningsPerCreator =
+        (contest as any).max_earnings_per_creator ??
+        cpmContest.max_earnings_per_creator ??
+        null;
+      if (
+        maxEarningsPerCreator != null &&
+        rewardAmount > maxEarningsPerCreator
+      ) {
+        rewardAmount = maxEarningsPerCreator;
+      }
     }
 
     if (rewardAmount <= 0) {
