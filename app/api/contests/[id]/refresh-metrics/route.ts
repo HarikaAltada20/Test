@@ -141,7 +141,7 @@ export async function POST(
         );
     }
 
-    // Twitter: use Upstash Redis + QStash queue when configured to avoid Vercel timeout (100+ participants, 1000+ tweets)
+    // Twitter: use Upstash Redis 
     const queueEnabled = isMetricsQueueEnabled();
     const useQueue = isTwitter && queueEnabled;
     if (isTwitter) {
@@ -193,7 +193,7 @@ export async function POST(
           .eq("contest_id", contestId)
           .eq("is_active", true);
         const participantCount = count ?? 0;
-        const BATCH_SIZE = 20;
+        const BATCH_SIZE = 5;
         const totalBatches = Math.max(
           1,
           Math.ceil(participantCount / BATCH_SIZE)

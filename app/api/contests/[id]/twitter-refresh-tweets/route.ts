@@ -15,7 +15,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const BATCH_SIZE = 20; // Process 20 participants per queue batch (must match refresh-metrics)
+const BATCH_SIZE = 5; // Process 5 participants per queue batch (must match refresh-metrics)
 
 // IMPORTANT: This is the ONLY endpoint that makes Twitter API calls
 // This is called ONLY when:

@@ -124,7 +124,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
   // Need batchIndex and totalBatches (from job or compute if job was wrongly isRaid)
   let batchIndex: number;
   let totalBatches: number;
-  const BATCH_SIZE = 20;
+  const BATCH_SIZE = 5;
 
   if (job.isRaid && !isRaidCampaign) {
     // Job said raid but contest is awareness → run twitter-refresh-tweets (batch 0)

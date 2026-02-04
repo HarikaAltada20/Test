@@ -92,7 +92,7 @@ export async function POST(
           .select('*', { count: 'exact', head: true })
           .eq('contest_id', contestId)
           .eq('is_active', true);
-        const BATCH_SIZE = 20;
+        const BATCH_SIZE = 5;
         const participantCount = count ?? 0;
         const totalBatches = Math.max(1, Math.ceil(participantCount / BATCH_SIZE));
         job = { contestId, isRaid: false, batchIndex: 0, totalBatches };
