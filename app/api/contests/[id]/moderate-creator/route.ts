@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { debitCreatorWithdrawableBalance, logTransactionAsAdmin, REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
+import {
+  debitCreatorWithdrawableBalance,
+  logTransactionAsAdmin,
+  REVERSAL_TRANSACTION_REMARK,
+} from "@/lib/payment-utils";
 
 /**
  * POST /api/contests/[id]/moderate-creator
- * 
+ *
  * Approve or reject a creator for a Twitter campaign
  * This sets moderation_status and rejection_reason on twitter_campaign_leaderboard
  * and also updates all tweets from that creator
- * 
+ *
  * Body:
  * - creatorId: string
  * - action: "approve" | "reject"
@@ -21,7 +25,9 @@ export async function POST(
 ) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -77,16 +83,20 @@ export async function POST(
     const moderationStatus = action === "approve" ? "verified" : "rejected";
 
     // Get current leaderboard entry to check if creator is paid
-    const { data: currentLeaderboardEntry, error: fetchError } = await supabaseAdmin
-      .from("twitter_campaign_leaderboard")
-      .select("paid, earnings")
-      .eq("contest_id", contestId)
-      .eq("creator_id", creatorId)
-      .single();
+    const { data: currentLeaderboardEntry, error: fetchError } =
+      await supabaseAdmin
+        .from("twitter_campaign_leaderboard")
+        .select("paid, earnings")
+        .eq("contest_id", contestId)
+        .eq("creator_id", creatorId)
+        .single();
 
     if (fetchError && fetchError.code !== "PGRST116") {
       // PGRST116 is "not found", which is acceptable
-      console.error("[moderate-creator] Error fetching leaderboard entry:", fetchError);
+      console.error(
+        "[moderate-creator] Error fetching leaderboard entry:",
+        fetchError
+      );
       return NextResponse.json(
         { error: "Failed to fetch leaderboard entry" },
         { status: 500 }
@@ -95,23 +105,32 @@ export async function POST(
 
     // Handle payment reversal if creator is currently paid and status is being changed away from paid
     if (currentLeaderboardEntry?.paid) {
-      let reversalAmount = currentLeaderboardEntry.earnings || 0;
-      
-      if (!reversalAmount || reversalAmount <= 0) {
-        // Fallback: calculate net unreversed reward = rewards - prior reversals
-        const [{ data: rewardTxns, error: rewardErr }, { data: refundTxns, error: refundErr }] = await Promise.all([
+      let mainReversalAmount = currentLeaderboardEntry.earnings || 0;
+
+      if (!mainReversalAmount || mainReversalAmount <= 0) {
+        // Fallback: main reward = rewards (contest_id + twitter_creator_id) - prior main reversals (refunds without bonus_type)
+        const [
+          { data: rewardTxns, error: rewardErr },
+          { data: mainRefundTxns, error: refundErr },
+        ] = await Promise.all([
           supabaseAdmin
             .from("money_transactions")
             .select("id, amount")
             .eq("user_id", creatorId)
             .eq("type", "reward")
-            .contains("metadata", { contest_id: contestId, twitter_creator_id: creatorId }),
+            .contains("metadata", {
+              contest_id: contestId,
+              twitter_creator_id: creatorId,
+            }),
           supabaseAdmin
             .from("money_transactions")
-            .select("id, amount, remarks")
+            .select("id, amount, remarks, metadata")
             .eq("user_id", creatorId)
             .eq("type", "refund")
-            .contains("metadata", { contest_id: contestId, twitter_creator_id: creatorId })
+            .contains("metadata", {
+              contest_id: contestId,
+              twitter_creator_id: creatorId,
+            }),
         ] as any);
 
         if (rewardErr || refundErr) {
@@ -122,16 +141,82 @@ export async function POST(
           );
         }
 
-        const totalRewards = (rewardTxns || []).reduce((sum: number, tx: any) => sum + (tx.amount || 0), 0);
-        const totalReversals = (refundTxns || [])
-          .filter((tx: any) => !tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK)
-          .reduce((sum: number, tx: any) => sum + (tx.amount || 0), 0);
-        reversalAmount = Math.max(0, totalRewards - totalReversals);
+        const totalMainRewards = (rewardTxns || []).reduce(
+          (sum: number, tx: any) => sum + (tx.amount || 0),
+          0
+        );
+        const mainRefunds = (mainRefundTxns || []).filter(
+          (tx: any) =>
+            (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK) &&
+            !(tx.metadata && (tx.metadata as any).bonus_type)
+        );
+        const totalMainReversals = mainRefunds.reduce(
+          (sum: number, tx: any) => sum + (tx.amount || 0),
+          0
+        );
+        mainReversalAmount = Math.max(0, totalMainRewards - totalMainReversals);
       }
 
-      if (reversalAmount > 0) {
-        // Debit creator wallet by the credited total
-        const debitRes = await debitCreatorWithdrawableBalance(creatorId, reversalAmount);
+      // Bonus reversal: flat_fee bonuses credited for this creator+contest minus any already reversed
+      const [
+        { data: bonusRewardTxns, error: bonusRewardErr },
+        { data: bonusRefundTxns, error: bonusRefundErr },
+      ] = await Promise.all([
+        supabaseAdmin
+          .from("money_transactions")
+          .select("id, amount")
+          .eq("user_id", creatorId)
+          .eq("type", "reward")
+          .contains("metadata", {
+            contest_id: contestId,
+            bonus_type: "flat_fee",
+          }),
+        supabaseAdmin
+          .from("money_transactions")
+          .select("id, amount, remarks")
+          .eq("user_id", creatorId)
+          .eq("type", "refund")
+          .contains("metadata", {
+            contest_id: contestId,
+            twitter_creator_id: creatorId,
+            bonus_type: "flat_fee",
+          }),
+      ] as any);
+
+      if (bonusRewardErr || bonusRefundErr) {
+        const message =
+          bonusRewardErr?.message || bonusRefundErr?.message || "unknown";
+        return NextResponse.json(
+          {
+            error: `Failed to fetch bonus transactions for reversal: ${message}`,
+          },
+          { status: 500 }
+        );
+      }
+
+      const bonusCredited = (bonusRewardTxns || []).reduce(
+        (sum: number, tx: any) => sum + (tx.amount || 0),
+        0
+      );
+      const bonusReversals = (bonusRefundTxns || []).filter(
+        (tx: any) => !tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK
+      );
+      const bonusAlreadyReversed = bonusReversals.reduce(
+        (sum: number, tx: any) => sum + (tx.amount || 0),
+        0
+      );
+      const bonusReversalAmount = Math.max(
+        0,
+        bonusCredited - bonusAlreadyReversed
+      );
+
+      const totalReversalAmount = mainReversalAmount + bonusReversalAmount;
+
+      if (totalReversalAmount > 0) {
+        const debitRes = await debitCreatorWithdrawableBalance(
+          creatorId,
+          totalReversalAmount
+        );
         if (!debitRes.success) {
           return NextResponse.json(
             { error: `Failed to reverse creator credit: ${debitRes.error}` },
@@ -139,22 +224,74 @@ export async function POST(
           );
         }
 
-        // Log a reversal transaction entry for audit trail
-        await logTransactionAsAdmin(
-          creatorId,
-          "refund",
-          reversalAmount,
-          "success",
-          `Reversal of Twitter contest reward - ${(contest as any)?.title || "Contest"}`,
-          {
-            remarks: REVERSAL_TRANSACTION_REMARK,
-            paymentMethod: "refund",
-            metadata: {
-              contest_id: contestId,
-              twitter_creator_id: creatorId,
-            },
+        const contestTitle = (contest as any)?.title || "Contest";
+
+        if (mainReversalAmount > 0) {
+          const mainRefundLogged = await logTransactionAsAdmin(
+            creatorId,
+            "refund",
+            mainReversalAmount,
+            "success",
+            `Reversal of Twitter contest reward - ${contestTitle}`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                contest_id: contestId,
+                twitter_creator_id: creatorId,
+              },
+            }
+          );
+          if (!mainRefundLogged) {
+            console.error(
+              "[moderate-creator] Failed to log main reward refund for creator:",
+              creatorId,
+              "amount:",
+              mainReversalAmount
+            );
+            return NextResponse.json(
+              {
+                error:
+                  "Reversal debit succeeded but failed to log reward refund in transaction history. Please contact support.",
+              },
+              { status: 500 }
+            );
           }
-        );
+        }
+
+        if (bonusReversalAmount > 0) {
+          const bonusRefundLogged = await logTransactionAsAdmin(
+            creatorId,
+            "refund",
+            bonusReversalAmount,
+            "success",
+            `Reversal of Twitter contest flat-fee bonus - ${contestTitle}`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                contest_id: contestId,
+                twitter_creator_id: creatorId,
+                bonus_type: "flat_fee",
+              },
+            }
+          );
+          if (!bonusRefundLogged) {
+            console.error(
+              "[moderate-creator] Failed to log bonus refund for creator:",
+              creatorId,
+              "amount:",
+              bonusReversalAmount
+            );
+            return NextResponse.json(
+              {
+                error:
+                  "Reversal debit succeeded but failed to log bonus refund in transaction history. Please contact support.",
+              },
+              { status: 500 }
+            );
+          }
+        }
       }
     }
 
@@ -184,7 +321,10 @@ export async function POST(
       .eq("creator_id", creatorId);
 
     if (leaderboardUpdateError) {
-      console.error("[moderate-creator] Error updating leaderboard:", leaderboardUpdateError);
+      console.error(
+        "[moderate-creator] Error updating leaderboard:",
+        leaderboardUpdateError
+      );
       return NextResponse.json(
         { error: "Failed to update leaderboard" },
         { status: 500 }
@@ -206,7 +346,10 @@ export async function POST(
         .eq("creator_id", creatorId);
 
       if (tweetUpdateError) {
-        console.error("[moderate-creator] Error updating tweets:", tweetUpdateError);
+        console.error(
+          "[moderate-creator] Error updating tweets:",
+          tweetUpdateError
+        );
         // Don't fail the request if tweet update fails, leaderboard is already updated
       }
     } else {
@@ -224,7 +367,10 @@ export async function POST(
             moderation_status: moderationStatus,
           };
           // Only clear reason if there's no manual points adjustment
-          if (!tweet.manual_points_adjustment || tweet.manual_points_adjustment === 0) {
+          if (
+            !tweet.manual_points_adjustment ||
+            tweet.manual_points_adjustment === 0
+          ) {
             individualUpdate.manual_points_reason = null;
           }
           await supabaseAdmin
@@ -238,18 +384,26 @@ export async function POST(
     // Trigger leaderboard recalculation
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     try {
-      await fetch(`${baseUrl}/api/contests/${contestId}/twitter-refresh-tweets`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
+      await fetch(
+        `${baseUrl}/api/contests/${contestId}/twitter-refresh-tweets`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     } catch (refreshError) {
-      console.error("[moderate-creator] Error refreshing leaderboard:", refreshError);
+      console.error(
+        "[moderate-creator] Error refreshing leaderboard:",
+        refreshError
+      );
       // Don't fail the request if leaderboard refresh fails
     }
 
     return NextResponse.json({
       success: true,
-      message: `Creator ${action === "approve" ? "approved" : "rejected"} successfully`,
+      message: `Creator ${
+        action === "approve" ? "approved" : "rejected"
+      } successfully`,
     });
   } catch (error: any) {
     console.error("[moderate-creator] Error:", error);
@@ -259,4 +413,3 @@ export async function POST(
     );
   }
 }
-
