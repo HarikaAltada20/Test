@@ -2513,6 +2513,8 @@ export default function ContestDetailClient({
 
     setIsRefreshingMetrics(true);
 
+    let result: { queued?: boolean; error?: string; message?: string } | undefined =
+      undefined;
     try {
       // Add timeout for long-running requests
       // Twitter refresh can take 60-90+ seconds (especially for raid campaigns with multiple API calls)
@@ -2531,26 +2533,51 @@ export default function ContestDetailClient({
       );
 
       clearTimeout(timeoutId);
-      const result = await response.json();
+      result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "Failed to refresh metrics");
+        throw new Error(result?.error || "Failed to refresh metrics");
       }
 
-      toast({
-        title: "Success! 🎉",
-        description: `${result.message}. Budget and leaderboard updated!`,
-      });
-
-      // Refresh Twitter metrics after refresh
-      if (currentContest.platform?.toLowerCase() === "twitter") {
-        fetchTwitterMetrics();
+      if (result?.queued) {
+        // Poll until refresh completes; keep "Updating..." state, then reload the page
+        const previousUpdated = currentContest.last_metrics_updated ?? null;
+        const pollIntervalMs = 3000;
+        const pollMaxMs = 120000; // 2 min
+        const startedAt = Date.now();
+        const pollTimer = setInterval(async () => {
+          if (Date.now() - startedAt > pollMaxMs) {
+            clearInterval(pollTimer);
+            setIsRefreshingMetrics(false);
+            return;
+          }
+          try {
+            const res = await fetch(
+              `/api/contests/${contestId}/last-metrics-updated`
+            );
+            if (!res.ok) return;
+            const data = await res.json();
+            const newUpdated = data.last_metrics_updated ?? null;
+            if (newUpdated && newUpdated !== previousUpdated) {
+              clearInterval(pollTimer);
+              setIsRefreshingMetrics(false);
+              window.location.reload();
+              return;
+            }
+          } catch {
+            // ignore
+          }
+        }, pollIntervalMs);
+      } else {
+        toast({
+          title: "Success! 🎉",
+          description: `${result?.message ?? "Budget and leaderboard updated!"}`,
+        });
+        if (currentContest.platform?.toLowerCase() === "twitter") {
+          fetchTwitterMetrics();
+        }
+        setTimeout(() => window.location.reload(), 1500);
       }
-
-      // Refresh the page to show updated data
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
     } catch (error: any) {
       console.error("Failed to refresh metrics:", error);
 
@@ -2570,7 +2597,10 @@ export default function ContestDetailClient({
         });
       }
     } finally {
-      setIsRefreshingMetrics(false);
+      // Only clear loading state for non-queued path; queued path clears it when poll completes or times out
+      if (!result?.queued) {
+        setIsRefreshingMetrics(false);
+      }
     }
   };
 
@@ -8380,8 +8410,8 @@ export default function ContestDetailClient({
                                           submission.creator_id || ""
                                         ) || 0;
                                     } else {
-                                      // For other platforms, use submission rank
-                                      currentRank = index + 1; // 1-based ranking
+                                      // For other platforms, use global submission rank (not page index)
+                                      currentRank = rank; // rank is already globalIndex + 1
                                     }
 
                                     if (currentRank > 0) {
