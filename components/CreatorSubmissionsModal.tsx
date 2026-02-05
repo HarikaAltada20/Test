@@ -2044,36 +2044,40 @@ export function CreatorSubmissionsModal({
                                       View Content
                                     </a>
                                   </DropdownMenuItem>
-                                  {isAdminView && (
-                                    <DropdownMenuItem
-                                      onClick={() =>
-                                        handleDownloadReel(submission.id)
-                                      }
-                                      disabled={
-                                        downloadingSubmissionId ===
-                                        submission.id
-                                      }
-                                      className={
-                                        downloadingSubmissionId ===
-                                        submission.id
-                                          ? "opacity-50 cursor-not-allowed"
-                                          : ""
-                                      }
-                                    >
-                                      {downloadingSubmissionId ===
-                                      submission.id ? (
-                                        <>
-                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                          Downloading...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Download className="h-4 w-4 mr-2" />
-                                          Download Reel/Short
-                                        </>
-                                      )}
-                                    </DropdownMenuItem>
-                                  )}
+                                  {isAdminView &&
+                                    contest?.platform?.toLowerCase() !==
+                                      "twitter" &&
+                                    contest?.platform?.toLowerCase() !==
+                                      "x" && (
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          handleDownloadReel(submission.id)
+                                        }
+                                        disabled={
+                                          downloadingSubmissionId ===
+                                          submission.id
+                                        }
+                                        className={
+                                          downloadingSubmissionId ===
+                                          submission.id
+                                            ? "opacity-50 cursor-not-allowed"
+                                            : ""
+                                        }
+                                      >
+                                        {downloadingSubmissionId ===
+                                        submission.id ? (
+                                          <>
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                            Downloading...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Download className="h-4 w-4 mr-2" />
+                                            Download Reel/Short
+                                          </>
+                                        )}
+                                      </DropdownMenuItem>
+                                    )}
                                 </>
                               )}
                             </DropdownMenuContent>
