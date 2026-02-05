@@ -112,20 +112,20 @@ export async function POST(
     ) {
       const creatorId = currentTweet.creator_id;
 
-      // Amount paid for this tweet = rewards for this tweet - refunds for this tweet
+      // Fetch all rewards and refunds for this tweet so we can split reward-granted vs bonus
       const [
         { data: rewardTxns, error: rewardErr },
         { data: refundTxns, error: refundErr },
       ] = await Promise.all([
         supabaseAdmin
           .from("money_transactions")
-          .select("id, amount")
+          .select("id, amount, metadata")
           .eq("user_id", creatorId)
           .eq("type", "reward")
           .contains("metadata", { contest_id: contestId, tweet_id: tweetId }),
         supabaseAdmin
           .from("money_transactions")
-          .select("id, amount")
+          .select("id, amount, metadata, remarks")
           .eq("user_id", creatorId)
           .eq("type", "refund")
           .contains("metadata", { contest_id: contestId, tweet_id: tweetId }),
@@ -139,20 +139,53 @@ export async function POST(
         );
       }
 
-      const totalRewards = (rewardTxns || []).reduce(
+      // Tweet CPM reward (reward granted) = rewards without bonus_type; exclude flat_fee bonus
+      const tweetRewardTxns = (rewardTxns || []).filter(
+        (tx: any) =>
+          !(tx.metadata && (tx.metadata as any).bonus_type === "flat_fee")
+      );
+      const tweetRefundTxns = (refundTxns || []).filter(
+        (tx: any) =>
+          !(tx.metadata && (tx.metadata as any).bonus_type === "flat_fee") &&
+          (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK)
+      );
+      const tweetRewardSum = tweetRewardTxns.reduce(
         (sum: number, tx: any) => sum + (tx.amount || 0),
         0
       );
-      const totalRefunds = (refundTxns || []).reduce(
+      const tweetRefundSum = tweetRefundTxns.reduce(
         (sum: number, tx: any) => sum + (tx.amount || 0),
         0
       );
-      const reversalAmount = Math.max(0, totalRewards - totalRefunds);
+      const tweetReversalAmount = Math.max(0, tweetRewardSum - tweetRefundSum);
 
-      if (reversalAmount > 0) {
+      // Flat fee bonus = rewards/refunds with bonus_type "flat_fee"
+      const bonusRewardTxns = (rewardTxns || []).filter(
+        (tx: any) =>
+          tx.metadata && (tx.metadata as any).bonus_type === "flat_fee"
+      );
+      const bonusRefundTxns = (refundTxns || []).filter(
+        (tx: any) =>
+          tx.metadata &&
+          (tx.metadata as any).bonus_type === "flat_fee" &&
+          (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK)
+      );
+      const bonusRewardSum = bonusRewardTxns.reduce(
+        (sum: number, tx: any) => sum + (tx.amount || 0),
+        0
+      );
+      const bonusRefundSum = bonusRefundTxns.reduce(
+        (sum: number, tx: any) => sum + (tx.amount || 0),
+        0
+      );
+      const bonusReversalAmount = Math.max(0, bonusRewardSum - bonusRefundSum);
+
+      const totalReversalAmount = tweetReversalAmount + bonusReversalAmount;
+
+      if (totalReversalAmount > 0) {
         const debitRes = await debitCreatorWithdrawableBalance(
           creatorId,
-          reversalAmount
+          totalReversalAmount
         );
         if (!debitRes.success) {
           return NextResponse.json(
@@ -161,25 +194,81 @@ export async function POST(
           );
         }
 
-        await logTransactionAsAdmin(
-          creatorId,
-          "refund",
-          reversalAmount,
-          "success",
-          `Reversal of Twitter CPM tweet reward - ${(contest as any)?.title || "Contest"}`,
-          {
-            remarks: REVERSAL_TRANSACTION_REMARK,
-            paymentMethod: "refund",
-            metadata: {
-              contest_id: contestId,
-              twitter_creator_id: creatorId,
-              tweet_id: tweetId,
-              payout_type: "twitter_cpm_tweet_reversal",
-            },
-          }
-        );
+        const contestTitle = (contest as any)?.title || "Contest";
 
-        // Decrement leaderboard earnings for this creator
+        // Log reward-granted reversal (CPM tweet reward) so cash transaction shows correct value
+        if (tweetReversalAmount > 0) {
+          const logged = await logTransactionAsAdmin(
+            creatorId,
+            "refund",
+            tweetReversalAmount,
+            "success",
+            `Reversal of Twitter CPM tweet reward - ${contestTitle}`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                contest_id: contestId,
+                twitter_creator_id: creatorId,
+                tweet_id: tweetId,
+                payout_type: "twitter_cpm_tweet_reversal",
+              },
+            }
+          );
+          if (!logged) {
+            console.error(
+              "[moderate-submission] Failed to log tweet reward refund for tweet:",
+              tweetId,
+              "amount:",
+              tweetReversalAmount
+            );
+            return NextResponse.json(
+              {
+                error:
+                  "Reversal debit succeeded but failed to log reward refund in transaction history.",
+              },
+              { status: 500 }
+            );
+          }
+        }
+
+        // Log bonus reversal separately so cash transaction shows bonus amount correctly
+        if (bonusReversalAmount > 0) {
+          const logged = await logTransactionAsAdmin(
+            creatorId,
+            "refund",
+            bonusReversalAmount,
+            "success",
+            `Reversal of Twitter contest flat-fee bonus - ${contestTitle}`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                contest_id: contestId,
+                twitter_creator_id: creatorId,
+                tweet_id: tweetId,
+                bonus_type: "flat_fee",
+              },
+            }
+          );
+          if (!logged) {
+            console.error(
+              "[moderate-submission] Failed to log bonus refund for tweet:",
+              tweetId,
+              "amount:",
+              bonusReversalAmount
+            );
+            return NextResponse.json(
+              {
+                error:
+                  "Reversal debit succeeded but failed to log bonus refund in transaction history.",
+              },
+              { status: 500 }
+            );
+          }
+        }
+
+        // Decrement leaderboard earnings for this creator by total reversed
         const { data: leaderboardEntry } = await supabaseAdmin
           .from("twitter_campaign_leaderboard")
           .select("id, earnings")
@@ -192,7 +281,7 @@ export async function POST(
           await supabaseAdmin
             .from("twitter_campaign_leaderboard")
             .update({
-              earnings: Math.max(0, currentEarnings - reversalAmount),
+              earnings: Math.max(0, currentEarnings - totalReversalAmount),
             })
             .eq("id", leaderboardEntry.id);
         }

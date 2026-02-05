@@ -1,4 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
 import { redirect } from "next/navigation";
 import ContestDetailClient from "./contest-detail-client"; // Import the new client component
 
@@ -438,6 +440,128 @@ export default async function ContestDetailPage({
     contest_format: contestData.contest_format,
   };
 
+  // For Twitter campaigns: fetch bonus-paid status from money_transactions so Bonus Granted column is correct
+  let twitterBonusByTweetId: Map<string, { amount: number; paid_at: string }> =
+    new Map();
+  if (isTwitterCampaign && twitterTweetsData && twitterTweetsData.length > 0) {
+    try {
+      const supabaseAdmin = createAdminClient();
+      const [{ data: bonusRewards }, { data: bonusRefunds }] =
+        await Promise.all([
+          supabaseAdmin
+            .from("money_transactions")
+            .select("amount, created_at, metadata, user_id")
+            .eq("type", "reward")
+            .contains("metadata", {
+              contest_id: contestId,
+              bonus_type: "flat_fee",
+            }),
+          supabaseAdmin
+            .from("money_transactions")
+            .select("amount, metadata, remarks, user_id")
+            .eq("type", "refund")
+            .contains("metadata", {
+              contest_id: contestId,
+              bonus_type: "flat_fee",
+            }),
+        ]);
+      const rewardSumByTweet = new Map<
+        string,
+        { sum: number; latestAt: string }
+      >();
+      const refundSumByTweet = new Map<string, number>();
+      const creatorLevelRefund = new Map<string, number>();
+      (bonusRewards || []).forEach((r: any) => {
+        const rawTweetId = r.metadata?.tweet_id;
+        const tweetId = rawTweetId != null ? String(rawTweetId) : null;
+        if (tweetId) {
+          const amt = Number(r.amount) || 0;
+          const at = r.created_at || "";
+          const cur = rewardSumByTweet.get(tweetId);
+          rewardSumByTweet.set(tweetId, {
+            sum: (cur?.sum ?? 0) + amt,
+            latestAt:
+              !cur || (at && at > (cur.latestAt || "")) ? at : cur.latestAt,
+          });
+        }
+      });
+      (bonusRefunds || [])
+        .filter(
+          (r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK
+        )
+        .forEach((r: any) => {
+          const rawTweetId = r.metadata?.tweet_id;
+          const tweetId = rawTweetId != null ? String(rawTweetId) : null;
+          const amt = Number(r.amount) || 0;
+          if (tweetId) {
+            refundSumByTweet.set(
+              tweetId,
+              (refundSumByTweet.get(tweetId) ?? 0) + amt
+            );
+          } else {
+            const creatorId = r.user_id;
+            if (creatorId) {
+              creatorLevelRefund.set(
+                creatorId,
+                (creatorLevelRefund.get(creatorId) ?? 0) + amt
+              );
+            }
+          }
+        });
+      const creatorTotalReward = new Map<string, number>();
+      rewardSumByTweet.forEach((reward, tweetId) => {
+        const creatorId = twitterTweetsData?.find(
+          (t: any) => t.id === tweetId || String(t.id) === tweetId
+        )?.creator_id;
+        if (creatorId) {
+          creatorTotalReward.set(
+            creatorId,
+            (creatorTotalReward.get(creatorId) ?? 0) + reward.sum
+          );
+        }
+      });
+      const creatorsWithFullBonusReversal = new Set<string>();
+      creatorLevelRefund.forEach((refundSum, creatorId) => {
+        const totalReward = creatorTotalReward.get(creatorId) ?? 0;
+        if (refundSum >= totalReward) {
+          creatorsWithFullBonusReversal.add(creatorId);
+        }
+      });
+      refundSumByTweet.forEach((refundSum, tweetId) => {
+        const reward = rewardSumByTweet.get(tweetId);
+        if (reward && reward.sum > refundSum) {
+          const creatorId = twitterTweetsData?.find(
+            (t: any) => t.id === tweetId || String(t.id) === tweetId
+          )?.creator_id;
+          if (!creatorId || !creatorsWithFullBonusReversal.has(creatorId)) {
+            twitterBonusByTweetId.set(tweetId, {
+              amount: reward.sum - refundSum,
+              paid_at: reward.latestAt,
+            });
+          }
+        }
+      });
+      rewardSumByTweet.forEach((reward, tweetId) => {
+        if (!twitterBonusByTweetId.has(tweetId)) {
+          const refundSum = refundSumByTweet.get(tweetId) ?? 0;
+          if (reward.sum > refundSum) {
+            const creatorId = twitterTweetsData?.find(
+              (t: any) => t.id === tweetId || String(t.id) === tweetId
+            )?.creator_id;
+            if (!creatorId || !creatorsWithFullBonusReversal.has(creatorId)) {
+              twitterBonusByTweetId.set(tweetId, {
+                amount: reward.sum - refundSum,
+                paid_at: reward.latestAt,
+              });
+            }
+          }
+        }
+      });
+    } catch (err) {
+      console.error("[page.tsx] Error fetching Twitter bonus-paid data:", err);
+    }
+  }
+
   // Transform Twitter tweets into submission-like format for display
   const twitterSubmissions = twitterTweetsData
     ? twitterTweetsData.map((tweet: any) => {
@@ -538,15 +662,15 @@ export default async function ContestDetailPage({
           (tweet.points || 0) + (tweet.manual_points_adjustment || 0);
         const tweetEarningsCents =
           isCpm && tweetPaid && cpmRate > 0
-            ? Math.round((tweetTotalPoints * cpmRate / 1000) * 100)
+            ? Math.round(((tweetTotalPoints * cpmRate) / 1000) * 100)
             : null;
         const paid = isCpm ? tweetPaid : creatorPaid;
         const earnings =
           isCpm && tweetPaid
             ? tweetEarningsCents
             : creatorPaid && creatorEarnings != null
-              ? creatorEarnings
-              : null;
+            ? creatorEarnings
+            : null;
         const paidAt = isCpm ? null : creatorPaidAt;
 
         return {
@@ -574,8 +698,9 @@ export default async function ContestDetailPage({
           video_title: tweet.tweet_text?.substring(0, 100) || null,
           paid,
           paid_at: paidAt,
-          bonus_paid: false,
-          bonus_paid_at: null,
+          bonus_paid: twitterBonusByTweetId.has(String(tweet.id)) || twitterBonusByTweetId.has(tweet.id),
+          bonus_paid_at: twitterBonusByTweetId.get(String(tweet.id))?.paid_at ?? twitterBonusByTweetId.get(tweet.id)?.paid_at ?? null,
+          bonus_amount: twitterBonusByTweetId.get(String(tweet.id))?.amount ?? twitterBonusByTweetId.get(tweet.id)?.amount ?? null,
           creator_display_name: creatorDisplayName,
           creator_username: creatorUsername,
           creator_avatar_url: creatorAvatarUrl,

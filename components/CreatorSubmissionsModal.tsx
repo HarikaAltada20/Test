@@ -55,7 +55,7 @@ interface Creator {
 
 interface Submission {
   id: string;
-  creator_id: string;
+  creator_id: string | null;
   video_title: string | null;
   video_thumbnail_url: string | null;
   views: number;
@@ -66,7 +66,7 @@ interface Submission {
   paid_at: string | null;
   bonus_paid: boolean;
   bonus_paid_at: string | null;
-  bonus_amount: number | null;
+  bonus_amount?: number | null;
   created_at: string;
   platform: string | null;
   other_stats: any;
@@ -90,10 +90,13 @@ interface CreatorSubmissionsModalProps {
   onSetPending: (submissionIds: string[]) => void;
   onPayment: (
     submissionId: string,
-    type: "standard" | "bonus" | "both"
-  ) => void;
+    type: "standard" | "bonus" | "both",
+    options?: { skipReload?: boolean }
+  ) => void | Promise<void>;
   onCustomPayment: (submissionId: string) => void;
   isAdminView?: boolean;
+  /** For leaderboard contests: creator's rank (1-based) so expected reward per tweet matches main view */
+  creatorRank?: number;
 }
 
 export function CreatorSubmissionsModal({
@@ -108,6 +111,7 @@ export function CreatorSubmissionsModal({
   onPayment,
   onCustomPayment,
   isAdminView = false,
+  creatorRank,
 }: CreatorSubmissionsModalProps) {
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(
     new Set()
@@ -271,8 +275,13 @@ export function CreatorSubmissionsModal({
     // Get selected submissions
     const selectedSubs = submissions.filter((s) => selectedIds.includes(s.id));
 
-    // Filter to verified submissions only
-    const verifiedSubs = selectedSubs.filter((s) => s.status === "verified");
+    // Filter to verified submissions only (Twitter: use moderation_status)
+    const verifiedSubs = selectedSubs.filter((s) => {
+      const status = (s as any).is_twitter_tweet
+        ? (s as any).moderation_status || s.status
+        : s.status;
+      return status === "verified";
+    });
 
     if (verifiedSubs.length === 0) {
       alert(
@@ -287,8 +296,15 @@ export function CreatorSubmissionsModal({
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
 
-    if (isBulkTransaction) {
-      // OPTION 2: Bulk Transaction (Single API call)
+    // Twitter CPM/leaderboard tweets use per-tweet APIs (pay-twitter-tweet, pay-twitter-bonus);
+    // bulk-payment API only supports submissions table (YouTube/Instagram). Use individual onPayment for Twitter.
+    const hasTwitterTweets = sortedSubs.some(
+      (s) => (s as any).is_twitter_tweet === true
+    );
+    const useBulkApi = isBulkTransaction && !hasTwitterTweets;
+
+    if (useBulkApi) {
+      // OPTION 2: Bulk Transaction (Single API call) - YouTube/Instagram only
       try {
         const response = await fetch("/api/admin/bulk-payment", {
           method: "POST",
@@ -345,10 +361,10 @@ export function CreatorSubmissionsModal({
       let successCount = 0;
       let failCount = 0;
 
-      // Pay each submission in order
+      // Pay each submission in order (skipReload so parent doesn't reload after each)
       for (const sub of sortedSubs) {
         try {
-          await onPayment(sub.id, type);
+          await onPayment(sub.id, type, { skipReload: true });
           successCount++;
         } catch (error) {
           console.error(`Failed to pay submission ${sub.id}:`, error);
@@ -357,14 +373,21 @@ export function CreatorSubmissionsModal({
         }
       }
 
-      // Show summary
+      // Show summary and reload once so data is fresh
       if (failCount > 0) {
-        alert(
-          `Payment completed with errors:\n✓ ${successCount} submissions paid\n✗ ${failCount} submissions failed`
-        );
+        toast({
+          title: "Payment completed with errors",
+          description: `✓ ${successCount} paid, ✗ ${failCount} failed`,
+          variant: "destructive",
+        });
       } else {
-        alert(`✓ Successfully paid ${successCount} submissions!`);
+        toast({
+          title: "Success",
+          description: `Successfully paid ${successCount} submission(s).`,
+          variant: "default",
+        });
       }
+      window.location.reload();
     }
 
     // Clear selection
@@ -413,6 +436,28 @@ export function CreatorSubmissionsModal({
 
   const calculateSubmissionBaseExpectedReward = (submission: Submission) => {
     let baseExpectedReward = submission.earnings || 0;
+
+    // Leaderboard: expected reward per tweet = prize for this creator's rank (same as normal view)
+    if (
+      contest?.contest_type === "leaderboard" &&
+      creatorRank != null &&
+      creatorRank > 0
+    ) {
+      const leaderboardContest = (contest?.contest_based_details as any)
+        ?.leaderboard_contest;
+      const prizes = leaderboardContest?.prizes;
+      if (Array.isArray(prizes)) {
+        const prizeForRank = prizes.find(
+          (p: any) => p.position === creatorRank
+        );
+        if (prizeForRank?.amount != null) {
+          // Prize amounts are stored in cents; modal uses cents for formatCurrency
+          return Math.max(Number(prizeForRank.amount), 0);
+        }
+      }
+      return 0;
+    }
+
     if (contest?.contest_type === "cpm" && !baseExpectedReward) {
       const cpmConfig = (contest?.contest_based_details as any)?.cpm_contest;
       const cpmRateUsd = cpmConfig?.cpm_rate_usd;
@@ -470,6 +515,18 @@ export function CreatorSubmissionsModal({
 
   const flatFeeBonus = getFlatFeeBonus();
   const hasBonus = flatFeeBonus > 0;
+
+  const isTwitterLeaderboardContest =
+    contest?.contest_type === "leaderboard" &&
+    (contest?.platform?.toLowerCase() === "twitter" ||
+      contest?.platform?.toLowerCase() === "x") &&
+    contest?.contest_format === "text_image";
+
+  const isTwitterCpmContest =
+    contest?.contest_type === "cpm" &&
+    (contest?.platform?.toLowerCase() === "twitter" ||
+      contest?.platform?.toLowerCase() === "x") &&
+    contest?.contest_format === "text_image";
 
   // Check if this is a Twitter text_image contest
   const isTwitterTextImageContest =
@@ -593,8 +650,10 @@ export function CreatorSubmissionsModal({
   let creatorCapApplied = false;
   let cappedTwitterSubmissionId: string | null = null;
 
-  if (maxEarningsPerCreator && maxEarningsPerCreator > 0) {
-    // Sort by created_at to apply cap in submission order
+  // For leaderboard, expected reward per tweet = prize for creator's rank (no cap); match normal view
+  const isLeaderboard = contest?.contest_type === "leaderboard";
+  if (maxEarningsPerCreator && maxEarningsPerCreator > 0 && !isLeaderboard) {
+    // Sort by created_at to apply cap in submission order (CPM only)
     const submissionsByTime = [...sortedSubmissions].sort((a, b) => {
       return (
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -631,7 +690,7 @@ export function CreatorSubmissionsModal({
       }
     });
   } else {
-    // No cap - use base expected rewards
+    // No cap (or leaderboard): use base expected rewards per submission
     sortedSubmissions.forEach((sub) => {
       const baseExpectedReward = calculateSubmissionBaseExpectedReward(sub);
       expectedRewardsMap.set(sub.id, baseExpectedReward);
@@ -981,7 +1040,9 @@ export function CreatorSubmissionsModal({
                     )}
                   {contest?.post_contest_status === "verification_complete" &&
                     contest?.post_contest_status !== "payments_processed" &&
-                    isAdminView && (
+                    isAdminView &&
+                    // Hide all payment buttons for Twitter leaderboard contests
+                    !isTwitterLeaderboardContest && (
                       <>
                         <div className="border-l border-gray-300 dark:border-gray-600 h-6 mx-2"></div>
                         <Button
@@ -1002,22 +1063,30 @@ export function CreatorSubmissionsModal({
                         </Button>
                         {hasBonus && (
                           <>
-                            <Button
-                              size="sm"
-                              onClick={() => handleBulkPayment("bonus", false)}
-                              className="bg-green-600 hover:bg-green-700 text-white whitespace-nowrap"
-                            >
-                              <DollarSign className="h-4 w-4 mr-1" />
-                              Mark Bonus as Paid
-                            </Button>
-                            <Button
-                              size="sm"
-                              onClick={() => handleBulkPayment("bonus", true)}
-                              className="bg-green-500 hover:bg-green-600 text-white whitespace-nowrap"
-                            >
-                              <DollarSign className="h-4 w-4 mr-1" />
-                              Mark Bonus as Paid (Bulk)
-                            </Button>
+                            {!isTwitterCpmContest && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    handleBulkPayment("bonus", false)
+                                  }
+                                  className="bg-green-600 hover:bg-green-700 text-white whitespace-nowrap"
+                                >
+                                  <DollarSign className="h-4 w-4 mr-1" />
+                                  Mark Bonus as Paid
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    handleBulkPayment("bonus", true)
+                                  }
+                                  className="bg-green-500 hover:bg-green-600 text-white whitespace-nowrap"
+                                >
+                                  <DollarSign className="h-4 w-4 mr-1" />
+                                  Mark Bonus as Paid (Bulk)
+                                </Button>
+                              </>
+                            )}
                             <Button
                               size="sm"
                               onClick={() => handleBulkPayment("both", false)}
@@ -1353,9 +1422,8 @@ export function CreatorSubmissionsModal({
                     // Use ACTUAL earnings for granted reward (includes custom pay amount)
                     // For Twitter CPM: treat as paid when paid flag or moderation_status is 'paid'
                     // Prefer: explicit paid/granted amount (custom pay) > submission.earnings > expected reward
-                    const statusForGranted = getNormalizedSubmissionStatus(
-                      submission
-                    );
+                    const statusForGranted =
+                      getNormalizedSubmissionStatus(submission);
                     const isPaidForGranted =
                       submission.paid ||
                       (isTwitterTweet && statusForGranted === "paid");
@@ -1365,11 +1433,11 @@ export function CreatorSubmissionsModal({
                       submission.other_stats?.paid_amount_cents ??
                       submission.other_stats?.granted_amount_cents;
                     const grantedReward = isPaidForGranted
-                      ? (explicitPaidAmount != null && explicitPaidAmount > 0
-                          ? Number(explicitPaidAmount)
-                          : submission.earnings && submission.earnings > 0
-                            ? submission.earnings
-                            : expectedReward)
+                      ? explicitPaidAmount != null && explicitPaidAmount > 0
+                        ? Number(explicitPaidAmount)
+                        : submission.earnings && submission.earnings > 0
+                        ? submission.earnings
+                        : expectedReward
                       : 0;
                     const expectedBonus =
                       expectedBonusMap.get(submission.id) || 0;
@@ -1889,13 +1957,14 @@ export function CreatorSubmissionsModal({
                                   </>
                                 )}
 
-                              {/* Payment options: verified submissions (including Twitter CPM/leaderboard) */}
+                              {/* Payment options: verified submissions (hide for Twitter leaderboard contests) */}
                               {contest?.post_contest_status ===
                                 "verification_complete" &&
                                 getNormalizedSubmissionStatus(submission) ===
                                   "verified" &&
                                 !submission.paid &&
-                                isAdminView && (
+                                isAdminView &&
+                                !isTwitterLeaderboardContest && (
                                   <>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
@@ -1908,14 +1977,16 @@ export function CreatorSubmissionsModal({
                                     </DropdownMenuItem>
                                     {hasBonus && !submission.bonus_paid && (
                                       <>
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            onPayment(submission.id, "bonus")
-                                          }
-                                        >
-                                          <DollarSign className="h-4 w-4 mr-2" />
-                                          Mark Bonus as Paid
-                                        </DropdownMenuItem>
+                                        {!isTwitterCpmContest && (
+                                          <DropdownMenuItem
+                                            onClick={() =>
+                                              onPayment(submission.id, "bonus")
+                                            }
+                                          >
+                                            <DollarSign className="h-4 w-4 mr-2" />
+                                            Mark Bonus as Paid
+                                          </DropdownMenuItem>
+                                        )}
                                         <DropdownMenuItem
                                           onClick={() =>
                                             onPayment(submission.id, "both")
@@ -1928,7 +1999,8 @@ export function CreatorSubmissionsModal({
                                     )}
                                     {hasBonus &&
                                       !submission.bonus_paid &&
-                                      submission.paid && (
+                                      submission.paid &&
+                                      !isTwitterCpmContest && (
                                         <DropdownMenuItem
                                           onClick={() =>
                                             onPayment(submission.id, "bonus")
