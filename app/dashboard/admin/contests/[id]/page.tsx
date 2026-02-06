@@ -138,6 +138,7 @@ export default async function AdminContestDetailPage({
           { count: "exact" }
         )
         .eq("contest_id", contestId)
+        .neq("filter_status", "filtered_out")
         // Don't filter by is_eligible - include all tweets so rejected ones are visible for status changes
         .order("tweet_created_at", { ascending: false })
         .range(0, INITIAL_TWEET_LIMIT - 1); // Only fetch first page
@@ -177,6 +178,7 @@ export default async function AdminContestDetailPage({
             { count: "exact" }
           )
           .eq("contest_id", contestId)
+          .neq("filter_status", "filtered_out")
           // Don't filter by is_eligible - include all tweets so rejected ones are visible for status changes
           .order("tweet_created_at", { ascending: false })
           .range(0, INITIAL_TWEET_LIMIT - 1); // Only fetch first page
@@ -218,30 +220,36 @@ export default async function AdminContestDetailPage({
     }
 
     // For Twitter campaigns, fetch creator-level leaderboard data from twitter_campaign_leaderboard
-    let creatorModerationData: Record<string, {
-      moderation_status?: string;
-      rejection_reason?: string | null;
-      manual_points_adjustment?: number;
-      manual_points_reason?: string | null;
-      total_points?: number;
-      total_eligible_tweets?: number;
-      total_likes?: number;
-      total_replies?: number;
-      total_retweets?: number;
-      total_quote_reposts?: number;
-      total_impressions?: number;
-      current_rank?: number;
-      paid?: boolean;
-      paid_at?: string | null;
-      earnings?: number;
-      paid_rank?: number | null;
-    }> = {};
+    let creatorModerationData: Record<
+      string,
+      {
+        moderation_status?: string;
+        rejection_reason?: string | null;
+        manual_points_adjustment?: number;
+        manual_points_reason?: string | null;
+        total_points?: number;
+        total_eligible_tweets?: number;
+        total_likes?: number;
+        total_replies?: number;
+        total_retweets?: number;
+        total_quote_reposts?: number;
+        total_impressions?: number;
+        current_rank?: number;
+        paid?: boolean;
+        paid_at?: string | null;
+        earnings?: number;
+        paid_rank?: number | null;
+      }
+    > = {};
     if (isTwitterCampaign) {
       try {
-        const { data: leaderboardData, error: leaderboardError } = await supabase
-          .from("twitter_campaign_leaderboard")
-          .select("creator_id, moderation_status, rejection_reason, manual_points_adjustment, manual_points_reason, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, current_rank, paid, paid_at, earnings, paid_rank")
-          .eq("contest_id", contestId);
+        const { data: leaderboardData, error: leaderboardError } =
+          await supabase
+            .from("twitter_campaign_leaderboard")
+            .select(
+              "creator_id, moderation_status, rejection_reason, manual_points_adjustment, manual_points_reason, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, current_rank, paid, paid_at, earnings, paid_rank"
+            )
+            .eq("contest_id", contestId);
 
         if (leaderboardError) {
           console.error(
@@ -475,53 +483,53 @@ export default async function AdminContestDetailPage({
           const moderationStatus =
             (tweet as any).moderation_status || "pending";
 
-        return {
-          id: tweet.id,
-          created_at: tweet.tweet_created_at || tweet.created_at,
-          content_link: tweet.tweet_url,
-          status: moderationStatus, // Use moderation_status as status
-          views: tweet.impressions || 0,
-          earnings: null, // Twitter campaigns don't use earnings
-          other_stats: {
-            likes: tweet.likes || 0,
-            replies: tweet.replies || 0,
-            retweets: tweet.retweets || 0,
-            quote_reposts: tweet.quote_reposts || 0,
-            impressions: tweet.impressions || 0,
-            points: totalPoints,
-            base_points: basePoints,
+          return {
+            id: tweet.id,
+            created_at: tweet.tweet_created_at || tweet.created_at,
+            content_link: tweet.tweet_url,
+            status: moderationStatus, // Use moderation_status as status
+            views: tweet.impressions || 0,
+            earnings: null, // Twitter campaigns don't use earnings
+            other_stats: {
+              likes: tweet.likes || 0,
+              replies: tweet.replies || 0,
+              retweets: tweet.retweets || 0,
+              quote_reposts: tweet.quote_reposts || 0,
+              impressions: tweet.impressions || 0,
+              points: totalPoints,
+              base_points: basePoints,
+              manual_points_adjustment: manualAdjustment,
+              manual_points_reason: tweet.manual_points_reason,
+              tweet_type: tweet.tweet_type,
+              tweet_text: tweet.tweet_text,
+            },
+            platform: "twitter",
+            video_thumbnail_url: null,
+            video_title: tweet.tweet_text?.substring(0, 100) || null,
+            paid: false,
+            paid_at: null,
+            bonus_paid: false,
+            bonus_paid_at: null,
+            creator_display_name: creatorDisplayName,
+            creator_username: creatorUsername,
+            creator_avatar_url: creatorAvatarUrl,
+            creator_id: actualCreatorProfileId,
+            // Mark as Twitter tweet for UI handling
+            is_twitter_tweet: true,
+            tweet_id: tweet.tweet_id,
+            moderation_status: moderationStatus, // Default to "pending" if column doesn't exist
             manual_points_adjustment: manualAdjustment,
             manual_points_reason: tweet.manual_points_reason,
-            tweet_type: tweet.tweet_type,
-            tweet_text: tweet.tweet_text,
-          },
-          platform: "twitter",
-          video_thumbnail_url: null,
-          video_title: tweet.tweet_text?.substring(0, 100) || null,
-          paid: false,
-          paid_at: null,
-          bonus_paid: false,
-          bonus_paid_at: null,
-          creator_display_name: creatorDisplayName,
-          creator_username: creatorUsername,
-          creator_avatar_url: creatorAvatarUrl,
-          creator_id: actualCreatorProfileId,
-          // Mark as Twitter tweet for UI handling
-          is_twitter_tweet: true,
-          tweet_id: tweet.tweet_id,
-          moderation_status: moderationStatus, // Default to "pending" if column doesn't exist
-          manual_points_adjustment: manualAdjustment,
-          manual_points_reason: tweet.manual_points_reason,
-          filter_status: (tweet as any).filter_status || null, // Track eligibility deletion status
-          // Add nested creator object for compatibility
-          creator: {
-            id: actualCreatorProfileId,
-            username: creatorUsername,
-            profile_picture_url: creatorAvatarUrl,
-            full_name: creatorDisplayName,
-          },
-        };
-      })
+            filter_status: (tweet as any).filter_status || null, // Track eligibility deletion status
+            // Add nested creator object for compatibility
+            creator: {
+              id: actualCreatorProfileId,
+              username: creatorUsername,
+              profile_picture_url: creatorAvatarUrl,
+              full_name: creatorDisplayName,
+            },
+          };
+        })
       : [];
 
     // Prepare regular submissions data

@@ -301,18 +301,6 @@ export default function TwitterRejectionModal({
                             </Select>
                         </div>
 
-                        {/* Selected Reason Preview */}
-                        {selectedReason && selectedReason !== 'other' && (
-                            <Alert className="border-[#7F39EC17] bg-[#7F39EC17]">
-                                <AlertDescription className="text-[#7F39EC]">
-                                    <div className="space-y-1">
-                                        <div className="font-medium">Selected Reason: {getSelectedReasonLabel()}</div>
-                                        <div className="text-sm">{getSelectedReasonDescription()}</div>
-                                    </div>
-                                </AlertDescription>
-                            </Alert>
-                        )}
-
                         {/* Custom Reason Input */}
                         {selectedReason === 'other' && (
                             <div className="space-y-3">
@@ -398,10 +386,10 @@ export default function TwitterRejectionModal({
                             )}
                         >
                             {isLoading ? (
-                                <>
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                    Rejecting...
-                                </>
+                                <div className="flex items-center justify-center gap-2">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                    <span>Rejecting...</span>
+                                </div>
                             ) : (
                                 <>
                                     {isCreatorRejection ? 'Reject All Creator Tweets' : 'Reject Tweet'}
