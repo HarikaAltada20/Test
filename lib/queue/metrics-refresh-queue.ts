@@ -1,12 +1,14 @@
 /**
- * Twitter metrics refresh queue using Upstash Redis only (no QStash).
- * Jobs are pushed to a Redis list; a cron job (/api/cron/process-metrics-queue) pops and processes them.
- * Enables background refresh without Vercel timeout (100+ participants, 1000+ tweets).
+ * Twitter metrics refresh queue using Upstash Redis.
+ * Jobs are pushed to a Redis list; the processor (/api/cron/process-metrics-queue) is triggered
+ * by QStash (when configured) or by direct POST after each enqueue. Pops and processes one job
+ * per run (raid or one batch of awareness). Enables background refresh without Vercel timeout.
  *
  * Required env (when queue is used for Twitter refresh):
  * - UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN (Upstash Redis)
- * - CRON_SECRET (cron calls twitter-refresh-tweets / fetch-raid-engagements)
- * - VERCEL_URL or NEXT_PUBLIC_APP_URL (cron base URL for internal API calls)
+ * Optional: QSTASH_TOKEN (+ signing keys) for event-driven triggers; else CRON_SECRET + direct POST.
+ * - CRON_SECRET (auth for processor and internal calls to twitter-refresh-tweets / fetch-raid-engagements)
+ * - VERCEL_URL or NEXT_PUBLIC_APP_URL (base URL for internal API calls)
  */
 
 import { Redis } from "@upstash/redis";
