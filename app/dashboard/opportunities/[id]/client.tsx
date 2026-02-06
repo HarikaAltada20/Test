@@ -541,6 +541,8 @@ export function ContestClientPage({
 
     setIsRefreshingMetrics(true);
 
+    let result: { queued?: boolean; error?: string; lastMetricsUpdated?: string } | undefined =
+      undefined;
     try {
       const response = await fetch(
         `/api/contests/${contest.id}/refresh-metrics`,
@@ -553,41 +555,53 @@ export function ContestClientPage({
         }
       );
 
-      const result = await response.json();
+      result = await response.json();
 
       if (!response.ok) {
         throw new Error(result.error || "Failed to refresh metrics");
       }
 
-      // Update contest with new last_metrics_updated timestamp
-      const newTimestamp =
-        result.lastMetricsUpdated || new Date().toISOString();
-      setContest((prev: any) => ({
-        ...prev,
-        last_metrics_updated: newTimestamp,
-      }));
-
-      // Refresh BOTH the leaderboard AND the user's own submission data
-      const isTwitterContest = contest.platform === "twitter";
-      if (isTwitterContest) {
-        // For Twitter, refresh both leaderboard, my rank, and metrics
-        await Promise.all([
-          fetchTwitterLeaderboard(),
-          fetchMyTwitterRank(),
-          fetchTwitterMetrics(),
-        ]);
+      if (result.queued) {
+        // Metrics refresh queued; keep "Updating..." until done, then reload the page
+        const previousUpdated = contest?.last_metrics_updated ?? null;
+        const pollIntervalMs = 3000;
+        const pollMaxMs = 120000; // 2 min
+        const startedAt = Date.now();
+        const pollTimer = setInterval(async () => {
+          if (Date.now() - startedAt > pollMaxMs) {
+            clearInterval(pollTimer);
+            setIsRefreshingMetrics(false);
+            return;
+          }
+          try {
+            const res = await fetch(
+              `/api/contests/${contest.id}/last-metrics-updated`
+            );
+            if (!res.ok) return;
+            const data = await res.json();
+            const newUpdated = data.last_metrics_updated ?? null;
+            if (newUpdated && newUpdated !== previousUpdated) {
+              clearInterval(pollTimer);
+              setIsRefreshingMetrics(false);
+              window.location.reload();
+              return;
+            }
+          } catch {
+            // ignore
+          }
+        }, pollIntervalMs);
       } else {
-        // For other platforms, refresh leaderboard and submission data
-        await Promise.all([
-          fetchLeaderboard(leaderboardCurrentPage),
-          fetchMySubmissionData(),
-        ]);
+        // Sync refresh completed; reload page so all data is fresh
+        setTimeout(() => window.location.reload(), 1200);
       }
     } catch (error: any) {
       console.error("Failed to refresh metrics:", error);
       // In opportunities page, we'll silently handle errors or show a subtle notification
     } finally {
-      setIsRefreshingMetrics(false);
+      // Only clear loading state here for non-queued path; queued path clears it when poll completes or times out
+      if (!result?.queued) {
+        setIsRefreshingMetrics(false);
+      }
     }
   };
 
@@ -5304,6 +5318,7 @@ export function ContestClientPage({
                   cooldownType="opportunities"
                   contestStatus={contest?.status}
                   disableRefreshWhenContestEnded
+                  creatorOnlyUserId={user?.id ?? undefined}
                 />
               </div>
             </TabPanel>

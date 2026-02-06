@@ -142,23 +142,27 @@ export async function POST(
         );
       }
     } else if (adjustmentType === "twitter_leaderboard") {
-      // Read leaderboard entry so we can increment the manual adjustment value
+      // Read leaderboard entry so we can increment manual adjustment AND total_points
       const { data: leaderboardEntry } = await supabaseAdmin
         .from("twitter_campaign_leaderboard")
-        .select("manual_points_adjustment")
+        .select("total_points, manual_points_adjustment")
         .eq("contest_id", contestId)
         .eq("creator_id", creatorId)
         .maybeSingle();
 
       const currentManualAdjustment = leaderboardEntry?.manual_points_adjustment ?? 0;
       const newManualAdjustment = currentManualAdjustment + points;
+      const currentTotalPoints = leaderboardEntry?.total_points ?? 0;
+      // Add the same points to total_points so payment = base + adjusted (not just adjusted)
+      const newTotalPoints = currentTotalPoints + points;
 
-      // Update leaderboard manual points (applies to all tweets for this creator)
+      // Update leaderboard: manual adjustment and total_points together
       const { error: updateError } = await supabaseAdmin
         .from("twitter_campaign_leaderboard")
         .update({
           manual_points_adjustment: newManualAdjustment,
           manual_points_reason: reason,
+          total_points: newTotalPoints,
         })
         .eq("contest_id", contestId)
         .eq("creator_id", creatorId);
@@ -170,6 +174,9 @@ export async function POST(
           { status: 500 }
         );
       }
+
+      // Re-rank so leaderboard order reflects new total_points
+      await rerankTwitterLeaderboard(contestId, supabaseAdmin);
     }
 
     return NextResponse.json({
@@ -194,6 +201,16 @@ async function recalculateTwitterLeaderboard(
   creatorId: string,
   supabaseAdmin: any
 ): Promise<void> {
+  // Get existing leaderboard entry first (need total_points and manual for fallback base)
+  const { data: existingLeaderboard } = await supabaseAdmin
+    .from("twitter_campaign_leaderboard")
+    .select("total_points, manual_points_adjustment")
+    .eq("contest_id", contestId)
+    .eq("creator_id", creatorId)
+    .maybeSingle();
+
+  const leaderboardManualAdjustment = existingLeaderboard?.manual_points_adjustment || 0;
+
   // Get all tweets for this creator
   const { data: tweets } = await supabaseAdmin
     .from("twitter_campaign_tweets")
@@ -203,30 +220,27 @@ async function recalculateTwitterLeaderboard(
     .eq("is_eligible", true)
     .in("moderation_status", ["pending", "verified"]); // Only count pending/verified
 
-  // Calculate total points (base points + manual adjustments)
-  let totalPoints = 0;
+  // Calculate total points (base from tweets + tweet manual + leaderboard manual)
+  let totalPointsFromTweets = 0;
   let totalEligibleTweets = 0;
 
   if (tweets) {
     tweets.forEach((tweet: any) => {
       const basePoints = tweet.points || 0;
       const manualAdjustment = tweet.manual_points_adjustment || 0;
-      totalPoints += basePoints + manualAdjustment;
+      totalPointsFromTweets += basePoints + manualAdjustment;
       totalEligibleTweets += 1;
     });
   }
 
-  // Get existing leaderboard entry
-  const { data: existingLeaderboard } = await supabaseAdmin
-    .from("twitter_campaign_leaderboard")
-    .select("manual_points_adjustment")
-    .eq("contest_id", contestId)
-    .eq("creator_id", creatorId)
-    .maybeSingle();
-
-  // Add leaderboard-level manual adjustment if exists
-  const leaderboardManualAdjustment = existingLeaderboard?.manual_points_adjustment || 0;
-  totalPoints += leaderboardManualAdjustment;
+  // If tweets have no points (e.g. base computed elsewhere), preserve existing base
+  // so payment = base + adjusted amount, not just adjusted amount
+  const existingBase =
+    (existingLeaderboard?.total_points ?? 0) - (existingLeaderboard?.manual_points_adjustment ?? 0);
+  const totalPoints =
+    totalPointsFromTweets > 0
+      ? totalPointsFromTweets + leaderboardManualAdjustment
+      : Math.max(0, existingBase) + leaderboardManualAdjustment;
 
   // Get existing entry to preserve refresh_count
   const { data: existingEntry } = await supabaseAdmin
