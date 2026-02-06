@@ -1,7 +1,7 @@
 /**
- * Cron: process Twitter metrics refresh queue (Redis only, no QStash).
- * Pops one job from Redis and processes it (raid or one batch of awareness).
- * Call with Authorization: Bearer CRON_SECRET. Schedule via Vercel cron (e.g. every 1–2 min).
+ * Process Twitter metrics refresh queue: pops one job from Redis and runs it
+ * (raid or one batch of awareness). Triggered by QStash (event-driven) or by
+ * Vercel cron / CRON_SECRET. Accepts QStash signature or Authorization: Bearer CRON_SECRET.
  */
 
 import { NextResponse } from "next/server";
@@ -12,6 +12,11 @@ import {
   isMetricsQueueEnabled,
   type MetricsRefreshJob,
 } from "@/lib/queue/metrics-refresh-queue";
+import {
+  authorizeProcessMetricsQueue,
+  isQStashEnabled,
+  triggerProcessMetricsQueue,
+} from "@/lib/qstash";
 
 function getBaseUrl(): string {
   const url = process.env.VERCEL_URL;
@@ -20,19 +25,28 @@ function getBaseUrl(): string {
 }
 
 export async function GET(request: Request) {
+  const authorized = await authorizeProcessMetricsQueue(request, "");
+  if (!authorized) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   return handleRequest(request);
 }
 
 export async function POST(request: Request) {
+  const rawBody = await request.text();
+  const authorized = await authorizeProcessMetricsQueue(request, rawBody);
+  if (!authorized) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const viaQStash = !!request.headers.get("Upstash-Signature");
+  console.log(
+    `[process-metrics-queue] Invoked by ${viaQStash ? "QStash" : "CRON/direct"}`
+  );
   return handleRequest(request);
 }
 
-async function handleRequest(request: Request): Promise<NextResponse> {
+async function handleRequest(_request: Request): Promise<NextResponse> {
   const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
 
   if (!isMetricsQueueEnabled()) {
     return NextResponse.json(
@@ -49,7 +63,9 @@ async function handleRequest(request: Request): Promise<NextResponse> {
   const jobStartMs = Date.now();
   const baseUrl = getBaseUrl();
   const { contestId } = job;
-  console.log(`[process-metrics-queue] Processing job contestId=${contestId} job.isRaid=${job.isRaid}`);
+  console.log(
+    `[process-metrics-queue] Processing job contestId=${contestId} job.isRaid=${job.isRaid}`
+  );
 
   // Always verify campaign type from DB so awareness campaigns never run fetch-raid-engagements
   const supabaseAdmin = createAdminSupabaseClient(
@@ -65,14 +81,23 @@ async function handleRequest(request: Request): Promise<NextResponse> {
   const platform = (contest?.platform ?? "").toString().toLowerCase();
   const isTwitterPlatform = platform === "twitter" || platform === "x";
   const campaignType =
-    (contest as { contest_based_details?: { twitter_campaign?: { campaign_type?: string } } })
-      ?.contest_based_details?.twitter_campaign?.campaign_type ?? "";
+    (
+      contest as {
+        contest_based_details?: {
+          twitter_campaign?: { campaign_type?: string };
+        };
+      }
+    )?.contest_based_details?.twitter_campaign?.campaign_type ?? "";
   const isRaidCampaign =
     isTwitterPlatform &&
     typeof campaignType === "string" &&
     campaignType.toLowerCase().trim() === "raid";
 
-  console.log(`[process-metrics-queue] contestId=${contestId} campaign_type=${campaignType} isRaidCampaign=${isRaidCampaign} → ${isRaidCampaign ? "fetch-raid-engagements" : "twitter-refresh-tweets"}`);
+  console.log(
+    `[process-metrics-queue] contestId=${contestId} campaign_type=${campaignType} isRaidCampaign=${isRaidCampaign} → ${
+      isRaidCampaign ? "fetch-raid-engagements" : "twitter-refresh-tweets"
+    }`
+  );
 
   // Raid campaign → fetch-raid-engagements only. Awareness → twitter-refresh-tweets only.
   if (job.isRaid && isRaidCampaign) {
@@ -88,7 +113,11 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       });
       if (!raidRes.ok) {
         const text = await raidRes.text();
-        console.error("[process-metrics-queue] Raid fetch failed:", raidRes.status, text);
+        console.error(
+          "[process-metrics-queue] Raid fetch failed:",
+          raidRes.status,
+          text
+        );
         return NextResponse.json(
           { processed: 1, error: "Raid fetch failed", details: text },
           { status: 500 }
@@ -97,7 +126,10 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     } catch (err) {
       console.error("[process-metrics-queue] Raid fetch error:", err);
       return NextResponse.json(
-        { processed: 1, error: err instanceof Error ? err.message : "Raid fetch failed" },
+        {
+          processed: 1,
+          error: err instanceof Error ? err.message : "Raid fetch failed",
+        },
         { status: 500 }
       );
     }
@@ -141,16 +173,15 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     totalBatches = job.totalBatches;
   } else {
     return NextResponse.json(
-      { processed: 1, error: "Invalid job: missing batchIndex/totalBatches for awareness" },
+      {
+        processed: 1,
+        error: "Invalid job: missing batchIndex/totalBatches for awareness",
+      },
       { status: 400 }
     );
   }
 
-  if (
-    totalBatches < 1 ||
-    batchIndex < 0 ||
-    batchIndex >= totalBatches
-  ) {
+  if (totalBatches < 1 || batchIndex < 0 || batchIndex >= totalBatches) {
     return NextResponse.json(
       { processed: 1, error: "Invalid batchIndex/totalBatches" },
       { status: 400 }
@@ -176,7 +207,11 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     const refreshData = await refreshRes.json().catch(() => ({}));
 
     if (!refreshRes.ok) {
-      console.error("[process-metrics-queue] Refresh batch failed:", refreshRes.status, refreshData);
+      console.error(
+        "[process-metrics-queue] Refresh batch failed:",
+        refreshRes.status,
+        refreshData
+      );
       return NextResponse.json(
         { processed: 1, error: "Refresh batch failed", details: refreshData },
         { status: 500 }
@@ -195,11 +230,40 @@ async function handleRequest(request: Request): Promise<NextResponse> {
         totalBatches,
       };
       await enqueueMetricsRefreshJob(nextJob);
+      // Trigger next run: QStash (event-driven) or direct POST when QStash not configured / loopback
+      const baseUrlForTrigger = getBaseUrl();
+      const doFetch = () => {
+        const cronSecret = process.env.CRON_SECRET;
+        fetch(`${baseUrlForTrigger}/api/cron/process-metrics-queue`, {
+          method: "POST",
+          headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {},
+        }).catch((e) =>
+          console.warn("[process-metrics-queue] Trigger next run failed:", e)
+        );
+      };
+      if (isQStashEnabled()) {
+        triggerProcessMetricsQueue(baseUrlForTrigger)
+          .then((res) => {
+            if (res?.error) {
+              doFetch();
+            } else if (res?.messageId) {
+              console.log(
+                "[process-metrics-queue] QStash trigger sent for next batch messageId=",
+                res.messageId
+              );
+            }
+          })
+          .catch(() => doFetch());
+      } else {
+        doFetch();
+      }
     }
 
     const batchElapsedMs = Date.now() - jobStartMs;
     console.log(
-      `[process-metrics-queue] contestId=${contestId} batch ${batchIndex + 1}/${totalBatches} completed in ${batchElapsedMs}ms hasMore=${hasMore}`
+      `[process-metrics-queue] contestId=${contestId} batch ${
+        batchIndex + 1
+      }/${totalBatches} completed in ${batchElapsedMs}ms hasMore=${hasMore}`
     );
     return NextResponse.json({
       processed: 1,
@@ -215,7 +279,10 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       err
     );
     return NextResponse.json(
-      { processed: 1, error: err instanceof Error ? err.message : "Refresh failed" },
+      {
+        processed: 1,
+        error: err instanceof Error ? err.message : "Refresh failed",
+      },
       { status: 500 }
     );
   }

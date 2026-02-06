@@ -12,6 +12,10 @@ import {
   getMissingQueueEnv,
   enqueueMetricsRefreshJob,
 } from "@/lib/queue/metrics-refresh-queue";
+import {
+  isQStashEnabled,
+  triggerProcessMetricsQueue,
+} from "@/lib/qstash";
 
 export async function POST(
   request: Request,
@@ -223,18 +227,30 @@ export async function POST(
       console.log(
         `[refresh-metrics] contestId=${contestId} enqueued in ${enqueueElapsedMs}ms - ${cronName} - Source: ${isOpportunitiesRefresh ? "Opportunities" : "Owner"}`
       );
-      // Trigger processor once so first job runs soon (cron will process remaining batches)
+      // Trigger processor via QStash (event-driven) or fallback to direct POST (e.g. localhost)
       const processUrl = `${baseUrl}/api/cron/process-metrics-queue`;
-      fetch(processUrl, {
-        method: "POST",
-        headers: {
-          ...(process.env.CRON_SECRET
-            ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
-            : {}),
-        },
-      }).catch((e) =>
-        console.warn("[metrics-refresh-queue] Trigger process-metrics-queue failed:", e)
-      );
+      const doFetch = () =>
+        fetch(processUrl, {
+          method: "POST",
+          headers: {
+            ...(process.env.CRON_SECRET
+              ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
+              : {}),
+          },
+        }).catch((e) =>
+          console.warn("[metrics-refresh-queue] Trigger process-metrics-queue failed:", e)
+        );
+      if (isQStashEnabled()) {
+        triggerProcessMetricsQueue(baseUrl).then((res) => {
+          if (res?.error) {
+            doFetch();
+          } else if (res?.messageId) {
+            console.log("[refresh-metrics] QStash trigger sent messageId=", res.messageId);
+          }
+        }).catch(() => doFetch());
+      } else {
+        doFetch();
+      }
 
       return NextResponse.json({
         success: true,
