@@ -5318,7 +5318,7 @@ export function ContestClientPage({
                   cooldownType="opportunities"
                   contestStatus={contest?.status}
                   disableRefreshWhenContestEnded
-                  creatorOnlyUserId={user?.id ?? undefined}
+                  creatorOnlyUserId={undefined}
                 />
               </div>
             </TabPanel>
