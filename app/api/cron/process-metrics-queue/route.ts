@@ -19,9 +19,8 @@ import {
 } from "@/lib/qstash";
 
 function getBaseUrl(): string {
-  const url = process.env.VERCEL_URL;
-  if (url) return `https://${url}`;
-  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const url = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
+  return url.replace(/\/$/, "");
 }
 
 export async function GET(request: Request) {
