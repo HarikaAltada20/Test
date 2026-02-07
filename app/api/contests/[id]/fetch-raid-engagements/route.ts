@@ -58,11 +58,34 @@ const RAID_POINTS_CONFIG = {
   // quote_repost_bookmarks_multiplier: 0.2,   // Points per bookmark on their quote repost
 };
 
+const RAID_BATCH_SIZE = 5;
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    let body: {
+      fromQueue?: boolean;
+      batchIndex?: number;
+      totalBatches?: number;
+    } = {};
+    try {
+      body = await request.json();
+    } catch {
+      // empty or invalid body
+    }
+    const fromQueue = body.fromQueue === true;
+    const batchIndex =
+      typeof body.batchIndex === "number" ? body.batchIndex : undefined;
+    const totalBatches =
+      typeof body.totalBatches === "number" ? body.totalBatches : undefined;
+    const isBatchedRaid =
+      fromQueue &&
+      batchIndex !== undefined &&
+      totalBatches !== undefined &&
+      totalBatches >= 1;
+
     const supabase = await createClient();
     const supabaseAdmin = createAdminClient();
     const { id: contestId } = await params;
@@ -513,6 +536,36 @@ export async function POST(
       });
     }
 
+    // When batching, only process this slice of participants; participantMap stays full for reply attribution.
+    const batchParticipants = isBatchedRaid
+      ? activeParticipants.slice(
+          batchIndex! * RAID_BATCH_SIZE,
+          (batchIndex! + 1) * RAID_BATCH_SIZE
+        )
+      : activeParticipants;
+    const batchParticipantIds =
+      isBatchedRaid && batchParticipants.length > 0
+        ? new Set(batchParticipants.map((p) => p.creator_id))
+        : null;
+    const batchParticipantUsernames =
+      isBatchedRaid && batchParticipants.length > 0
+        ? new Set(
+            batchParticipants
+              .map((p) => p.twitter_username?.replace("@", "").toLowerCase())
+              .filter(Boolean) as string[]
+          )
+        : null;
+
+    if (isBatchedRaid && batchParticipants.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: "Raid batch empty",
+        hasMore: (batchIndex! + 1) < totalBatches!,
+        batchIndex,
+        totalBatches,
+      });
+    }
+
     // Create map of username -> creator_id and join date for quick lookup (only for non-rejected creators)
     const participantMap = new Map<string, string>();
     const participantJoinDateMap = new Map<string, Date>(); // Map username -> join date
@@ -809,6 +862,12 @@ export async function POST(
         if (isUserObject) {
           // This is a user object - we need to fetch their timeline to find the retweet
           const username = retweet.screen_name;
+          if (
+            batchParticipantUsernames &&
+            !batchParticipantUsernames.has(username.toLowerCase())
+          ) {
+            continue; // Skip: not in this batch
+          }
           console.log(
             `[fetch-raid-engagements] Retweet is user object (${username}), fetching their timeline to find retweet`
           );
@@ -976,11 +1035,13 @@ export async function POST(
 
     // 4d. Search participant timelines for quote reposts (if not already found in latest_replies.php)
     // Quote reposts might not be in latest_replies.php, so we'll check each participant's timeline
-    // IMPORTANT: We fetch ALL tweets up to join date using pagination
+    // IMPORTANT: We fetch ALL tweets up to join date using pagination. When batching, only this batch's participants.
     console.log(
-      `[fetch-raid-engagements] Checking participant timelines for quote reposts...`
+      `[fetch-raid-engagements] Checking participant timelines for quote reposts (${
+        isBatchedRaid ? `batch ${(batchIndex ?? 0) + 1}/${totalBatches ?? 1}` : "all"
+      })...`
     );
-    for (const participant of activeParticipants) {
+    for (const participant of batchParticipants) {
       const username = participant.twitter_username?.replace("@", "");
       if (!username) continue;
 
@@ -1349,7 +1410,7 @@ export async function POST(
       await supabaseAdmin
         .from("twitter_campaign_tweets")
         .select(
-          "tweet_id, moderation_status, manual_points_adjustment, manual_points_reason, is_eligible"
+          "tweet_id, creator_id, moderation_status, manual_points_adjustment, manual_points_reason, is_eligible"
         )
         .eq("contest_id", contestId)
         .not("target_tweet_id", "is", null); // Only raid engagements (those with target_tweet_id)
@@ -1361,11 +1422,21 @@ export async function POST(
       );
     }
 
-    // Create a map for quick lookup of moderation data
-    const existingEngagementsMap = new Map(
+    // Create a map for quick lookup of moderation data (and creator_id for batch delete filtering)
+    const existingEngagementsMap = new Map<
+      string,
+      {
+        creator_id: string | null;
+        moderation_status: string;
+        manual_points_adjustment: number;
+        manual_points_reason: string | null;
+        was_eligible: boolean;
+      }
+    >(
       (existingRaidEngagements || []).map((e: any) => [
         e.tweet_id,
         {
+          creator_id: e.creator_id ?? null,
           moderation_status: e.moderation_status || "pending",
           manual_points_adjustment: e.manual_points_adjustment || 0,
           manual_points_reason: e.manual_points_reason || null,
@@ -1605,6 +1676,15 @@ export async function POST(
       engagements.push(engagement);
     }
 
+    // When batching, keep only engagements for this batch's participants
+    if (batchParticipantIds) {
+      const filtered = engagements.filter((e) =>
+        batchParticipantIds.has(e.creator_id)
+      );
+      engagements.length = 0;
+      engagements.push(...filtered);
+    }
+
     // Add summary logging
     console.log(`[fetch-raid-engagements] Summary:`, {
       totalTimelineTweets: timeline.length,
@@ -1656,19 +1736,25 @@ export async function POST(
 
     // ============================================================================
     // MARK ENGAGEMENTS AS DELETED IF THEY'RE NOT IN FRESH API RESPONSE
-    // Since we now fetch ALL tweets up to join date via pagination for participant timelines,
-    // and latest_replies.php should return all engagements, if an engagement is not found,
-    // it means it's actually deleted (or was never eligible)
+    // When batching: only mark as deleted engagements that belong to this batch's participants.
     // ============================================================================
     console.log(
-      `[fetch-raid-engagements] Processing deleted engagements (we fetched all tweets up to join date, so missing = deleted)`
+      isBatchedRaid
+        ? `[fetch-raid-engagements] Processing deleted engagements for this batch only (${batchParticipantIds?.size ?? 0} participants)`
+        : `[fetch-raid-engagements] Processing deleted engagements (we fetched all tweets up to join date, so missing = deleted)`
     );
 
     // Find engagements that were in DB but not in fresh API response
-    // Since we paginated through all tweets up to join date, missing engagements are truly deleted
-    const engagementsToMarkAsDeleted = Array.from(
-      existingEngagementsMap.keys()
-    ).filter((tweetId) => !freshEngagementIds.has(tweetId));
+    let engagementsToMarkAsDeleted = Array.from(existingEngagementsMap.keys()).filter(
+      (tweetId) => !freshEngagementIds.has(tweetId)
+    );
+    // When batching, only mark as deleted engagements belonging to this batch's participants
+    if (isBatchedRaid && batchParticipantIds && batchParticipantIds.size > 0) {
+      engagementsToMarkAsDeleted = engagementsToMarkAsDeleted.filter((tweetId) => {
+        const row = existingEngagementsMap.get(tweetId);
+        return row?.creator_id != null && batchParticipantIds.has(row.creator_id);
+      });
+    }
 
     if (engagementsToMarkAsDeleted.length > 0) {
       console.log(
@@ -1910,28 +1996,35 @@ export async function POST(
       }
     );
 
-    // 11. Update last_metrics_updated in contests table (same logic as awareness campaigns)
-    const currentTime = new Date().toISOString();
-    console.log(
-      `[fetch-raid-engagements] Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime}`
-    );
-
-    const { data: updateData, error: updateError } = await supabaseAdmin
-      .from("contests")
-      .update({ last_metrics_updated: currentTime })
-      .eq("id", contestId)
-      .select();
-
-    if (updateError) {
-      console.error(
-        `[fetch-raid-engagements] Failed to update last_metrics_updated for contest ${contestId}:`,
-        updateError
-      );
-      // Don't fail the request, just log the error
-    } else {
+    // 11. Update last_metrics_updated in contests table (only when full run or last batch)
+    const isLastRaidBatch =
+      !isBatchedRaid ||
+      (typeof batchIndex === "number" &&
+        typeof totalBatches === "number" &&
+        batchIndex === totalBatches - 1);
+    if (isLastRaidBatch) {
+      const currentTime = new Date().toISOString();
       console.log(
-        `[fetch-raid-engagements] Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`
+        `[fetch-raid-engagements] Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime}`
       );
+
+      const { data: updateData, error: updateError } = await supabaseAdmin
+        .from("contests")
+        .update({ last_metrics_updated: currentTime })
+        .eq("id", contestId)
+        .select();
+
+      if (updateError) {
+        console.error(
+          `[fetch-raid-engagements] Failed to update last_metrics_updated for contest ${contestId}:`,
+          updateError
+        );
+        // Don't fail the request, just log the error
+      } else {
+        console.log(
+          `[fetch-raid-engagements] Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`
+        );
+      }
     }
 
     // 12. If targets reached, log it (you can add logic to end campaign here)
@@ -1941,6 +2034,12 @@ export async function POST(
       );
       // Optionally update contest status or send notification
     }
+
+    const hasMore =
+      isBatchedRaid &&
+      typeof batchIndex === "number" &&
+      typeof totalBatches === "number" &&
+      batchIndex + 1 < totalBatches;
 
     return NextResponse.json({
       success: true,
@@ -1953,6 +2052,11 @@ export async function POST(
         quoteReposts: engagements.filter((e) => e.tweet_type === "quote")
           .length,
       },
+      ...(isBatchedRaid && {
+        hasMore,
+        batchIndex,
+        totalBatches,
+      }),
     });
   } catch (error: any) {
     console.error("[fetch-raid-engagements] Error:", error);
