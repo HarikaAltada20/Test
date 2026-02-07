@@ -429,9 +429,9 @@ export function ContestClientPage({
           creator_full_name: entry.app_full_name || null,
           creator_pfp_url: null, // Twitter leaderboard doesn't include profile pics
           user_platform_pfp_url: null,
-          submissions: [entry], // Single aggregated entry
+          submissions: [entry], // Single aggregated entry (includes paid, earnings from twitter_campaign_leaderboard)
           total_views: 0, // Not applicable for Twitter
-          total_earnings: 0, // Will be calculated from prize structure
+          total_earnings: entry.earnings || 0, // From twitter_campaign_leaderboard
           best_submission: entry,
           best_rank: currentRank,
           submission_count: entry.total_eligible_tweets || 0,
@@ -443,6 +443,8 @@ export function ContestClientPage({
           total_retweets: entry.total_retweets || 0,
           total_quote_reposts: entry.total_quote_reposts || 0,
           total_impressions: entry.total_impressions || 0,
+          paid: entry.paid,
+          paid_at: entry.paid_at,
         };
       });
     }
@@ -558,10 +560,10 @@ export function ContestClientPage({
       result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "Failed to refresh metrics");
+        throw new Error(result?.error ?? "Failed to refresh metrics");
       }
 
-      if (result.queued) {
+      if (result?.queued) {
         // Metrics refresh queued; keep "Updating..." until done, then reload the page
         const previousUpdated = contest?.last_metrics_updated ?? null;
         const pollIntervalMs = 3000;
@@ -5945,12 +5947,21 @@ export function ContestClientPage({
 
                                   let prizeDisplay = null;
                                   if (displayEntry.earnings > 0) {
-                                    // Show actual earnings for verified or paid submissions; otherwise show expected
+                                    // Twitter: show Paid when payouts_processed or paid; others use verified/paid only
+                                    const isTwitter =
+                                      contest?.platform === "twitter" ||
+                                      contest?.platform === "x";
                                     const isEarned =
                                       displayEntry.status === "verified" ||
-                                      displayEntry.status === "paid";
+                                      displayEntry.status === "paid" ||
+                                      (isTwitter &&
+                                        ((displayEntry as any).paid === true ||
+                                          contest?.post_contest_status === "payouts_processed"));
                                     const earningsLabel = isEarned
-                                      ? "Earned"
+                                      ? (isTwitter &&
+                                        contest?.post_contest_status === "payouts_processed"
+                                        ? "Paid"
+                                        : "Earned")
                                       : "Expected";
 
                                     // Check for flat fee bonus in detailed mode
@@ -6262,14 +6273,23 @@ export function ContestClientPage({
                                                   // Earnings display based on modal view mode
                                                   let prizeDisplay = null;
                                                   if (submission.earnings > 0) {
+                                                    const isTwitter =
+                                                      contest?.platform === "twitter" ||
+                                                      contest?.platform === "x";
                                                     const isEarned =
                                                       submission.status ===
                                                         "verified" ||
                                                       submission.status ===
-                                                        "paid";
+                                                        "paid" ||
+                                                      (isTwitter &&
+                                                        ((submission as any).paid === true ||
+                                                          contest?.post_contest_status === "payouts_processed"));
                                                     const earningsLabel =
                                                       isEarned
-                                                        ? "Earned"
+                                                        ? (isTwitter &&
+                                                          contest?.post_contest_status === "payouts_processed"
+                                                          ? "Paid"
+                                                          : "Earned")
                                                         : "Expected";
 
                                                     const flatFeeBonus =
@@ -6787,7 +6807,7 @@ export function ContestClientPage({
                                     // Earnings display - match leaderboard format
                                     let prizeDisplay = null;
                                     if (video.earnings > 0) {
-                                      // For CPM contests, show Expected vs Earned based on verification/paid status
+                                      // For CPM contests, show Expected vs Earned based on verification/paid status (YouTube/Instagram - no Twitter-specific logic)
                                       if (contestType === "cpm") {
                                         const isEarned =
                                           video.status === "verified" ||
@@ -7335,10 +7355,18 @@ export function ContestClientPage({
                             const hasPayoutsProcessed =
                               contestStatus === "ended" &&
                               postContestStatus === "payouts_processed";
+                            const isTwitter =
+                              contest?.platform === "twitter" ||
+                              contest?.platform === "x";
+                            // Twitter: also check leaderboard paid field (twitter_campaign_leaderboard.paid)
+                            const twitterPaid =
+                              isTwitter && (creatorGroup as any).paid === true;
                             const shouldShowActualEarnings =
-                              hasPaidSubmission || hasPayoutsProcessed;
+                              hasPaidSubmission ||
+                              twitterPaid ||
+                              (isTwitter && hasPayoutsProcessed);
                             const earningsLabel = shouldShowActualEarnings
-                              ? "Total Earned"
+                              ? (isTwitter && (hasPayoutsProcessed || twitterPaid) ? "Paid" : "Total Earned")
                               : contestStatus === "active" &&
                                 isLeaderboardContest
                               ? "Winning Zone"
@@ -7698,13 +7726,22 @@ export function ContestClientPage({
                           let prizeDisplay = null;
 
                           if (entry.earnings > 0) {
-                            // For CPM contests, show Expected vs Earned based on verification/paid status
+                            // Twitter CPM/leaderboard: show Paid when payouts_processed; others use verified/paid only
+                            const isTwitter =
+                              contest?.platform === "twitter" ||
+                              contest?.platform === "x";
                             if (contestType === "cpm") {
                               const isEarned =
                                 entry.status === "verified" ||
-                                entry.status === "paid";
+                                entry.status === "paid" ||
+                                (isTwitter &&
+                                  ((entry as any).paid === true ||
+                                    contest?.post_contest_status === "payouts_processed"));
                               const earningsLabel = isEarned
-                                ? "Earned"
+                                ? (isTwitter &&
+                                  contest?.post_contest_status === "payouts_processed"
+                                  ? "Paid"
+                                  : "Earned")
                                 : "Expected";
 
                               // Check if there's a flat fee bonus
@@ -7750,7 +7787,12 @@ export function ContestClientPage({
                                 );
                               }
                             } else {
-                              // For leaderboard contests with earnings
+                              // For leaderboard contests with earnings (Twitter: "Paid" when payouts_processed)
+                              const leaderboardLabel =
+                                isTwitter &&
+                                contest?.post_contest_status === "payouts_processed"
+                                  ? "Paid"
+                                  : "Earned";
                               if (
                                 contestType === "leaderboard" &&
                                 leaderboardViewMode === "detailed"
@@ -7773,7 +7815,7 @@ export function ContestClientPage({
                                             : "text-green-600"
                                         )}
                                       >
-                                        Earned: {formatMoney(totalEarnings)}
+                                        {leaderboardLabel}: {formatMoney(totalEarnings)}
                                       </div>
                                       <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
                                         <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
@@ -7792,7 +7834,7 @@ export function ContestClientPage({
                                 } else {
                                   prizeDisplay = (
                                     <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                      Earned: {formatMoney(entry.earnings)}
+                                      {leaderboardLabel}: {formatMoney(entry.earnings)}
                                     </div>
                                   );
                                 }
@@ -7800,7 +7842,7 @@ export function ContestClientPage({
                                 // Simple view for leaderboard or non-CPM contests
                                 prizeDisplay = (
                                   <span className="font-semibold text-green-600 dark:text-green-400">
-                                    Earned: {formatMoney(entry.earnings)}
+                                    {leaderboardLabel}: {formatMoney(entry.earnings)}
                                   </span>
                                 );
                               }
