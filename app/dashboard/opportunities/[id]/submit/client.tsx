@@ -59,7 +59,7 @@ import { cn } from "@/lib/utils";
 //   - 30 days: SUBMISSION_WINDOW_VALUE = 30, SUBMISSION_WINDOW_UNIT = 'day'
 //   - 48 hours: SUBMISSION_WINDOW_VALUE = 48, SUBMISSION_WINDOW_UNIT = 'hour'
 //   - 1 week: SUBMISSION_WINDOW_VALUE = 1, SUBMISSION_WINDOW_UNIT = 'week'
-const SUBMISSION_WINDOW_VALUE: number = 2;
+const SUBMISSION_WINDOW_VALUE: number = 3;
 const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "day";
 
 // Auto-generate display text and handle singular/plural forms
