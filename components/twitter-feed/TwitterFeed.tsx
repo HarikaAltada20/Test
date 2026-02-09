@@ -33,6 +33,8 @@ export interface TwitterFeedProps {
   cooldownType?: "opportunities" | "brand" | "admin"; // "opportunities" for creators (1 hour), "brand" for brands (3 minutes), "admin" for admins (1 minute)
   contestStatus?: string | null;
   disableRefreshWhenContestEnded?: boolean;
+  /** When true (e.g. opportunities/creator view), show "Refresh my tweets" and allow refresh even when contest ended (creator-only refresh, 1h cooldown). */
+  allowRefreshMyTweetsWhenEnded?: boolean;
   /** When set (e.g. opportunities/creator view), only load and show this creator's tweets. Hides creator filter. */
   creatorOnlyUserId?: string | null;
 }
@@ -80,6 +82,7 @@ export function TwitterFeed({
   cooldownType = "opportunities", // Default to opportunities (creators) - 1 hour cooldown
   contestStatus,
   disableRefreshWhenContestEnded = false,
+  allowRefreshMyTweetsWhenEnded = false,
   creatorOnlyUserId = null,
 }: TwitterFeedProps) {
   const { toast } = useToast();
@@ -212,7 +215,7 @@ export function TwitterFeed({
   // All other operations (tab switch, pagination, filtering) only read from DB
   const handleRefreshFeed = async () => {
     if (isRefreshingFeed) return;
-    if (contestEnded) {
+    if (contestEnded && !allowRefreshMyTweetsWhenEnded) {
       toast({
         title: "Contest Ended",
         description:
@@ -404,22 +407,29 @@ export function TwitterFeed({
                     );
 
               const waitLabel = formatRemainingTime(cooldownInfo.remainingMs);
+              const disableByContestEnded =
+                contestEnded && !allowRefreshMyTweetsWhenEnded;
               const isDisabled =
-                contestEnded || isRefreshingFeed || !cooldownInfo.canRefresh;
-              const disabledReason = contestEnded
+                disableByContestEnded ||
+                isRefreshingFeed ||
+                !cooldownInfo.canRefresh;
+              const disabledReason = disableByContestEnded
                 ? "Contest has ended"
                 : !cooldownInfo.canRefresh
                 ? `Please wait ${waitLabel}`
                 : isRefreshingFeed
-                ? "Refreshing feed..."
+                ? "Refreshing..."
                 : "";
-              const label = contestEnded
+              const defaultLabel = allowRefreshMyTweetsWhenEnded
+                ? "Refresh my tweets"
+                : "Refresh Feed";
+              const label = disableByContestEnded
                 ? "Contest Ended"
                 : isRefreshingFeed
                 ? "Refreshing..."
                 : !cooldownInfo.canRefresh
                 ? `Wait ${waitLabel}`
-                : "Refresh Feed";
+                : defaultLabel;
 
               return (
                 <Button
@@ -435,7 +445,12 @@ export function TwitterFeed({
                       ? "text-white hover:bg-gray-700"
                       : "text-gray-700 hover:bg-gray-100"
                   )}
-                  title={disabledReason || "Refresh Twitter feed"}
+                  title={
+                    disabledReason ||
+                    (allowRefreshMyTweetsWhenEnded
+                      ? "Refresh your tweets and metrics (1h cooldown)"
+                      : "Refresh Twitter feed")
+                  }
                 >
                   {isRefreshingFeed ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
