@@ -143,7 +143,7 @@ type LeaderboardEntry = {
   user_full_name: string;
   creator_pfp_url: string | null;
   user_platform_pfp_url: string | null;
-
+  /** Global rank (1-based) from API; matches contest/brand side for correct Winning Zone / expected reward */
   rank?: number;
 };
 
@@ -7004,14 +7004,27 @@ export function ContestClientPage({
                                             const totalEarnings =
                                               prizeInfo.amount + flatFeeBonus;
                                             prizeDisplay = (
-                                              <div className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                              <div
+                                                className={`font-semibold flex items-center ${
+                                                  prizeText === "Winning Zone"
+                                                    ? "text-purple-500 dark:text-purple-400"
+                                                    : "text-amber-500 dark:text-amber-400"
+                                                }`}
+                                              >
                                                 <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                                 <div>
                                                   <div>
                                                     {prizeText}:{" "}
                                                     {formatMoney(totalEarnings)}
                                                   </div>
-                                                  <div className="text-xs text-amber-600 dark:text-amber-500">
+                                                  <div
+                                                    className={`text-xs ${
+                                                      prizeText ===
+                                                      "Winning Zone"
+                                                        ? "text-purple-600 dark:text-purple-500"
+                                                        : "text-amber-600 dark:text-amber-500"
+                                                    }`}
+                                                  >
                                                     (
                                                     {formatMoney(
                                                       prizeInfo.amount
@@ -7025,7 +7038,13 @@ export function ContestClientPage({
                                             );
                                           } else {
                                             prizeDisplay = (
-                                              <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                              <span
+                                                className={`font-semibold flex items-center ${
+                                                  prizeText === "Winning Zone"
+                                                    ? "text-purple-500 dark:text-purple-400"
+                                                    : "text-amber-500 dark:text-amber-400"
+                                                }`}
+                                              >
                                                 <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                                 {prizeText}:{" "}
                                                 {formatMoney(prizeInfo.amount)}
@@ -7035,7 +7054,13 @@ export function ContestClientPage({
                                         } else {
                                           // Simple view
                                           prizeDisplay = (
-                                            <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                            <span
+                                              className={`font-semibold flex items-center ${
+                                                prizeText === "Winning Zone"
+                                                  ? "text-purple-500 dark:text-purple-400"
+                                                  : "text-amber-500 dark:text-amber-400"
+                                              }`}
+                                            >
                                               <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                               {prizeText}:{" "}
                                               {formatMoney(prizeInfo.amount)}
@@ -7521,11 +7546,23 @@ export function ContestClientPage({
                                 ) {
                                   prizeDisplay = (
                                     <div className="space-y-1">
-                                      <div className="font-semibold text-amber-500 dark:text-amber-400 text-base flex items-center">
+                                      <div
+                                        className={`font-semibold text-base flex items-center ${
+                                          prizeText === "Winning Zone"
+                                            ? "text-purple-500 dark:text-purple-400"
+                                            : "text-amber-500 dark:text-amber-400"
+                                        }`}
+                                      >
                                         <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                         {prizeText}: {formatMoney(totalPrize)}
                                       </div>
-                                      <div className="text-xs text-amber-600 dark:text-amber-500">
+                                      <div
+                                        className={`text-xs ${
+                                          prizeText === "Winning Zone"
+                                            ? "text-purple-600 dark:text-purple-500"
+                                            : "text-amber-600 dark:text-amber-500"
+                                        }`}
+                                      >
                                         ({formatMoney(totalPrizeAmount)} Prize
                                         {submissionRanks.length > 1 &&
                                           ` (${submissionRanks.length} videos)`}{" "}
@@ -7540,7 +7577,13 @@ export function ContestClientPage({
                                   );
                                 } else {
                                   prizeDisplay = (
-                                    <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                    <span
+                                      className={`font-semibold flex items-center ${
+                                        prizeText === "Winning Zone"
+                                          ? "text-purple-500 dark:text-purple-400"
+                                          : "text-amber-500 dark:text-amber-400"
+                                      }`}
+                                    >
                                       <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                       {prizeText}: {formatMoney(totalPrize)}
                                     </span>
@@ -7793,17 +7836,11 @@ export function ContestClientPage({
                         )
                       : // Submission-wise display (original)
                         leaderboard.map((entry, index) => {
-                          // Display rank: always sequential 1, 2, 3... (position in list)
-                          const displayRank =
+                          const rank =
                             (leaderboardCurrentPage - 1) *
                               leaderboardItemsPerPage +
                             index +
                             1;
-                          // Actual rank for prize/Winning Zone lookup (API rank)
-                          const actualRank =
-                            entry.rank ??
-                            rankLookupMap.get(entry.id) ??
-                            displayRank;
                           let prizeDisplay = null;
 
                           if (entry.earnings > 0) {
@@ -7944,7 +7981,7 @@ export function ContestClientPage({
                             const prizeInfo = (
                               contest.contest_based_details.leaderboard_contest
                                 .prizes as PrizeInfo[]
-                            ).find((p) => p.position === actualRank);
+                            ).find((p) => p.position === rank);
                             if (prizeInfo) {
                               const prizeText =
                                 contest.status === "active"
@@ -7961,14 +7998,26 @@ export function ContestClientPage({
                                   const totalEarnings =
                                     prizeInfo.amount + flatFeeBonus;
                                   prizeDisplay = (
-                                    <div className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                    <div
+                                      className={`font-semibold flex items-center ${
+                                        prizeText === "Winning Zone"
+                                          ? "text-purple-500 dark:text-purple-400"
+                                          : "text-amber-500 dark:text-amber-400"
+                                      }`}
+                                    >
                                       <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                       <div>
                                         <div>
                                           {prizeText}:{" "}
                                           {formatMoney(totalEarnings)}
                                         </div>
-                                        <div className="text-xs text-amber-600 dark:text-amber-500">
+                                        <div
+                                          className={`text-xs ${
+                                            prizeText === "Winning Zone"
+                                              ? "text-purple-600 dark:text-purple-500"
+                                              : "text-amber-600 dark:text-amber-500"
+                                          }`}
+                                        >
                                           ({formatMoney(prizeInfo.amount)} Prize
                                           + {formatMoney(flatFeeBonus)} Bonus)
                                         </div>
@@ -7977,7 +8026,13 @@ export function ContestClientPage({
                                   );
                                 } else {
                                   prizeDisplay = (
-                                    <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                    <span
+                                      className={`font-semibold flex items-center ${
+                                        prizeText === "Winning Zone"
+                                          ? "text-purple-500 dark:text-purple-400"
+                                          : "text-amber-500 dark:text-amber-400"
+                                      }`}
+                                    >
                                       <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                       {prizeText}:{" "}
                                       {formatMoney(prizeInfo.amount)}
@@ -7987,7 +8042,13 @@ export function ContestClientPage({
                               } else {
                                 // Simple view
                                 prizeDisplay = (
-                                  <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                  <span
+                                    className={`font-semibold flex items-center ${
+                                      prizeText === "Winning Zone"
+                                        ? "text-purple-500 dark:text-purple-400"
+                                        : "text-amber-500 dark:text-amber-400"
+                                    }`}
+                                  >
                                     <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                     {prizeText}: {formatMoney(prizeInfo.amount)}
                                   </span>
@@ -8004,7 +8065,7 @@ export function ContestClientPage({
                               <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
                                 <div className="flex items-center space-x-3 md:space-x-4">
                                   <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
-                                    {displayRank}
+                                    {rank}
                                   </h2>
                                   <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
                                     <AvatarImage

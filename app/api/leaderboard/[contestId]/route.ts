@@ -65,28 +65,7 @@ export async function GET(request: Request) {
 
     const totalPages = totalEntries ? Math.ceil(totalEntries / limit) : 0;
 
-    // 3. Fetch ALL submissions (including rejected) ordered by views to compute rank.
-    // Rank = position in full list so it matches brand side (rejected is rank 1, first non-rejected is rank 2, etc.)
-    const { data: allOrdered, error: allOrderedError } = await supabase
-      .from("submissions")
-      .select("id")
-      .eq("contest_id", contestId)
-      .order("views", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: true });
-
-    if (allOrderedError) {
-      console.error("Error fetching ordered submissions:", allOrderedError);
-      throw new Error(
-        `Failed to fetch ordered submissions: ${allOrderedError.message}`
-      );
-    }
-
-    const idToRank = new Map<string, number>();
-    (allOrdered || []).forEach((row, index) => {
-      idToRank.set(row.id, index + 1);
-    });
-
-    // 4. Fetch paginated non-rejected submissions for display
+    // 3. Fetch paginated submissions for the contest
     let submissionsQuery = supabase
       .from("submissions")
       .select(
@@ -105,6 +84,7 @@ export async function GET(request: Request) {
       )
       .eq("contest_id", contestId);
 
+    // Exclude rejected submissions for all contest types on public leaderboard
     submissionsQuery = submissionsQuery.neq("status", "rejected");
 
     const { data: submissions, error: submissionsError } =
@@ -165,8 +145,8 @@ export async function GET(request: Request) {
     );
 
     // 8. Combine submissions with user and creator profile data
-    // Rank = position in full list (including rejected) so Winning Zone matches brand side (e.g. first non-rejected gets 2nd prize if rank 1 is rejected)
-    const leaderboardData = submissions.map((submission) => {
+    // Rank = global position (1-based) among non-rejected, same as contest/brand side for correct Winning Zone
+    const leaderboardData = submissions.map((submission, index) => {
       const userProfile = usersMap.get(submission.creator_id) || null;
       const creatorProfile =
         creatorProfilesMap.get(submission.creator_id) || null;
@@ -210,7 +190,7 @@ export async function GET(request: Request) {
       if (!creator_pfp_url)
         creator_pfp_url = userProfile?.profile_picture_url || null;
 
-      const rank = idToRank.get(submission.id) ?? 0;
+      const rank = from + index + 1;
 
       return {
         ...submission,

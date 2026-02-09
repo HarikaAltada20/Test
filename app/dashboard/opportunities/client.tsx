@@ -99,7 +99,7 @@ const getBudgetTrackerValues = (
 const getContestsByMediaType = (contests: any[], mediaType: string) => {
   return contests.filter((contest) => {
     const format = contest.contest_format;
-    
+
     if (mediaType === "all") {
       return true; // Show all contests
     } else if (mediaType === "media") {
@@ -154,10 +154,13 @@ export default function OpportunitiesPage({
   };
 
   const [mediaType, setMediaType] = useState("all");
-  
+
   // Calculate filtered contests by media type for tab counts
-  const filteredContestsByMediaType = getContestsByMediaType(availableContests, mediaType);
-  
+  const filteredContestsByMediaType = getContestsByMediaType(
+    availableContests,
+    mediaType
+  );
+
   const tabs = [
     {
       id: "all",
@@ -190,9 +193,9 @@ export default function OpportunitiesPage({
       ).length,
     },
   ];
-  
+
   const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: "all" });
-  
+
   // New state variables for filters and sorting
   const [statusFilter, setStatusFilter] = useState<StatusFilterType>("all");
   const [platformFilter, setPlatformFilter] =
@@ -2211,7 +2214,13 @@ export default function OpportunitiesPage({
                           ) && "bg-[#7F39EC] text-white"
                         )}
                       >
-                        {contest.status === "active" ? "Live" : contest.status === "upcoming" ? "Upcoming" : contest.status === "ended" ? "completed" : contest.status}
+                        {contest.status === "active"
+                          ? "Live"
+                          : contest.status === "upcoming"
+                          ? "Upcoming"
+                          : contest.status === "ended"
+                          ? "completed"
+                          : contest.status}
                       </Badge>
                       {contest.post_contest_status === "payouts_processed" && (
                         <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
