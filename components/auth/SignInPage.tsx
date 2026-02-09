@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { FcGoogle } from "react-icons/fc";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import logo from "@/public/images/gold_logo_horizontal.svg";
 import { FaFacebookF, FaInstagram } from "react-icons/fa";
@@ -40,7 +40,11 @@ export default function SignInPage() {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextUrl = searchParams.get("next");
   const supabase = createClient();
+
+  const safeNext = nextUrl && nextUrl.startsWith("/") && !nextUrl.startsWith("//") && (nextUrl.startsWith("/dashboard") || nextUrl.startsWith("/choose-username")) ? nextUrl : null;
 
   // Handle email/password sign-in
   const handleEmailSignIn = async (e: React.FormEvent) => {
@@ -116,8 +120,8 @@ export default function SignInPage() {
         duration: TOAST_DURATION_SHORT,
       });
 
-      // Navigate to dashboard and refresh to update layout with new auth state
-      router.push("/dashboard");
+      // Navigate to requested page or dashboard and refresh to update layout with new auth state
+      router.push(safeNext || "/dashboard");
       router.refresh();
     } catch (err: any) {
       console.error("Email sign-in error:", err);
@@ -152,10 +156,12 @@ export default function SignInPage() {
       // This ensures PKCE code verifier is preserved in webview session storage
       // Use "select_account" to show account picker with existing accounts
       const isMobile = /GameOfCreators-Mobile/i.test(navigator.userAgent);
+      const callbackUrl = new URL("/auth/callback", window.location.origin);
+      if (safeNext) callbackUrl.searchParams.set("next", safeNext);
       const { data, error: signInError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: callbackUrl.toString(),
           queryParams: {
             access_type: "offline",
             // Use "select_account" for mobile to show account picker with existing accounts

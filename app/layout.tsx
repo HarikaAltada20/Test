@@ -7,6 +7,7 @@ import ReferralCapture from "@/components/ReferralCapture";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { createClient } from "@/utils/supabase/server";
+import { getUserSafe } from "@/utils/supabase/auth-server";
 import { ConditionalFooter } from "./conditional-footer";
 import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
@@ -81,7 +82,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
-  const { data: authData } = await supabase.auth.getUser();
+  const { data: authData } = await getUserSafe(supabase);
   const user = authData?.user;
 
   let profileFullName: string | null = null;

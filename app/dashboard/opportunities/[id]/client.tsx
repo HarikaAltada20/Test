@@ -2388,26 +2388,26 @@ export function ContestClientPage({
               </div>
               <div
                 className={cn(
-                  "w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-yellow-500 to-orange-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
+                  "w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
 
                   isDark
                     ? "bg-[#170337]"
-                    : "bg-gradient-to-br from-yellow-500 to-orange-600"
+                    : "bg-gradient-to-br from-purple-500 to-purple-600"
                 )}
               >
                 <Trophy className="h-7 w-7" />
               </div>
             </CardContent>
           </div>
-          {/* <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-700/50 hover:shadow-lg transition-all duration-300">
+          {/* <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                  <Trophy className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                  <Trophy className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300 uppercase tracking-wide">Prize Pool</p>
-                  <p className="text-lg font-bold text-yellow-900 dark:text-yellow-100">
+                  <p className="text-xs font-medium text-purple-800 dark:text-purple-300 uppercase tracking-wide">Prize Pool</p>
+                  <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
                     {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest
                       ? formatMoney(contest.contest_based_details.cpm_contest.total_budget)
                       : contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest
@@ -2416,7 +2416,7 @@ export function ContestClientPage({
                           ? formatMoney(contest.total_prize || 0)
                           : "$0.00"}
                   </p>
-                  <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">
+                  <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">
                     {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.winner_count
                       ? `${contest.contest_based_details.leaderboard_contest.winner_count} winner${contest.contest_based_details.leaderboard_contest.winner_count !== 1 ? 's' : ''}`
                       : contest.contest_type === 'cpm'
@@ -3502,7 +3502,7 @@ export function ContestClientPage({
                     >
                       <div className="p-6">
                         <div className="flex items-center gap-3 mb-6">
-                          <div className="w-10 h-10 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
+                          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
                             <Trophy className="h-5 w-5 text-white" />
                           </div>
                           <div>
@@ -3766,7 +3766,7 @@ export function ContestClientPage({
                                   >
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-4">
-                                        <div className="w-8 h-8 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md">
+                                        <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md">
                                           {prize.position}
                                         </div>
                                         <div>
@@ -6106,14 +6106,14 @@ export function ContestClientPage({
                                           const totalEarnings =
                                             prizeInfo.amount + flatFeeBonus;
                                           prizeDisplay = (
-                                            <div className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                            <div className="font-semibold text-purple-500 dark:text-purple-400 flex items-center">
                                               <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                               <div>
                                                 <div>
                                                   {prizeText}:{" "}
                                                   {formatMoney(totalEarnings)}
                                                 </div>
-                                                <div className="text-xs text-amber-600 dark:text-amber-500">
+                                                <div className="text-xs text-purple-600 dark:text-purple-500">
                                                   (
                                                   {formatMoney(
                                                     prizeInfo.amount
@@ -6127,7 +6127,7 @@ export function ContestClientPage({
                                           );
                                         } else {
                                           prizeDisplay = (
-                                            <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                            <span className="font-semibold text-purple-500 dark:text-purple-400 flex items-center">
                                               <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                               {prizeText}:{" "}
                                               {formatMoney(prizeInfo.amount)}
@@ -6144,7 +6144,7 @@ export function ContestClientPage({
                                           prizeInfo.amount + flatFeeBonus;
 
                                         prizeDisplay = (
-                                          <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                          <span className="font-semibold text-purple-500 dark:text-purple-400 flex items-center">
                                             <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                             {prizeText}:{" "}
                                             {formatMoney(totalEarnings)}
@@ -7006,9 +7006,7 @@ export function ContestClientPage({
                                             prizeDisplay = (
                                               <div
                                                 className={`font-semibold flex items-center ${
-                                                  prizeText === "Winning Zone"
-                                                    ? "text-purple-500 dark:text-purple-400"
-                                                    : "text-amber-500 dark:text-amber-400"
+                                                  "text-purple-500 dark:text-purple-400"
                                                 }`}
                                               >
                                                 <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
@@ -7017,14 +7015,7 @@ export function ContestClientPage({
                                                     {prizeText}:{" "}
                                                     {formatMoney(totalEarnings)}
                                                   </div>
-                                                  <div
-                                                    className={`text-xs ${
-                                                      prizeText ===
-                                                      "Winning Zone"
-                                                        ? "text-purple-600 dark:text-purple-500"
-                                                        : "text-amber-600 dark:text-amber-500"
-                                                    }`}
-                                                  >
+                                                  <div className="text-xs text-purple-600 dark:text-purple-500">
                                                     (
                                                     {formatMoney(
                                                       prizeInfo.amount
@@ -7040,9 +7031,7 @@ export function ContestClientPage({
                                             prizeDisplay = (
                                               <span
                                                 className={`font-semibold flex items-center ${
-                                                  prizeText === "Winning Zone"
-                                                    ? "text-purple-500 dark:text-purple-400"
-                                                    : "text-amber-500 dark:text-amber-400"
+                                                  "text-purple-500 dark:text-purple-400"
                                                 }`}
                                               >
                                                 <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
@@ -7056,9 +7045,7 @@ export function ContestClientPage({
                                           prizeDisplay = (
                                             <span
                                               className={`font-semibold flex items-center ${
-                                                prizeText === "Winning Zone"
-                                                  ? "text-purple-500 dark:text-purple-400"
-                                                  : "text-amber-500 dark:text-amber-400"
+"text-purple-500 dark:text-purple-400"
                                               }`}
                                             >
                                               <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
@@ -7548,20 +7535,14 @@ export function ContestClientPage({
                                     <div className="space-y-1">
                                       <div
                                         className={`font-semibold text-base flex items-center ${
-                                          prizeText === "Winning Zone"
-                                            ? "text-purple-500 dark:text-purple-400"
-                                            : "text-amber-500 dark:text-amber-400"
+"text-purple-500 dark:text-purple-400"
                                         }`}
                                       >
                                         <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                         {prizeText}: {formatMoney(totalPrize)}
                                       </div>
                                       <div
-                                        className={`text-xs ${
-                                          prizeText === "Winning Zone"
-                                            ? "text-purple-600 dark:text-purple-500"
-                                            : "text-amber-600 dark:text-amber-500"
-                                        }`}
+                                        className="text-xs text-purple-600 dark:text-purple-500"
                                       >
                                         ({formatMoney(totalPrizeAmount)} Prize
                                         {submissionRanks.length > 1 &&
@@ -7579,9 +7560,7 @@ export function ContestClientPage({
                                   prizeDisplay = (
                                     <span
                                       className={`font-semibold flex items-center ${
-                                        prizeText === "Winning Zone"
-                                          ? "text-purple-500 dark:text-purple-400"
-                                          : "text-amber-500 dark:text-amber-400"
+"text-purple-500 dark:text-purple-400"
                                       }`}
                                     >
                                       <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
@@ -8000,9 +7979,7 @@ export function ContestClientPage({
                                   prizeDisplay = (
                                     <div
                                       className={`font-semibold flex items-center ${
-                                        prizeText === "Winning Zone"
-                                          ? "text-purple-500 dark:text-purple-400"
-                                          : "text-amber-500 dark:text-amber-400"
+"text-purple-500 dark:text-purple-400"
                                       }`}
                                     >
                                       <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
@@ -8012,11 +7989,7 @@ export function ContestClientPage({
                                           {formatMoney(totalEarnings)}
                                         </div>
                                         <div
-                                          className={`text-xs ${
-                                            prizeText === "Winning Zone"
-                                              ? "text-purple-600 dark:text-purple-500"
-                                              : "text-amber-600 dark:text-amber-500"
-                                          }`}
+                                          className="text-xs text-purple-600 dark:text-purple-500"
                                         >
                                           ({formatMoney(prizeInfo.amount)} Prize
                                           + {formatMoney(flatFeeBonus)} Bonus)
@@ -8028,9 +8001,7 @@ export function ContestClientPage({
                                   prizeDisplay = (
                                     <span
                                       className={`font-semibold flex items-center ${
-                                        prizeText === "Winning Zone"
-                                          ? "text-purple-500 dark:text-purple-400"
-                                          : "text-amber-500 dark:text-amber-400"
+"text-purple-500 dark:text-purple-400"
                                       }`}
                                     >
                                       <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
@@ -8044,9 +8015,7 @@ export function ContestClientPage({
                                 prizeDisplay = (
                                   <span
                                     className={`font-semibold flex items-center ${
-                                      prizeText === "Winning Zone"
-                                        ? "text-purple-500 dark:text-purple-400"
-                                        : "text-amber-500 dark:text-amber-400"
+"text-purple-500 dark:text-purple-400"
                                     }`}
                                   >
                                     <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />

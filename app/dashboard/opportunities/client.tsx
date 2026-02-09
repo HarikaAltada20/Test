@@ -1683,15 +1683,16 @@ export default function OpportunitiesPage({
                 contest.contest_based_details.leaderboard_contest.total_prize >
                 0 && (
                   <div className="flex items-center">
-                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <DollarSign className={cn("h-4 w-4 mr-2 flex-shrink-0", isDark ? "text-purple-400" : "text-purple-600")} />
                     <span
-                      style={{
-                        color: isDark ? "white" : "#475569",
-                        transition: "none",
-                      }}
+                      className={cn(
+                        "font-medium",
+                        isDark ? "text-purple-300" : "text-purple-700"
+                      )}
+                      style={{ transition: "none" }}
                     >
                       Total Prize Pool:{" "}
-                      <span className="font-medium">
+                      <span>
                         {formatMoney(
                           contest.contest_based_details.leaderboard_contest
                             .total_prize
@@ -2361,8 +2362,8 @@ export default function OpportunitiesPage({
                             className={cn(
                               "text-[12px]",
                               isDark
-                                ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
-                                : "bg-amber-50 text-amber-700 border-amber-200"
+                                ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                                : "bg-purple-50 text-purple-700 border-purple-200"
                             )}
                           >
                             <Star className="h-3 w-3 mr-1" />
@@ -2616,15 +2617,15 @@ export default function OpportunitiesPage({
                         contest.contest_based_details.leaderboard_contest
                           .total_prize > 0 && (
                           <div className="flex items-center">
-                            <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                            <span>
+                            <DollarSign className={cn("h-4 w-4 mr-2 flex-shrink-0", isDark ? "text-purple-400" : "text-purple-600")} />
+                            <span
+                              className={cn(
+                                "font-medium",
+                                isDark ? "text-purple-300" : "text-purple-700"
+                              )}
+                            >
                               Total Prize Pool:{" "}
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isDark ? "text-white" : "text-slate-700"
-                                )}
-                              >
+                              <span>
                                 {formatMoney(
                                   contest.contest_based_details
                                     .leaderboard_contest.total_prize
