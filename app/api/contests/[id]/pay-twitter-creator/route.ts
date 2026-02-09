@@ -62,11 +62,11 @@ export async function POST(
       );
     }
 
-    // Get contest to verify it's a Twitter contest
+    // Get contest to verify it's a Twitter contest (include max_earnings_per_creator for CPM cap)
     const { data: contest, error: contestError } = await supabase
       .from("contests")
       .select(
-        "id, title, advertiser_id, platform, contest_type, contest_based_details, post_contest_status"
+        "id, title, advertiser_id, platform, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator"
       )
       .eq("id", contestId)
       .single();
@@ -113,7 +113,7 @@ export async function POST(
       await supabaseAdmin
         .from("twitter_campaign_leaderboard")
         .select(
-          "id, creator_id, current_rank, total_points, paid, earnings, paid_rank"
+          "id, creator_id, current_rank, total_points, paid, earnings, paid_rank, moderation_status"
         )
         .eq("contest_id", contestId)
         .eq("creator_id", creatorId)
@@ -123,6 +123,17 @@ export async function POST(
       return NextResponse.json(
         { error: "Creator not found in leaderboard for this contest" },
         { status: 404 }
+      );
+    }
+
+    // Block payment for rejected creators to avoid inconsistent state
+    if (leaderboardEntry.moderation_status === "rejected") {
+      return NextResponse.json(
+        {
+          error:
+            "Cannot pay a rejected creator. Approve the creator first, then process payment.",
+        },
+        { status: 400 }
       );
     }
 
@@ -169,7 +180,7 @@ export async function POST(
 
       rewardAmount = prizeForRank.amount; // Already in cents
     } else if (contest.contest_type === "cpm") {
-      // CPM-based Twitter contest: pay based on total_points and CPM rate
+      // CPM-based Twitter contest: pay based on total_points and CPM rate (match expected reward in UI)
       if (!cpmContest || typeof cpmContest.cpm_rate_usd !== "number") {
         return NextResponse.json(
           { error: "CPM configuration is missing for this contest" },
@@ -181,6 +192,17 @@ export async function POST(
       const rate = cpmContest.cpm_rate_usd; // dollars per 1000 points
       // Convert to cents: (points / 1000) * rate (USD) * 100
       rewardAmount = Math.round((totalPoints * rate * 100) / 1000);
+      // Apply max_earnings_per_creator cap so credited amount = expected reward shown in modal
+      const maxEarningsPerCreator =
+        (contest as any).max_earnings_per_creator ??
+        cpmContest.max_earnings_per_creator ??
+        null;
+      if (
+        maxEarningsPerCreator != null &&
+        rewardAmount > maxEarningsPerCreator
+      ) {
+        rewardAmount = maxEarningsPerCreator;
+      }
     }
 
     if (rewardAmount <= 0) {
@@ -287,6 +309,7 @@ export async function POST(
       paid_at: new Date().toISOString(),
       earnings: rewardAmount,
       paid_rank: leaderboardEntry.current_rank, // Store rank at payment time for audit
+      moderation_status: "paid", // Update status to paid
     };
 
     const { error: updateError } = await supabaseAdmin
@@ -303,6 +326,23 @@ export async function POST(
         { error: "Failed to update leaderboard payment status" },
         { status: 500 }
       );
+    }
+
+    // Update all tweets from this creator to 'paid' status (consistent with reject/verify flows)
+    const { error: tweetsUpdateError } = await supabaseAdmin
+      .from("twitter_campaign_tweets")
+      .update({ moderation_status: "paid" })
+      .eq("contest_id", contestId)
+      .eq("creator_id", creatorId)
+      .neq("moderation_status", "rejected"); // Don't update rejected tweets
+
+    if (tweetsUpdateError) {
+      console.error(
+        "[pay-twitter-creator] Error updating tweets:",
+        tweetsUpdateError
+      );
+      // Don't fail the entire payment if tweet update fails, just log it
+      // The leaderboard is the source of truth for payment status
     }
 
     return NextResponse.json({

@@ -107,8 +107,19 @@ export async function POST(
         typeof campaignType === "string" &&
         campaignType.toLowerCase().trim() === "raid";
 
+      const { count } = await supabaseAdmin
+        .from("twitter_campaign_participants")
+        .select("*", { count: "exact", head: true })
+        .eq("contest_id", contestId)
+        .eq("is_active", true);
+      const BATCH_SIZE = 5;
+      const participantCount = count ?? 0;
+      const totalBatches = Math.max(
+        1,
+        Math.ceil(participantCount / BATCH_SIZE)
+      );
       let job:
-        | { contestId: string; isRaid: true }
+        | { contestId: string; isRaid: true; batchIndex?: number; totalBatches?: number }
         | {
             contestId: string;
             isRaid: false;
@@ -116,19 +127,13 @@ export async function POST(
             totalBatches: number;
           };
       if (isRaidCampaign) {
-        job = { contestId, isRaid: true };
+        job = {
+          contestId,
+          isRaid: true,
+          batchIndex: 0,
+          totalBatches,
+        };
       } else {
-        const { count } = await supabaseAdmin
-          .from("twitter_campaign_participants")
-          .select("*", { count: "exact", head: true })
-          .eq("contest_id", contestId)
-          .eq("is_active", true);
-        const BATCH_SIZE = 5;
-        const participantCount = count ?? 0;
-        const totalBatches = Math.max(
-          1,
-          Math.ceil(participantCount / BATCH_SIZE)
-        );
         job = { contestId, isRaid: false, batchIndex: 0, totalBatches };
       }
 

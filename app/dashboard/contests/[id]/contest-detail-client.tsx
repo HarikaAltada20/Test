@@ -211,7 +211,7 @@ interface Submission {
   earnings?: number | null; // Added for earnings display
   // Twitter-specific fields
   is_twitter_tweet?: boolean; // Flag to identify Twitter tweets
-  moderation_status?: "pending" | "verified" | "rejected"; // Twitter moderation status
+  moderation_status?: "pending" | "verified" | "rejected" | "paid"; // Twitter moderation status
   manual_points_adjustment?: number; // Manual points adjustment for Twitter tweets
   manual_points_reason?: string | null; // Reason for manual points adjustment
   tweet_id?: string; // Twitter tweet ID
@@ -228,6 +228,7 @@ interface Submission {
   paid_at?: string | null;
   bonus_paid?: boolean;
   bonus_paid_at?: string | null;
+  bonus_amount?: number | null;
 }
 // --- End Local Type Definitions ---
 
@@ -799,23 +800,36 @@ export default function ContestDetailClient({
             leaderboardData.moderation_status || "pending",
           creator_rejection_reason: leaderboardData.rejection_reason || null,
           current_rank: leaderboardData.current_rank || null,
-          paid: leaderboardData.paid || false,
+          paid:
+            leaderboardData.paid ||
+            (currentContest?.contest_type === "cpm" &&
+              creatorSubmissions.some(
+                (s: any) =>
+                  (s as any).paid || (s as any).moderation_status === "paid"
+              )) ||
+            false,
           paid_at: leaderboardData.paid_at || null,
           earnings_from_db: leaderboardData.earnings || 0,
           paid_rank: leaderboardData.paid_rank || null,
-          eligibleTweets: Math.max(0, verifiedSubmissionCount),
+          // Use leaderboard total_eligible_tweets when filter leaves no verified subs (e.g. after "Mark both paid" with paid filter)
+          eligibleTweets: Math.max(
+            0,
+            verifiedSubmissionCount,
+            leaderboardData.total_eligible_tweets ?? 0
+          ),
         };
       });
 
       // Calculate earnings based on rank for Twitter leaderboard campaigns
-      // Only consider verified creators when calculating ranks (same as YouTube/Instagram)
+      // Consider both verified and paid creators when calculating ranks
       const contestDetails =
         currentContest?.contest_based_details?.leaderboard_contest;
       const prizes = contestDetails?.prizes || [];
 
       // Filter to only verified creators and sort by points to recalculate ranks
       const verifiedCreators = Object.values(grouped).filter((group: any) => {
-        return group.creator_moderation_status === "verified";
+        const status = (group.creator_moderation_status || "").toLowerCase();
+        return status === "verified" || status === "paid";
       });
 
       // Sort verified creators by total points (descending)
@@ -826,21 +840,51 @@ export default function ContestDetailClient({
         return pointsB - pointsA;
       });
 
-      // Assign expected earnings based on recalculated rank among verified creators only
+      // Assign expected earnings based on recalculated rank among verified/paid creators
       verifiedCreators.forEach((group: any, index: number) => {
-        const verifiedRank = index + 1; // Rank among verified creators only (1, 2, 3, ...)
+        const verifiedRank = index + 1; // Rank among verified/paid creators only (1, 2, 3, ...)
         const prizeForRank = prizes.find(
           (p: any) => p.position === verifiedRank
         );
         if (prizeForRank) {
           group.earnings.expected = prizeForRank.amount;
-          // Use paid status from leaderboard (creator-level payment)
+          // Primary path: use paid status from leaderboard (creator-level payment)
           if (
             group.paid &&
             group.earnings_from_db &&
             group.earnings_from_db > 0
           ) {
             group.earnings.granted = group.earnings_from_db; // Use actual earnings from database
+          }
+        }
+      });
+
+      // Fallback: ensure all paid creators have non-zero expected/granted earnings
+      Object.values(grouped).forEach((group: any) => {
+        if (
+          group.paid &&
+          group.earnings_from_db &&
+          group.earnings_from_db > 0
+        ) {
+          // If granted is still zero, fall back to DB earnings
+          if (!group.earnings.granted || group.earnings.granted <= 0) {
+            group.earnings.granted = group.earnings_from_db;
+          }
+
+          // If expected is still zero, derive it from paid_rank/current_rank and prize structure
+          if (
+            (!group.earnings.expected || group.earnings.expected <= 0) &&
+            prizes.length > 0
+          ) {
+            const rankForPrize = group.paid_rank || group.current_rank || null;
+            if (rankForPrize != null) {
+              const prizeForRank = prizes.find(
+                (p: any) => p.position === rankForPrize
+              );
+              if (prizeForRank) {
+                group.earnings.expected = prizeForRank.amount;
+              }
+            }
           }
         }
       });
@@ -871,6 +915,23 @@ export default function ContestDetailClient({
           currentTotalExpectedBonus += bonusToAssign;
         });
       }
+
+      // Sum bonus.granted from each creator's submissions (after "Mark both paid", each tweet has bonus_paid/bonus_amount)
+      const leaderboardFlatFeeForGranted =
+        (currentContest?.contest_based_details as any)?.leaderboard_contest
+          ?.flat_fee_bonus || 0;
+      Object.values(grouped).forEach((group: any) => {
+        const subs = group.submissions || [];
+        subs.forEach((sub: any) => {
+          if ((sub as any).bonus_paid === true || sub.bonus_paid === true) {
+            const actualBonus =
+              Number((sub as any).bonus_amount) || leaderboardFlatFeeForGranted;
+            if (actualBonus > 0) {
+              group.bonus.granted += actualBonus;
+            }
+          }
+        });
+      });
 
       // Filter out groups with no submissions when status filter is active (to avoid undefined/empty groups)
       const groupsArray = Object.values(grouped);
@@ -938,10 +999,12 @@ export default function ContestDetailClient({
           bonus: { expected: 0, granted: 0 },
           firstSubmittedAt: submission.created_at,
           isCapped: false,
-          // Creator-level moderation data
+          // Creator-level moderation data (for Twitter: paid/earnings come from leaderboard)
           creator_moderation_status:
             creatorModeration.moderation_status || "pending",
           creator_rejection_reason: creatorModeration.rejection_reason || null,
+          paid: creatorModeration.paid || false,
+          earnings_from_db: creatorModeration.earnings || 0,
         };
       }
 
@@ -961,7 +1024,12 @@ export default function ContestDetailClient({
       // Map Twitter moderation_status to standard status for counting
       let normalizedStatus = status;
       if (isTwitterTweet) {
-        if (status === "approved" || status === "verified") {
+        // Treat "paid" as an approved/verified state for counting & eligibility
+        if (
+          status === "approved" ||
+          status === "verified" ||
+          status === "paid"
+        ) {
           normalizedStatus = "verified";
         } else if (status === "rejected") {
           normalizedStatus = "rejected";
@@ -971,6 +1039,11 @@ export default function ContestDetailClient({
       }
 
       group.statusCounts.all++;
+      // For CPM (and leaderboard), if any tweet is paid, show creator as paid and enable reversal
+      if (status === "paid" || (submission as any).paid) {
+        group.statusCounts.paid++;
+        group.paid = true;
+      }
       if (normalizedStatus === "verified" || normalizedStatus === "approved") {
         group.statusCounts.verified++;
         if (submission.paid) group.statusCounts.verified_paid++;
@@ -1093,9 +1166,8 @@ export default function ContestDetailClient({
       }
 
       if (!isTwitterTweet) {
-        const submissionEarnings = calculateSubmissionExpectedEarnings(
-          submission
-        );
+        const submissionEarnings =
+          calculateSubmissionExpectedEarnings(submission);
         group.earnings.expected += submissionEarnings;
         if (submission.paid) {
           group.earnings.granted += submissionEarnings;
@@ -1221,9 +1293,14 @@ export default function ContestDetailClient({
       if (cpmRate > 0) {
         Object.values(grouped).forEach((group: any) => {
           const hasVerifiedSubmissions = group.statusCounts?.verified > 0;
-          const creatorStatus = group.creator_moderation_status;
+          const creatorStatus = (
+            group.creator_moderation_status || ""
+          ).toLowerCase();
+          // Treat "paid" creators as eligible (same as verified)
           const isCreatorEligible =
-            hasVerifiedSubmissions || creatorStatus === "verified";
+            hasVerifiedSubmissions ||
+            creatorStatus === "verified" ||
+            creatorStatus === "paid";
 
           if (!isCreatorEligible) {
             group.earnings.expected = 0;
@@ -1247,6 +1324,15 @@ export default function ContestDetailClient({
           }
 
           group.earnings.expected = finalExpectedEarnings;
+
+          // Use actual paid amount from leaderboard when creator has been paid
+          if (
+            (group as any).paid &&
+            (group as any).earnings_from_db != null &&
+            (group as any).earnings_from_db > 0
+          ) {
+            group.earnings.granted = (group as any).earnings_from_db;
+          }
 
           // DEBUG: Log earnings calculation for Twitter CPM
           console.log(
@@ -1398,7 +1484,7 @@ export default function ContestDetailClient({
     });
 
     return rankingMap;
-  }, [filteredSubmissions, currentContest]);
+  }, [filteredSubmissions, currentContest, currentSubmissions]);
 
   // Sort creator groups by total points for Twitter leaderboard contests
   const sortedCreatorGroups = useMemo(() => {
@@ -1550,6 +1636,71 @@ export default function ContestDetailClient({
     setCurrentContest(contest);
   }, [contest]);
 
+  // Hydrate Twitter bonus status from API so Bonus Granted is correct for CPM and leaderboard (modal + creator-wise)
+  useEffect(() => {
+    const isTwitter =
+      currentContest?.platform?.toLowerCase() === "twitter" ||
+      currentContest?.platform?.toLowerCase() === "x";
+    const isTwitterCpmOrLeaderboard =
+      isTwitter &&
+      (currentContest?.contest_type === "cpm" ||
+        currentContest?.contest_type === "leaderboard");
+    if (
+      !isTwitterCpmOrLeaderboard ||
+      !contestId ||
+      !currentSubmissions?.length
+    ) {
+      return;
+    }
+    const twitterTweetIds = currentSubmissions
+      .filter(
+        (s: any) =>
+          s.is_twitter_tweet === true || s.platform?.toLowerCase() === "twitter"
+      )
+      .map((s) => s.id)
+      .filter(Boolean);
+    if (twitterTweetIds.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/contests/${contestId}/twitter-bonus-status?tweetIds=${encodeURIComponent(
+            twitterTweetIds.join(",")
+          )}`
+        );
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled || !data.statusByTweetId) return;
+        setCurrentSubmissions((prev) =>
+          prev.map((sub) => {
+            const status = data.statusByTweetId[sub.id];
+            if (!status) return sub;
+            return {
+              ...sub,
+              bonus_paid: status.bonus_paid,
+              bonus_amount: status.bonus_amount,
+              bonus_paid_at: status.bonus_paid_at ?? (sub as any).bonus_paid_at,
+            };
+          })
+        );
+      } catch (err) {
+        console.error(
+          "[contest-detail-client] Failed to fetch Twitter bonus status:",
+          err
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    contestId,
+    currentContest?.platform,
+    currentContest?.contest_type,
+    currentSubmissions?.length,
+  ]);
+
   // Fetch Twitter metrics on load if this is a Twitter campaign
   useEffect(() => {
     if (currentContest?.platform?.toLowerCase() === "twitter") {
@@ -1688,7 +1839,14 @@ export default function ContestDetailClient({
     submissionId: string,
     newStatus: SubmissionAction,
     reason?: string,
-    paymentDetails?: { paymentProofUrl: string; paymentDescription: string }
+    paymentDetails?: {
+      paymentProofUrl: string;
+      paymentDescription: string;
+      amountInCents?: number;
+      isCustom?: boolean;
+      customRemarks?: string;
+    },
+    options?: { skipReload?: boolean }
   ) => {
     console.log("🚀 Starting submission status update:", {
       submissionId,
@@ -1696,7 +1854,7 @@ export default function ContestDetailClient({
       reason,
     });
 
-    // Check if this is a Twitter tweet - if so, use Twitter moderation endpoint
+    // Check if this is a Twitter tweet - if so, use Twitter moderation endpoint (for both CPM and leaderboard)
     const submission = currentSubmissions.find((s) => s.id === submissionId);
     if ((submission as any)?.is_twitter_tweet) {
       if (newStatus === "verified") {
@@ -1711,7 +1869,197 @@ export default function ContestDetailClient({
         await handleModerateTwitterTweet(submissionId, "pending");
         return;
       }
+      // mark_bonus_paid: credit only the flat fee bonus (no main reward)
+      if (newStatus === "mark_bonus_paid") {
+        setIsLoadingSubmission((prev) => ({ ...prev, [submissionId]: true }));
+        try {
+          const res = await fetch(
+            `/api/contests/${contestId}/pay-twitter-bonus`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tweetId: submissionId }),
+            }
+          );
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Failed to pay bonus");
+          const bonusAmount = data.amount ?? 0;
+          setCurrentSubmissions((prev) =>
+            prev.map((s) =>
+              s.id === submissionId
+                ? {
+                    ...s,
+                    bonus_paid: true,
+                    bonus_paid_at: new Date().toISOString(),
+                    ...(bonusAmount > 0 ? { bonus_amount: bonusAmount } : {}),
+                  }
+                : s
+            )
+          );
+          toast({
+            title: "Bonus paid",
+            description:
+              "Flat fee bonus credited to creator. Main reward was not paid.",
+            variant: "default",
+          });
+          if (!options?.skipReload)
+            setTimeout(() => window.location.reload(), 1000);
+          return;
+        } finally {
+          setIsLoadingSubmission((prev) => ({
+            ...prev,
+            [submissionId]: false,
+          }));
+        }
+      }
 
+      // paid, mark_both_paid: CPM = per-tweet payment (only this tweet); leaderboard = pay full creator
+      if (newStatus === "paid" || newStatus === "mark_both_paid") {
+        const creatorId = submission?.creator_id;
+        if (!creatorId) {
+          toast({
+            title: "Error",
+            description: "Creator not found for this submission",
+            variant: "destructive",
+          });
+          return;
+        }
+        setIsLoadingSubmission((prev) => ({ ...prev, [submissionId]: true }));
+        try {
+          const isCpm =
+            currentContest?.contest_type === "cpm" &&
+            (currentContest?.platform?.toLowerCase() === "twitter" ||
+              currentContest?.platform?.toLowerCase() === "x");
+          if (isCpm) {
+            const res = await fetch(
+              `/api/contests/${contestId}/pay-twitter-tweet`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  tweetId: submissionId,
+                  ...(paymentDetails && {
+                    paymentProofUrl: paymentDetails.paymentProofUrl,
+                    paymentDescription: paymentDetails.paymentDescription,
+                    amountInCents: paymentDetails.amountInCents,
+                    isCustom: paymentDetails.isCustom,
+                    customRemarks: paymentDetails.customRemarks,
+                  }),
+                }),
+              }
+            );
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to pay tweet");
+            const amountCents = data.amount ?? 0;
+
+            let bonusAmountFromApi = 0;
+            if (newStatus === "mark_both_paid") {
+              const bonusRes = await fetch(
+                `/api/contests/${contestId}/pay-twitter-bonus`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ tweetId: submissionId }),
+                }
+              );
+              const bonusData = await bonusRes.json();
+              bonusAmountFromApi = bonusData?.amount ?? 0;
+              const noBonusConfigured = bonusData?.error
+                ?.toLowerCase?.()
+                .includes("no flat fee bonus");
+              if (
+                !bonusRes.ok &&
+                !bonusData?.alreadyPaid &&
+                !noBonusConfigured
+              ) {
+                toast({
+                  title: "Reward paid; bonus failed",
+                  description: bonusData?.error || "Could not credit bonus.",
+                  variant: "destructive",
+                });
+              }
+            }
+            setCurrentSubmissions((prev) =>
+              prev.map((s) =>
+                s.id === submissionId
+                  ? {
+                      ...s,
+                      paid: true,
+                      earnings: amountCents,
+                      ...(newStatus === "mark_both_paid"
+                        ? {
+                            bonus_paid: true,
+                            bonus_paid_at: new Date().toISOString(),
+                            ...(bonusAmountFromApi > 0
+                              ? { bonus_amount: bonusAmountFromApi }
+                              : {}),
+                          }
+                        : {}),
+                      ...((s as any).moderation_status !== undefined
+                        ? { moderation_status: "paid" as const }
+                        : {}),
+                      ...("status" in s ? { status: "paid" } : {}),
+                    }
+                  : s
+              )
+            );
+            toast({
+              title: "Success",
+              description:
+                newStatus === "mark_both_paid"
+                  ? "Expected reward and bonus credited to creator."
+                  : "Tweet payment processed. Reward granted for this tweet added to withdrawal.",
+              variant: "default",
+            });
+            if (!options?.skipReload)
+              setTimeout(() => window.location.reload(), 1000);
+          } else {
+            await handlePayTwitterCreator(creatorId, {});
+            // Mark both as paid: also credit flat fee bonus for this tweet
+            if (newStatus === "mark_both_paid") {
+              const bonusRes = await fetch(
+                `/api/contests/${contestId}/pay-twitter-bonus`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ tweetId: submissionId }),
+                }
+              );
+              const bonusData = await bonusRes.json();
+              const noBonusConfigured = bonusData?.error
+                ?.toLowerCase?.()
+                .includes("no flat fee bonus");
+              if (
+                !bonusRes.ok &&
+                !bonusData?.alreadyPaid &&
+                !noBonusConfigured
+              ) {
+                toast({
+                  title: "Reward paid; bonus failed",
+                  description: bonusData?.error || "Could not credit bonus.",
+                  variant: "destructive",
+                });
+              }
+            }
+            toast({
+              title: "Success",
+              description:
+                newStatus === "mark_both_paid"
+                  ? "Expected reward and bonus credited to creator."
+                  : "Payment processed successfully.",
+              variant: "default",
+            });
+            if (!options?.skipReload)
+              setTimeout(() => window.location.reload(), 1000);
+          }
+          return;
+        } finally {
+          setIsLoadingSubmission((prev) => ({
+            ...prev,
+            [submissionId]: false,
+          }));
+        }
+      }
       toast({
         title: "Error",
         description: `Action "${newStatus}" is not supported for Twitter tweets`,
@@ -1856,16 +2204,23 @@ export default function ContestDetailClient({
       toast(toastConfig);
 
       // Clear contest cache and refresh contest list to update budget tracker
-      console.log("[contest-detail-client] Dispatching contests:refresh event from handleUpdateSubmissionStatus...");
+      console.log(
+        "[contest-detail-client] Dispatching contests:refresh event from handleUpdateSubmissionStatus..."
+      );
       window.dispatchEvent(new CustomEvent("contests:refresh"));
-      
+
       // Also directly call the clear cache API to ensure it happens
       try {
-        console.log("[contest-detail-client] Directly calling clear cache API...");
+        console.log(
+          "[contest-detail-client] Directly calling clear cache API..."
+        );
         await fetch("/api/contests/clear-cache", { method: "POST" });
         console.log("[contest-detail-client] Direct cache clear completed");
       } catch (error) {
-        console.error("[contest-detail-client] Direct cache clear failed:", error);
+        console.error(
+          "[contest-detail-client] Direct cache clear failed:",
+          error
+        );
       }
 
       if (
@@ -2041,6 +2396,42 @@ export default function ContestDetailClient({
         throw new Error(result.error || "Failed to process payment");
       }
 
+      const isCpmTwitter =
+        currentContest?.contest_type === "cpm" &&
+        (currentContest?.platform?.toLowerCase() === "twitter" ||
+          currentContest?.platform?.toLowerCase() === "x");
+      if (isCpmTwitter) {
+        const cpmRate =
+          (currentContest?.contest_based_details as any)?.cpm_contest
+            ?.cpm_rate_usd ?? 0;
+        setCurrentSubmissions((prev) =>
+          prev.map((s) => {
+            if ((s as any).creator_id !== creatorId) return s;
+            const isTw =
+              (s as any).is_twitter_tweet ||
+              (s as any).platform?.toLowerCase() === "twitter";
+            if (!isTw) return s;
+            const totalPoints =
+              ((s as any).other_stats?.points ??
+                (s as any).other_stats?.base_points ??
+                0) + ((s as any).manual_points_adjustment ?? 0);
+            const earnings =
+              cpmRate > 0
+                ? Math.round((totalPoints * cpmRate * 100) / 1000)
+                : result.amount ?? 0;
+            return {
+              ...s,
+              paid: true,
+              earnings,
+              ...((s as any).moderation_status !== undefined
+                ? { moderation_status: "paid" as const }
+                : {}),
+              ...("status" in s ? { status: "paid" } : {}),
+            };
+          })
+        );
+      }
+
       toast({
         title: "Success",
         description: "Creator payment processed successfully",
@@ -2056,6 +2447,73 @@ export default function ContestDetailClient({
       toast({
         title: "Error",
         description: error.message || "Failed to process payment",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingSubmission((prev) => ({ ...prev, [creatorId]: false }));
+    }
+  };
+
+  // Creator-wise: pay both expected reward (leaderboard/CPM) and flat bonus for all tweets
+  const handleCreatorMarkBothPaid = async (
+    creatorId: string,
+    tweetIds: string[]
+  ) => {
+    setIsLoadingSubmission((prev) => ({ ...prev, [creatorId]: true }));
+    try {
+      // 1) Pay creator-level reward based on points/rank
+      const mainRes = await fetch(
+        `/api/contests/${contestId}/pay-twitter-creator`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ creatorId }),
+        }
+      );
+      const mainData = await mainRes.json();
+      if (!mainRes.ok) {
+        throw new Error(mainData?.error || "Failed to process creator payment");
+      }
+
+      // 2) Pay flat fee bonus per tweet (idempotent per tweet)
+      await Promise.allSettled(
+        tweetIds.map(async (tweetId) => {
+          const bonusRes = await fetch(
+            `/api/contests/${contestId}/pay-twitter-bonus`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tweetId }),
+            }
+          );
+          const bonusData = await bonusRes.json().catch(() => ({}));
+          const noBonusConfigured = bonusData?.error
+            ?.toLowerCase?.()
+            .includes("no flat fee bonus");
+          if (!bonusRes.ok && !bonusData?.alreadyPaid && !noBonusConfigured) {
+            console.error(
+              "[handleCreatorMarkBothPaid] Bonus payment failed for tweet",
+              tweetId,
+              bonusData
+            );
+          }
+        })
+      );
+
+      toast({
+        title: "Success",
+        description:
+          "Expected reward and flat bonus credited for this creator based on their points.",
+        variant: "default",
+      });
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (error: any) {
+      console.error("[handleCreatorMarkBothPaid] Error:", error);
+      toast({
+        title: "Error",
+        description:
+          error?.message ||
+          "Failed to process creator payment with bonus. No changes were made.",
         variant: "destructive",
       });
     } finally {
@@ -2738,10 +3196,7 @@ export default function ContestDetailClient({
   function calculateSubmissionExpectedEarnings(submission: Submission) {
     let expectedEarnings = submission.earnings || 0;
 
-    if (
-      !expectedEarnings &&
-      currentContest?.contest_type === "cpm"
-    ) {
+    if (!expectedEarnings && currentContest?.contest_type === "cpm") {
       const cpmConfig = (currentContest?.contest_based_details as any)
         ?.cpm_contest;
       if (cpmConfig?.cpm_rate_usd) {
@@ -2858,11 +3313,19 @@ export default function ContestDetailClient({
   // Twitter moderation handlers
   const handleModerateTwitterTweet = async (
     tweetId: string,
-    action: "approve" | "reject" | "pending",
+    action: "approve" | "reject" | "pending" | "paid",
     reason?: string
   ) => {
     setIsLoadingSubmission((prev) => ({ ...prev, [tweetId]: true }));
     try {
+      const apiAction =
+        action === "approve"
+          ? "approve"
+          : action === "reject"
+          ? "reject"
+          : action === "paid"
+          ? "paid"
+          : "pending";
       const response = await fetch(
         `/api/contests/${contestId}/moderate-submission`,
         {
@@ -2872,12 +3335,7 @@ export default function ContestDetailClient({
           },
           body: JSON.stringify({
             tweetId,
-            action:
-              action === "approve"
-                ? "approve"
-                : action === "reject"
-                ? "reject"
-                : "pending",
+            action: apiAction,
             reason:
               reason || (action === "reject" ? "Rejected by admin" : null),
           }),
@@ -2890,20 +3348,118 @@ export default function ContestDetailClient({
         throw new Error(result.error || "Failed to moderate tweet");
       }
 
-      // Update local state
+      // For "paid": compute creator-level earnings so Reward Granted and creator-wise view update
+      const submission = currentSubmissions.find((s) => s.id === tweetId);
+      const creatorId = submission?.creator_id;
+      let earningsCents = 0;
+      const isTwitterContest =
+        (currentContest?.platform?.toLowerCase() === "twitter" ||
+          currentContest?.platform?.toLowerCase() === "x") &&
+        currentContest?.contest_format === "text_image";
+
+      if (action === "paid" && creatorId && isTwitterContest) {
+        if (currentContest?.contest_type === "leaderboard") {
+          const contestDetails =
+            currentContest?.contest_based_details?.leaderboard_contest;
+          const prizes = contestDetails?.prizes || [];
+          const creatorPointsMap = new Map<string, number>();
+          const creatorStatusMap = new Map<string, string>();
+          currentSubmissions.forEach((sub: any) => {
+            if (!sub.creator_id || sub.is_twitter_tweet !== true) return;
+            const cid = sub.creator_id;
+            const basePoints = sub.other_stats?.base_points || 0;
+            const manualPoints = (sub as any).manual_points_adjustment || 0;
+            creatorPointsMap.set(
+              cid,
+              (creatorPointsMap.get(cid) || 0) + basePoints + manualPoints
+            );
+            const status =
+              creatorModerationData?.[cid]?.moderation_status ??
+              (sub.moderation_status || sub.status || "pending");
+            creatorStatusMap.set(cid, status);
+          });
+          const verifiedOrPaidCreators = Array.from(creatorPointsMap.entries())
+            .filter(
+              ([cid]) =>
+                creatorStatusMap.get(cid) === "verified" ||
+                creatorStatusMap.get(cid) === "paid"
+            )
+            .sort((a, b) => b[1] - a[1]);
+          const rankIdx = verifiedOrPaidCreators.findIndex(
+            ([cid]) => cid === creatorId
+          );
+          const prizeRank = rankIdx >= 0 ? rankIdx + 1 : undefined;
+          const prizeForRank = prizeRank
+            ? prizes.find((p: any) => p.position === prizeRank)
+            : null;
+          earningsCents = prizeForRank?.amount ?? 0;
+          if (earningsCents === 0) {
+            const rank = creatorRankingMap.get(creatorId);
+            const fallbackPrize = rank
+              ? prizes.find((p: any) => p.position === rank)
+              : null;
+            earningsCents = fallbackPrize?.amount ?? 0;
+          }
+        } else if (currentContest?.contest_type === "cpm") {
+          const cpmConfig = (currentContest?.contest_based_details as any)
+            ?.cpm_contest;
+          const cpmRate = cpmConfig?.cpm_rate_usd || 0;
+          const maxEarningsPerCreator =
+            currentContest?.max_earnings_per_creator ??
+            cpmConfig?.max_earnings_per_creator ??
+            null;
+          if (cpmRate > 0) {
+            let totalPoints = 0;
+            currentSubmissions.forEach((sub: any) => {
+              if (sub.creator_id !== creatorId || sub.is_twitter_tweet !== true)
+                return;
+              const status = (sub.moderation_status ||
+                sub.status ||
+                "pending") as string;
+              if (status === "rejected") return;
+              const basePoints = sub.other_stats?.base_points || 0;
+              const manualPoints = (sub as any).manual_points_adjustment || 0;
+              totalPoints += basePoints + manualPoints;
+            });
+            const calculatedEarningsDollars = (totalPoints * cpmRate) / 1000;
+            let earningsInCents = Math.round(calculatedEarningsDollars * 100);
+            if (
+              maxEarningsPerCreator != null &&
+              earningsInCents > maxEarningsPerCreator
+            ) {
+              earningsInCents = maxEarningsPerCreator;
+            }
+            earningsCents = earningsInCents;
+          }
+        }
+      }
+
+      const paidAt = new Date().toISOString();
+      const newModerationStatus =
+        action === "approve"
+          ? "verified"
+          : action === "reject"
+          ? "rejected"
+          : action === "paid"
+          ? "paid"
+          : "pending";
       setCurrentSubmissions((prev) =>
-        prev.map((sub) =>
-          sub.id === tweetId
-            ? {
-                ...sub,
-                moderation_status:
-                  action === "approve"
-                    ? "verified"
-                    : action === "reject"
-                    ? "rejected"
-                    : "pending",
-              }
-            : sub
+        prev.map(
+          (sub): Submission =>
+            sub.id === tweetId
+              ? {
+                  ...sub,
+                  moderation_status: newModerationStatus,
+                  status: newModerationStatus,
+                  ...(action === "paid"
+                    ? {
+                        paid: true,
+                        paid_at: paidAt,
+                        earnings: earningsCents,
+                      }
+                    : {}),
+                }
+              : sub
         )
       );
 
@@ -2914,21 +3470,32 @@ export default function ContestDetailClient({
             ? "approved"
             : action === "reject"
             ? "rejected"
+            : action === "paid"
+            ? "marked as paid"
             : "set to pending"
         } successfully`,
       });
 
       // Clear contest cache and refresh contest list to update budget tracker
-      console.log("[contest-detail-client] Dispatching contests:refresh event from handleModerateTwitterTweet...");
+      console.log(
+        "[contest-detail-client] Dispatching contests:refresh event from handleModerateTwitterTweet..."
+      );
       window.dispatchEvent(new CustomEvent("contests:refresh"));
-      
+
       // Also directly call the clear cache API to ensure it happens
       try {
-        console.log("[contest-detail-client] Directly calling clear cache API from Twitter moderation...");
+        console.log(
+          "[contest-detail-client] Directly calling clear cache API from Twitter moderation..."
+        );
         await fetch("/api/contests/clear-cache", { method: "POST" });
-        console.log("[contest-detail-client] Direct cache clear completed from Twitter moderation");
+        console.log(
+          "[contest-detail-client] Direct cache clear completed from Twitter moderation"
+        );
       } catch (error) {
-        console.error("[contest-detail-client] Direct cache clear failed from Twitter moderation:", error);
+        console.error(
+          "[contest-detail-client] Direct cache clear failed from Twitter moderation:",
+          error
+        );
       }
 
       // Refresh page after a delay
@@ -2973,33 +3540,118 @@ export default function ContestDetailClient({
     }));
 
     try {
-      const response = await fetch(
-        `/api/contests/${contestId}/moderate-creator`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            creatorId: creatorId,
-            action: action,
-          }),
+      // CPM: reverse each paid tweet and then set action per tweet via moderate-submission
+      const isCpmTwitter =
+        currentContest?.contest_type === "cpm" &&
+        (currentContest?.platform?.toLowerCase() === "twitter" ||
+          currentContest?.platform?.toLowerCase() === "x");
+
+      if (isCpmTwitter) {
+        const creatorTweets = (currentSubmissions || []).filter(
+          (s: any) =>
+            (s as any).creator_id === creatorId &&
+            ((s as any).is_twitter_tweet ||
+              s.platform?.toLowerCase() === "twitter")
+        );
+        // Reverse paid tweets first (sets to pending and debits)
+        for (const submission of creatorTweets) {
+          const isPaid =
+            (submission as any).paid ||
+            (submission as any).moderation_status === "paid";
+          if (isPaid) {
+            const res = await fetch(
+              `/api/contests/${contestId}/moderate-submission`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  tweetId: submission.id,
+                  action: "pending",
+                }),
+              }
+            );
+            if (!res.ok) {
+              const err = await res.json();
+              throw new Error(err.error || "Failed to reverse tweet payment");
+            }
+          }
         }
-      );
+        // Then set each tweet to the target action (approve → verified, etc.)
+        const submissionAction = action === "approve" ? "approve" : "reject";
+        for (const submission of creatorTweets) {
+          const res = await fetch(
+            `/api/contests/${contestId}/moderate-submission`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                tweetId: submission.id,
+                action: submissionAction,
+                ...(submissionAction === "reject"
+                  ? { reason: "Creator reversal" }
+                  : {}),
+              }),
+            }
+          );
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || `Failed to ${action} tweet`);
+          }
+        }
+        if (action === "approve") {
+          markCreatorSubmissionsVerifiedLocally(creatorId);
+        }
+        // Update creator/leaderboard row so creator-wise view shows correct status
+        const leaderboardRes = await fetch(
+          `/api/contests/${contestId}/moderate-creator`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              creatorId,
+              action,
+            }),
+          }
+        );
+        if (!leaderboardRes.ok) {
+          const err = await leaderboardRes.json();
+          throw new Error(err.error || `Failed to update creator status`);
+        }
+        toast({
+          title: "Success",
+          description: `Creator ${
+            action === "approve" ? "approved" : "rejected"
+          } and payment reversed successfully`,
+        });
+      } else {
+        const response = await fetch(
+          `/api/contests/${contestId}/moderate-creator`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              creatorId: creatorId,
+              action: action,
+            }),
+          }
+        );
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || `Failed to ${action} creator`);
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || `Failed to ${action} creator`);
+        }
+
+        if (action === "approve") {
+          markCreatorSubmissionsVerifiedLocally(creatorId);
+        }
+
+        toast({
+          title: "Success",
+          description: `Creator ${
+            action === "approve" ? "approved" : "rejected"
+          } and payment reversed successfully`,
+        });
       }
-
-      if (action === "approve") {
-        markCreatorSubmissionsVerifiedLocally(creatorId);
-      }
-
-      toast({
-        title: "Success",
-        description: `Creator ${
-          action === "approve" ? "approved" : "rejected"
-        } and payment reversed successfully`,
-      });
 
       setTimeout(() => {
         window.location.reload();
@@ -3035,37 +3687,93 @@ export default function ContestDetailClient({
       : reason;
 
     if (pendingTwitterRejection.type === "creator") {
-      // Use creator-level moderation API
+      const creatorId = pendingTwitterRejection.creatorId;
       setIsLoadingSubmission((prev) => ({
         ...prev,
-        [pendingTwitterRejection.creatorId || ""]: true,
+        [creatorId || ""]: true,
       }));
 
       try {
-        const response = await fetch(
-          `/api/contests/${contestId}/moderate-creator`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              creatorId: pendingTwitterRejection.creatorId,
-              action: "reject",
-              reason: fullReason,
-            }),
+        // CPM: reject (and reverse) each tweet via moderate-submission, then update creator/leaderboard via moderate-creator
+        if (
+          currentContest?.contest_type === "cpm" &&
+          (currentContest?.platform?.toLowerCase() === "twitter" ||
+            currentContest?.platform?.toLowerCase() === "x")
+        ) {
+          const creatorTweets = (currentSubmissions || []).filter(
+            (s: any) =>
+              (s as any).creator_id === creatorId &&
+              ((s as any).is_twitter_tweet ||
+                s.platform?.toLowerCase() === "twitter")
+          );
+          for (const submission of creatorTweets) {
+            const res = await fetch(
+              `/api/contests/${contestId}/moderate-submission`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  tweetId: submission.id,
+                  action: "reject",
+                  reason: fullReason,
+                }),
+              }
+            );
+            if (!res.ok) {
+              const err = await res.json();
+              throw new Error(err.error || "Failed to reject tweet");
+            }
           }
-        );
+          // Update creator/leaderboard row so creator-wise view shows rejected (no extra reversal; CPM doesn't set leaderboard.paid)
+          const leaderboardRes = await fetch(
+            `/api/contests/${contestId}/moderate-creator`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                creatorId,
+                action: "reject",
+                reason: fullReason,
+              }),
+            }
+          );
+          if (!leaderboardRes.ok) {
+            const err = await leaderboardRes.json();
+            throw new Error(err.error || "Failed to update creator status");
+          }
+          toast({
+            title: "Success",
+            description: `Creator @${
+              pendingTwitterRejection.creatorUsername || "creator"
+            } and all tweets have been rejected (payments reversed where applicable).`,
+          });
+        } else {
+          // Leaderboard: use creator-level moderation API
+          const response = await fetch(
+            `/api/contests/${contestId}/moderate-creator`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                creatorId,
+                action: "reject",
+                reason: fullReason,
+              }),
+            }
+          );
 
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "Failed to reject creator");
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || "Failed to reject creator");
+          }
+
+          toast({
+            title: "Success",
+            description: `Creator @${
+              pendingTwitterRejection.creatorUsername || "creator"
+            } has been rejected`,
+          });
         }
-
-        toast({
-          title: "Success",
-          description: `Creator @${
-            pendingTwitterRejection.creatorUsername || "creator"
-          } has been rejected`,
-        });
 
         setTimeout(() => {
           window.location.reload();
@@ -3080,7 +3788,7 @@ export default function ContestDetailClient({
       } finally {
         setIsLoadingSubmission((prev) => {
           const newState = { ...prev };
-          delete newState[pendingTwitterRejection.creatorId || ""];
+          delete newState[creatorId || ""];
           return newState;
         });
       }
@@ -10394,25 +11102,11 @@ export default function ContestDetailClient({
                                               )}
                                             </>
                                           )}
-                                          {/* Show reward columns for leaderboard and CPM contests */}
-                                          {!(
-                                            (currentContest.platform?.toLowerCase() ===
-                                              "twitter" ||
-                                              currentContest.platform?.toLowerCase() ===
-                                                "x") &&
-                                            currentContest.contest_format ===
-                                              "text_image"
-                                          ) ||
-                                          ((currentContest.contest_type ===
+                                          {/* Show reward columns for leaderboard and CPM contests (including Twitter) */}
+                                          {(currentContest.contest_type ===
                                             "leaderboard" ||
                                             currentContest.contest_type ===
-                                              "cpm") &&
-                                            (currentContest.platform?.toLowerCase() ===
-                                              "twitter" ||
-                                              currentContest.platform?.toLowerCase() ===
-                                                "x") &&
-                                            currentContest.contest_format ===
-                                              "text_image") ? (
+                                              "cpm") && (
                                             <>
                                               <TableCell className="text-center font-medium">
                                                 <div className="flex items-center justify-center gap-1">
@@ -10439,7 +11133,7 @@ export default function ContestDetailClient({
                                                 )}
                                               </TableCell>
                                             </>
-                                          ) : null}
+                                          )}
                                           {(() => {
                                             const flatFeeBonus =
                                               currentContest.contest_type ===
@@ -10636,12 +11330,13 @@ export default function ContestDetailClient({
                                                         </Button>
                                                       </DropdownMenuTrigger>
                                                       <DropdownMenuContent align="end">
-                                                        {group.creator_moderation_status !==
-                                                          "verified" && (
+                                                        {(group.creator_moderation_status !==
+                                                          "verified" ||
+                                                          group.paid) && (
                                                           <DropdownMenuItem
                                                             onClick={() => {
                                                               if (group.paid) {
-                                                                // Show reversal confirmation for paid creators
+                                                                // Show reversal confirmation when any tweet is paid (revert + approve)
                                                                 setConfirmTwitterCreatorReversal(
                                                                   {
                                                                     creatorId:
@@ -10743,60 +11438,68 @@ export default function ContestDetailClient({
                                                           Adjust Creator Points
                                                         </DropdownMenuItem>
 
-                                                        <DropdownMenuItem
-                                                          onClick={() => {
-                                                            if (group.paid) {
-                                                              // Show reversal confirmation for paid creators
-                                                              setConfirmTwitterCreatorReversal(
-                                                                {
-                                                                  creatorId:
-                                                                    group
+                                                        {group.creator_moderation_status !==
+                                                          "rejected" && (
+                                                          <DropdownMenuItem
+                                                            onClick={() => {
+                                                              if (group.paid) {
+                                                                // Show reversal confirmation for paid creators
+                                                                setConfirmTwitterCreatorReversal(
+                                                                  {
+                                                                    creatorId:
+                                                                      group
+                                                                        .creator
+                                                                        .id,
+                                                                    action:
+                                                                      "reject",
+                                                                    needRejectionReason:
+                                                                      true,
+                                                                    creatorUsername:
+                                                                      group
+                                                                        .creator
+                                                                        .username,
+                                                                  }
+                                                                );
+                                                              } else {
+                                                                // Direct rejection for non-paid creators
+                                                                setPendingTwitterRejection(
+                                                                  {
+                                                                    id: group
                                                                       .creator
                                                                       .id,
-                                                                  action:
-                                                                    "reject",
-                                                                  needRejectionReason:
-                                                                    true,
-                                                                  creatorUsername:
-                                                                    group
-                                                                      .creator
-                                                                      .username,
-                                                                }
-                                                              );
-                                                            } else {
-                                                              // Direct rejection for non-paid creators
-                                                              setPendingTwitterRejection(
-                                                                {
-                                                                  id: group
-                                                                    .creator.id,
-                                                                  type: "creator",
-                                                                  creatorId:
-                                                                    group
-                                                                      .creator
-                                                                      .id,
-                                                                  creatorUsername:
-                                                                    group
-                                                                      .creator
-                                                                      .username,
-                                                                }
-                                                              );
-                                                              setTwitterRejectionModalOpen(
-                                                                true
-                                                              );
-                                                            }
-                                                          }}
-                                                          className="text-red-600"
-                                                        >
-                                                          <XCircle className="h-4 w-4 mr-2" />
-                                                          Reject Creator
-                                                        </DropdownMenuItem>
-                                                        {/* Payment options for Twitter creators */}
+                                                                    type: "creator",
+                                                                    creatorId:
+                                                                      group
+                                                                        .creator
+                                                                        .id,
+                                                                    creatorUsername:
+                                                                      group
+                                                                        .creator
+                                                                        .username,
+                                                                  }
+                                                                );
+                                                                setTwitterRejectionModalOpen(
+                                                                  true
+                                                                );
+                                                              }
+                                                            }}
+                                                            className="text-red-600"
+                                                          >
+                                                            <XCircle className="h-4 w-4 mr-2" />
+                                                            Reject Creator
+                                                          </DropdownMenuItem>
+                                                        )}
+                                                        {/* Payment options for Twitter creators (leaderboard and CPM) - hide for rejected */}
                                                         {currentContest.post_contest_status ===
                                                           "verification_complete" &&
                                                           !group.paid &&
+                                                          group.creator_moderation_status !==
+                                                            "rejected" &&
                                                           isAdminView &&
-                                                          currentContest.contest_type ===
-                                                            "leaderboard" && (
+                                                          (currentContest.contest_type ===
+                                                            "leaderboard" ||
+                                                            currentContest.contest_type ===
+                                                              "cpm") && (
                                                             <>
                                                               <DropdownMenuSeparator />
                                                               <DropdownMenuItem
@@ -10918,6 +11621,59 @@ export default function ContestDetailClient({
                                                                 Mark as Custom
                                                                 Paid
                                                               </DropdownMenuItem>
+                                                              {(() => {
+                                                                const flatFeeBonus =
+                                                                  currentContest.contest_type ===
+                                                                  "cpm"
+                                                                    ? (
+                                                                        currentContest.contest_based_details as any
+                                                                      )
+                                                                        ?.cpm_contest
+                                                                        ?.flat_fee_bonus
+                                                                    : (
+                                                                        currentContest.contest_based_details as any
+                                                                      )
+                                                                        ?.leaderboard_contest
+                                                                        ?.flat_fee_bonus;
+                                                                return (
+                                                                  flatFeeBonus >
+                                                                  0
+                                                                );
+                                                              })() && (
+                                                                <>
+                                                                  <DropdownMenuItem
+                                                                    onClick={() => {
+                                                                      const tweetIds =
+                                                                        (
+                                                                          group.submissions ||
+                                                                          []
+                                                                        )
+                                                                          .filter(
+                                                                            (
+                                                                              s: any
+                                                                            ) =>
+                                                                              s.is_twitter_tweet
+                                                                          )
+                                                                          .map(
+                                                                            (
+                                                                              s: any
+                                                                            ) =>
+                                                                              s.id
+                                                                          );
+                                                                      handleCreatorMarkBothPaid(
+                                                                        group
+                                                                          .creator
+                                                                          .id,
+                                                                        tweetIds
+                                                                      );
+                                                                    }}
+                                                                  >
+                                                                    <DollarSign className="h-4 w-4 mr-2" />
+                                                                    Mark Both as
+                                                                    Paid
+                                                                  </DropdownMenuItem>
+                                                                </>
+                                                              )}
                                                             </>
                                                           )}
                                                       </DropdownMenuContent>
@@ -13790,7 +14546,7 @@ export default function ContestDetailClient({
         </DialogContent>
       </Dialog>
 
-      {/* Creator Submissions Modal */}
+      {/* Creator Submissions Modal - use currentSubmissions so hydrated bonus_paid/bonus_amount are included */}
       {selectedCreatorForModal && groupSubmissionsByCreator && (
         <CreatorSubmissionsModal
           isOpen={!!selectedCreatorForModal}
@@ -13801,11 +14557,16 @@ export default function ContestDetailClient({
             )?.creator || {}
           }
           submissions={
-            (groupSubmissionsByCreator as any[]).find(
-              (g: any) => g.creator.id === selectedCreatorForModal
-            )?.submissions || []
+            (currentSubmissions || []).filter(
+              (s: any) => s.creator_id === selectedCreatorForModal
+            ) as React.ComponentProps<
+              typeof CreatorSubmissionsModal
+            >["submissions"]
           }
           contest={currentContest}
+          creatorRank={
+            creatorRankingMap.get(selectedCreatorForModal) ?? undefined
+          }
           onVerify={async (ids: string[]) => {
             // Handle bulk verify
             for (const id of ids) {
@@ -13829,16 +14590,22 @@ export default function ContestDetailClient({
           }}
           onPayment={async (
             submissionId: string,
-            type: "standard" | "bonus" | "both"
+            type: "standard" | "bonus" | "both",
+            options?: { skipReload?: boolean }
           ) => {
-            // Handle payment based on type
             const action =
               type === "bonus"
                 ? "mark_bonus_paid"
                 : type === "both"
                 ? "mark_both_paid"
                 : "paid";
-            await handleUpdateSubmissionStatus(submissionId, action);
+            await handleUpdateSubmissionStatus(
+              submissionId,
+              action,
+              undefined,
+              undefined,
+              options
+            );
           }}
           onCustomPayment={(submissionId: string) => {
             // Handle custom payment
