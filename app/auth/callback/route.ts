@@ -181,14 +181,23 @@ export async function GET(request: NextRequest) {
       let redirectPath = "/dashboard";
 
       if (!userProfile || !userProfile.username) {
-        // User needs to set up their username (and potentially other profile info)
         redirectPath = "/choose-username";
       } else if (userProfile.user_type === "admin") {
-        // Admin users should go directly to admin dashboard
         redirectPath = "/dashboard/admin";
       }
 
-      console.log("Redirecting OAuth user to:", redirectPath);
+      // If user has a complete profile and requested a specific page, send them there (safe paths only)
+      const requestedNext = searchParams.get("next");
+      if (
+        requestedNext &&
+        requestedNext.startsWith("/") &&
+        !requestedNext.startsWith("//") &&
+        (requestedNext.startsWith("/dashboard") || requestedNext.startsWith("/choose-username")) &&
+        redirectPath === "/dashboard"
+      ) {
+        redirectPath = requestedNext;
+      }
+
       return NextResponse.redirect(`${origin}${redirectPath}`);
     } catch (error: any) {
       console.error("OAuth callback error:", error);

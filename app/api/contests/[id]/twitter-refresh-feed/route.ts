@@ -42,13 +42,28 @@ export async function POST(
     const { data: contest, error: contestError } = await supabase
       .from("contests")
       .select(
-        "id, title, platform, last_metrics_updated, advertiser_id, contest_based_details"
+        "id, title, platform, last_metrics_updated, advertiser_id, contest_based_details, post_contest_status"
       )
       .eq("id", contestId)
       .single();
 
     if (contestError || !contest) {
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+    }
+
+    // Hard lock: same as refresh-metrics - no feed refresh after review begins
+    if (
+      contest.post_contest_status === "in_review" ||
+      contest.post_contest_status === "verification_complete" ||
+      contest.post_contest_status === "payouts_processed"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Metrics are locked after contest review begins. No further refresh allowed.",
+        },
+        { status: 400 }
+      );
     }
 
     // Check if user is the contest owner (brand/advertiser)
@@ -119,7 +134,12 @@ export async function POST(
         Math.ceil(participantCount / BATCH_SIZE)
       );
       let job:
-        | { contestId: string; isRaid: true; batchIndex?: number; totalBatches?: number }
+        | {
+            contestId: string;
+            isRaid: true;
+            batchIndex?: number;
+            totalBatches?: number;
+          }
         | {
             contestId: string;
             isRaid: false;
