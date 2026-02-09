@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { getUserSafe } from "@/utils/supabase/auth-server";
 import DashboardContent from "./ClientLayout";
 import { User } from "@supabase/supabase-js";
 
@@ -8,7 +9,7 @@ export default async function layout({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await getUserSafe(supabase);
 
   let userWithRole: (User & { user_type?: string | null }) | null = null;
 

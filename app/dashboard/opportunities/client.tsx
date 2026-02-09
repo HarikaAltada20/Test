@@ -52,12 +52,6 @@ import { Input } from "@/components/ui/input";
 import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 
 import {
@@ -99,7 +93,7 @@ const getBudgetTrackerValues = (
 const getContestsByMediaType = (contests: any[], mediaType: string) => {
   return contests.filter((contest) => {
     const format = contest.contest_format;
-    
+
     if (mediaType === "all") {
       return true; // Show all contests
     } else if (mediaType === "media") {
@@ -154,10 +148,13 @@ export default function OpportunitiesPage({
   };
 
   const [mediaType, setMediaType] = useState("all");
-  
+
   // Calculate filtered contests by media type for tab counts
-  const filteredContestsByMediaType = getContestsByMediaType(availableContests, mediaType);
-  
+  const filteredContestsByMediaType = getContestsByMediaType(
+    availableContests,
+    mediaType
+  );
+
   const tabs = [
     {
       id: "all",
@@ -190,9 +187,9 @@ export default function OpportunitiesPage({
       ).length,
     },
   ];
-  
+
   const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: "all" });
-  
+
   // New state variables for filters and sorting
   const [statusFilter, setStatusFilter] = useState<StatusFilterType>("all");
   const [platformFilter, setPlatformFilter] =
@@ -665,7 +662,7 @@ export default function OpportunitiesPage({
             if (
               contest.contest_type === "leaderboard" &&
               contest.contest_based_details?.leaderboard_contest?.total_budget >
-                0 &&
+              0 &&
               contest.contest_based_details?.leaderboard_contest
                 ?.flat_fee_bonus > 0
             ) {
@@ -758,8 +755,8 @@ export default function OpportunitiesPage({
                 submissions,
                 cpmDetails.cpm_rate_usd,
                 contest.max_earnings_per_creator ||
-                  cpmDetails.max_earnings_per_creator ||
-                  null,
+                cpmDetails.max_earnings_per_creator ||
+                null,
                 cpmDetails.min_views,
                 cpmDetails.max_views,
                 cpmDetails.flat_fee_bonus || 0,
@@ -814,7 +811,7 @@ export default function OpportunitiesPage({
                 submissionRecords,
                 cpmDetails.cpm_rate_usd,
                 contest.max_earnings_per_creator ||
-                  cpmDetails.max_earnings_per_creator,
+                cpmDetails.max_earnings_per_creator,
                 cpmDetails.min_views,
                 cpmDetails.max_views,
                 cpmDetails.flat_fee_bonus || 0,
@@ -886,7 +883,7 @@ export default function OpportunitiesPage({
       : [];
     const contestSubcategories =
       typeof contest.subcategories === "object" &&
-      contest.subcategories !== null
+        contest.subcategories !== null
         ? (contest.subcategories as Record<string, string[]>)
         : {};
     const contestInterests = Array.isArray(contest.interests)
@@ -1092,7 +1089,7 @@ export default function OpportunitiesPage({
         : [];
       const contestSubcategories =
         typeof contest.subcategories === "object" &&
-        contest.subcategories !== null
+          contest.subcategories !== null
           ? (contest.subcategories as Record<string, string[]>)
           : {};
       const contestInterests = Array.isArray(contest.interests)
@@ -1199,12 +1196,12 @@ export default function OpportunitiesPage({
         case "cpm_rate_asc":
           const rateA =
             a.contest_type === "cpm" &&
-            a.contest_based_details?.cpm_contest?.cpm_rate_usd
+              a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1; // Use -1 to sort contests without CPM rate last
           const rateB =
             b.contest_type === "cpm" &&
-            b.contest_based_details?.cpm_contest?.cpm_rate_usd
+              b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           if (rateA === -1 && rateB === -1) return 0;
@@ -1280,30 +1277,30 @@ export default function OpportunitiesPage({
         {(contest.status === "active" ||
           contest.status === "upcoming" ||
           contest.status === "ended") && (
-          <div className="absolute top-3 right-3 z-10 flex flex-row gap-2">
-            <Badge
-              className={cn(
-                "capitalize text-sm px-3 py-1 font-medium border",
-                contest.status === "active" && "bg-[#7F39EC] text-white",
-                contest.status === "upcoming" && "bg-[#7F39EC] text-white",
-                contest.status === "ended" && "bg-[#7F39EC] text-white"
-              )}
-            >
-              {contest.status === "active"
-                ? "Live"
-                : contest.status === "upcoming"
-                ? "Upcoming"
-                : contest.status === "ended"
-                ? "completed"
-                : contest.status || "Unknown"}
-            </Badge>
-            {contest.post_contest_status === "payouts_processed" && (
-              <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
-                paid
+            <div className="absolute top-3 right-3 z-10 flex flex-row gap-2">
+              <Badge
+                className={cn(
+                  "capitalize text-sm px-3 py-1 font-medium border",
+                  contest.status === "active" && "bg-[#7F39EC] text-white",
+                  contest.status === "upcoming" && "bg-[#7F39EC] text-white",
+                  contest.status === "ended" && "bg-[#7F39EC] text-white"
+                )}
+              >
+                {contest.status === "active"
+                  ? "Live"
+                  : contest.status === "upcoming"
+                    ? "Upcoming"
+                    : contest.status === "ended"
+                      ? "completed"
+                      : contest.status || "Unknown"}
               </Badge>
-            )}
-          </div>
-        )}
+              {contest.post_contest_status === "payouts_processed" && (
+                <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
+                  paid
+                </Badge>
+              )}
+            </div>
+          )}
         {/* Thumbnail */}
         <div className="w-full sm:w-64 md:w-80 lg:w-72 xl:w-96 sm:h-[200px] md:h-[220px] lg:h-[250px] min-h-[12rem] flex-shrink-0 flex items-center justify-center overflow-hidden relative">
           {contest.thumbnail_url ? (
@@ -1353,8 +1350,8 @@ export default function OpportunitiesPage({
                               ? "bg-red-900/30 text-red-300 border-red-700/50"
                               : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
                             : campaignType === "raid"
-                            ? "bg-red-50 text-red-700 border-red-200"
-                            : "bg-cyan-50 text-cyan-700 border-cyan-200"
+                              ? "bg-red-50 text-red-700 border-red-200"
+                              : "bg-cyan-50 text-cyan-700 border-cyan-200"
                         )}
                       >
                         {campaignType.toUpperCase()}
@@ -1416,26 +1413,26 @@ export default function OpportunitiesPage({
               {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
                 contest.contest_based_details?.leaderboard_contest
                   ?.flat_fee_bonus) && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-sm px-3 py-1 font-medium",
-                    isDark
-                      ? "bg-green-900/30 text-green-300 border-green-700/50"
-                      : "bg-green-50 text-green-700 border-green-200"
-                  )}
-                >
-                  <Gift className="h-3 w-3 mr-1" />
-                  {formatMoney(
-                    contest.contest_based_details?.cpm_contest
-                      ?.flat_fee_bonus ||
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-sm px-3 py-1 font-medium",
+                      isDark
+                        ? "bg-green-900/30 text-green-300 border-green-700/50"
+                        : "bg-green-50 text-green-700 border-green-200"
+                    )}
+                  >
+                    <Gift className="h-3 w-3 mr-1" />
+                    {formatMoney(
+                      contest.contest_based_details?.cpm_contest
+                        ?.flat_fee_bonus ||
                       contest.contest_based_details?.leaderboard_contest
                         ?.flat_fee_bonus ||
                       0
-                  )}
-                  /submission
-                </Badge>
-              )}
+                    )}
+                    /submission
+                  </Badge>
+                )}
               {contest.bonus_details?.description_html && (
                 <Badge
                   variant="outline"
@@ -1574,7 +1571,7 @@ export default function OpportunitiesPage({
                   : [];
                 const contestSubcategories =
                   typeof contest.subcategories === "object" &&
-                  contest.subcategories !== null
+                    contest.subcategories !== null
                     ? (contest.subcategories as Record<string, string[]>)
                     : {};
                 const contestInterests = Array.isArray(contest.interests)
@@ -1623,17 +1620,17 @@ export default function OpportunitiesPage({
                     {contest.contest_type === "cpm"
                       ? "CPM Based"
                       : contest.contest_type === "leaderboard"
-                      ? "Leaderboard"
-                      : contest.contest_type
-                      ? contest.contest_type.charAt(0).toUpperCase() +
-                        contest.contest_type.slice(1)
-                      : "N/A"}
+                        ? "Leaderboard"
+                        : contest.contest_type
+                          ? contest.contest_type.charAt(0).toUpperCase() +
+                          contest.contest_type.slice(1)
+                          : "N/A"}
                   </span>
                 </span>
               </div>
               {contest.contest_type === "cpm" &&
                 contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
-                  null && (
+                null && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                     <span
@@ -1643,7 +1640,7 @@ export default function OpportunitiesPage({
                       }}
                     >
                       {contest.platform?.toLowerCase() === "twitter" ||
-                      contest.platform?.toLowerCase() === "x"
+                        contest.platform?.toLowerCase() === "x"
                         ? "Points Rate: "
                         : "CPM Rate: "}
                       <span className="font-medium">
@@ -1652,7 +1649,7 @@ export default function OpportunitiesPage({
                             .cpm_rate_usd * 100
                         )}{" "}
                         {contest.platform?.toLowerCase() === "twitter" ||
-                        contest.platform?.toLowerCase() === "x"
+                          contest.platform?.toLowerCase() === "x"
                           ? "/ 1k points"
                           : "/ 1k views"}
                       </span>
@@ -1661,7 +1658,7 @@ export default function OpportunitiesPage({
                 )}
               {contest.contest_type === "cpm" &&
                 contest.contest_based_details?.cpm_contest?.total_budget !=
-                  null &&
+                null &&
                 contest.contest_based_details.cpm_contest.total_budget > 0 && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
@@ -1684,17 +1681,18 @@ export default function OpportunitiesPage({
                 contest.contest_based_details?.leaderboard_contest
                   ?.total_prize != null &&
                 contest.contest_based_details.leaderboard_contest.total_prize >
-                  0 && (
+                0 && (
                   <div className="flex items-center">
-                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <DollarSign className={cn("h-4 w-4 mr-2 flex-shrink-0", isDark ? "text-purple-400" : "text-purple-600")} />
                     <span
-                      style={{
-                        color: isDark ? "white" : "#475569",
-                        transition: "none",
-                      }}
+                      className={cn(
+                        "font-medium",
+                        isDark ? "text-purple-300" : "text-purple-700"
+                      )}
+                      style={{ transition: "none" }}
                     >
                       Total Prize Pool:{" "}
-                      <span className="font-medium">
+                      <span>
                         {formatMoney(
                           contest.contest_based_details.leaderboard_contest
                             .total_prize
@@ -1708,7 +1706,7 @@ export default function OpportunitiesPage({
             {/* Budget Spent Progress Bar for CPM contests */}
             {contest.contest_type === "cpm" &&
               contest.contest_based_details?.cpm_contest?.total_budget !=
-                null &&
+              null &&
               contest.contest_based_details.cpm_contest.total_budget > 0 &&
               (() => {
                 const totalBudget =
@@ -1894,65 +1892,58 @@ export default function OpportunitiesPage({
             />
           </div>
           {/* View Toggle Buttons - Right Side */}
-          <div className="flex gap-2 items-center">
-            <div className="flex items-center gap-1 border border-gray-400 rounded-md p-1">
+          <div className="flex flex-wrap gap-2 items-center w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-1 border border-gray-400 rounded-md p-1 min-w-0">
               <button
                 onClick={() => setMediaType("all")}
                 className={cn(
-                  "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
+                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium whitespace-nowrap",
                   mediaType === "all"
                     ? isDark
                       ? "bg-[#7F39EC] text-white"
                       : "bg-[#7F39EC] text-white"
                     : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 )}
                 title="All Opportunities"
               >
-                <LayoutGrid className="h-4 w-4 mr-2" />
+                <LayoutGrid className="h-4 w-4 mr-1.5 sm:mr-2 shrink-0" />
                 <span>All</span>
-                
               </button>
               <button
                 onClick={() => setMediaType("text")}
                 className={cn(
-                  "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
+                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium whitespace-nowrap",
                   mediaType === "text"
                     ? isDark
                       ? "bg-[#7F39EC] text-white"
                       : "bg-[#7F39EC] text-white"
                     : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 )}
                 title="Text/Image Opportunities"
               >
-                <FileType className="h-4 w-4 mr-2" />
-                <span>Text/Image</span>
-                <span className="flex sm:hidden lg:flex ml-1">
-                  Opportunities
-                </span>
+                <FileType className="h-4 w-4 mr-1.5 sm:mr-2 shrink-0" />
+                <span>Text/Image Opportunities</span>
               </button>
               <button
                 onClick={() => setMediaType("media")}
                 className={cn(
-                  "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
+                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium whitespace-nowrap",
                   mediaType === "media"
                     ? isDark
                       ? "bg-[#7F39EC] text-white"
                       : "bg-[#7F39EC] text-white"
                     : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 )}
                 title="Video Opportunities"
               >
-                <Film className="h-4 w-4 mr-2" />
-                <span>Video</span>
-                <span className="flex sm:hidden lg:flex ml-1">
-                  Opportunities
-                </span>
+                <Film className="h-4 w-4 mr-1.5 sm:mr-2 shrink-0" />
+                <span>Video Opportunities</span>
               </button>
             </div>
 
@@ -1966,8 +1957,8 @@ export default function OpportunitiesPage({
                       ? "bg-[#7F39EC] text-white"
                       : "bg-[#7F39EC] text-white"
                     : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 )}
                 title="Grid View"
               >
@@ -1984,8 +1975,8 @@ export default function OpportunitiesPage({
                       ? "bg-[#7F39EC] text-white"
                       : "bg-[#7F39EC] text-white"
                     : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 )}
                 title="List View"
               >
@@ -2208,17 +2199,23 @@ export default function OpportunitiesPage({
                         className={cn(
                           "capitalize text-sm px-3 py-1 font-medium border",
                           contest.status === "active" &&
-                            "bg-[#7F39EC] text-white",
+                          "bg-[#7F39EC] text-white",
                           contest.status === "upcoming" &&
-                            "bg-[#7F39EC] text-white",
+                          "bg-[#7F39EC] text-white",
                           contest.status === "ended" &&
-                            "bg-[#7F39EC] text-white",
+                          "bg-[#7F39EC] text-white",
                           !["active", "upcoming", "ended"].includes(
                             contest.status
                           ) && "bg-[#7F39EC] text-white"
                         )}
                       >
-                        {contest.status === "active" ? "Live" : contest.status === "upcoming" ? "Upcoming" : contest.status === "ended" ? "completed" : contest.status}
+                        {contest.status === "active"
+                          ? "Live"
+                          : contest.status === "upcoming"
+                            ? "Upcoming"
+                            : contest.status === "ended"
+                              ? "completed"
+                              : contest.status}
                       </Badge>
                       {contest.post_contest_status === "payouts_processed" && (
                         <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
@@ -2275,8 +2272,8 @@ export default function OpportunitiesPage({
                                         ? "bg-red-900/30 text-red-300 border-red-700/50"
                                         : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
                                       : campaignType === "raid"
-                                      ? "bg-red-50 text-red-700 border-red-200"
-                                      : "bg-cyan-50 text-cyan-700 border-cyan-200"
+                                        ? "bg-red-50 text-red-700 border-red-200"
+                                        : "bg-cyan-50 text-cyan-700 border-cyan-200"
                                   )}
                                 >
                                   {campaignType.toUpperCase()}
@@ -2310,26 +2307,26 @@ export default function OpportunitiesPage({
                           ?.flat_fee_bonus ||
                           contest.contest_based_details?.leaderboard_contest
                             ?.flat_fee_bonus) && (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[12px]",
-                              isDark
-                                ? "bg-green-900/30 text-green-300 border-green-700/50"
-                                : "bg-green-50 text-green-700 border-green-200"
-                            )}
-                          >
-                            <Gift className="h-3 w-3 mr-1" />
-                            {formatMoney(
-                              contest.contest_based_details?.cpm_contest
-                                ?.flat_fee_bonus ||
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[12px]",
+                                isDark
+                                  ? "bg-green-900/30 text-green-300 border-green-700/50"
+                                  : "bg-green-50 text-green-700 border-green-200"
+                              )}
+                            >
+                              <Gift className="h-3 w-3 mr-1" />
+                              {formatMoney(
+                                contest.contest_based_details?.cpm_contest
+                                  ?.flat_fee_bonus ||
                                 contest.contest_based_details
                                   ?.leaderboard_contest?.flat_fee_bonus ||
                                 0
-                            )}
-                            /submission
-                          </Badge>
-                        )}
+                              )}
+                              /submission
+                            </Badge>
+                          )}
                         {/* Content Type Badge - Don't show for Twitter text_image contests (we show campaign_type badge instead) */}
                         {(() => {
                           const isTwitterTextImage =
@@ -2365,8 +2362,8 @@ export default function OpportunitiesPage({
                             className={cn(
                               "text-[12px]",
                               isDark
-                                ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
-                                : "bg-amber-50 text-amber-700 border-amber-200"
+                                ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                                : "bg-purple-50 text-purple-700 border-purple-200"
                             )}
                           >
                             <Star className="h-3 w-3 mr-1" />
@@ -2500,11 +2497,11 @@ export default function OpportunitiesPage({
                           : [];
                         const contestSubcategories =
                           typeof contest.subcategories === "object" &&
-                          contest.subcategories !== null
+                            contest.subcategories !== null
                             ? (contest.subcategories as Record<
-                                string,
-                                string[]
-                              >)
+                              string,
+                              string[]
+                            >)
                             : {};
                         const contestInterests = Array.isArray(
                           contest.interests
@@ -2554,11 +2551,11 @@ export default function OpportunitiesPage({
                             {contest.contest_type === "cpm"
                               ? "CPM Based"
                               : contest.contest_type === "leaderboard"
-                              ? "Leaderboard"
-                              : contest.contest_type
-                              ? contest.contest_type.charAt(0).toUpperCase() +
-                                contest.contest_type.slice(1)
-                              : "N/A"}
+                                ? "Leaderboard"
+                                : contest.contest_type
+                                  ? contest.contest_type.charAt(0).toUpperCase() +
+                                  contest.contest_type.slice(1)
+                                  : "N/A"}
                           </span>
                         </span>
                       </div>
@@ -2569,7 +2566,7 @@ export default function OpportunitiesPage({
                             <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                             <span>
                               {contest.platform?.toLowerCase() === "twitter" ||
-                              contest.platform?.toLowerCase() === "x"
+                                contest.platform?.toLowerCase() === "x"
                                 ? "Points Rate: "
                                 : "CPM Rate: "}
                               <span
@@ -2584,7 +2581,7 @@ export default function OpportunitiesPage({
                                 )}{" "}
                                 {contest.platform?.toLowerCase() ===
                                   "twitter" ||
-                                contest.platform?.toLowerCase() === "x"
+                                  contest.platform?.toLowerCase() === "x"
                                   ? "/ 1k points"
                                   : "/ 1k views"}
                               </span>
@@ -2595,7 +2592,7 @@ export default function OpportunitiesPage({
                         contest.contest_based_details?.cpm_contest
                           ?.total_budget != null &&
                         contest.contest_based_details.cpm_contest.total_budget >
-                          0 && (
+                        0 && (
                           <div className="flex items-center">
                             <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                             <span>
@@ -2620,15 +2617,15 @@ export default function OpportunitiesPage({
                         contest.contest_based_details.leaderboard_contest
                           .total_prize > 0 && (
                           <div className="flex items-center">
-                            <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                            <span>
+                            <DollarSign className={cn("h-4 w-4 mr-2 flex-shrink-0", isDark ? "text-purple-400" : "text-purple-600")} />
+                            <span
+                              className={cn(
+                                "font-medium",
+                                isDark ? "text-purple-300" : "text-purple-700"
+                              )}
+                            >
                               Total Prize Pool:{" "}
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isDark ? "text-white" : "text-slate-700"
-                                )}
-                              >
+                              <span>
                                 {formatMoney(
                                   contest.contest_based_details
                                     .leaderboard_contest.total_prize
@@ -2667,7 +2664,7 @@ export default function OpportunitiesPage({
                       contest.contest_based_details?.cpm_contest
                         ?.total_budget != null &&
                       contest.contest_based_details.cpm_contest.total_budget >
-                        0 &&
+                      0 &&
                       (() => {
                         const totalBudget =
                           contest.contest_based_details.cpm_contest
@@ -2942,7 +2939,7 @@ export default function OpportunitiesPage({
                         value={size.toString()}
                         className={cn(
                           isDark &&
-                            "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
+                          "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
                         )}
                       >
                         {size}
