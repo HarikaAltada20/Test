@@ -93,7 +93,9 @@ export async function POST(
     // 1. Get contest and check if it's a raid campaign
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
-      .select("id, contest_type, contest_based_details, start_date, max_submissions_per_creator")
+      .select(
+        "id, contest_type, contest_based_details, start_date, max_submissions_per_creator, post_contest_status"
+      )
       .eq("id", contestId)
       .maybeSingle();
 
@@ -116,6 +118,23 @@ export async function POST(
         contestId
       );
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+    }
+
+    // Hard lock: same as refresh-metrics - no raid refresh after review begins
+    const postStatus = (contest as { post_contest_status?: string })
+      .post_contest_status;
+    if (
+      postStatus === "in_review" ||
+      postStatus === "verification_complete" ||
+      postStatus === "payouts_processed"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Metrics are locked after contest review begins. No further refresh allowed.",
+        },
+        { status: 400 }
+      );
     }
 
     const isCpmContest = contest.contest_type === "cpm";
@@ -560,7 +579,7 @@ export async function POST(
       return NextResponse.json({
         success: true,
         message: "Raid batch empty",
-        hasMore: (batchIndex! + 1) < totalBatches!,
+        hasMore: batchIndex! + 1 < totalBatches!,
         batchIndex,
         totalBatches,
       });
@@ -1038,7 +1057,9 @@ export async function POST(
     // IMPORTANT: We fetch ALL tweets up to join date using pagination. When batching, only this batch's participants.
     console.log(
       `[fetch-raid-engagements] Checking participant timelines for quote reposts (${
-        isBatchedRaid ? `batch ${(batchIndex ?? 0) + 1}/${totalBatches ?? 1}` : "all"
+        isBatchedRaid
+          ? `batch ${(batchIndex ?? 0) + 1}/${totalBatches ?? 1}`
+          : "all"
       })...`
     );
     for (const participant of batchParticipants) {
@@ -1175,18 +1196,18 @@ export async function POST(
     console.log(
       `[fetch-raid-engagements] Total direct engagements found: ${allEngagementTweets.length}`
     );
-    
+
     // Sort engagements by created_at (newest to oldest) for consistent ordering
     const sortedEngagements = [...allEngagementTweets].sort((a, b) => {
       const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
       const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
       return dateB - dateA; // Newest first
     });
-    
+
     console.log(
       `[fetch-raid-engagements] Sorted engagements from newest to oldest`
     );
-    
+
     const timeline = sortedEngagements;
 
     // 5. Update target tweet metrics in metrics table (target_current_*)
@@ -1740,20 +1761,26 @@ export async function POST(
     // ============================================================================
     console.log(
       isBatchedRaid
-        ? `[fetch-raid-engagements] Processing deleted engagements for this batch only (${batchParticipantIds?.size ?? 0} participants)`
+        ? `[fetch-raid-engagements] Processing deleted engagements for this batch only (${
+            batchParticipantIds?.size ?? 0
+          } participants)`
         : `[fetch-raid-engagements] Processing deleted engagements (we fetched all tweets up to join date, so missing = deleted)`
     );
 
     // Find engagements that were in DB but not in fresh API response
-    let engagementsToMarkAsDeleted = Array.from(existingEngagementsMap.keys()).filter(
-      (tweetId) => !freshEngagementIds.has(tweetId)
-    );
+    let engagementsToMarkAsDeleted = Array.from(
+      existingEngagementsMap.keys()
+    ).filter((tweetId) => !freshEngagementIds.has(tweetId));
     // When batching, only mark as deleted engagements belonging to this batch's participants
     if (isBatchedRaid && batchParticipantIds && batchParticipantIds.size > 0) {
-      engagementsToMarkAsDeleted = engagementsToMarkAsDeleted.filter((tweetId) => {
-        const row = existingEngagementsMap.get(tweetId);
-        return row?.creator_id != null && batchParticipantIds.has(row.creator_id);
-      });
+      engagementsToMarkAsDeleted = engagementsToMarkAsDeleted.filter(
+        (tweetId) => {
+          const row = existingEngagementsMap.get(tweetId);
+          return (
+            row?.creator_id != null && batchParticipantIds.has(row.creator_id)
+          );
+        }
+      );
     }
 
     if (engagementsToMarkAsDeleted.length > 0) {
@@ -1808,7 +1835,7 @@ export async function POST(
 
     // 8. Calculate total_* metrics from all participant engagements
     // This aggregates likes/replies/retweets/quotes/impressions from participant's engagements
-    
+
     // ============================================================================
     // ENFORCE SUBMISSION LIMITS: Replace older raid engagements with newer ones
     // This ensures creators can always have their newest engagements count toward the limit
@@ -1822,15 +1849,17 @@ export async function POST(
         `[fetch-raid-engagements] Enforcing raid submission cap (${maxSubmissionsPerCreator}) per creator`
       );
 
-      const { data: eligibleRaidEngagements, error: eligibleRaidEngagementsError } =
-        await supabaseAdmin
-          .from("twitter_campaign_tweets")
-          .select("creator_id, tweet_id, tweet_created_at")
-          .eq("contest_id", contestId)
-          .eq("is_eligible", true)
-          .not("target_tweet_id", "is", null) // Only raid engagements
-          .order("creator_id", { ascending: true })
-          .order("tweet_created_at", { ascending: false }); // Newest first
+      const {
+        data: eligibleRaidEngagements,
+        error: eligibleRaidEngagementsError,
+      } = await supabaseAdmin
+        .from("twitter_campaign_tweets")
+        .select("creator_id, tweet_id, tweet_created_at")
+        .eq("contest_id", contestId)
+        .eq("is_eligible", true)
+        .not("target_tweet_id", "is", null) // Only raid engagements
+        .order("creator_id", { ascending: true })
+        .order("tweet_created_at", { ascending: false }); // Newest first
 
       if (eligibleRaidEngagementsError) {
         console.error(

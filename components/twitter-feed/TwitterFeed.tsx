@@ -32,6 +32,8 @@ export interface TwitterFeedProps {
   lastMetricsUpdated?: string | null;
   cooldownType?: "opportunities" | "brand" | "admin"; // "opportunities" for creators (1 hour), "brand" for brands (3 minutes), "admin" for admins (1 minute)
   contestStatus?: string | null;
+  /** When set to in_review, verification_complete, or payouts_processed, Refresh Feed is disabled (metrics locked). */
+  postContestStatus?: string | null;
   disableRefreshWhenContestEnded?: boolean;
   /** When true (e.g. opportunities/creator view), show "Refresh my tweets" and allow refresh even when contest ended (creator-only refresh, 1h cooldown). */
   allowRefreshMyTweetsWhenEnded?: boolean;
@@ -81,6 +83,7 @@ export function TwitterFeed({
   lastMetricsUpdated,
   cooldownType = "opportunities", // Default to opportunities (creators) - 1 hour cooldown
   contestStatus,
+  postContestStatus = null,
   disableRefreshWhenContestEnded = false,
   allowRefreshMyTweetsWhenEnded = false,
   creatorOnlyUserId = null,
@@ -104,6 +107,10 @@ export function TwitterFeed({
   const tweetsLoadedRef = useRef<string | null>(null);
   const contestEnded =
     disableRefreshWhenContestEnded && isContestEnded(contestStatus);
+  const metricsLocked =
+    postContestStatus === "in_review" ||
+    postContestStatus === "verification_complete" ||
+    postContestStatus === "payouts_processed";
 
   // Reset loaded flag when contest changes (same pattern as leaderboard)
   useEffect(() => {
@@ -215,6 +222,15 @@ export function TwitterFeed({
   // All other operations (tab switch, pagination, filtering) only read from DB
   const handleRefreshFeed = async () => {
     if (isRefreshingFeed) return;
+    if (metricsLocked) {
+      toast({
+        title: "Refresh disabled",
+        description:
+          "Metrics are locked after contest review begins. No further refresh allowed.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (contestEnded && !allowRefreshMyTweetsWhenEnded) {
       toast({
         title: "Contest Ended",
@@ -410,10 +426,13 @@ export function TwitterFeed({
               const disableByContestEnded =
                 contestEnded && !allowRefreshMyTweetsWhenEnded;
               const isDisabled =
+                metricsLocked ||
                 disableByContestEnded ||
                 isRefreshingFeed ||
                 !cooldownInfo.canRefresh;
-              const disabledReason = disableByContestEnded
+              const disabledReason = metricsLocked
+                ? "Metrics are locked after contest review begins"
+                : disableByContestEnded
                 ? "Contest has ended"
                 : !cooldownInfo.canRefresh
                 ? `Please wait ${waitLabel}`
@@ -423,6 +442,8 @@ export function TwitterFeed({
               const defaultLabel = allowRefreshMyTweetsWhenEnded
                 ? "Refresh my tweets"
                 : "Refresh Feed";
+              // Keep the button text stable (Refresh Feed / Refresh my tweets),
+              // even when locked; only the disabled state & tooltip explain why
               const label = disableByContestEnded
                 ? "Contest Ended"
                 : isRefreshingFeed

@@ -1,38 +1,29 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from './utils/supabase/middleware'
-import { createClient } from '@/utils/supabase/server'
 
 export async function middleware(request: NextRequest) {
-  // First, handle the session update (your original working code)
-  const response = await updateSession(request)
+  // Session update and auth; returns response plus user/supabase to avoid duplicate getUser()
+  const { response, user, supabase } = await updateSession(request)
   
-  // Then add route protection for authenticated users
+  // If updateSession already redirected (e.g. unauthenticated on protected path), return that response
+  const location = response.headers.get('Location')
+  if (location) return response
+  
+  // Then add route protection for authenticated users (reuse user/supabase from updateSession)
   const { pathname } = request.nextUrl
   
   // Auth route protection - redirect logged-in users away from auth pages
   if (pathname.startsWith('/auth/')) {
-    try {
-      const supabase = await createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (user) {
-        // User is logged in, redirect to dashboard
-        const redirectUrl = new URL('/dashboard', request.url)
-        return NextResponse.redirect(redirectUrl)
-      }
-    } catch (error) {
-      console.error('Auth route protection error:', error)
-      // Don't block the request if there's an error checking auth
+    if (user) {
+      const redirectUrl = new URL('/dashboard', request.url)
+      return NextResponse.redirect(redirectUrl)
     }
   }
   
   // Only check permissions for dashboard routes
   if (pathname.startsWith('/dashboard')) {
     try {
-      const supabase = await createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      // If user is authenticated, check permissions
+      // If user is authenticated, check permissions (reuse user/supabase from updateSession)
       if (user) {
         const { data: userData } = await supabase
           .from('users')

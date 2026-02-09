@@ -1,7 +1,15 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isRefreshTokenError } from './auth-server'
 
-export async function updateSession(request: NextRequest) {
+export type UpdateSessionResult = {
+  response: NextResponse
+  user: User | null
+  supabase: SupabaseClient
+}
+
+export async function updateSession(request: NextRequest): Promise<UpdateSessionResult> {
     let supabaseResponse = NextResponse.next({
         request,
     })
@@ -52,9 +60,19 @@ export async function updateSession(request: NextRequest) {
         }
     )
 
-    const {
-        data: { user },
-    } = await supabase.auth.getUser()
+    let user: User | null = null
+    try {
+        const { data } = await supabase.auth.getUser()
+        user = data.user
+    } catch (err) {
+        if (isRefreshTokenError(err)) {
+            await supabase.auth.signOut()
+            user = null
+        } else {
+            throw err
+        }
+    }
+
     const currentPath = request.nextUrl.pathname;
 
     // --- Handle Unauthenticated Users ---
@@ -69,11 +87,12 @@ export async function updateSession(request: NextRequest) {
         // If an unauthenticated user is trying to access one of these,
         // and it's NOT one of the explicitly allowed public auth paths, redirect to signin.
         if (!isPublicAuthPath) {
-                    console.log(`Middleware: No user, path: ${currentPath}. Redirecting to /auth/signin.`);
-        return NextResponse.redirect(new URL('/auth/signin', request.url));
+            const signInUrl = new URL('/auth/signin', request.url)
+            signInUrl.searchParams.set('next', currentPath)
+            return { response: NextResponse.redirect(signInUrl), user: null, supabase }
         }
         // If it's an allowed public auth path (or /choose-username for direct nav), let unauthenticated user proceed.
-        return supabaseResponse;
+        return { response: supabaseResponse, user: null, supabase };
     }
 
     // --- Handle Authenticated Users (User Exists) ---
@@ -92,7 +111,7 @@ export async function updateSession(request: NextRequest) {
     if (profileError && profileError.code !== 'PGRST116') { // PGRST116: "No rows found"
         console.error(`Middleware: Error fetching profile for user ${user.id}:`, profileError.message);
         // Allow request to proceed to avoid blocking user for a temporary DB issue. Error is logged.
-        return supabaseResponse;
+        return { response: supabaseResponse, user, supabase };
     }
 
     const hasUsername = userProfile?.username;
@@ -100,7 +119,7 @@ export async function updateSession(request: NextRequest) {
     // Scenario 1: User has a username but is trying to access /choose-username again.
     if (hasUsername && currentPath.startsWith('/choose-username')) {
         console.log(`Middleware: User ${user.id} has username, redirecting from /choose-username to /dashboard.`);
-        return NextResponse.redirect(new URL('/dashboard', request.url));
+        return { response: NextResponse.redirect(new URL('/dashboard', request.url)), user, supabase };
     }
 
     // Scenario 2: User does NOT have a username and is on a protected path
@@ -111,9 +130,9 @@ export async function updateSession(request: NextRequest) {
         !currentPath.startsWith('/auth')) {
         // This implies they are on a /dashboard/* path without a username.
         console.log(`Middleware: User ${user.id} has no username, path: ${currentPath}. Redirecting to /choose-username.`);
-        return NextResponse.redirect(new URL('/choose-username', request.url));
+        return { response: NextResponse.redirect(new URL('/choose-username', request.url)), user, supabase };
     }
 
     // All other cases for authenticated user (e.g., has username and is on dashboard), let them proceed.
-    return supabaseResponse
+    return { response: supabaseResponse, user, supabase };
 }

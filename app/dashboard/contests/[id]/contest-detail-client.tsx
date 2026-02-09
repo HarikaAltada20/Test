@@ -1151,16 +1151,35 @@ export default function ContestDetailClient({
           );
         }
       } else {
-        // For non-Twitter submissions, accumulate regular metrics
-        group.metrics.views += submission.views || 0;
-        group.metrics.likes += submission.other_stats?.likes || 0;
-        group.metrics.comments += submission.other_stats?.comments || 0;
-        group.metrics.shares += submission.other_stats?.shares || 0;
-        group.metrics.saves += submission.other_stats?.saves || 0;
-        group.metrics.reach += submission.other_stats?.reach || 0;
-        group.metrics.interactions += submission.other_stats?.interactions || 0;
+        // For non-Twitter submissions (YouTube, Instagram, others), accumulate metrics
+        // using extractPlatformMetrics so that platform-specific shapes (e.g. other_stats.instagram / other_stats.youtube)
+        // are handled consistently between normal view and creator-wise view.
+        const platformMetrics: any = extractPlatformMetrics(submission);
 
-        // For regular submissions, accumulate base_points and points
+        group.metrics.views += platformMetrics.views || 0;
+        group.metrics.likes += platformMetrics.likes || 0;
+        group.metrics.comments += platformMetrics.comments || 0;
+        group.metrics.shares += platformMetrics.shares || 0;
+
+        // Instagram / other platforms may expose additional metrics
+        group.metrics.saves += platformMetrics.saves || 0;
+        group.metrics.reach += platformMetrics.reach || 0;
+
+        // Prefer total_interactions when available (Instagram), otherwise fall back to interactions
+        group.metrics.interactions +=
+          platformMetrics.total_interactions ||
+          platformMetrics.interactions ||
+          0;
+
+        // Watch time metrics (primarily for Instagram Reels)
+        // We accumulate the per-submission averages and later divide by totalCount
+        // to get a creator-level average in the UI.
+        group.metrics.avg_watch_time_ms +=
+          platformMetrics.avg_watch_time_ms || 0;
+        group.metrics.total_watch_time_ms +=
+          platformMetrics.total_watch_time_ms || 0;
+
+        // For regular submissions, still accumulate base_points and points from other_stats
         group.metrics.base_points += submission.other_stats?.base_points || 0;
         group.metrics.points += submission.other_stats?.points || 0;
       }
@@ -2971,8 +2990,9 @@ export default function ContestDetailClient({
 
     setIsRefreshingMetrics(true);
 
-    let result: { queued?: boolean; error?: string; message?: string } | undefined =
-      undefined;
+    let result:
+      | { queued?: boolean; error?: string; message?: string }
+      | undefined = undefined;
     try {
       // Add timeout for long-running requests
       // Twitter refresh can take 60-90+ seconds (especially for raid campaigns with multiple API calls)
@@ -3029,7 +3049,9 @@ export default function ContestDetailClient({
       } else {
         toast({
           title: "Success! 🎉",
-          description: `${result?.message ?? "Budget and leaderboard updated!"}`,
+          description: `${
+            result?.message ?? "Budget and leaderboard updated!"
+          }`,
         });
         if (currentContest.platform?.toLowerCase() === "twitter") {
           fetchTwitterMetrics();
@@ -3138,7 +3160,7 @@ export default function ContestDetailClient({
     return <Share2 className="h-6 w-6 text-gray-600 flex-shrink-0" />;
   };
 
-  const extractPlatformMetrics = (submission: Submission) => {
+  function extractPlatformMetrics(submission: Submission) {
     const platform = submission.platform?.toLowerCase();
     const stats = submission.other_stats || {};
     const baseViews = submission.views || 0;
@@ -3191,7 +3213,7 @@ export default function ContestDetailClient({
         engagement_rate: stats.engagement_rate || 0,
       };
     }
-  };
+  }
 
   function calculateSubmissionExpectedEarnings(submission: Submission) {
     let expectedEarnings = submission.earnings || 0;
@@ -5136,7 +5158,7 @@ export default function ContestDetailClient({
                   {currentContest.brief_html ? (
                     <div
                       className={cn(
-                        "prose prose-md max-w-none p-4 rounded-lg border",
+                        "prose prose-md max-w-none p-4 rounded-lg border [&_a]:break-words [&_a]:hover:underline",
                         isDark
                           ? "bg-[#170337] text-white border-gray-600 [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
                           : "bg-white text-foreground"
@@ -7379,7 +7401,7 @@ export default function ContestDetailClient({
                     >
                       <div
                         className={cn(
-                          "prose prose-md max-w-none",
+                          "prose prose-md max-w-none [&_a]:break-words [&_a]:overflow-wrap-anywhere [&_a]:hover:underline",
                           isDark
                             ? "bg-[#170337] text-white prose-invert border-gray-600"
                             : "bg-white text-foreground"
@@ -11776,6 +11798,7 @@ export default function ContestDetailClient({
                       | "brand"
                       | "admin"
                   }
+                  postContestStatus={currentContest?.post_contest_status}
                 />
               </div>
             </TabPanel>
@@ -11792,41 +11815,39 @@ export default function ContestDetailClient({
                 <div className="flex items-center justify-between">
                   <CardTitle>Contest Analytics</CardTitle>
                   {/* Refresh Metrics Button - Only show for Twitter campaigns */}
-                  {currentContest?.platform?.toLowerCase() === "twitter" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRefreshMetrics}
-                      disabled={isRefreshingMetrics || !cooldownInfo.canRefresh}
-                      className={cn(
-                        "flex items-center gap-2",
-                        isDark
-                          ? "border-slate-700 text-slate-300 hover:bg-slate-800"
-                          : "border-slate-300 text-slate-700 hover:bg-slate-50"
-                      )}
-                      title={
-                        !cooldownInfo.canRefresh
-                          ? `Please wait ${
-                              cooldownInfo.remainingMinutes
-                            } more minute${
-                              cooldownInfo.remainingMinutes !== 1 ? "s" : ""
-                            }`
-                          : "Refresh metrics from Twitter API"
-                      }
-                    >
-                      <RefreshCw
-                        className={cn(
-                          "h-4 w-4",
-                          isRefreshingMetrics && "animate-spin"
-                        )}
-                      />
-                      {isRefreshingMetrics
+                  {currentContest?.platform?.toLowerCase() === "twitter" &&
+                    (() => {
+                      const refreshBtn = getRefreshButtonState();
+                      const analyticsRefreshLabel = isRefreshingMetrics
                         ? "Updating..."
-                        : !cooldownInfo.canRefresh
-                        ? `Wait ${cooldownInfo.remainingMinutes}m`
-                        : "Refresh Metrics"}
-                    </Button>
-                  )}
+                        : "Refresh Metrics";
+                      return (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRefreshMetrics}
+                          disabled={refreshBtn.isDisabled}
+                          className={cn(
+                            "flex items-center gap-2",
+                            isDark
+                              ? "border-slate-700 text-slate-300 hover:bg-slate-800"
+                              : "border-slate-300 text-slate-700 hover:bg-slate-50"
+                          )}
+                          title={
+                            refreshBtn.disabledReason ||
+                            "Refresh metrics from Twitter API"
+                          }
+                        >
+                          <RefreshCw
+                            className={cn(
+                              "h-4 w-4",
+                              isRefreshingMetrics && "animate-spin"
+                            )}
+                          />
+                          {analyticsRefreshLabel}
+                        </Button>
+                      );
+                    })()}
                 </div>
                 {/* Analytics Filter Tabs */}
                 <div className="mt-4">

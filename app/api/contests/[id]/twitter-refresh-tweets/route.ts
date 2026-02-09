@@ -75,9 +75,26 @@ export async function POST(
 
     const { data: contestCheck } = await supabaseAdmin
       .from("contests")
-      .select("contest_based_details, platform")
+      .select("contest_based_details, platform, post_contest_status")
       .eq("id", contestId)
       .maybeSingle();
+
+    // Hard lock: same as refresh-metrics - no tweet fetch after review starts
+    const postStatus = (contestCheck as { post_contest_status?: string } | null)
+      ?.post_contest_status;
+    if (
+      postStatus === "in_review" ||
+      postStatus === "verification_complete" ||
+      postStatus === "payouts_processed"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Metrics are locked after contest review begins. No further refresh allowed.",
+        },
+        { status: 400 }
+      );
+    }
 
     const platform = (contestCheck?.platform ?? "").toString().toLowerCase();
     const isTwitterPlatform = platform === "twitter" || platform === "x";
