@@ -991,7 +991,7 @@ export default function SubmitContentPage({
         const videoData: YouTubeVideo = responseData.videoInfo;
         if (videoData?.snippet?.publishedAt) {
           if (isContentTooOld(videoData.snippet.publishedAt)) {
-            const errorMessage = `You can only submit the content which is posted within 2 days. This video was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
+            const errorMessage = `You can only submit the content which is posted within ${SUBMISSION_WINDOW_VALUE} ${SUBMISSION_WINDOW_UNIT}. This video was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
             setSubmissionTimingError(errorMessage);
             setVideoPreview(videoData);
             toast({
