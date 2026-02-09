@@ -143,6 +143,8 @@ type LeaderboardEntry = {
   user_full_name: string;
   creator_pfp_url: string | null;
   user_platform_pfp_url: string | null;
+
+  rank?: number;
 };
 
 // Store for generated dummy data to avoid re-computation if count doesn't change
@@ -405,14 +407,16 @@ export function ContestClientPage({
     return userSubmissions.length > 0 ? userSubmissions[0] : null;
   }, [userSubmissions]);
 
-  // Memoized rank lookup map for O(1) rank access
   const rankLookupMap = useMemo(() => {
-    const map = new Map();
+    const map = new Map<string, number>();
     leaderboard.forEach((entry, index) => {
-      map.set(entry.id, index + 1);
+      const rank =
+        entry.rank ??
+        (leaderboardCurrentPage - 1) * leaderboardItemsPerPage + (index + 1);
+      map.set(entry.id, rank);
     });
     return map;
-  }, [leaderboard]);
+  }, [leaderboard, leaderboardCurrentPage, leaderboardItemsPerPage]);
 
   // Memoized grouped leaderboard by creator (for creator-wise display)
   const groupedLeaderboardByCreator = useMemo(() => {
@@ -458,6 +462,7 @@ export function ContestClientPage({
         creator_pfp_url: string | null;
         user_platform_pfp_url: string | null;
         submissions: LeaderboardEntry[];
+        submission_ranks: number[];
         total_views: number;
         total_earnings: number;
         best_submission: LeaderboardEntry | null;
@@ -468,11 +473,15 @@ export function ContestClientPage({
 
     leaderboard.forEach((entry, index) => {
       const existing = grouped.get(entry.creator_id);
-      const currentRank = index + 1;
+      // Prefer API rank (matches contest/brand) for correct Winning Zone / expected reward
+      const currentRank =
+        entry.rank ??
+        (leaderboardCurrentPage - 1) * leaderboardItemsPerPage + (index + 1);
 
       if (existing) {
         // Add this submission to the creator's group
         existing.submissions.push(entry);
+        existing.submission_ranks.push(currentRank);
         existing.total_views += entry.views || 0;
         existing.total_earnings += entry.earnings || 0;
         existing.best_rank = Math.min(existing.best_rank, currentRank);
@@ -498,6 +507,7 @@ export function ContestClientPage({
           creator_pfp_url: entry.creator_pfp_url,
           user_platform_pfp_url: entry.user_platform_pfp_url,
           submissions: [entry],
+          submission_ranks: [currentRank],
           total_views: entry.views || 0,
           total_earnings: entry.earnings || 0,
           best_submission: entry,
@@ -516,7 +526,30 @@ export function ContestClientPage({
       // If ranks are equal, sort by total views
       return b.total_views - a.total_views;
     });
-  }, [leaderboard, leaderboardDisplayMode, contest?.platform]);
+  }, [
+    leaderboard,
+    leaderboardDisplayMode,
+    contest?.platform,
+    leaderboardCurrentPage,
+    leaderboardItemsPerPage,
+  ]);
+
+  // Keep track of how many creators are on each page in creator-wise view
+  // so we can render continuous creator ranks across pagination
+  useEffect(() => {
+    if (
+      leaderboardDisplayMode === "creator" &&
+      groupedLeaderboardByCreator &&
+      groupedLeaderboardByCreator.length > 0
+    ) {
+      creatorsPerPageRef.current[leaderboardCurrentPage] =
+        groupedLeaderboardByCreator.length;
+    }
+  }, [
+    leaderboardDisplayMode,
+    groupedLeaderboardByCreator,
+    leaderboardCurrentPage,
+  ]);
 
   // Get user's submissions (now memoized)
   const getUserSubmissions = () => userSubmissions;
@@ -543,8 +576,9 @@ export function ContestClientPage({
 
     setIsRefreshingMetrics(true);
 
-    let result: { queued?: boolean; error?: string; lastMetricsUpdated?: string } | undefined =
-      undefined;
+    let result:
+      | { queued?: boolean; error?: string; lastMetricsUpdated?: string }
+      | undefined = undefined;
     try {
       const response = await fetch(
         `/api/contests/${contest.id}/refresh-metrics`,
@@ -1349,6 +1383,8 @@ export function ContestClientPage({
   const emptyDataRefetchAttemptedRef = useRef<string | null>(null);
   // Track if my rank has been fetched to prevent repeated calls
   const myRankFetchedRef = useRef<string | null>(null);
+  // Track how many creators are shown per page in creator-wise view so ranks can be continuous
+  const creatorsPerPageRef = useRef<Record<number, number>>({});
 
   // Reset loaded flag when contest changes
   useEffect(() => {
@@ -4605,7 +4641,7 @@ export function ContestClientPage({
                     {contest.brief_html ? (
                       <div
                         className={cn(
-                          "prose prose-sm max-w-none",
+                          "prose prose-sm max-w-none [&_a]:break-words [&_a]:hover:underline",
                           isDark
                             ? "prose-invert text-white [&_*]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_b]:!text-white [&_em]:!text-white [&_i]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_a]:!text-blue-400 [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white"
                             : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700"
@@ -4694,7 +4730,7 @@ export function ContestClientPage({
                     {(contest as any).rules_html ? (
                       <div
                         className={cn(
-                          "prose prose-sm max-w-none",
+                          "prose prose-sm max-w-none [&_a]:break-words [&_a]:hover:underline",
                           isDark
                             ? "prose-invert text-white [&_*]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_b]:!text-white [&_em]:!text-white [&_i]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_a]:!text-blue-400 [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white"
                             : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700"
@@ -5319,6 +5355,7 @@ export function ContestClientPage({
                   lastMetricsUpdated={contest?.last_metrics_updated}
                   cooldownType="opportunities"
                   contestStatus={contest?.status}
+                  postContestStatus={contest?.post_contest_status}
                   disableRefreshWhenContestEnded
                   creatorOnlyUserId={undefined}
                 />
@@ -5956,12 +5993,14 @@ export function ContestClientPage({
                                       displayEntry.status === "paid" ||
                                       (isTwitter &&
                                         ((displayEntry as any).paid === true ||
-                                          contest?.post_contest_status === "payouts_processed"));
+                                          contest?.post_contest_status ===
+                                            "payouts_processed"));
                                     const earningsLabel = isEarned
-                                      ? (isTwitter &&
-                                        contest?.post_contest_status === "payouts_processed"
+                                      ? isTwitter &&
+                                        contest?.post_contest_status ===
+                                          "payouts_processed"
                                         ? "Paid"
-                                        : "Earned")
+                                        : "Earned"
                                       : "Expected";
 
                                     // Check for flat fee bonus in detailed mode
@@ -6274,7 +6313,8 @@ export function ContestClientPage({
                                                   let prizeDisplay = null;
                                                   if (submission.earnings > 0) {
                                                     const isTwitter =
-                                                      contest?.platform === "twitter" ||
+                                                      contest?.platform ===
+                                                        "twitter" ||
                                                       contest?.platform === "x";
                                                     const isEarned =
                                                       submission.status ===
@@ -6282,14 +6322,17 @@ export function ContestClientPage({
                                                       submission.status ===
                                                         "paid" ||
                                                       (isTwitter &&
-                                                        ((submission as any).paid === true ||
-                                                          contest?.post_contest_status === "payouts_processed"));
+                                                        ((submission as any)
+                                                          .paid === true ||
+                                                          contest?.post_contest_status ===
+                                                            "payouts_processed"));
                                                     const earningsLabel =
                                                       isEarned
-                                                        ? (isTwitter &&
-                                                          contest?.post_contest_status === "payouts_processed"
+                                                        ? isTwitter &&
+                                                          contest?.post_contest_status ===
+                                                            "payouts_processed"
                                                           ? "Paid"
-                                                          : "Earned")
+                                                          : "Earned"
                                                         : "Expected";
 
                                                     const flatFeeBonus =
@@ -7320,15 +7363,34 @@ export function ContestClientPage({
                       ? // Creator-wise display
                         groupedLeaderboardByCreator.map(
                           (creatorGroup, index) => {
-                            // For Twitter, use current_rank from API; for others, calculate from pagination
-                            const rank =
-                              contest?.platform === "twitter" &&
+                            // For Twitter, use current_rank from API.
+                            // For other platforms, use a continuous creator rank across pages
+                            // based on how many creators were shown on previous pages.
+                            const isTwitterCreator =
+                              contest?.platform === "twitter" ||
+                              contest?.platform === "x";
+
+                            let rank: number;
+                            if (
+                              isTwitterCreator &&
                               (creatorGroup as any).best_rank
-                                ? (creatorGroup as any).best_rank
-                                : (leaderboardCurrentPage - 1) *
-                                    leaderboardItemsPerPage +
-                                  index +
-                                  1;
+                            ) {
+                              rank = (creatorGroup as any).best_rank;
+                            } else {
+                              const creatorOffset = Object.entries(
+                                creatorsPerPageRef.current
+                              )
+                                .filter(
+                                  ([page]) =>
+                                    Number(page) > 0 &&
+                                    Number(page) < leaderboardCurrentPage
+                                )
+                                .reduce(
+                                  (sum, [, count]) => sum + (count as number),
+                                  0
+                                );
+                              rank = creatorOffset + index + 1;
+                            }
                             let prizeDisplay = null;
 
                             // Calculate total earnings including bonuses
@@ -7366,7 +7428,10 @@ export function ContestClientPage({
                               twitterPaid ||
                               (isTwitter && hasPayoutsProcessed);
                             const earningsLabel = shouldShowActualEarnings
-                              ? (isTwitter && (hasPayoutsProcessed || twitterPaid) ? "Paid" : "Total Earned")
+                              ? isTwitter &&
+                                (hasPayoutsProcessed || twitterPaid)
+                                ? "Paid"
+                                : "Total Earned"
                               : contestStatus === "active" &&
                                 isLeaderboardContest
                               ? "Winning Zone"
@@ -7428,19 +7493,26 @@ export function ContestClientPage({
                                   ?.leaderboard_contest?.prizes
                               )
                             ) {
-                              const prizeInfo = (
-                                contest.contest_based_details
-                                  .leaderboard_contest.prizes as PrizeInfo[]
-                              ).find(
-                                (p) => p.position === creatorGroup.best_rank
-                              );
-                              if (prizeInfo) {
+                              const prizes = contest.contest_based_details
+                                .leaderboard_contest.prizes as PrizeInfo[];
+                              // Sum prize for each of this creator's submissions
+                              const submissionRanks = (
+                                creatorGroup as { submission_ranks?: number[] }
+                              ).submission_ranks ?? [creatorGroup.best_rank];
+                              let totalPrizeAmount = 0;
+                              for (const rank of submissionRanks) {
+                                const info = prizes.find(
+                                  (p) => p.position === rank
+                                );
+                                if (info) totalPrizeAmount += info.amount;
+                              }
+                              if (totalPrizeAmount > 0) {
                                 const prizeText =
                                   contest.status === "active"
                                     ? "Winning Zone"
                                     : "Prize";
                                 const totalPrize =
-                                  prizeInfo.amount +
+                                  totalPrizeAmount +
                                   flatFeeBonus * creatorGroup.submission_count;
 
                                 if (
@@ -7454,7 +7526,10 @@ export function ContestClientPage({
                                         {prizeText}: {formatMoney(totalPrize)}
                                       </div>
                                       <div className="text-xs text-amber-600 dark:text-amber-500">
-                                        ({formatMoney(prizeInfo.amount)} Prize +{" "}
+                                        ({formatMoney(totalPrizeAmount)} Prize
+                                        {submissionRanks.length > 1 &&
+                                          ` (${submissionRanks.length} videos)`}{" "}
+                                        +{" "}
                                         {formatMoney(
                                           flatFeeBonus *
                                             creatorGroup.submission_count
@@ -7718,11 +7793,17 @@ export function ContestClientPage({
                         )
                       : // Submission-wise display (original)
                         leaderboard.map((entry, index) => {
-                          const rank =
+                          // Display rank: always sequential 1, 2, 3... (position in list)
+                          const displayRank =
                             (leaderboardCurrentPage - 1) *
                               leaderboardItemsPerPage +
                             index +
                             1;
+                          // Actual rank for prize/Winning Zone lookup (API rank)
+                          const actualRank =
+                            entry.rank ??
+                            rankLookupMap.get(entry.id) ??
+                            displayRank;
                           let prizeDisplay = null;
 
                           if (entry.earnings > 0) {
@@ -7736,12 +7817,14 @@ export function ContestClientPage({
                                 entry.status === "paid" ||
                                 (isTwitter &&
                                   ((entry as any).paid === true ||
-                                    contest?.post_contest_status === "payouts_processed"));
+                                    contest?.post_contest_status ===
+                                      "payouts_processed"));
                               const earningsLabel = isEarned
-                                ? (isTwitter &&
-                                  contest?.post_contest_status === "payouts_processed"
+                                ? isTwitter &&
+                                  contest?.post_contest_status ===
+                                    "payouts_processed"
                                   ? "Paid"
-                                  : "Earned")
+                                  : "Earned"
                                 : "Expected";
 
                               // Check if there's a flat fee bonus
@@ -7790,7 +7873,8 @@ export function ContestClientPage({
                               // For leaderboard contests with earnings (Twitter: "Paid" when payouts_processed)
                               const leaderboardLabel =
                                 isTwitter &&
-                                contest?.post_contest_status === "payouts_processed"
+                                contest?.post_contest_status ===
+                                  "payouts_processed"
                                   ? "Paid"
                                   : "Earned";
                               if (
@@ -7815,7 +7899,8 @@ export function ContestClientPage({
                                             : "text-green-600"
                                         )}
                                       >
-                                        {leaderboardLabel}: {formatMoney(totalEarnings)}
+                                        {leaderboardLabel}:{" "}
+                                        {formatMoney(totalEarnings)}
                                       </div>
                                       <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
                                         <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
@@ -7834,7 +7919,8 @@ export function ContestClientPage({
                                 } else {
                                   prizeDisplay = (
                                     <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                      {leaderboardLabel}: {formatMoney(entry.earnings)}
+                                      {leaderboardLabel}:{" "}
+                                      {formatMoney(entry.earnings)}
                                     </div>
                                   );
                                 }
@@ -7842,7 +7928,8 @@ export function ContestClientPage({
                                 // Simple view for leaderboard or non-CPM contests
                                 prizeDisplay = (
                                   <span className="font-semibold text-green-600 dark:text-green-400">
-                                    {leaderboardLabel}: {formatMoney(entry.earnings)}
+                                    {leaderboardLabel}:{" "}
+                                    {formatMoney(entry.earnings)}
                                   </span>
                                 );
                               }
@@ -7857,7 +7944,7 @@ export function ContestClientPage({
                             const prizeInfo = (
                               contest.contest_based_details.leaderboard_contest
                                 .prizes as PrizeInfo[]
-                            ).find((p) => p.position === rank);
+                            ).find((p) => p.position === actualRank);
                             if (prizeInfo) {
                               const prizeText =
                                 contest.status === "active"
@@ -7917,7 +8004,7 @@ export function ContestClientPage({
                               <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
                                 <div className="flex items-center space-x-3 md:space-x-4">
                                   <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
-                                    {rank}
+                                    {displayRank}
                                   </h2>
                                   <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
                                     <AvatarImage

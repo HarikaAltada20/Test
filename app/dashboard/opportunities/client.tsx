@@ -1894,12 +1894,12 @@ export default function OpportunitiesPage({
             />
           </div>
           {/* View Toggle Buttons - Right Side */}
-          <div className="flex gap-2 items-center">
-            <div className="flex items-center gap-1 border border-gray-400 rounded-md p-1">
+          <div className="flex flex-wrap gap-2 items-center w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-1 border border-gray-400 rounded-md p-1 min-w-0">
               <button
                 onClick={() => setMediaType("all")}
                 className={cn(
-                  "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
+                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium whitespace-nowrap",
                   mediaType === "all"
                     ? isDark
                       ? "bg-[#7F39EC] text-white"
@@ -1910,14 +1910,13 @@ export default function OpportunitiesPage({
                 )}
                 title="All Opportunities"
               >
-                <LayoutGrid className="h-4 w-4 mr-2" />
+                <LayoutGrid className="h-4 w-4 mr-1.5 sm:mr-2 shrink-0" />
                 <span>All</span>
-                
               </button>
               <button
                 onClick={() => setMediaType("text")}
                 className={cn(
-                  "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
+                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium whitespace-nowrap",
                   mediaType === "text"
                     ? isDark
                       ? "bg-[#7F39EC] text-white"
@@ -1928,16 +1927,13 @@ export default function OpportunitiesPage({
                 )}
                 title="Text/Image Opportunities"
               >
-                <FileType className="h-4 w-4 mr-2" />
-                <span>Text/Image</span>
-                <span className="flex sm:hidden lg:flex ml-1">
-                  Opportunities
-                </span>
+                <FileType className="h-4 w-4 mr-1.5 sm:mr-2 shrink-0" />
+                <span>Text/Image Opportunities</span>
               </button>
               <button
                 onClick={() => setMediaType("media")}
                 className={cn(
-                  "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
+                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium whitespace-nowrap",
                   mediaType === "media"
                     ? isDark
                       ? "bg-[#7F39EC] text-white"
@@ -1948,11 +1944,8 @@ export default function OpportunitiesPage({
                 )}
                 title="Video Opportunities"
               >
-                <Film className="h-4 w-4 mr-2" />
-                <span>Video</span>
-                <span className="flex sm:hidden lg:flex ml-1">
-                  Opportunities
-                </span>
+                <Film className="h-4 w-4 mr-1.5 sm:mr-2 shrink-0" />
+                <span>Video Opportunities</span>
               </button>
             </div>
 
