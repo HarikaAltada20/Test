@@ -182,26 +182,31 @@ export async function POST(
         typeof campaignType === "string" &&
         campaignType.toLowerCase().trim() === "raid";
 
-      // Raid → enqueue job for fetch-raid-engagements. Awareness → enqueue job for twitter-refresh-tweets.
+      // Raid → enqueue job for fetch-raid-engagements (batched by participant). Awareness → enqueue job for twitter-refresh-tweets.
+      const supabaseAdmin = createAdminSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+      const { count: participantCountResult } = await supabaseAdmin
+        .from("twitter_campaign_participants")
+        .select("*", { count: "exact", head: true })
+        .eq("contest_id", contestId)
+        .eq("is_active", true);
+      const participantCount = participantCountResult ?? 0;
+      const BATCH_SIZE = 5;
+      const totalBatches = Math.max(
+        1,
+        Math.ceil(participantCount / BATCH_SIZE)
+      );
       let job: Parameters<typeof enqueueMetricsRefreshJob>[0];
       if (isRaidCampaign) {
-        job = { contestId, isRaid: true };
+        job = {
+          contestId,
+          isRaid: true,
+          batchIndex: 0,
+          totalBatches,
+        };
       } else {
-        const supabaseAdmin = createAdminSupabaseClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
-        const { count } = await supabaseAdmin
-          .from("twitter_campaign_participants")
-          .select("*", { count: "exact", head: true })
-          .eq("contest_id", contestId)
-          .eq("is_active", true);
-        const participantCount = count ?? 0;
-        const BATCH_SIZE = 5;
-        const totalBatches = Math.max(
-          1,
-          Math.ceil(participantCount / BATCH_SIZE)
-        );
         job = { contestId, isRaid: false, batchIndex: 0, totalBatches };
       }
 

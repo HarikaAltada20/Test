@@ -19,9 +19,8 @@ import {
 } from "@/lib/qstash";
 
 function getBaseUrl(): string {
-  const url = process.env.VERCEL_URL;
-  if (url) return `https://${url}`;
-  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const url = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
+  return url.replace(/\/$/, "");
 }
 
 export async function GET(request: Request) {
@@ -99,9 +98,22 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
     }`
   );
 
-  // Raid campaign → fetch-raid-engagements only. Awareness → twitter-refresh-tweets only.
+  // Raid campaign → fetch-raid-engagements only (batched by participant when job has batchIndex/totalBatches).
   if (job.isRaid && isRaidCampaign) {
     const raidUrl = `${baseUrl}/api/contests/${contestId}/fetch-raid-engagements`;
+    const raidBatchIndex =
+      "batchIndex" in job && typeof job.batchIndex === "number"
+        ? job.batchIndex
+        : undefined;
+    const raidTotalBatches =
+      "totalBatches" in job && typeof job.totalBatches === "number"
+        ? job.totalBatches
+        : undefined;
+    const raidBody =
+      raidBatchIndex !== undefined && raidTotalBatches !== undefined
+        ? { fromQueue: true, batchIndex: raidBatchIndex, totalBatches: raidTotalBatches }
+        : {};
+    let raidHasMore = false;
     try {
       const raidRes = await fetch(raidUrl, {
         method: "POST",
@@ -109,20 +121,71 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
           "Content-Type": "application/json",
           ...(cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {}),
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify(raidBody),
       });
+      const raidData = await raidRes.json().catch(() => ({}));
       if (!raidRes.ok) {
-        const text = await raidRes.text();
         console.error(
           "[process-metrics-queue] Raid fetch failed:",
           raidRes.status,
-          text
+          raidData
         );
         return NextResponse.json(
-          { processed: 1, error: "Raid fetch failed", details: text },
+          { processed: 1, error: "Raid fetch failed", details: raidData },
           { status: 500 }
         );
       }
+
+      raidHasMore =
+        raidData.hasMore === true &&
+        typeof raidBatchIndex === "number" &&
+        typeof raidTotalBatches === "number" &&
+        raidBatchIndex + 1 < raidTotalBatches;
+
+      if (raidHasMore) {
+        const nextRaidJob: MetricsRefreshJob = {
+          contestId,
+          isRaid: true,
+          batchIndex: raidBatchIndex! + 1,
+          totalBatches: raidTotalBatches!,
+        };
+        await enqueueMetricsRefreshJob(nextRaidJob);
+        const baseUrlForTrigger = getBaseUrl();
+        const doFetch = () => {
+          fetch(`${baseUrlForTrigger}/api/cron/process-metrics-queue`, {
+            method: "POST",
+            headers: cronSecret
+              ? { Authorization: `Bearer ${cronSecret}` }
+              : {},
+          }).catch((e) =>
+            console.warn("[process-metrics-queue] Trigger next raid batch failed:", e)
+          );
+        };
+        if (isQStashEnabled()) {
+          triggerProcessMetricsQueue(baseUrlForTrigger)
+            .then((res) => {
+              if (res?.error) doFetch();
+              else if (res?.messageId)
+                console.log(
+                  "[process-metrics-queue] QStash trigger sent for next raid batch messageId=",
+                  res.messageId
+                );
+            })
+            .catch(() => doFetch());
+        } else {
+          doFetch();
+        }
+      }
+
+      // Update last_metrics_updated only when raid is fully done (last batch or non-batched run).
+      if (!raidHasMore) {
+        const doneTime = new Date().toISOString();
+        await supabaseAdmin
+          .from("contests")
+          .update({ last_metrics_updated: doneTime })
+          .eq("id", contestId);
+      }
+
     } catch (err) {
       console.error("[process-metrics-queue] Raid fetch error:", err);
       return NextResponse.json(
@@ -134,21 +197,15 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
       );
     }
 
-    const doneTime = new Date().toISOString();
-    await supabaseAdmin
-      .from("contests")
-      .update({ last_metrics_updated: doneTime })
-      .eq("id", contestId);
-
     const raidElapsedMs = Date.now() - jobStartMs;
     console.log(
-      `[process-metrics-queue] contestId=${contestId} raid refresh completed in ${raidElapsedMs}ms`
+      `[process-metrics-queue] contestId=${contestId} raid batch completed in ${raidElapsedMs}ms`
     );
     return NextResponse.json({
       processed: 1,
       contestId,
       isRaid: true,
-      lastMetricsUpdated: doneTime,
+      hasMore: raidHasMore,
     });
   }
 

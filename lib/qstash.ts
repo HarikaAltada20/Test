@@ -10,9 +10,8 @@
 import { Client, Receiver } from "@upstash/qstash";
 
 function getBaseUrl(): string {
-  const url = process.env.VERCEL_URL;
-  if (url) return `https://${url}`;
-  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const url = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
+  return url.replace(/\/$/, "");
 }
 
 /** QStash cannot deliver to localhost; detect loopback so callers can fall back to direct POST. */

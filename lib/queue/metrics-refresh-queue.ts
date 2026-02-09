@@ -18,7 +18,7 @@ const REDIS_QUEUE_KEY = `${REDIS_PREFIX}:queue`;
 const REDIS_STATE_TTL_SEC = 60 * 60 * 2; // 2 hours
 
 export type MetricsRefreshJob =
-  | { contestId: string; isRaid: true }
+  | { contestId: string; isRaid: true; batchIndex?: number; totalBatches?: number }
   | {
       contestId: string;
       isRaid: false;
@@ -70,7 +70,8 @@ export function getMissingQueueEnv(): string[] {
 
 /**
  * Enqueue a Twitter metrics refresh job (push to Redis list).
- * For raid: one job. For awareness: first job (batchIndex 0); cron processor will push next batches.
+ * For raid: one job (or first batch job with batchIndex 0); processor will push next batches.
+ * For awareness: first job (batchIndex 0); processor will push next batches.
  */
 export async function enqueueMetricsRefreshJob(
   job: MetricsRefreshJob,
