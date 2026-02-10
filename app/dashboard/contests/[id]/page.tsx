@@ -698,11 +698,21 @@ export default async function ContestDetailPage({
           video_title: tweet.tweet_text?.substring(0, 100) || null,
           paid,
           paid_at: paidAt,
-          bonus_paid: twitterBonusByTweetId.has(String(tweet.id)) || twitterBonusByTweetId.has(tweet.id),
-          bonus_paid_at: twitterBonusByTweetId.get(String(tweet.id))?.paid_at ?? twitterBonusByTweetId.get(tweet.id)?.paid_at ?? null,
-          bonus_amount: twitterBonusByTweetId.get(String(tweet.id))?.amount ?? twitterBonusByTweetId.get(tweet.id)?.amount ?? null,
+          bonus_paid:
+            twitterBonusByTweetId.has(String(tweet.id)) ||
+            twitterBonusByTweetId.has(tweet.id),
+          bonus_paid_at:
+            twitterBonusByTweetId.get(String(tweet.id))?.paid_at ??
+            twitterBonusByTweetId.get(tweet.id)?.paid_at ??
+            null,
+          bonus_amount:
+            twitterBonusByTweetId.get(String(tweet.id))?.amount ??
+            twitterBonusByTweetId.get(tweet.id)?.amount ??
+            null,
           creator_display_name: creatorDisplayName,
           creator_username: creatorUsername,
+          // Explicit username from users table for creator-wise view
+          user_username: user?.username || null,
           creator_avatar_url: creatorAvatarUrl,
           creator_id: actualCreatorProfileId,
           // Mark as Twitter tweet for UI handling
@@ -813,6 +823,8 @@ export default async function ContestDetailPage({
           bonus_paid_at: sub.bonus_paid_at,
           creator_display_name: creatorDisplayName,
           creator_username: creatorUsername,
+          // Explicit username from users table for creator-wise view
+          user_username: user?.username || null,
           creator_avatar_url: creatorAvatarUrl,
           creator_id: actualCreatorProfileId,
           // Add nested creator object for creator-wise grouping compatibility
