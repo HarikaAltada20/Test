@@ -534,6 +534,37 @@ export function CreatorSubmissionsModal({
       contest?.platform?.toLowerCase() === "x") &&
     contest?.contest_format === "text_image";
 
+  const isInstagramContest =
+    contest?.platform?.toLowerCase().includes("instagram") ?? false;
+
+  const formatMetricValue = (value: any) => {
+    if (value === null || value === undefined || value === "") return "-";
+    if (typeof value === "number") {
+      return value.toLocaleString();
+    }
+    return String(value);
+  };
+
+  const formatWatchTime = (milliseconds: number): string => {
+    if (!milliseconds || milliseconds === 0) return "0s";
+
+    const seconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) {
+      const remainingMinutes = minutes % 60;
+      return `${hours}h ${remainingMinutes}m`;
+    }
+
+    if (minutes > 0) {
+      const remainingSeconds = seconds % 60;
+      return `${minutes}m ${remainingSeconds}s`;
+    }
+
+    return `${seconds}s`;
+  };
+
   const getNormalizedSubmissionStatus = (submission: Submission) => {
     const isTwitterTweet = submission.is_twitter_tweet === true;
     const rawStatus =
@@ -1162,7 +1193,7 @@ export function CreatorSubmissionsModal({
                       Content
                     </TableHead>
                   )}
-                  {/* For Twitter text_image contests, show detailed metrics; for others, show simplified */}
+                  {/* For Twitter text_image contests, show detailed metrics; for others, show simplified (with Instagram extras) */}
                   {isTwitterTextImageContest ? (
                     <>
                       <TableHead
@@ -1280,6 +1311,58 @@ export function CreatorSubmissionsModal({
                       >
                         Comments
                       </TableHead>
+                      {isInstagramContest && (
+                        <>
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                            )}
+                          >
+                            Shares
+                          </TableHead>
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                            )}
+                          >
+                            Saves
+                          </TableHead>
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                            )}
+                          >
+                            Reach
+                          </TableHead>
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                            )}
+                          >
+                            Interactions
+                          </TableHead>
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                            )}
+                          >
+                            Avg Watch Time
+                          </TableHead>
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                            )}
+                          >
+                            Total Watch Time
+                          </TableHead>
+                        </>
+                      )}
                     </>
                   )}
                   {/* Hide reward columns for Twitter text_image contests */}
@@ -1357,9 +1440,12 @@ export function CreatorSubmissionsModal({
                       colSpan={
                         isTwitterTextImageContest
                           ? 16 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Submitted, Actions
-                          : hasBonus
-                          ? 13 // Checkbox, #, Content, Views, Likes, Comments, Expected Reward, Reward Granted, Bonus Expected, Bonus Granted, Status, Submitted, Actions
-                          : 11 // Checkbox, #, Content, Views, Likes, Comments, Expected Reward, Reward Granted, Status, Submitted, Actions
+                          : 3 + // Checkbox, #, Content
+                            3 + // Views, Likes, Comments
+                            (isInstagramContest ? 6 : 0) + // Shares, Saves, Reach, Interactions, Avg Watch Time, Total Watch Time
+                            2 + // Expected Reward, Reward Granted
+                            (hasBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
+                            3 // Status, Submitted, Actions
                       }
                       className={cn(
                         "text-center py-8",
@@ -1384,6 +1470,25 @@ export function CreatorSubmissionsModal({
                       : submission.other_stats?.youtube?.comments ||
                         submission.other_stats?.instagram?.comments ||
                         0;
+                    const instagramStats =
+                      submission.other_stats?.instagram ||
+                      submission.other_stats ||
+                      {};
+                    const shares =
+                      (instagramStats as any)?.shares ||
+                      (instagramStats as any)?.share_count ||
+                      0;
+                    const saves =
+                      (instagramStats as any)?.saves ||
+                      (instagramStats as any)?.saved ||
+                      0;
+                    const reach = (instagramStats as any)?.reach || 0;
+                    const totalInteractions =
+                      (instagramStats as any)?.total_interactions || 0;
+                    const avgWatchTimeMs =
+                      (instagramStats as any)?.avg_watch_time_ms || 0;
+                    const totalWatchTimeMs =
+                      (instagramStats as any)?.total_watch_time_ms || 0;
 
                     // Twitter-specific metrics
                     const retweets = submission.other_stats?.retweets || 0;
@@ -1864,6 +1969,57 @@ export function CreatorSubmissionsModal({
                             <TableCell className="text-center font-mono">
                               {comments.toLocaleString()}
                             </TableCell>
+                            {/* Instagram-specific metrics for non-Twitter submissions */}
+                            {isInstagramContest && (
+                              <>
+                                <TableCell className="text-center font-mono">
+                                  {formatMetricValue(shares)}
+                                </TableCell>
+                                <TableCell className="text-center font-mono">
+                                  {formatMetricValue(saves)}
+                                </TableCell>
+                                <TableCell className="text-center font-mono">
+                                  {formatMetricValue(reach)}
+                                </TableCell>
+                                <TableCell className="text-center font-mono">
+                                  {formatMetricValue(totalInteractions)}
+                                </TableCell>
+                                <TableCell className="text-center font-mono">
+                                  <div className="flex flex-col items-center">
+                                    <span className="font-bold">
+                                      {formatWatchTime(avgWatchTimeMs)}
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "text-xs",
+                                        isDark
+                                          ? "text-gray-400"
+                                          : "text-gray-500"
+                                      )}
+                                    >
+                                      avg
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-center font-mono">
+                                  <div className="flex flex-col items-center">
+                                    <span className="font-bold">
+                                      {formatWatchTime(totalWatchTimeMs)}
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "text-xs",
+                                        isDark
+                                          ? "text-gray-400"
+                                          : "text-gray-500"
+                                      )}
+                                    >
+                                      total
+                                    </span>
+                                  </div>
+                                </TableCell>
+                              </>
+                            )}
                             {/* Expected Reward and Reward Granted (only for non-Twitter) */}
                             {!isTwitterTextImageContest && (
                               <>

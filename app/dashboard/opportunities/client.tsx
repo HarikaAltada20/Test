@@ -1892,12 +1892,13 @@ export default function OpportunitiesPage({
             />
           </div>
           {/* View Toggle Buttons - Right Side */}
-          <div className="flex flex-wrap gap-2 items-center w-full sm:w-auto">
-            <div className="flex flex-wrap items-center gap-1 border border-gray-400 rounded-md p-1 min-w-0">
+          <div className="flex gap-2">
+            {/* Format Toggle: All / Text/Image*/}
+            <div className="flex items-center gap-1 border border-gray-400 rounded-md p-1">
               <button
                 onClick={() => setMediaType("all")}
                 className={cn(
-                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium whitespace-nowrap",
+                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium ",
                   mediaType === "all"
                     ? isDark
                       ? "bg-[#7F39EC] text-white"
@@ -1914,7 +1915,7 @@ export default function OpportunitiesPage({
               <button
                 onClick={() => setMediaType("text")}
                 className={cn(
-                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium whitespace-nowrap",
+                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium ",
                   mediaType === "text"
                     ? isDark
                       ? "bg-[#7F39EC] text-white"
@@ -1931,7 +1932,7 @@ export default function OpportunitiesPage({
               <button
                 onClick={() => setMediaType("media")}
                 className={cn(
-                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium whitespace-nowrap",
+                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium",
                   mediaType === "media"
                     ? isDark
                       ? "bg-[#7F39EC] text-white"
