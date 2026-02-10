@@ -208,6 +208,8 @@ interface Submission {
   creator_username: string | null;
   creator_avatar_url: string | null;
   creator_id: string | null;
+  // Username coming directly from users table (server-mapped)
+  user_username?: string | null;
   earnings?: number | null; // Added for earnings display
   // Twitter-specific fields
   is_twitter_tweet?: boolean; // Flag to identify Twitter tweets
@@ -1039,11 +1041,13 @@ export default function ContestDetailClient({
       }
 
       group.statusCounts.all++;
+
       // For CPM (and leaderboard), if any tweet is paid, show creator as paid and enable reversal
       if (status === "paid" || (submission as any).paid) {
         group.statusCounts.paid++;
         group.paid = true;
       }
+
       if (normalizedStatus === "verified" || normalizedStatus === "approved") {
         group.statusCounts.verified++;
         if (submission.paid) group.statusCounts.verified_paid++;
@@ -1092,6 +1096,12 @@ export default function ContestDetailClient({
             }
           }
         }
+      } else if (normalizedStatus === "pending") {
+        // Track pending submissions at creator level (used in creator-wise badges)
+        group.statusCounts.pending++;
+      } else if (normalizedStatus === "rejected") {
+        // Track rejected submissions at creator level (used in creator-wise badges)
+        group.statusCounts.rejected++;
       }
       if (submission.bonus_paid) {
         // Use actual bonus_amount from database if available
@@ -1430,6 +1440,66 @@ export default function ContestDetailClient({
       }
     }
 
+    // For non-Twitter leaderboard contests (e.g. Instagram / YouTube),
+    // assign expected reward at CREATOR level based on leaderboard prizes
+    // so creator-wise view matches the leaderboard expectations.
+    const isNonTwitterLeaderboard =
+      currentContest?.contest_type === "leaderboard" &&
+      !(
+        (currentContest?.platform?.toLowerCase() === "twitter" ||
+          currentContest?.platform?.toLowerCase() === "x") &&
+        currentContest?.contest_format === "text_image"
+      );
+
+    if (isNonTwitterLeaderboard) {
+      const leaderboardDetails =
+        currentContest?.contest_based_details?.leaderboard_contest;
+      const prizes = leaderboardDetails?.prizes || [];
+
+      if (prizes.length > 0) {
+        const allCreators = Object.values(grouped) as any[];
+
+        // Determine prize-eligible creators (same rule used elsewhere: verified / paid)
+        const eligibleCreators = allCreators.filter((group: any) => {
+          const hasVerifiedSubmissions = group.statusCounts?.verified > 0;
+          const creatorStatus = (
+            group.creator_moderation_status || ""
+          ).toLowerCase();
+
+          return (
+            hasVerifiedSubmissions ||
+            creatorStatus === "verified" ||
+            creatorStatus === "paid"
+          );
+        });
+
+        // Rank ONLY eligible creators by total views (primary metric for non-Twitter leaderboards)
+        eligibleCreators.sort(
+          (a: any, b: any) => (b.metrics?.views || 0) - (a.metrics?.views || 0)
+        );
+
+        eligibleCreators.forEach((group: any, index: number) => {
+          const rank = index + 1;
+          const prizeForRank = prizes.find((p: any) => p.position === rank);
+          if (!prizeForRank) return;
+
+          // Set expected earnings to the prize amount (already in cents)
+          group.earnings.expected = prizeForRank.amount;
+
+          // If any submission is paid, mirror the prize in granted earnings
+          const hasPaidSubmissions = (group.submissions || []).some(
+            (s: any) => s.status === "paid" || s.paid
+          );
+          if (
+            hasPaidSubmissions &&
+            (!group.earnings.granted || group.earnings.granted <= 0)
+          ) {
+            group.earnings.granted = prizeForRank.amount;
+          }
+        });
+      }
+    }
+
     // Apply earnings cap per creator for expected earnings display (for non-CPM contests)
     const maxEarnings = currentContest?.max_earnings_per_creator;
     if (maxEarnings && maxEarnings > 0 && !isTwitterCpmContest) {
@@ -1505,7 +1575,7 @@ export default function ContestDetailClient({
     return rankingMap;
   }, [filteredSubmissions, currentContest, currentSubmissions]);
 
-  // Sort creator groups by total points for Twitter leaderboard contests
+  // Sort creator groups (used in creator-wise view)
   const sortedCreatorGroups = useMemo(() => {
     if (!groupSubmissionsByCreator) return [];
 
@@ -1528,9 +1598,37 @@ export default function ContestDetailClient({
       });
     }
 
-    // For other contests, return as-is (may be sorted differently)
-    return groupSubmissionsByCreator;
-  }, [groupSubmissionsByCreator, currentContest]);
+    // For other contests, sort creator groups based on the current sort option
+    const groups = [...groupSubmissionsByCreator] as any[];
+
+    return groups.sort((a, b) => {
+      switch (sortOption) {
+        case "views_asc":
+          return (a.metrics.views || 0) - (b.metrics.views || 0);
+        case "time_desc": {
+          const at = a.firstSubmittedAt
+            ? new Date(a.firstSubmittedAt).getTime()
+            : 0;
+          const bt = b.firstSubmittedAt
+            ? new Date(b.firstSubmittedAt).getTime()
+            : 0;
+          return bt - at;
+        }
+        case "time_asc": {
+          const at = a.firstSubmittedAt
+            ? new Date(a.firstSubmittedAt).getTime()
+            : 0;
+          const bt = b.firstSubmittedAt
+            ? new Date(b.firstSubmittedAt).getTime()
+            : 0;
+          return at - bt;
+        }
+        case "views_desc":
+        default:
+          return (b.metrics.views || 0) - (a.metrics.views || 0);
+      }
+    });
+  }, [groupSubmissionsByCreator, currentContest, sortOption]);
 
   // Check if we should show rejection reason column
   const showRejectionReasonColumn = useMemo(() => {
@@ -1741,63 +1839,275 @@ export default function ContestDetailClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, currentContest?.platform, contestId]);
 
-  const getStatusBadgeProps = (contest: Contest) => {
-    // For unpublished contests, show moderation status
+  const getStatusBadgeProps = (contest: Contest, isDarkMode: boolean) => {
+    const light = (bg: string, text: string, border: string) =>
+      `${bg} ${text} border ${border}`;
+    const dark = (bg: string, text: string, border: string) =>
+      `${bg} ${text} border ${border}`;
+    // For unpublished contests, show moderation status (light bg + dark text)
     if (contest.moderation_status !== "published") {
       switch (contest.moderation_status) {
         case "draft":
-          return { text: "Draft", className: "bg-gray-500 text-white" };
+          return isDarkMode
+            ? {
+                text: "Draft",
+                className: dark(
+                  "bg-gray-700",
+                  "text-gray-100",
+                  "border-gray-500"
+                ),
+              }
+            : {
+                text: "Draft",
+                className: light(
+                  "bg-gray-200",
+                  "text-gray-800",
+                  "border-gray-400"
+                ),
+              };
         case "pending_approval":
-          return {
-            text: "Pending Approval",
-            className: "bg-yellow-500 text-white",
-          };
+          return isDarkMode
+            ? {
+                text: "Pending Approval",
+                className: dark(
+                  "bg-yellow-900/40",
+                  "text-yellow-200",
+                  "border-yellow-500"
+                ),
+              }
+            : {
+                text: "Pending Approval",
+                className: light(
+                  "bg-yellow-100",
+                  "text-yellow-900",
+                  "border-yellow-400"
+                ),
+              };
         case "approved":
-          return {
-            text: "Ready to Publish",
-            className: "bg-blue-500 text-white",
-          };
+          return isDarkMode
+            ? {
+                text: "Ready to Publish",
+                className: dark(
+                  "bg-blue-900/40",
+                  "text-blue-200",
+                  "border-blue-500"
+                ),
+              }
+            : {
+                text: "Ready to Publish",
+                className: light(
+                  "bg-blue-100",
+                  "text-blue-800",
+                  "border-blue-400"
+                ),
+              };
         case "rejected":
-          return { text: "Rejected", className: "bg-red-500 text-white" };
+          return isDarkMode
+            ? {
+                text: "Rejected",
+                className: dark(
+                  "bg-red-900/40",
+                  "text-red-200",
+                  "border-red-500"
+                ),
+              }
+            : {
+                text: "Rejected",
+                className: light(
+                  "bg-red-100",
+                  "text-red-800",
+                  "border-red-400"
+                ),
+              };
         default:
-          return { text: "Unknown", className: "bg-slate-400 text-white" };
+          return isDarkMode
+            ? {
+                text: "Unknown",
+                className: dark(
+                  "bg-slate-700",
+                  "text-slate-100",
+                  "border-slate-500"
+                ),
+              }
+            : {
+                text: "Unknown",
+                className: light(
+                  "bg-slate-200",
+                  "text-slate-800",
+                  "border-slate-400"
+                ),
+              };
       }
     }
 
-    // For published contests, show lifecycle status
+    // For published contests, show lifecycle status (light bg + dark text)
     switch (contest.status) {
       case "active":
-        return { text: "Live", className: "bg-green-500 text-white" };
+        return isDarkMode
+          ? {
+              text: "Live",
+              className: dark(
+                "bg-green-900/40",
+                "text-green-200",
+                "border-green-500"
+              ),
+            }
+          : {
+              text: "Live",
+              className: light(
+                "bg-green-100",
+                "text-green-800",
+                "border-green-400"
+              ),
+            };
       case "upcoming":
-        return { text: "Upcoming", className: "bg-blue-500 text-white" };
+        return isDarkMode
+          ? {
+              text: "Upcoming",
+              className: dark(
+                "bg-blue-900/40",
+                "text-blue-200",
+                "border-blue-500"
+              ),
+            }
+          : {
+              text: "Upcoming",
+              className: light(
+                "bg-blue-100",
+                "text-blue-800",
+                "border-blue-400"
+              ),
+            };
       case "ended":
-        // Show post-contest status for ended contests
         if (contest.post_contest_status === "pending_review") {
-          return {
-            text: "Pending Review",
-            className: "bg-yellow-500 text-white",
-          };
+          return isDarkMode
+            ? {
+                text: "Pending Review",
+                className: dark(
+                  "bg-yellow-900/40",
+                  "text-yellow-200",
+                  "border-yellow-500"
+                ),
+              }
+            : {
+                text: "Pending Review",
+                className: light(
+                  "bg-yellow-100",
+                  "text-yellow-900",
+                  "border-yellow-400"
+                ),
+              };
         }
         if (contest.post_contest_status === "in_review") {
-          return { text: "In Review", className: "bg-orange-500 text-white" };
+          return isDarkMode
+            ? {
+                text: "In Review",
+                className: dark(
+                  "bg-orange-900/40",
+                  "text-orange-200",
+                  "border-orange-500"
+                ),
+              }
+            : {
+                text: "In Review",
+                className: light(
+                  "bg-orange-100",
+                  "text-orange-900",
+                  "border-orange-400"
+                ),
+              };
         }
         if (contest.post_contest_status === "verification_complete") {
-          return {
-            text: "Verified - Payment Processing",
-            className: "bg-purple-500 text-white",
-          };
+          return isDarkMode
+            ? {
+                text: "Verified - Payment Processing",
+                className: dark(
+                  "bg-purple-900/40",
+                  "text-purple-200",
+                  "border-purple-500"
+                ),
+              }
+            : {
+                text: "Verified - Payment Processing",
+                className: light(
+                  "bg-purple-100",
+                  "text-purple-800",
+                  "border-purple-400"
+                ),
+              };
         }
         if (contest.post_contest_status === "payouts_processed") {
-          return {
-            text: "Verified - Payment Released",
-            className: "bg-green-600 text-white",
-          };
+          return isDarkMode
+            ? {
+                text: "Verified - Payment Released",
+                className: dark(
+                  "bg-green-900/40",
+                  "text-green-200",
+                  "border-green-500"
+                ),
+              }
+            : {
+                text: "Verified - Payment Released",
+                className: light(
+                  "bg-green-100",
+                  "text-green-800",
+                  "border-green-400"
+                ),
+              };
         }
-        return { text: "Ended", className: "bg-gray-500 text-white" };
+        return isDarkMode
+          ? {
+              text: "Ended",
+              className: dark(
+                "bg-gray-700",
+                "text-gray-100",
+                "border-gray-500"
+              ),
+            }
+          : {
+              text: "Ended",
+              className: light(
+                "bg-gray-200",
+                "text-gray-800",
+                "border-gray-400"
+              ),
+            };
       case "incomplete":
-        return { text: "Incomplete", className: "bg-yellow-500 text-black" };
+        return isDarkMode
+          ? {
+              text: "Incomplete",
+              className: dark(
+                "bg-yellow-900/40",
+                "text-yellow-200",
+                "border-yellow-500"
+              ),
+            }
+          : {
+              text: "Incomplete",
+              className: light(
+                "bg-yellow-100",
+                "text-yellow-900",
+                "border-yellow-400"
+              ),
+            };
       default:
-        return { text: "Unknown", className: "bg-slate-400 text-white" };
+        return isDarkMode
+          ? {
+              text: "Unknown",
+              className: dark(
+                "bg-slate-700",
+                "text-slate-100",
+                "border-slate-500"
+              ),
+            }
+          : {
+              text: "Unknown",
+              className: light(
+                "bg-slate-200",
+                "text-slate-800",
+                "border-slate-400"
+              ),
+            };
     }
   };
 
@@ -2240,19 +2550,6 @@ export default function ContestDetailClient({
           "[contest-detail-client] Direct cache clear failed:",
           error
         );
-      }
-
-      if (
-        ["cpm", "leaderboard"].includes(currentContest?.contest_type || "") &&
-        currentContest?.platform &&
-        ["youtube", "instagram"].some((platform) =>
-          currentContest.platform?.toLowerCase().includes(platform)
-        ) &&
-        (newStatus === "verified" || newStatus === "pending")
-      ) {
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
       }
 
       if (typeof window !== "undefined") {
@@ -3520,10 +3817,10 @@ export default function ContestDetailClient({
         );
       }
 
-      // Refresh page after a delay
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      // Page-level state is already updated via setCurrentSubmissions above.
+      // We rely on that local state update plus the "contests:refresh" event
+      // and cache clear below instead of forcing a full page reload here,
+      // so the UI reflects changes instantly without a hard refresh.
     } catch (error: any) {
       console.error("Error moderating tweet:", error);
       toast({
@@ -3947,7 +4244,7 @@ export default function ContestDetailClient({
     return <p>Loading contest details or contest not found...</p>;
   }
 
-  const contestStatusBadgeInfo = getStatusBadgeProps(currentContest);
+  const contestStatusBadgeInfo = getStatusBadgeProps(currentContest, isDark);
 
   return (
     <div>
@@ -3981,32 +4278,29 @@ export default function ContestDetailClient({
 
             {/* Status + Contest type */}
 
-            <div
+            <Badge
               className={cn(
                 contestStatusBadgeInfo.className,
-                "capitalize text-sm px-3 py-1 rounded-full",
-                isDark
-                  ? "bg-[#FFE19857] text-yellow-300"
-                  : "bg-[#FDD36F57] text-[#A87313]"
+                "capitalize text-sm font-medium px-3 py-1 rounded-full"
               )}
             >
               {contestStatusBadgeInfo.text}
-            </div>
+            </Badge>
             {currentContest.contest_type && (
-              <div
+              <Badge
                 // variant={
                 //   currentContest.contest_type === "cpm" ? "secondary" : "default"
                 // }
 
                 className={cn(
-                  "capitalize text-sm px-3 py-1 rounded-full",
+                  "capitalize text-sm font-medium px-3 py-1 rounded-full",
                   isDark
-                    ? "bg-[#B487FA80] text-purple-300"
-                    : "bg-[#7F39EC3B] text-[#4A00BE]"
+                    ? "bg-purple-500/20 text-purple-300 border-purple-400"
+                    : "bg-purple-100 text-purple-900 border-purple-400"
                 )}
               >
                 {currentContest.contest_type === "cpm" ? "CPM" : "Leaderboard"}
-              </div>
+              </Badge>
             )}
           </div>
         </div>
@@ -4251,7 +4545,7 @@ export default function ContestDetailClient({
                   </p>
                   <p
                     className={cn(
-                      "text-2xl font-bold mt-1",
+                      "capitalize text-2xl font-bold mt-1",
                       isDark
                         ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
                         : "text-gray-900"
@@ -4862,6 +5156,74 @@ export default function ContestDetailClient({
               //   </CardContent>
               // </Card>
             )}
+
+          {/* Submissions Count Card */}
+          <div
+            className={cn(
+              "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+              isDark
+                ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
+                : "bg-gradient-to-br from-white to-purple-50 border border-purple-100"
+            )}
+          >
+            <div className="p-6 relative z-10">
+              <div className="flex items-center justify-between mb-4">
+                <div
+                  className={cn(
+                    "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                    isDark
+                      ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                      : "bg-gradient-to-br from-purple-500 to-purple-600 text-white"
+                  )}
+                >
+                  <Users
+                    className={cn(
+                      "h-6 w-6",
+                      isDark ? "text-white" : "text-white"
+                    )}
+                  />
+                </div>
+                <div className="text-right">
+                  <p
+                    className={cn(
+                      "text-sm font-medium uppercase tracking-wide",
+                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                    )}
+                  >
+                    Submissions
+                  </p>
+                  <p
+                    className={cn(
+                      "text-2xl font-bold mt-1",
+                      isDark
+                        ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
+                        : "text-gray-900"
+                    )}
+                  >
+                    {currentSubmissions.length}
+                  </p>
+                </div>
+              </div>
+              <div className="mb-4">
+                <p
+                  className={cn(
+                    "text-sm font-medium",
+                    isDark ? "text-white/80 drop-shadow-sm" : "text-gray-600"
+                  )}
+                >
+                  Total entries
+                </p>
+              </div>
+              <div
+                className={cn(
+                  "h-1 w-full rounded-full",
+                  isDark
+                    ? "bg-gradient-to-r from-purple-400 via-violet-400 to-fuchsia-400 shadow-lg shadow-purple-400/70 animate-pulse"
+                    : "bg-gradient-to-r from-purple-200 to-purple-300"
+                )}
+              ></div>
+            </div>
+          </div>
         </div>
 
         {/* Budget Progress Tracker - Two-Color Visualization (CPM) */}
@@ -5003,73 +5365,6 @@ export default function ContestDetailClient({
             </div>
           )}
 
-        {/* Submissions Count Card */}
-        <div
-          className={cn(
-            "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-            isDark
-              ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
-              : "bg-gradient-to-br from-white to-purple-50 border border-purple-100"
-          )}
-        >
-          <div className="p-6 relative z-10">
-            <div className="flex items-center justify-between mb-4">
-              <div
-                className={cn(
-                  "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                  isDark
-                    ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                    : "bg-gradient-to-br from-purple-500 to-purple-600 text-white"
-                )}
-              >
-                <Users
-                  className={cn(
-                    "h-6 w-6",
-                    isDark ? "text-white" : "text-white"
-                  )}
-                />
-              </div>
-              <div className="text-right">
-                <p
-                  className={cn(
-                    "text-sm font-medium uppercase tracking-wide",
-                    isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
-                  )}
-                >
-                  Submissions
-                </p>
-                <p
-                  className={cn(
-                    "text-2xl font-bold mt-1",
-                    isDark
-                      ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
-                      : "text-gray-900"
-                  )}
-                >
-                  {currentSubmissions.length}
-                </p>
-              </div>
-            </div>
-            <div className="mb-4">
-              <p
-                className={cn(
-                  "text-sm font-medium",
-                  isDark ? "text-white/80 drop-shadow-sm" : "text-gray-600"
-                )}
-              >
-                Total entries
-              </p>
-            </div>
-            <div
-              className={cn(
-                "h-1 w-full rounded-full",
-                isDark
-                  ? "bg-gradient-to-r from-purple-400 via-violet-400 to-fuchsia-400 shadow-lg shadow-purple-400/70 animate-pulse"
-                  : "bg-gradient-to-r from-purple-200 to-purple-300"
-              )}
-            ></div>
-          </div>
-        </div>
         {/* <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -10758,6 +11053,16 @@ export default function ContestDetailClient({
                                         hasVerifiedOrPaidSubmissions
                                           ? group.bonus.expected
                                           : 0;
+                                      // Prefer username coming from users table if available (mapped as user_username on submissions)
+                                      const primarySubmission =
+                                        group.submissions?.[0];
+                                      const userTableUsername =
+                                        (primarySubmission as any)
+                                          ?.user_username || null;
+                                      // Platform-specific handle (Instagram / YouTube / Twitter etc.)
+                                      const platformUsername =
+                                        primarySubmission?.creator_username ||
+                                        null;
                                       return (
                                         <TableRow key={group.creator.id}>
                                           <TableCell className="font-medium">
@@ -10778,9 +11083,18 @@ export default function ContestDetailClient({
                                                     "U"}
                                                 </AvatarFallback>
                                               </Avatar>
-                                              <span className="font-medium">
-                                                {group.creator.username}
-                                              </span>
+                                              <div className="flex flex-col">
+                                                <span className="font-semibold text-md">
+                                                  {userTableUsername ||
+                                                    group.creator.username}
+                                                </span>
+                                                {/* Platform username / handle (Instagram / YouTube / Twitter etc.), on its own line */}
+                                                {platformUsername && (
+                                                  <span className="text-[11px] text-slate-800">
+                                                    {platformUsername}
+                                                  </span>
+                                                )}
+                                              </div>
                                             </div>
                                           </TableCell>
                                           <TableCell className="text-center font-semibold">
@@ -10842,18 +11156,11 @@ export default function ContestDetailClient({
                                                   )}
                                                 </>
                                               ) : (
-                                                <div className="flex flex-wrap gap-1 justify-center">
-                                                  <Badge
-                                                    variant="outline"
-                                                    className="text-xs"
-                                                  >
-                                                    All:{" "}
-                                                    {group.statusCounts.all}
-                                                  </Badge>
+                                                <div className="flex flex-col flex-wrap gap-2 justify-center items-center">
                                                   {group.statusCounts.verified >
                                                     0 && (
-                                                    <Badge className="bg-green-500 text-white text-xs">
-                                                      V:{" "}
+                                                    <Badge className="bg-green-100 text-green-700 border border-green-200 text-xs whitespace-nowrap">
+                                                      Verified:{" "}
                                                       {
                                                         group.statusCounts
                                                           .verified
@@ -10862,15 +11169,15 @@ export default function ContestDetailClient({
                                                   )}
                                                   {group.statusCounts.paid >
                                                     0 && (
-                                                    <Badge className="bg-blue-500 text-white text-xs">
-                                                      P:{" "}
+                                                    <Badge className="bg-blue-100 text-blue-700 border border-blue-200 text-xs whitespace-nowrap">
+                                                      Paid:{" "}
                                                       {group.statusCounts.paid}
                                                     </Badge>
                                                   )}
                                                   {group.statusCounts.pending >
                                                     0 && (
-                                                    <Badge className="bg-yellow-500 text-white text-xs">
-                                                      Pend:{" "}
+                                                    <Badge className="bg-amber-100 text-amber-700 border border-amber-200 text-xs whitespace-nowrap">
+                                                      Pending:{" "}
                                                       {
                                                         group.statusCounts
                                                           .pending
@@ -10879,8 +11186,8 @@ export default function ContestDetailClient({
                                                   )}
                                                   {group.statusCounts.rejected >
                                                     0 && (
-                                                    <Badge className="bg-red-500 text-white text-xs">
-                                                      R:{" "}
+                                                    <Badge className="bg-red-100 text-red-700 border border-red-200 text-xs whitespace-nowrap">
+                                                      Rejected:{" "}
                                                       {
                                                         group.statusCounts
                                                           .rejected
@@ -11785,7 +12092,7 @@ export default function ContestDetailClient({
 
           {contest?.platform?.toLowerCase() === "twitter" && (
             <TabPanel value="twitter-feed" activeTab={activeTab}>
-              <div className="p-6">
+              <div className="w-full min-w-0 px-3 py-4 sm:px-4 sm:py-5 md:p-6 overflow-x-hidden">
                 <TwitterFeed
                   contestId={contestId}
                   contestTitle={currentContest?.title || "Contest"}

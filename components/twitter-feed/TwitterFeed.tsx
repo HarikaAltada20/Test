@@ -384,7 +384,7 @@ export function TwitterFeed({
   return (
     <div
       className={cn(
-        "space-y-6",
+        "w-full max-w-full min-w-0 space-y-4 sm:space-y-6",
         isDark ? "bg-[#170337]" : "bg-white",
         className
       )}
@@ -392,21 +392,21 @@ export function TwitterFeed({
       {showHeader && (
         <div
           className={cn(
-            "flex items-center justify-between p-4 rounded-t-xl border-b",
+            "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 sm:p-4 rounded-t-xl border-b",
             isDark ? "bg-[#170337] border-gray-600" : "bg-white border-gray-200"
           )}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <h1
               className={cn(
-                "text-2xl font-bold",
+                "text-lg sm:text-xl md:text-2xl font-bold truncate",
                 isDark ? "text-white" : "text-gray-900"
               )}
             >
               Twitter Feed
             </h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {(() => {
               // Use appropriate cooldown based on cooldownType prop
               const cooldownInfo =
@@ -486,9 +486,9 @@ export function TwitterFeed({
         </div>
       )}
 
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-4 min-[500px]:flex-row min-[500px]:gap-6 min-w-0">
         {/* Main Feed */}
-        <div className="flex-1 space-y-4">
+        <div className="flex-1 min-w-0 space-y-4">
           {isLoading && tweets.length === 0 ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
@@ -519,9 +519,9 @@ export function TwitterFeed({
                       : "bg-white border-gray-200 hover:border-purple-300"
                   )}
                 >
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-3 flex-wrap">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-3">
+                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
                         {(() => {
                           const typeColors = getTweetTypeColor(
                             tweet.tweet_type
@@ -557,16 +557,16 @@ export function TwitterFeed({
                       </div>
                     </div>
 
-                    <div className="mb-4">
+                    <div className="mb-4 min-w-0 overflow-hidden">
                       <div
                         className={cn(
-                          "p-3 rounded-lg border",
+                          "p-3 rounded-lg border break-words",
                           isDark
                             ? "bg-gray-800/50 border-gray-700 text-white"
                             : "bg-gray-50 border-gray-200 text-gray-900"
                         )}
                       >
-                        <p className="whitespace-pre-wrap">
+                        <p className="whitespace-pre-wrap break-words text-sm sm:text-base">
                           {tweet.tweet_text}
                         </p>
                       </div>
@@ -627,7 +627,7 @@ export function TwitterFeed({
                           {tweet.replies || 0}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 ml-auto">
+                      <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
                         <div className="flex items-center gap-1">
                           <div className="w-2 h-2 bg-green-500 rounded-full" />
                           <span className="text-sm font-semibold text-green-500">
@@ -677,7 +677,10 @@ export function TwitterFeed({
           {/* Pagination */}
           {totalPages > 1 && (
             <div
-              className={cn("py-4 mt-6", isDark ? "bg-[#170337]" : "bg-white")}
+              className={cn(
+                "py-3 sm:py-4 mt-4 sm:mt-6 min-w-0 overflow-x-auto",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
             >
               <PaginationControls
                 page={currentPage}
@@ -710,7 +713,7 @@ export function TwitterFeed({
         {creators.length > 0 && !creatorOnlyUserId && (
           <div
             className={cn(
-              "w-64 border rounded-lg p-4",
+              "w-full min-[500px]:w-64 flex-shrink-0 border rounded-lg p-3 sm:p-4 min-w-0",
               isDark
                 ? "bg-[#170337] border-gray-700"
                 : "bg-white border-gray-200"
@@ -718,7 +721,7 @@ export function TwitterFeed({
           >
             <h3
               className={cn(
-                "font-semibold mb-4",
+                "font-semibold mb-3 sm:mb-4 text-sm sm:text-base",
                 isDark ? "text-white" : "text-gray-900"
               )}
             >

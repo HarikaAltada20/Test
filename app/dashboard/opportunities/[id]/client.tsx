@@ -7005,9 +7005,7 @@ export function ContestClientPage({
                                               prizeInfo.amount + flatFeeBonus;
                                             prizeDisplay = (
                                               <div
-                                                className={`font-semibold flex items-center ${
-                                                  "text-purple-500 dark:text-purple-400"
-                                                }`}
+                                                className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
                                               >
                                                 <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                                 <div>
@@ -7030,9 +7028,7 @@ export function ContestClientPage({
                                           } else {
                                             prizeDisplay = (
                                               <span
-                                                className={`font-semibold flex items-center ${
-                                                  "text-purple-500 dark:text-purple-400"
-                                                }`}
+                                                className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
                                               >
                                                 <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                                 {prizeText}:{" "}
@@ -7044,9 +7040,7 @@ export function ContestClientPage({
                                           // Simple view
                                           prizeDisplay = (
                                             <span
-                                              className={`font-semibold flex items-center ${
-"text-purple-500 dark:text-purple-400"
-                                              }`}
+                                              className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
                                             >
                                               <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                               {prizeText}:{" "}
@@ -7534,16 +7528,12 @@ export function ContestClientPage({
                                   prizeDisplay = (
                                     <div className="space-y-1">
                                       <div
-                                        className={`font-semibold text-base flex items-center ${
-"text-purple-500 dark:text-purple-400"
-                                        }`}
+                                        className={`font-semibold text-base flex items-center ${"text-purple-500 dark:text-purple-400"}`}
                                       >
                                         <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                         {prizeText}: {formatMoney(totalPrize)}
                                       </div>
-                                      <div
-                                        className="text-xs text-purple-600 dark:text-purple-500"
-                                      >
+                                      <div className="text-xs text-purple-600 dark:text-purple-500">
                                         ({formatMoney(totalPrizeAmount)} Prize
                                         {submissionRanks.length > 1 &&
                                           ` (${submissionRanks.length} videos)`}{" "}
@@ -7559,9 +7549,7 @@ export function ContestClientPage({
                                 } else {
                                   prizeDisplay = (
                                     <span
-                                      className={`font-semibold flex items-center ${
-"text-purple-500 dark:text-purple-400"
-                                      }`}
+                                      className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
                                     >
                                       <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                       {prizeText}: {formatMoney(totalPrize)}
@@ -7978,9 +7966,7 @@ export function ContestClientPage({
                                     prizeInfo.amount + flatFeeBonus;
                                   prizeDisplay = (
                                     <div
-                                      className={`font-semibold flex items-center ${
-"text-purple-500 dark:text-purple-400"
-                                      }`}
+                                      className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
                                     >
                                       <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                       <div>
@@ -7988,9 +7974,7 @@ export function ContestClientPage({
                                           {prizeText}:{" "}
                                           {formatMoney(totalEarnings)}
                                         </div>
-                                        <div
-                                          className="text-xs text-purple-600 dark:text-purple-500"
-                                        >
+                                        <div className="text-xs text-purple-600 dark:text-purple-500">
                                           ({formatMoney(prizeInfo.amount)} Prize
                                           + {formatMoney(flatFeeBonus)} Bonus)
                                         </div>
@@ -8000,9 +7984,7 @@ export function ContestClientPage({
                                 } else {
                                   prizeDisplay = (
                                     <span
-                                      className={`font-semibold flex items-center ${
-"text-purple-500 dark:text-purple-400"
-                                      }`}
+                                      className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
                                     >
                                       <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                       {prizeText}:{" "}
@@ -8014,9 +7996,7 @@ export function ContestClientPage({
                                 // Simple view
                                 prizeDisplay = (
                                   <span
-                                    className={`font-semibold flex items-center ${
-"text-purple-500 dark:text-purple-400"
-                                    }`}
+                                    className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
                                   >
                                     <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
                                     {prizeText}: {formatMoney(prizeInfo.amount)}
@@ -8203,34 +8183,38 @@ export function ContestClientPage({
                   ? analyticsTweets
                   : leaderboard;
 
+              // Helper to normalize status for analytics filtering/counts
+              const getAnalyticsStatus = (submission: any) => {
+                const isTwitterTweet = submission.is_twitter_tweet === true;
+
+                if (!isTwitterTweet) {
+                  return submission.status;
+                }
+
+                const baseStatus = submission.status;
+                const moderationStatus =
+                  submission.moderation_status || "pending";
+
+                // If a Twitter submission has been marked as paid via status,
+                // treat it as "paid" regardless of moderation_status so
+                // Verified/Paid tabs/counts include both.
+                if (baseStatus === "paid") {
+                  return "paid";
+                }
+
+                return moderationStatus;
+              };
+
               // Filter submissions for analytics based on active analytics tab
-              // For Twitter tweets, use moderation_status; for regular submissions, use status
               const filteredAnalyticsSubmissions =
                 allSubmissionsForAnalytics.filter((submission: any) => {
-                  const isTwitterTweet = submission.is_twitter_tweet === true;
-                  const statusToCheck = isTwitterTweet
-                    ? submission.moderation_status || "pending"
-                    : submission.status;
-
-                  // Map Twitter moderation_status to submission status for filtering
-                  // Note: moderation_status values are now: 'pending', 'verified', 'rejected'
-                  let mappedStatus = statusToCheck;
-                  if (isTwitterTweet) {
-                    // moderation_status already uses 'verified' instead of 'approved'
-                    // so we can use it directly
-                    if (statusToCheck === "verified") mappedStatus = "verified";
-                    else if (statusToCheck === "rejected")
-                      mappedStatus = "rejected";
-                    else mappedStatus = "pending"; // pending or null
-                  }
+                  const status = getAnalyticsStatus(submission);
 
                   if (activeAnalyticsTab === "all") return true;
                   if (activeAnalyticsTab === "verified_or_paid") {
-                    return (
-                      mappedStatus === "verified" || mappedStatus === "paid"
-                    );
+                    return status === "verified" || status === "paid";
                   }
-                  return mappedStatus === activeAnalyticsTab;
+                  return status === activeAnalyticsTab;
                 });
 
               // Calculate Twitter campaign metrics from filtered submissions
@@ -8371,12 +8355,9 @@ export function ContestClientPage({
                             )}
                           >
                             Verified (
-                            {allSubmissionsForAnalytics?.filter((s: any) => {
-                              const isTwitter = s.is_twitter_tweet;
-                              if (isTwitter)
-                                return s.moderation_status === "verified";
-                              return s.status === "verified";
-                            }).length || 0}
+                            {allSubmissionsForAnalytics?.filter(
+                              (s: any) => getAnalyticsStatus(s) === "verified"
+                            ).length || 0}
                             )
                           </TabsTrigger>
                           <TabsTrigger
@@ -8390,7 +8371,7 @@ export function ContestClientPage({
                           >
                             Paid (
                             {allSubmissionsForAnalytics?.filter(
-                              (s: any) => s.status === "paid"
+                              (s: any) => getAnalyticsStatus(s) === "paid"
                             ).length || 0}
                             )
                           </TabsTrigger>
@@ -8404,15 +8385,9 @@ export function ContestClientPage({
                             )}
                           >
                             Pending (
-                            {allSubmissionsForAnalytics?.filter((s: any) => {
-                              const isTwitter = s.is_twitter_tweet;
-                              if (isTwitter)
-                                return (
-                                  (s.moderation_status || "pending") ===
-                                  "pending"
-                                );
-                              return s.status === "pending";
-                            }).length || 0}
+                            {allSubmissionsForAnalytics?.filter(
+                              (s: any) => getAnalyticsStatus(s) === "pending"
+                            ).length || 0}
                             )
                           </TabsTrigger>
                           <TabsTrigger
@@ -8425,12 +8400,9 @@ export function ContestClientPage({
                             )}
                           >
                             Rejected (
-                            {allSubmissionsForAnalytics?.filter((s: any) => {
-                              const isTwitter = s.is_twitter_tweet;
-                              if (isTwitter)
-                                return s.moderation_status === "rejected";
-                              return s.status === "rejected";
-                            }).length || 0}
+                            {allSubmissionsForAnalytics?.filter(
+                              (s: any) => getAnalyticsStatus(s) === "rejected"
+                            ).length || 0}
                             )
                           </TabsTrigger>
                           <TabsTrigger
@@ -8444,12 +8416,8 @@ export function ContestClientPage({
                           >
                             Verified/Paid (
                             {allSubmissionsForAnalytics?.filter((s: any) => {
-                              const isTwitter = s.is_twitter_tweet;
-                              if (isTwitter)
-                                return s.moderation_status === "verified";
-                              return (
-                                s.status === "verified" || s.status === "paid"
-                              );
+                              const status = getAnalyticsStatus(s);
+                              return status === "verified" || status === "paid";
                             }).length || 0}
                             )
                           </TabsTrigger>
