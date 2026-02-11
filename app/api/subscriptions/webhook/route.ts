@@ -385,6 +385,42 @@ async function handleSubscriptionScheduleCanceled(schedule: any) {
   // Schedule canceled - no action needed, user will continue on current plan
 }
 
+
+async function resolveUserIdForSubscription(
+  subscriptionId: string,
+  subscriptionMetadata: Record<string, string> | null,
+  customerId: string | null
+): Promise<string | null> {
+  const fromMeta = subscriptionMetadata?.user_id;
+  if (fromMeta) return fromMeta;
+
+  if (customerId) {
+    try {
+      const customer = await stripe().customers.retrieve(customerId);
+      if (customer && !(customer as any).deleted && (customer as any).metadata?.user_id) {
+        console.log(`✅ Resolved user_id from customer metadata: ${(customer as any).metadata.user_id}`);
+        return (customer as any).metadata.user_id;
+      }
+    } catch (e) {
+      console.warn('Could not resolve user_id from customer:', e);
+    }
+  }
+
+  const supabase = createServiceRoleClient();
+  const { data: subRow, error } = await supabase
+    .from('subscriptions')
+    .select('user_id')
+    .eq('id', subscriptionId)
+    .limit(1)
+    .maybeSingle();
+
+  if (!error && subRow?.user_id) {
+    console.log(`✅ Resolved user_id from subscriptions table: ${subRow.user_id}`);
+    return subRow.user_id;
+  }
+  return null;
+}
+
 async function handleInvoicePaymentSucceeded(invoice: any) {
   console.log('💰 Invoice payment succeeded:', invoice.id);
   console.log("Invoice", invoice);
@@ -402,10 +438,17 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
   }
 
   const subscription = await stripe().subscriptions.retrieve(subscriptionId);
-  const { user_id, product_id } = subscription.metadata || {};
-
+  const product_id = subscription.metadata?.product_id ?? null;
+  let user_id: string | null = subscription.metadata?.user_id ?? null;
   if (!user_id) {
-    console.error('❌ Missing user_id in subscription for invoice');
+    user_id = await resolveUserIdForSubscription(
+      subscriptionId,
+      subscription.metadata || null,
+      typeof invoice.customer === 'string' ? invoice.customer : null
+    );
+  }
+  if (!user_id) {
+    console.error('❌ Could not resolve user_id for subscription (invoice.payment_succeeded). Transaction will not be logged.');
     return;
   }
 
@@ -508,10 +551,17 @@ async function handleInvoicePaymentFailed(invoice: any) {
   }
 
   const subscription = await stripe().subscriptions.retrieve(subscriptionId);
-  const { user_id, product_id } = subscription.metadata || {};
-
+  const product_id = subscription.metadata?.product_id ?? null;
+  let user_id: string | null = subscription.metadata?.user_id ?? null;
   if (!user_id) {
-    console.error('❌ Missing user_id in subscription for failed invoice');
+    user_id = await resolveUserIdForSubscription(
+      subscriptionId,
+      subscription.metadata || null,
+      typeof invoice.customer === 'string' ? invoice.customer : null
+    );
+  }
+  if (!user_id) {
+    console.error('❌ Could not resolve user_id for subscription (invoice.payment_failed).');
     return;
   }
 
@@ -1162,6 +1212,21 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
 
   try {
     console.log(`💰 Logging subscription payment to money_transactions for user ${userId}`);
+
+   
+    const { data: existing } = await supabase
+      .from('money_transactions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('type', 'subscription_payment')
+      .eq('status', 'success')
+      .contains('metadata', { stripe_invoice_id: invoice.id })
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      console.log(`⚠️ Subscription payment already logged for invoice ${invoice.id}, skipping duplicate`);
+      return;
+    }
 
     // Get product details for better transaction description
     const priceId = subscription.items.data[0].price.id;

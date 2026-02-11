@@ -55,47 +55,47 @@ export function SubscriptionSuccessClient({
     const getStatusBadgeColor = (status: string) => {
         switch (status) {
             case 'active':
-                return 'bg-green-100 text-green-800';
+                return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
             case 'trialing':
-                return 'bg-blue-100 text-blue-800';
+                return 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
             default:
-                return 'bg-gray-100 text-gray-800';
+                return 'bg-gray-500/20 text-gray-400 border border-gray-500/30';
         }
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-4">
-            <div className="max-w-2xl w-full space-y-6">
+        <div className="min-h-screen bg-[#000825] border-b border-[#A87313] flex items-center justify-center p-4">
+            <div className="max-w-4xl w-full space-y-6">
                 {/* Success Header */}
                 <div className="text-center space-y-4">
                     <div className="flex justify-center">
-                        <div className="bg-green-100 p-4 rounded-full">
-                            <CheckCircle className="h-16 w-16 text-green-600" />
+                        <div className="bg-emerald-500/20 border border-emerald-500/30 p-4 rounded-full ring-4 ring-emerald-500/10">
+                            <CheckCircle className="h-16 w-16 text-emerald-400" />
                         </div>
                     </div>
-                    <h1 className="text-3xl font-bold text-gray-900">
+                    <h1 className="text-3xl font-bold text-white">
                         Payment Successful!
                     </h1>
-                    <p className="text-lg text-gray-600">
+                    <p className="text-lg text-gray-400">
                         Your subscription has been activated successfully
                     </p>
                 </div>
 
                 {/* Subscription Details Card */}
-                <Card className="shadow-lg">
-                    <CardHeader className="pb-4">
-                        <CardTitle className="flex items-center gap-2">
-                            <CreditCard className="h-5 w-5" />
+                <Card className="bg-slate-800/50 border border-gray-600/50 shadow-xl shadow-black/20">
+                    <CardHeader className="pb-4 border-b border-gray-600/50">
+                        <CardTitle className="flex items-center gap-2 text-white">
+                            <CreditCard className="h-5 w-5 text-[#6C43D0]" />
                             {subscriptionData ? 'Subscription Details' : 'Payment Completed'}
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-6">
+                    <CardContent className="space-y-6 pt-6">
                         {subscriptionData ? (
                             <>
                                 {/* Plan Information */}
                                 <div className="flex justify-between items-center">
                                     <div>
-                                        <h3 className="font-semibold text-lg">{subscriptionData.planName}</h3>
+                                        <h3 className="font-semibold text-lg text-white">{subscriptionData.planName}</h3>
                                     </div>
                                     <Badge className={getStatusBadgeColor(subscriptionData.status)}>
                                         {subscriptionData.status}
@@ -103,22 +103,22 @@ export function SubscriptionSuccessClient({
                                 </div>
 
                                 {/* Payment Information */}
-                                <div className="border-t pt-4">
+                                <div className="border-t border-gray-600/50 pt-4">
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
-                                            <p className="text-sm text-gray-600">
+                                            <p className="text-sm text-gray-400">
                                                 {subscriptionData.status === 'trialing' ? 'Trial Amount' : 'Amount Charged'}
                                             </p>
-                                            <p className="font-semibold">
-                                                {subscriptionData.status === 'trialing' 
-                                                    ? '$0.00' 
+                                            <p className="font-semibold text-white">
+                                                {subscriptionData.status === 'trialing'
+                                                    ? '$0.00'
                                                     : formatCurrencyFromCents(subscriptionData.amount)
                                                 }
                                             </p>
                                         </div>
                                         <div>
-                                            <p className="text-sm text-gray-600">Billing Cycle</p>
-                                            <p className="font-semibold capitalize">
+                                            <p className="text-sm text-gray-400">Billing Cycle</p>
+                                            <p className="font-semibold text-white capitalize">
                                                 {subscriptionData.interval}ly
                                             </p>
                                         </div>
@@ -126,22 +126,22 @@ export function SubscriptionSuccessClient({
                                 </div>
 
                                 {/* Billing Information */}
-                                <div className="border-t pt-4">
+                                <div className="border-t border-gray-600/50 pt-4">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="flex items-center gap-2">
-                                            <Calendar className="h-4 w-4 text-gray-500" />
+                                            <Calendar className="h-4 w-4 text-gray-500 shrink-0" />
                                             <div>
-                                                <p className="text-sm text-gray-600">Current Period</p>
-                                                <p className="font-medium">
+                                                <p className="text-sm text-gray-400">Current Period</p>
+                                                <p className="font-medium text-gray-200">
                                                     {formatDate(new Date(subscriptionData.currentPeriodStart))} - {formatDate(new Date(subscriptionData.currentPeriodEnd))}
                                                 </p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <Calendar className="h-4 w-4 text-gray-500" />
+                                            <Calendar className="h-4 w-4 text-gray-500 shrink-0" />
                                             <div>
-                                                <p className="text-sm text-gray-600">Next Billing Date</p>
-                                                <p className="font-medium">
+                                                <p className="text-sm text-gray-400">Next Billing Date</p>
+                                                <p className="font-medium text-gray-200">
                                                     {formatDate(new Date(subscriptionData.nextBillingDate))}
                                                 </p>
                                             </div>
@@ -150,9 +150,9 @@ export function SubscriptionSuccessClient({
                                 </div>
 
                                 {/* Subscription ID for reference */}
-                                <div className="border-t pt-4">
-                                    <p className="text-sm text-gray-600">Subscription ID</p>
-                                    <p className="font-mono text-sm bg-gray-100 p-2 rounded">
+                                <div className="border-t border-gray-600/50 pt-4">
+                                    <p className="text-sm text-gray-400">Subscription ID</p>
+                                    <p className="font-mono text-sm bg-gray-800 border border-gray-600/50 text-gray-300 p-2 rounded">
                                         {subscriptionData.id}
                                     </p>
                                 </div>
@@ -160,16 +160,16 @@ export function SubscriptionSuccessClient({
                         ) : (
                             /* Fallback when subscription details aren't available */
                             <div className="text-center py-6">
-                                <div className="bg-green-100 p-3 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                                    <CheckCircle className="h-8 w-8 text-green-600" />
+                                <div className="bg-emerald-500/20 border border-emerald-500/30 p-3 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                                    <CheckCircle className="h-8 w-8 text-emerald-400" />
                                 </div>
-                                <h3 className="font-semibold text-lg mb-2">Payment Processed Successfully</h3>
-                                <p className="text-gray-600 mb-4">
+                                <h3 className="font-semibold text-lg text-white mb-2">Payment Processed Successfully</h3>
+                                <p className="text-gray-400 mb-4">
                                     Your subscription payment has been completed and your account will be updated shortly.
                                 </p>
-                                <div className="bg-blue-50 p-4 rounded-lg">
-                                    <h4 className="font-semibold text-blue-800 mb-2">Your Plan Benefits:</h4>
-                                    <ul className="text-sm text-blue-700 space-y-1">
+                                <div className="bg-[#6C43D0]/20 border border-[#6C43D0]/30 p-4 rounded-lg">
+                                    <h4 className="font-semibold text-[#A78BFA] mb-2">Your Plan Benefits:</h4>
+                                    <ul className="text-sm text-gray-300 space-y-1">
                                         <li>• Access to all premium features</li>
                                         <li>• Enhanced contest creation tools</li>
                                         <li>• Priority customer support</li>
@@ -182,29 +182,29 @@ export function SubscriptionSuccessClient({
                 </Card>
 
                 {/* What's Next Section */}
-                <Card className="shadow-lg">
-                    <CardHeader>
-                        <CardTitle>What's Next?</CardTitle>
+                <Card className="bg-slate-800/50 border border-gray-600/50 shadow-xl shadow-black/20">
+                    <CardHeader className="border-b border-gray-600/50">
+                        <CardTitle className="text-white">What&apos;s Next?</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-4 pt-6">
                         <div className="flex items-start gap-3">
-                            <div className="bg-blue-100 p-2 rounded-full mt-1">
-                                <ArrowRight className="h-4 w-4 text-blue-600" />
+                            <div className="bg-[#6C43D0]/20 border border-[#6C43D0]/30 p-2 rounded-full mt-1 shrink-0">
+                                <ArrowRight className="h-4 w-4 text-[#A78BFA]" />
                             </div>
                             <div>
-                                <h4 className="font-semibold">Start Creating Contests</h4>
-                                <p className="text-gray-600 text-sm">
+                                <h4 className="font-semibold text-white">Start Creating Contests</h4>
+                                <p className="text-gray-400 text-sm">
                                     Your new plan is now active. You can start creating contests with your upgraded features.
                                 </p>
                             </div>
                         </div>
                         <div className="flex items-start gap-3">
-                            <div className="bg-green-100 p-2 rounded-full mt-1">
-                                <Settings className="h-4 w-4 text-green-600" />
+                            <div className="bg-emerald-500/20 border border-emerald-500/30 p-2 rounded-full mt-1 shrink-0">
+                                <Settings className="h-4 w-4 text-emerald-400" />
                             </div>
                             <div>
-                                <h4 className="font-semibold">Manage Your Subscription</h4>
-                                <p className="text-gray-600 text-sm">
+                                <h4 className="font-semibold text-white">Manage Your Subscription</h4>
+                                <p className="text-gray-400 text-sm">
                                     You can update your payment method, change plans, or cancel anytime from your billing page.
                                 </p>
                             </div>
@@ -217,7 +217,7 @@ export function SubscriptionSuccessClient({
                     <Button
                         onClick={handleContinueToDashboard}
                         disabled={isLoading}
-                        className="flex-1 bg-green-600 hover:bg-green-700"
+                        className="flex-1 bg-[#6C43D0] hover:bg-[#5a38b8] text-white border-0"
                     >
                         <Home className="h-4 w-4 mr-2" />
                         Continue to Dashboard
@@ -226,7 +226,7 @@ export function SubscriptionSuccessClient({
                         onClick={handleManageSubscription}
                         disabled={isLoading}
                         variant="outline"
-                        className="flex-1"
+                        className="flex-1 bg-[#000825] border-gray-600 text-gray-200 hover:bg-gray-700/50 hover:text-white"
                     >
                         <Settings className="h-4 w-4 mr-2" />
                         Manage Subscription
@@ -235,9 +235,9 @@ export function SubscriptionSuccessClient({
 
                 {/* Footer Info */}
                 <div className="text-center text-sm text-gray-500">
-                    <p>Your subscription is now active and ready to use!</p>
-                    <p className="mt-1">
-                        Session ID: <span className="font-mono">{sessionId}</span>
+                    <p className="text-gray-400">Your subscription is now active and ready to use!</p>
+                    <p className="mt-1 text-gray-500">
+                        Session ID: <span className="font-mono text-gray-400">{sessionId}</span>
                     </p>
                 </div>
             </div>
