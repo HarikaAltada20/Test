@@ -428,7 +428,11 @@ export default async function AdminContestDetailPage({
           );
           const user = usersData.find((u) => u.id === tweet.creator_id);
 
-          // Try to get Twitter account info
+          // Prefer tweet's twitter_username for platform handle (creator_username) so admin sees the handle that posted
+          if (tweet.twitter_username) {
+            creatorUsername = tweet.twitter_username;
+          }
+          // Try to get Twitter account info for display name and avatar (and fallback username)
           if (creatorProfile?.twitter_account) {
             try {
               const twitterAccount =
@@ -437,8 +441,9 @@ export default async function AdminContestDetailPage({
                   : creatorProfile.twitter_account;
               creatorDisplayName =
                 twitterAccount?.name || twitterAccount?.username;
-              creatorUsername =
-                twitterAccount?.username || tweet.twitter_username;
+              if (!creatorUsername)
+                creatorUsername =
+                  twitterAccount?.username || tweet.twitter_username;
               creatorAvatarUrl = twitterAccount?.profile_picture_url;
             } catch (e) {
               console.error(
@@ -448,7 +453,7 @@ export default async function AdminContestDetailPage({
             }
           }
 
-          // Fallback to tweet data
+          // Fallback to tweet data for platform username
           if (!creatorUsername) {
             creatorUsername = tweet.twitter_username || "Unknown User";
           }
@@ -514,6 +519,8 @@ export default async function AdminContestDetailPage({
             creator_username: creatorUsername,
             creator_avatar_url: creatorAvatarUrl,
             creator_id: actualCreatorProfileId,
+            // Explicit username from users table for creator-wise view (main line); creator_username = platform handle (second line)
+            user_username: user?.username || null,
             // Mark as Twitter tweet for UI handling
             is_twitter_tweet: true,
             tweet_id: tweet.tweet_id,
@@ -619,6 +626,8 @@ export default async function AdminContestDetailPage({
             creator_username: creatorUsername,
             creator_avatar_url: creatorAvatarUrl,
             creator_id: actualCreatorProfileId,
+            // Explicit username from users table for creator-wise view (main line); creator_username = platform handle (second line)
+            user_username: user?.username || null,
             paid: sub.paid,
             paid_at: sub.paid_at,
             bonus_paid: sub.bonus_paid,
