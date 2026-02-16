@@ -10,6 +10,7 @@ import {
   Target,
   Users,
   Coins,
+  Twitter,
   DollarSign,
   Loader2,
   RefreshCw,
@@ -79,6 +80,7 @@ type SummaryStats = {
   totalCreators: number;
   instagramCreators?: number;
   youtubeCreators?: number;
+  twitterCreators?: number;
   totalWinnings: number;
   totalAffiliateEarnings: number;
   totalViews: number;
@@ -270,7 +272,7 @@ export default function LeaderboardClient({
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener(
         "theme-change",
-        handleThemeChange as EventListener
+        handleThemeChange as EventListener,
       );
     };
   }, [mode]);
@@ -361,7 +363,7 @@ export default function LeaderboardClient({
         // Return combined value for sorting/display purposes
         return formatMoney(
           (entry.metrics.affiliate_earnings || 0) +
-            (entry.metrics.other_earnings || 0)
+            (entry.metrics.other_earnings || 0),
         );
       case "contests_won":
         return entry.metrics.contests_won.toString();
@@ -395,7 +397,7 @@ export default function LeaderboardClient({
           <div
             className={cn(
               "relative overflow-hidden rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-8 shadow-md",
-              isDark ? "bg-[#170337] text-white" : "bg-white"
+              isDark ? "bg-[#170337] text-white" : "bg-white",
             )}
           >
             {/* <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:20px_20px]" /> */}
@@ -405,14 +407,14 @@ export default function LeaderboardClient({
                   <Award
                     className={cn(
                       "w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8",
-                      isDark ? "text-white" : "text-gray-900"
+                      isDark ? "text-white" : "text-gray-900",
                     )}
                   />
                 </div>
                 <h1
                   className={cn(
                     "text-2xl sm:text-3xl md:text-4xl font-bold",
-                    isDark ? "text-white" : "text-gray-900"
+                    isDark ? "text-white" : "text-gray-900",
                   )}
                 >
                   Creator Leaderboard
@@ -421,7 +423,7 @@ export default function LeaderboardClient({
               <p
                 className={cn(
                   "text-sm sm:text-base md:text-lg",
-                  isDark ? "text-gray-400" : "text-gray-900"
+                  isDark ? "text-gray-400" : "text-gray-900",
                 )}
               >
                 Explore the Top 100 creators across every metric—compare your
@@ -438,7 +440,7 @@ export default function LeaderboardClient({
           <div
             className={cn(
               "shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl",
-              isDark ? "bg-[#170337]" : "bg-white"
+              isDark ? "bg-[#170337]" : "bg-white",
             )}
           >
             <CardHeader
@@ -446,13 +448,13 @@ export default function LeaderboardClient({
                 "flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 border-b px-3 sm:px-6 pt-3 sm:pt-6",
                 isDark
                   ? "bg-gradient-to-br from-violet-900/30 via-violet-800/20 to-purple-900/20 border-violet-700/30"
-                  : "bg-gradient-to-br from-violet-100 via-violet-50 to-purple-50 border-violet-100/50"
+                  : "bg-gradient-to-br from-violet-100 via-violet-50 to-purple-50 border-violet-100/50",
               )}
             >
               <CardTitle
                 className={cn(
                   "text-xs sm:text-sm font-semibold",
-                  isDark ? "text-violet-300" : "text-violet-800"
+                  isDark ? "text-violet-300" : "text-violet-800",
                 )}
               >
                 Total Creators
@@ -462,13 +464,13 @@ export default function LeaderboardClient({
                   "p-1 sm:p-1.5 rounded-lg transition-colors",
                   isDark
                     ? "bg-violet-800/30 group-hover:bg-violet-800/40"
-                    : "bg-violet-200/50 group-hover:bg-violet-200"
+                    : "bg-violet-200/50 group-hover:bg-violet-200",
                 )}
               >
                 <Users
                   className={cn(
                     "h-3.5 w-3.5 sm:h-4 sm:w-4",
-                    isDark ? "text-violet-300" : "text-violet-700"
+                    isDark ? "text-violet-300" : "text-violet-700",
                   )}
                 />
               </div>
@@ -479,44 +481,73 @@ export default function LeaderboardClient({
                   "text-2xl sm:text-3xl font-bold bg-gradient-to-r bg-clip-text text-transparent",
                   isDark
                     ? "from-violet-300 to-purple-300"
-                    : "from-violet-700 to-purple-700"
+                    : "from-violet-700 to-purple-700",
                 )}
               >
                 {staticSummary.totalCreators.toLocaleString()}
               </div>
 
               {/* Platform Breakdown */}
-              {staticSummary.instagramCreators !== undefined &&
-                staticSummary.youtubeCreators !== undefined && (
-                  <p
-                    className={cn(
-                      "text-xs mt-1 sm:mt-2 font-medium flex items-center gap-2 flex-wrap",
-                      isDark ? "text-violet-300/70" : "text-violet-600/70"
-                    )}
-                  >
+              {(staticSummary.instagramCreators !== undefined ||
+                staticSummary.youtubeCreators !== undefined ||
+                staticSummary.twitterCreators !== undefined) && (
+                <p
+                  className={cn(
+                    "text-xs mt-1 sm:mt-2 font-medium flex items-center gap-2 flex-wrap",
+                    isDark ? "text-violet-300/70" : "text-violet-600/70",
+                  )}
+                >
+                  {staticSummary.instagramCreators !== undefined && (
+                    <>
+                      <span className="flex items-center gap-1.5">
+                        <Instagram className="w-3 h-3 text-pink-600" />
+                        {staticSummary.instagramCreators.toLocaleString()}{" "}
+                        Instagram
+                      </span>
+                      {(staticSummary.youtubeCreators !== undefined ||
+                        staticSummary.twitterCreators !== undefined) && (
+                        <span
+                          className={
+                            isDark ? "text-violet-500" : "text-violet-400"
+                          }
+                        >
+                          |
+                        </span>
+                      )}
+                    </>
+                  )}
+                  {staticSummary.youtubeCreators !== undefined && (
+                    <>
+                      <span className="flex items-center gap-1.5">
+                        <Youtube className="w-3 h-3 text-red-600" />
+                        {staticSummary.youtubeCreators.toLocaleString()} YouTube
+                      </span>
+                      {staticSummary.twitterCreators !== undefined && (
+                        <span
+                          className={
+                            isDark ? "text-violet-500" : "text-violet-400"
+                          }
+                        >
+                          |
+                        </span>
+                      )}
+                    </>
+                  )}
+                  {staticSummary.twitterCreators !== undefined && (
                     <span className="flex items-center gap-1.5">
-                      <Instagram className="w-3 h-3 text-pink-600" />
-                      {staticSummary.instagramCreators.toLocaleString()}{" "}
-                      Instagram
+                      <Twitter className="w-3 h-3 text-sky-500" />
+                      {staticSummary.twitterCreators.toLocaleString()} Twitter
                     </span>
-                    <span
-                      className={isDark ? "text-violet-500" : "text-violet-400"}
-                    >
-                      |
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <Youtube className="w-3 h-3 text-red-600" />
-                      {staticSummary.youtubeCreators.toLocaleString()} YouTube
-                    </span>
-                  </p>
-                )}
+                  )}
+                </p>
+              )}
             </CardContent>
           </div>
 
           <div
             className={cn(
               "shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl",
-              isDark ? "bg-[#170337]" : "bg-white"
+              isDark ? "bg-[#170337]" : "bg-white",
             )}
           >
             <CardHeader
@@ -524,13 +555,13 @@ export default function LeaderboardClient({
                 "flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 border-b px-3 sm:px-6 pt-3 sm:pt-6",
                 isDark
                   ? "bg-gradient-to-br from-amber-900/30 via-yellow-900/20 to-orange-900/20 border-amber-700/30"
-                  : "bg-gradient-to-br from-amber-100 via-yellow-50 to-orange-50 border-amber-100/50"
+                  : "bg-gradient-to-br from-amber-100 via-yellow-50 to-orange-50 border-amber-100/50",
               )}
             >
               <CardTitle
                 className={cn(
                   "text-xs sm:text-sm font-semibold",
-                  isDark ? "text-amber-300" : "text-amber-800"
+                  isDark ? "text-amber-300" : "text-amber-800",
                 )}
               >
                 Total Contests Won
@@ -540,13 +571,13 @@ export default function LeaderboardClient({
                   "p-1 sm:p-1.5 rounded-lg transition-colors",
                   isDark
                     ? "bg-amber-800/30 group-hover:bg-amber-800/40"
-                    : "bg-amber-200/50 group-hover:bg-amber-200"
+                    : "bg-amber-200/50 group-hover:bg-amber-200",
                 )}
               >
                 <Award
                   className={cn(
                     "h-3.5 w-3.5 sm:h-4 sm:w-4",
-                    isDark ? "text-amber-300" : "text-amber-700"
+                    isDark ? "text-amber-300" : "text-amber-700",
                   )}
                 />
               </div>
@@ -557,7 +588,7 @@ export default function LeaderboardClient({
                   "text-2xl sm:text-3xl font-bold bg-gradient-to-r bg-clip-text text-transparent",
                   isDark
                     ? "from-amber-300 to-orange-300"
-                    : "from-amber-700 to-orange-700"
+                    : "from-amber-700 to-orange-700",
                 )}
               >
                 {staticSummary.totalContestsWon.toLocaleString()}
@@ -565,7 +596,7 @@ export default function LeaderboardClient({
               <p
                 className={cn(
                   "text-xs mt-1 sm:mt-2 font-medium",
-                  isDark ? "text-amber-300/80" : "text-amber-600/80"
+                  isDark ? "text-amber-300/80" : "text-amber-600/80",
                 )}
               >
                 {staticSummary.totalContestsParticipated.toLocaleString()}{" "}
@@ -577,7 +608,7 @@ export default function LeaderboardClient({
           <div
             className={cn(
               "shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl",
-              isDark ? "bg-[#170337]" : "bg-white"
+              isDark ? "bg-[#170337]" : "bg-white",
             )}
           >
             <CardHeader
@@ -585,13 +616,13 @@ export default function LeaderboardClient({
                 "flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 rounded-t-lg border-b px-3 sm:px-6 pt-3 sm:pt-6",
                 isDark
                   ? "bg-gradient-to-br from-indigo-900/30 via-purple-900/20 to-blue-900/20 border-indigo-700/30"
-                  : "bg-gradient-to-br from-indigo-100 via-purple-50 to-blue-50 border-indigo-100/50"
+                  : "bg-gradient-to-br from-indigo-100 via-purple-50 to-blue-50 border-indigo-100/50",
               )}
             >
               <CardTitle
                 className={cn(
                   "text-xs sm:text-sm font-semibold",
-                  isDark ? "text-indigo-300" : "text-indigo-800"
+                  isDark ? "text-indigo-300" : "text-indigo-800",
                 )}
               >
                 Total Submissions Won
@@ -601,13 +632,13 @@ export default function LeaderboardClient({
                   "p-1 sm:p-1.5 rounded-lg transition-colors",
                   isDark
                     ? "bg-indigo-800/30 group-hover:bg-indigo-800/40"
-                    : "bg-indigo-200/50 group-hover:bg-indigo-200"
+                    : "bg-indigo-200/50 group-hover:bg-indigo-200",
                 )}
               >
                 <Target
                   className={cn(
                     "h-3.5 w-3.5 sm:h-4 sm:w-4",
-                    isDark ? "text-indigo-300" : "text-indigo-700"
+                    isDark ? "text-indigo-300" : "text-indigo-700",
                   )}
                 />
               </div>
@@ -618,7 +649,7 @@ export default function LeaderboardClient({
                   "text-2xl sm:text-3xl font-bold bg-gradient-to-r bg-clip-text text-transparent",
                   isDark
                     ? "from-indigo-300 to-purple-300"
-                    : "from-indigo-700 to-purple-700"
+                    : "from-indigo-700 to-purple-700",
                 )}
               >
                 {staticSummary.totalSubmissionsWon.toLocaleString()}
@@ -626,7 +657,7 @@ export default function LeaderboardClient({
               <p
                 className={cn(
                   "text-xs mt-1 sm:mt-2 font-medium",
-                  isDark ? "text-indigo-300/80" : "text-indigo-600/80"
+                  isDark ? "text-indigo-300/80" : "text-indigo-600/80",
                 )}
               >
                 {staticSummary.totalSubmissionsMade.toLocaleString()} total
@@ -638,7 +669,7 @@ export default function LeaderboardClient({
           <div
             className={cn(
               "shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl",
-              isDark ? "bg-[#170337]" : "bg-white"
+              isDark ? "bg-[#170337]" : "bg-white",
             )}
           >
             <CardHeader
@@ -646,13 +677,13 @@ export default function LeaderboardClient({
                 "flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 rounded-t-lg border-b px-3 sm:px-6 pt-3 sm:pt-6",
                 isDark
                   ? "bg-gradient-to-br from-pink-900/30 via-rose-900/20 to-fuchsia-900/20 border-pink-700/30"
-                  : "bg-gradient-to-br from-pink-100 via-rose-50 to-fuchsia-50 border-pink-100/50"
+                  : "bg-gradient-to-br from-pink-100 via-rose-50 to-fuchsia-50 border-pink-100/50",
               )}
             >
               <CardTitle
                 className={cn(
                   "text-xs sm:text-sm font-semibold",
-                  isDark ? "text-pink-300" : "text-pink-800"
+                  isDark ? "text-pink-300" : "text-pink-800",
                 )}
               >
                 Total Referrals
@@ -662,13 +693,13 @@ export default function LeaderboardClient({
                   "p-1 sm:p-1.5 rounded-lg transition-colors",
                   isDark
                     ? "bg-pink-800/30 group-hover:bg-pink-800/40"
-                    : "bg-pink-200/50 group-hover:bg-pink-200"
+                    : "bg-pink-200/50 group-hover:bg-pink-200",
                 )}
               >
                 <Users
                   className={cn(
                     "h-3.5 w-3.5 sm:h-4 sm:w-4",
-                    isDark ? "text-pink-300" : "text-pink-700"
+                    isDark ? "text-pink-300" : "text-pink-700",
                   )}
                 />
               </div>
@@ -679,7 +710,7 @@ export default function LeaderboardClient({
                   "text-2xl sm:text-3xl font-bold bg-gradient-to-r bg-clip-text text-transparent",
                   isDark
                     ? "from-pink-300 to-rose-300"
-                    : "from-pink-700 to-rose-700"
+                    : "from-pink-700 to-rose-700",
                 )}
               >
                 {staticSummary.totalReferrals.toLocaleString()}
@@ -687,7 +718,7 @@ export default function LeaderboardClient({
               <p
                 className={cn(
                   "text-xs mt-1 sm:mt-2 font-medium",
-                  isDark ? "text-pink-300/80" : "text-pink-600/80"
+                  isDark ? "text-pink-300/80" : "text-pink-600/80",
                 )}
               >
                 {staticSummary.totalAdvertisersReferred} brands,{" "}
@@ -705,7 +736,7 @@ export default function LeaderboardClient({
             "mb-4 sm:mb-6 rounded-xl sm:rounded-2xl shadow-md py-4 sm:py-6 px-2 sm:px-3",
             isDark
               ? "bg-[#170337]"
-              : "bg-white border border-gray-200 bg-gradient-to-br from-white via-gray-50/30 to-white backdrop-blur-sm"
+              : "bg-white border border-gray-200 bg-gradient-to-br from-white via-gray-50/30 to-white backdrop-blur-sm",
           )}
         >
           <Tabs
@@ -721,7 +752,7 @@ export default function LeaderboardClient({
                     "border border-gray-600 text-xs sm:text-sm text-gray-700 inline-flex items-center px-2 sm:px-3 py-2 rounded-full flex-shrink-0",
                     isDark
                       ? "text-white border-gray-500"
-                      : "text-gray-700 border-gray-600"
+                      : "text-gray-700 border-gray-600",
                   )}
                 >
                   {/* <span className="flex-shrink-0">{option.icon}</span> */}
@@ -740,7 +771,7 @@ export default function LeaderboardClient({
             "rounded-xl sm:rounded-2xl shadow-xl overflow-hidden",
             isDark
               ? "bg-[#170337]"
-              : "bg-white border border-gray-200 bg-gradient-to-br from-white via-gray-50/30 to-white"
+              : "bg-white border border-gray-200 bg-gradient-to-br from-white via-gray-50/30 to-white",
           )}
         >
           <div
@@ -748,7 +779,7 @@ export default function LeaderboardClient({
               "flex flex-row items-center justify-between gap-2  border-b sm:gap-3 md:gap-4 px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5  overflow-hidden",
               isDark
                 ? "bg-[#170337]"
-                : "bg-white border-gray-200 bg-gradient-to-r from-gray-50 to-white"
+                : "bg-white border-gray-200 bg-gradient-to-r from-gray-50 to-white",
             )}
           >
             <h2
@@ -756,7 +787,7 @@ export default function LeaderboardClient({
                 "text-lg sm:text-xl font-bold  min-w-0 flex-1",
                 isDark
                   ? "text-white"
-                  : "bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent truncate"
+                  : "bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent truncate",
               )}
             >
               {getMetricLabel(sortBy)}
@@ -771,7 +802,7 @@ export default function LeaderboardClient({
                       "inline-flex items-center gap-0.5 sm:gap-1 rounded-lg sm:rounded-xl p-0.5 sm:p-1 overflow-x-auto whitespace-nowrap shadow-inner",
                       isDark
                         ? "border border-gray-600 bg-transparent"
-                        : "border-2 border-gray-200 bg-white"
+                        : "border-2 border-gray-200 bg-white",
                     )}
                   >
                     <Button
@@ -785,12 +816,12 @@ export default function LeaderboardClient({
                               "transition-all duration-300 font-semibold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0",
                               isDark
                                 ? "text-gray-200 hover:text-violet-300 hover:bg-violet-900/20"
-                                : "text-gray-600 hover:text-violet-600 hover:bg-violet-50/50"
+                                : "text-gray-600 hover:text-violet-600 hover:bg-violet-50/50",
                             )
                       }
                       onClick={() => setPlatform("all")}
                     >
-                      Both
+                      All
                     </Button>
                     <Button
                       type="button"
@@ -803,7 +834,7 @@ export default function LeaderboardClient({
                               "transition-all duration-300 font-semibold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0",
                               isDark
                                 ? "text-red-300 hover:text-red-200 hover:bg-red-900/20"
-                                : "text-red-600 hover:text-red-700 hover:bg-red-50"
+                                : "text-red-600 hover:text-red-700 hover:bg-red-50",
                             )
                       }
                       onClick={() => setPlatform("youtube")}
@@ -824,7 +855,7 @@ export default function LeaderboardClient({
                               "transition-all duration-300 font-semibold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0",
                               isDark
                                 ? "text-pink-300 hover:text-pink-200 hover:bg-pink-900/20"
-                                : "text-pink-600 hover:text-pink-700 hover:bg-pink-50"
+                                : "text-pink-600 hover:text-pink-700 hover:bg-pink-50",
                             )
                       }
                       onClick={() => setPlatform("instagram")}
@@ -832,6 +863,27 @@ export default function LeaderboardClient({
                       <Instagram className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                       <span className="hidden sm:inline ml-1 sm:ml-1.5">
                         Instagram
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={platform === "twitter" ? "default" : "ghost"}
+                      className={
+                        platform === "twitter"
+                          ? "bg-sky-500 hover:bg-sky-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-sky-700/30 font-bold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                          : cn(
+                              "transition-all duration-300 font-semibold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0",
+                              isDark
+                                ? "text-sky-300 hover:text-sky-200 hover:bg-sky-900/20"
+                                : "text-sky-600 hover:text-sky-700 hover:bg-sky-50",
+                            )
+                      }
+                      onClick={() => setPlatform("twitter")}
+                    >
+                      <Twitter className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                      <span className="hidden sm:inline ml-1 sm:ml-1.5">
+                        Twitter
                       </span>
                     </Button>
                   </div>
@@ -843,7 +895,7 @@ export default function LeaderboardClient({
               "p-3 sm:p-4 md:p-6",
               isDark
                 ? "bg-[#170337]"
-                : "bg-gradient-to-br from-gray-50/30 to-white"
+                : "bg-gradient-to-br from-gray-50/30 to-white",
             )}
           >
             {loading ? (
@@ -855,7 +907,7 @@ export default function LeaderboardClient({
                       "group relative flex flex-row items-center gap-2 sm:gap-3 md:gap-4 p-3 sm:p-4 md:p-5 rounded-lg sm:rounded-xl border-2",
                       isDark
                         ? "border-gray-600 bg-[#170337]"
-                        : "border-gray-200 bg-white"
+                        : "border-gray-200 bg-white",
                     )}
                   >
                     {/* Left Section: Rank, Avatar, and User Info */}
@@ -960,7 +1012,7 @@ export default function LeaderboardClient({
                       key={entry.user_id}
                       className={cn(
                         "group relative flex flex-row items-center gap-2 sm:gap-3 md:gap-4 p-3 sm:p-4 md:p-5 rounded-lg sm:rounded-xl border-2 transition-all duration-300 hover:border-violet-300 hover:shadow-lg sm:hover:scale-[1.01]",
-                        isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+                        isDark ? "bg-[#170337]" : "bg-white border-gray-200",
                       )}
                     >
                       {/* Left Section: Rank, Avatar, and User Info */}
@@ -972,7 +1024,7 @@ export default function LeaderboardClient({
                               "flex items-center justify-center w-full h-full rounded-full group-hover:border-violet-400 ",
                               isDark
                                 ? "bg-[#170337] border-2 border-gray-600"
-                                : "bg-gradient-to-br from-gray-100 to-gray-200 border-2 border-gray-300 transition-colors"
+                                : "bg-gradient-to-br from-gray-100 to-gray-200 border-2 border-gray-300 transition-colors",
                             )}
                           >
                             <span
@@ -980,7 +1032,7 @@ export default function LeaderboardClient({
                                 "text-sm sm:text-lg md:text-xl font-bold",
                                 isDark
                                   ? "text-gray-300 group-hover:text-violet-400"
-                                  : "text-gray-700 group-hover:text-violet-600"
+                                  : "text-gray-700 group-hover:text-violet-600",
                               )}
                             >
                               {rank}
@@ -994,7 +1046,7 @@ export default function LeaderboardClient({
                             "w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 transition-all duration-300 group-hover:ring-violet-100 group-hover:shadow-lg flex-shrink-0",
                             isDark
                               ? "ring-2 ring-offset-1 ring-gray-300"
-                              : "ring-2 sm:ring-3 ring-offset-1 sm:ring-offset-2 ring-gray-200"
+                              : "ring-2 sm:ring-3 ring-offset-1 sm:ring-offset-2 ring-gray-200",
                           )}
                         >
                           {showAvatarImage && (
@@ -1003,7 +1055,7 @@ export default function LeaderboardClient({
                               onError={() =>
                                 handleAvatarError(
                                   entry.user_id,
-                                  entry.profile_picture_url || undefined
+                                  entry.profile_picture_url || undefined,
                                 )
                               }
                               loading="lazy"
@@ -1022,7 +1074,7 @@ export default function LeaderboardClient({
                               "font-bold text-sm sm:text-lg truncate",
                               isDark
                                 ? "text-white"
-                                : "text-gray-900 group-hover:text-violet-600"
+                                : "text-gray-900 group-hover:text-violet-600",
                             )}
                           >
                             {displayName}
@@ -1059,7 +1111,7 @@ export default function LeaderboardClient({
                         <div
                           className={cn(
                             "text-lg sm:text-2xl font-bold",
-                            isDark ? "text-white" : "text-gray-700"
+                            isDark ? "text-white" : "text-gray-700",
                           )}
                         >
                           {metricValue}
@@ -1071,7 +1123,7 @@ export default function LeaderboardClient({
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
                                 isDark
                                   ? "bg-emerald-800/20 border border-emerald-400/20 hover:bg-emerald-800/20"
-                                  : "bg-emerald-50/80 border border-emerald-200/60 hover:bg-emerald-100/80"
+                                  : "bg-emerald-50/80 border border-emerald-200/60 hover:bg-emerald-100/80",
                               )}
                             >
                               <Award
@@ -1079,7 +1131,7 @@ export default function LeaderboardClient({
                                   "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
                                   isDark
                                     ? "text-emerald-300"
-                                    : "text-emerald-600"
+                                    : "text-emerald-600",
                                 )}
                               />
                               <span
@@ -1087,7 +1139,7 @@ export default function LeaderboardClient({
                                   "text-[10px] sm:text-xs font-bold",
                                   isDark
                                     ? "text-emerald-300"
-                                    : "text-emerald-700"
+                                    : "text-emerald-700",
                                 )}
                               >
                                 {entry.metrics.contests_participated || 0}
@@ -1097,7 +1149,7 @@ export default function LeaderboardClient({
                                   "text-[10px] sm:text-xs font-medium hidden sm:inline",
                                   isDark
                                     ? "text-emerald-300"
-                                    : "text-emerald-600"
+                                    : "text-emerald-600",
                                 )}
                               >
                                 contests
@@ -1107,7 +1159,7 @@ export default function LeaderboardClient({
                                   "text-[10px] font-medium sm:hidden",
                                   isDark
                                     ? "text-emerald-300"
-                                    : "text-emerald-600"
+                                    : "text-emerald-600",
                                 )}
                               >
                                 c
@@ -1118,19 +1170,19 @@ export default function LeaderboardClient({
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
                                 isDark
                                   ? "bg-blue-800/20 border border-blue-400/20 hover:bg-blue-800/20"
-                                  : "bg-blue-50/80 border border-blue-200/60 hover:bg-teal-100/80"
+                                  : "bg-blue-50/80 border border-blue-200/60 hover:bg-teal-100/80",
                               )}
                             >
                               <Target
                                 className={cn(
                                   "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
-                                  isDark ? "text-blue-300" : "text-blue-600"
+                                  isDark ? "text-blue-300" : "text-blue-600",
                                 )}
                               />
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-bold",
-                                  isDark ? "text-blue-300" : "text-blue-700"
+                                  isDark ? "text-blue-300" : "text-blue-700",
                                 )}
                               >
                                 {entry.metrics.submissions_made || 0}
@@ -1138,7 +1190,7 @@ export default function LeaderboardClient({
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-medium hidden sm:inline",
-                                  isDark ? "text-blue-400" : "text-blue-600"
+                                  isDark ? "text-blue-400" : "text-blue-600",
                                 )}
                               >
                                 submissions
@@ -1146,7 +1198,7 @@ export default function LeaderboardClient({
                               <span
                                 className={cn(
                                   "text-[10px] font-medium sm:hidden",
-                                  isDark ? "text-blue-400" : "text-blue-600"
+                                  isDark ? "text-blue-400" : "text-blue-600",
                                 )}
                               >
                                 s
@@ -1161,19 +1213,19 @@ export default function LeaderboardClient({
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
                                 isDark
                                   ? "bg-blue-800/20 border border-blue-400/20 hover:bg-blue-800/20"
-                                  : "bg-blue-50/80 border border-blue-200/60 hover:bg-blue-100/80"
+                                  : "bg-blue-50/80 border border-blue-200/60 hover:bg-blue-100/80",
                               )}
                             >
                               <Award
                                 className={cn(
                                   "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
-                                  isDark ? "text-blue-300" : "text-blue-600"
+                                  isDark ? "text-blue-300" : "text-blue-600",
                                 )}
                               />
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-bold",
-                                  isDark ? "text-blue-300" : "text-blue-700"
+                                  isDark ? "text-blue-300" : "text-blue-700",
                                 )}
                               >
                                 {entry.metrics.contests_participated || 0}
@@ -1181,7 +1233,7 @@ export default function LeaderboardClient({
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-medium sm:inline",
-                                  isDark ? "text-blue-300" : "text-blue-600"
+                                  isDark ? "text-blue-300" : "text-blue-600",
                                 )}
                               >
                                 contests
@@ -1196,19 +1248,23 @@ export default function LeaderboardClient({
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
                                 isDark
                                   ? "bg-indigo-800/20 border border-indigo-400/30 hover:bg-indigo-800/20"
-                                  : "bg-indigo-50/80 border border-indigo-200/60 hover:bg-indigo-100/80"
+                                  : "bg-indigo-50/80 border border-indigo-200/60 hover:bg-indigo-100/80",
                               )}
                             >
                               <Target
                                 className={cn(
                                   "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
-                                  isDark ? "text-indigo-300" : "text-indigo-600"
+                                  isDark
+                                    ? "text-indigo-300"
+                                    : "text-indigo-600",
                                 )}
                               />
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-bold",
-                                  isDark ? "text-indigo-300" : "text-indigo-700"
+                                  isDark
+                                    ? "text-indigo-300"
+                                    : "text-indigo-700",
                                 )}
                               >
                                 {entry.metrics.submissions_made || 0}
@@ -1216,7 +1272,9 @@ export default function LeaderboardClient({
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-medium hidden sm:inline",
-                                  isDark ? "text-indigo-300" : "text-indigo-600"
+                                  isDark
+                                    ? "text-indigo-300"
+                                    : "text-indigo-600",
                                 )}
                               >
                                 submitted
@@ -1224,7 +1282,9 @@ export default function LeaderboardClient({
                               <span
                                 className={cn(
                                   "text-[10px] font-medium sm:hidden",
-                                  isDark ? "text-indigo-400" : "text-indigo-600"
+                                  isDark
+                                    ? "text-indigo-400"
+                                    : "text-indigo-600",
                                 )}
                               >
                                 s
@@ -1235,7 +1295,7 @@ export default function LeaderboardClient({
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
                                 isDark
                                   ? "bg-emerald-400/10 border border-emerald-400/30 hover:bg-emerald-400/20"
-                                  : "bg-emerald-50/80 border border-emerald-200/60 hover:bg-emerald-100/80"
+                                  : "bg-emerald-50/80 border border-emerald-200/60 hover:bg-emerald-100/80",
                               )}
                             >
                               <Award
@@ -1243,7 +1303,7 @@ export default function LeaderboardClient({
                                   "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
                                   isDark
                                     ? "text-emerald-300"
-                                    : "text-emerald-600"
+                                    : "text-emerald-600",
                                 )}
                               />
                               <span
@@ -1251,7 +1311,7 @@ export default function LeaderboardClient({
                                   "text-[10px] sm:text-xs font-bold",
                                   isDark
                                     ? "text-emerald-300"
-                                    : "text-emerald-700"
+                                    : "text-emerald-700",
                                 )}
                               >
                                 {entry.metrics.contests_participated || 0}
@@ -1261,7 +1321,7 @@ export default function LeaderboardClient({
                                   "text-[10px] sm:text-xs font-medium hidden sm:inline",
                                   isDark
                                     ? "text-emerald-400"
-                                    : "text-emerald-600"
+                                    : "text-emerald-600",
                                 )}
                               >
                                 contests
@@ -1271,7 +1331,7 @@ export default function LeaderboardClient({
                                   "text-[10px] font-medium sm:hidden",
                                   isDark
                                     ? "text-emerald-400"
-                                    : "text-emerald-600"
+                                    : "text-emerald-600",
                                 )}
                               >
                                 c
@@ -1286,19 +1346,19 @@ export default function LeaderboardClient({
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
                                 isDark
                                   ? "bg-blue-400/10 border border-blue-400/30 hover:bg-blue-400/20"
-                                  : "bg-blue-50/80 border border-blue-200/60 hover:bg-blue-100/80"
+                                  : "bg-blue-50/80 border border-blue-200/60 hover:bg-blue-100/80",
                               )}
                             >
                               <Building2
                                 className={cn(
                                   "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
-                                  isDark ? "text-blue-300" : "text-blue-600"
+                                  isDark ? "text-blue-300" : "text-blue-600",
                                 )}
                               />
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-bold",
-                                  isDark ? "text-blue-300" : "text-blue-700"
+                                  isDark ? "text-blue-300" : "text-blue-700",
                                 )}
                               >
                                 {entry.metrics.advertisers_referred || 0}
@@ -1306,7 +1366,7 @@ export default function LeaderboardClient({
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-medium hidden sm:inline",
-                                  isDark ? "text-blue-400" : "text-blue-600"
+                                  isDark ? "text-blue-400" : "text-blue-600",
                                 )}
                               >
                                 brands
@@ -1314,7 +1374,7 @@ export default function LeaderboardClient({
                               <span
                                 className={cn(
                                   "text-[10px] font-medium sm:hidden",
-                                  isDark ? "text-blue-400" : "text-blue-600"
+                                  isDark ? "text-blue-400" : "text-blue-600",
                                 )}
                               >
                                 b
@@ -1325,19 +1385,23 @@ export default function LeaderboardClient({
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
                                 isDark
                                   ? "bg-purple-400/10 border border-purple-400/30 hover:bg-purple-400/20"
-                                  : "bg-purple-50/80 border border-purple-200/60 hover:bg-purple-100/80"
+                                  : "bg-purple-50/80 border border-purple-200/60 hover:bg-purple-100/80",
                               )}
                             >
                               <Users
                                 className={cn(
                                   "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
-                                  isDark ? "text-purple-300" : "text-purple-600"
+                                  isDark
+                                    ? "text-purple-300"
+                                    : "text-purple-600",
                                 )}
                               />
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-bold",
-                                  isDark ? "text-purple-300" : "text-purple-700"
+                                  isDark
+                                    ? "text-purple-300"
+                                    : "text-purple-700",
                                 )}
                               >
                                 {entry.metrics.creators_referred || 0}
@@ -1345,7 +1409,9 @@ export default function LeaderboardClient({
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-medium hidden sm:inline",
-                                  isDark ? "text-purple-400" : "text-purple-600"
+                                  isDark
+                                    ? "text-purple-400"
+                                    : "text-purple-600",
                                 )}
                               >
                                 creators
@@ -1353,7 +1419,9 @@ export default function LeaderboardClient({
                               <span
                                 className={cn(
                                   "text-[10px] font-medium sm:hidden",
-                                  isDark ? "text-purple-400" : "text-purple-600"
+                                  isDark
+                                    ? "text-purple-400"
+                                    : "text-purple-600",
                                 )}
                               >
                                 c
@@ -1368,29 +1436,29 @@ export default function LeaderboardClient({
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
                                 isDark
                                   ? "bg-green-400/10 border border-green-400/30 hover:bg-green-400/20"
-                                  : "bg-green-50/80 border border-green-200/60 hover:bg-green-100/80"
+                                  : "bg-green-50/80 border border-green-200/60 hover:bg-green-100/80",
                               )}
                             >
                               <TrendingUp
                                 className={cn(
                                   "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
-                                  isDark ? "text-green-300" : "text-green-600"
+                                  isDark ? "text-green-300" : "text-green-600",
                                 )}
                               />
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-bold",
-                                  isDark ? "text-green-300" : "text-green-700"
+                                  isDark ? "text-green-300" : "text-green-700",
                                 )}
                               >
                                 {formatMoney(
-                                  entry.metrics.affiliate_earnings || 0
+                                  entry.metrics.affiliate_earnings || 0,
                                 )}
                               </span>
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-medium hidden sm:inline",
-                                  isDark ? "text-green-400" : "text-green-600"
+                                  isDark ? "text-green-400" : "text-green-600",
                                 )}
                               >
                                 Affiliate
@@ -1398,7 +1466,7 @@ export default function LeaderboardClient({
                               <span
                                 className={cn(
                                   "text-[10px] font-medium sm:hidden",
-                                  isDark ? "text-green-400" : "text-green-600"
+                                  isDark ? "text-green-400" : "text-green-600",
                                 )}
                               >
                                 A
@@ -1409,19 +1477,19 @@ export default function LeaderboardClient({
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
                                 isDark
                                   ? "bg-teal-400/10 border border-teal-400/30 hover:bg-teal-400/20"
-                                  : "bg-teal-50/80 border border-teal-200/60 hover:bg-teal-100/80"
+                                  : "bg-teal-50/80 border border-teal-200/60 hover:bg-teal-100/80",
                               )}
                             >
                               <DollarSign
                                 className={cn(
                                   "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
-                                  isDark ? "text-teal-300" : "text-teal-600"
+                                  isDark ? "text-teal-300" : "text-teal-600",
                                 )}
                               />
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-bold",
-                                  isDark ? "text-teal-300" : "text-teal-700"
+                                  isDark ? "text-teal-300" : "text-teal-700",
                                 )}
                               >
                                 {formatMoney(entry.metrics.other_earnings || 0)}
@@ -1429,7 +1497,7 @@ export default function LeaderboardClient({
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-xs font-medium hidden sm:inline",
-                                  isDark ? "text-teal-400" : "text-teal-600"
+                                  isDark ? "text-teal-400" : "text-teal-600",
                                 )}
                               >
                                 Other Earnings
@@ -1437,7 +1505,7 @@ export default function LeaderboardClient({
                               <span
                                 className={cn(
                                   "text-[10px] font-medium sm:hidden",
-                                  isDark ? "text-teal-400" : "text-teal-600"
+                                  isDark ? "text-teal-400" : "text-teal-600",
                                 )}
                               >
                                 E

@@ -1,7 +1,222 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic"; // Force dynamic rendering
+
+/** Build creator display fields from user + creator_profile (shared logic) */
+function buildCreatorDisplay(creatorProfile: any, userProfile: any, platform: string | null) {
+  let creator_pfp_url: string | null = null;
+  let creator_display_name: string | null = null;
+  let creator_username: string | null = null;
+  if (creatorProfile && platform) {
+    try {
+      if (platform === "youtube") {
+        const ytAccount =
+          typeof creatorProfile.youtube_account === "string"
+            ? JSON.parse(creatorProfile.youtube_account)
+            : creatorProfile.youtube_account;
+        creator_display_name = ytAccount?.channel_title ?? null;
+        creator_username =
+          (ytAccount?.channel_custom_url || ytAccount?.channel_id) ?? null;
+        creator_pfp_url = ytAccount?.channel_thumbnail ?? null;
+      } else if (platform === "instagram") {
+        const igAccount =
+          typeof creatorProfile.instagram_account === "string"
+            ? JSON.parse(creatorProfile.instagram_account)
+            : creatorProfile.instagram_account;
+        creator_display_name =
+          (igAccount?.name_of_account ||
+            igAccount?.full_name ||
+            igAccount?.display_name) ?? null;
+        creator_username = igAccount?.username ?? null;
+        creator_pfp_url = igAccount?.profile_picture_url ?? null;
+      }
+    } catch (_) {}
+  }
+  if (!creator_display_name)
+    creator_display_name =
+      userProfile?.full_name || userProfile?.username || "Unknown Creator";
+  if (!creator_username) creator_username = userProfile?.username || "N/A";
+  if (!creator_pfp_url) creator_pfp_url = userProfile?.profile_picture_url ?? null;
+  return { creator_pfp_url, creator_display_name, creator_username };
+}
+
+const CREATOR_WISE_CHUNK_SIZE = 200; // submissions per chunk to bound memory
+const CREATOR_ID_BATCH_SIZE = 500;   // for counting distinct creators
+
+type CreatorAgg = {
+  creator_id: string;
+  total_views: number;
+  total_earnings: number;
+  submission_count: number;
+  submission_ranks: number[];
+  best_rank: number;
+  has_paid_submission: boolean;
+  platform: string | null;
+};
+
+/**
+ * Get total distinct creator count for contest (scalable: fetches only creator_id in chunks).
+ */
+async function getTotalCreatorCount(
+  supabase: SupabaseClient,
+  contestId: string
+): Promise<number> {
+  const creatorIds: string[] = [];
+  let offset = 0;
+  while (true) {
+    const { data: batch, error } = await supabase
+      .from("submissions")
+      .select("creator_id")
+      .eq("contest_id", contestId)
+      .neq("status", "rejected")
+      .order("id", { ascending: true })
+      .range(offset, offset + CREATOR_ID_BATCH_SIZE - 1);
+
+    if (error) throw new Error(`Failed to fetch creator count: ${error.message}`);
+    if (!batch?.length) break;
+    creatorIds.push(...batch.map((r) => r.creator_id));
+    if (batch.length < CREATOR_ID_BATCH_SIZE) break;
+    offset += CREATOR_ID_BATCH_SIZE;
+  }
+  return new Set(creatorIds).size;
+}
+
+/**
+ * Fetch leaderboard aggregated by creator. Scalable: fetches submissions in chunks,
+ * aggregates in a Map (one entry per creator), stops when the requested page can be filled.
+ * Submissions per creator are not embedded; client uses expand API to load them.
+ */
+async function getLeaderboardGroupedByCreator(
+  supabase: SupabaseClient,
+  contestId: string,
+  page: number,
+  limit: number
+) {
+  const from = (page - 1) * limit;
+  const byCreator = new Map<string, CreatorAgg>();
+  let globalOffset = 0;
+  const baseQuery = supabase
+    .from("submissions")
+    .select("id, creator_id, views, earnings, status, created_at, platform")
+    .eq("contest_id", contestId)
+    .neq("status", "rejected")
+    .order("views", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: true });
+
+  // Fetch submission chunks until we have enough creators to form the requested page
+  while (true) {
+    const { data: chunk, error: subError } = await baseQuery.range(
+      globalOffset,
+      globalOffset + CREATOR_WISE_CHUNK_SIZE - 1
+    );
+
+    if (subError) {
+      console.error("Error fetching submissions for creator-wise:", subError);
+      throw new Error(`Failed to fetch submissions: ${subError.message}`);
+    }
+    if (!chunk?.length) break;
+
+    chunk.forEach((sub, i) => {
+      const rank = globalOffset + i + 1;
+      const existing = byCreator.get(sub.creator_id);
+      if (existing) {
+        existing.total_views += sub.views ?? 0;
+        existing.total_earnings += sub.earnings ?? 0;
+        existing.submission_count += 1;
+        existing.submission_ranks.push(rank);
+        existing.best_rank = Math.min(existing.best_rank, rank);
+        if (sub.status === "paid") existing.has_paid_submission = true;
+      } else {
+        byCreator.set(sub.creator_id, {
+          creator_id: sub.creator_id,
+          total_views: sub.views ?? 0,
+          total_earnings: sub.earnings ?? 0,
+          submission_count: 1,
+          submission_ranks: [rank],
+          best_rank: rank,
+          has_paid_submission: sub.status === "paid",
+          platform: sub.platform ?? null,
+        });
+      }
+    });
+
+    const sorted = Array.from(byCreator.values()).sort(
+      (a, b) => a.best_rank - b.best_rank
+    );
+    if (sorted.length >= from + limit) break;
+    if (chunk.length < CREATOR_WISE_CHUNK_SIZE) break;
+    globalOffset += chunk.length;
+  }
+
+  const sortedCreators = Array.from(byCreator.values()).sort(
+    (a, b) => a.best_rank - b.best_rank
+  );
+  const totalEntries = await getTotalCreatorCount(supabase, contestId);
+  const totalPages = totalEntries ? Math.ceil(totalEntries / limit) : 0;
+  const pageCreators = sortedCreators.slice(from, from + limit);
+  const creatorIds = pageCreators.map((c) => c.creator_id);
+
+  if (creatorIds.length === 0) {
+    return {
+      leaderboard: [],
+      currentPage: page,
+      totalPages,
+      totalEntries,
+    };
+  }
+
+  const { data: usersData, error: usersError } = await supabase
+    .from("users")
+    .select("id, username, profile_picture_url, full_name")
+    .in("id", creatorIds);
+
+  if (usersError) console.error("Error fetching users for creator-wise:", usersError);
+
+  const { data: creatorProfilesData, error: profilesError } = await supabase
+    .from("creator_profiles")
+    .select("id, youtube_account, instagram_account")
+    .in("id", creatorIds);
+
+  if (profilesError) console.error("Error fetching creator profiles:", profilesError);
+
+  const usersMap = new Map(usersData?.map((u) => [u.id, u]) || []);
+  const profilesMap = new Map(
+    creatorProfilesData?.map((p) => [p.id, p]) || []
+  );
+
+  const leaderboard = pageCreators.map((agg, index) => {
+    const userProfile = usersMap.get(agg.creator_id) || null;
+    const creatorProfile = profilesMap.get(agg.creator_id) || null;
+    const { creator_pfp_url, creator_display_name, creator_username } =
+      buildCreatorDisplay(creatorProfile, userProfile, agg.platform);
+    const best_rank = from + index + 1;
+    return {
+      creator_id: agg.creator_id,
+      creator_username: creator_username ?? "N/A",
+      creator_full_name: creator_display_name ?? "Unknown Creator",
+      creator_pfp_url,
+      user_platform_pfp_url: userProfile?.profile_picture_url ?? null,
+      user_platform_username: userProfile?.username ?? "N/A",
+      user_full_name: userProfile?.full_name ?? "Anonymous User",
+      total_views: agg.total_views,
+      total_earnings: agg.total_earnings,
+      submission_count: agg.submission_count,
+      best_rank,
+      submission_ranks: agg.submission_ranks,
+      has_paid_submission: agg.has_paid_submission,
+      submissions: [], // client fetches via /api/leaderboard/.../creators/[creatorId]/submissions when expanding
+    };
+  });
+
+  return {
+    leaderboard,
+    currentPage: page,
+    totalPages,
+    totalEntries,
+  };
+}
 
 // Revalidate data every 60 seconds
 export async function GET(request: Request) {
@@ -13,10 +228,9 @@ export async function GET(request: Request) {
   // Pagination parameters
   const page = parseInt(url.searchParams.get("page") || "1", 10);
   const limit = parseInt(url.searchParams.get("limit") || "25", 10); // Default limit to 25
+  const groupBy = url.searchParams.get("groupBy") || ""; // "creator" = aggregate by creator (combined views across all submissions)
   const from = (page - 1) * limit;
   const to = page * limit - 1;
-
-  // console.log(`(Using Anon Client) Extracted contestId: ${contestId}, Page: ${page}, Limit: ${limit}, From: ${from}, To: ${to}`);
 
   if (!contestId) {
     return NextResponse.json(
@@ -42,6 +256,22 @@ export async function GET(request: Request) {
 
     if (!contestData) {
       throw new Error("Contest not found");
+    }
+
+    // --- Creator-wise: aggregate by creator (combined views across ALL submissions), paginate by creator ---
+    if (groupBy === "creator") {
+      const creatorWiseResult = await getLeaderboardGroupedByCreator(
+        supabase,
+        contestId,
+        page,
+        limit
+      );
+      return NextResponse.json({
+        ...creatorWiseResult,
+        lastUpdated: new Date().toISOString(),
+        contestType: contestData.contest_type,
+        groupBy: "creator",
+      });
     }
 
     // 2. Fetch total count of submissions for the contest

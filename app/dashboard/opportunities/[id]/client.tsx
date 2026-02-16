@@ -155,7 +155,7 @@ let generatedDummyDataCache: {
 } | null = null;
 
 const generateAllDummyLeaderboardData = (
-  count: number
+  count: number,
 ): { entries: LeaderboardEntry[]; myRank: number | null } => {
   if (generatedDummyDataCache && generatedDummyDataCache.count === count) {
     return {
@@ -185,7 +185,7 @@ const generateAllDummyLeaderboardData = (
       earnings: Math.random() > 0.65 ? Math.floor(Math.random() * 150) + 10 : 0,
       status: "approved",
       created_at: new Date(
-        Date.now() - Math.random() * 45 * 24 * 60 * 60 * 1000
+        Date.now() - Math.random() * 45 * 24 * 60 * 60 * 1000,
       ).toISOString(), // random date in last 45 days
       content_link: "https://www.example.com/watch?v=dQw4w9WgXcQ", // A familiar link for all :)
       platform: platforms[i % platforms.length],
@@ -204,7 +204,7 @@ const generateAllDummyLeaderboardData = (
   });
 
   const myEntryIndex = entries.findIndex(
-    (e) => e.creator_id === MY_DUMMY_SUBMISSION_USER_ID
+    (e) => e.creator_id === MY_DUMMY_SUBMISSION_USER_ID,
   );
   if (myEntryIndex !== -1) {
     tempMyRank = myEntryIndex + 1;
@@ -241,7 +241,7 @@ export function ContestClientPage({
     useState(false);
   const [showAllSubmissionsModal, setShowAllSubmissionsModal] = useState(false);
   const [modalViewMode, setModalViewMode] = useState<"simple" | "detailed">(
-    "simple"
+    "simple",
   );
   const [rejectionReasonModalOpen, setRejectionReasonModalOpen] =
     useState(false);
@@ -250,10 +250,37 @@ export function ContestClientPage({
   const [modalItemsPerPage] = useState(10); // Show 10 submissions per page
   const [showCreatorVideosModal, setShowCreatorVideosModal] = useState(false);
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(
-    null
+    null,
   );
+  /** Lazy-loaded submissions for selected creator in creator-wise view (from API) */
+  const [selectedCreatorSubmissions, setSelectedCreatorSubmissions] = useState<
+    LeaderboardEntry[]
+  >([]);
   const [creatorVideosCurrentPage, setCreatorVideosCurrentPage] = useState(1);
   const [creatorVideosItemsPerPage] = useState(10);
+  /** Loading state for All Videos modal when fetching creator submissions */
+  const [loadingCreatorVideosModal, setLoadingCreatorVideosModal] =
+    useState(false);
+  /** Server-side creator-wise leaderboard (combined views across all submissions per creator); used when groupBy=creator */
+  const [creatorWiseLeaderboard, setCreatorWiseLeaderboard] = useState<
+    Array<{
+      creator_id: string;
+      creator_username: string;
+      creator_full_name: string;
+      creator_pfp_url: string | null;
+      user_platform_pfp_url: string | null;
+      user_platform_username?: string;
+      user_full_name?: string;
+      submissions: LeaderboardEntry[];
+      submission_ranks?: number[];
+      total_views: number;
+      total_earnings: number;
+      best_submission?: LeaderboardEntry | null;
+      best_rank: number;
+      submission_count: number;
+      has_paid_submission?: boolean;
+    }>
+  >([]);
   const tabs = useMemo(() => getTabs(contest?.platform), [contest?.platform]);
   const { activeTab, setActiveTab } = useTabState(tabs, {
     defaultTab: "details",
@@ -269,6 +296,8 @@ export function ContestClientPage({
   const [leaderboardItemsPerPage, setLeaderboardItemsPerPage] = useState(25); // Or your preferred default
   const [totalLeaderboardEntries, setTotalLeaderboardEntries] = useState(0);
   const [totalLeaderboardPages, setTotalLeaderboardPages] = useState(0);
+  const [creatorTotalEntries, setCreatorTotalEntries] = useState(0);
+  const [creatorTotalPages, setCreatorTotalPages] = useState(0);
 
   // State for logged-in user's submission and rank
   const [myLeaderboardEntry, setMyLeaderboardEntry] = useState<
@@ -308,7 +337,7 @@ export function ContestClientPage({
 
   // Post-contest status state for creator transparency
   const [postContestStatus, setPostContestStatus] = useState<string | null>(
-    null
+    null,
   );
 
   // User profile data for link processing
@@ -419,27 +448,26 @@ export function ContestClientPage({
   }, [leaderboard, leaderboardCurrentPage, leaderboardItemsPerPage]);
 
   // Memoized grouped leaderboard by creator (for creator-wise display)
+  // Prefer server-side creatorWiseLeaderboard when in creator mode (non-Twitter) for combined views across ALL submissions
   const groupedLeaderboardByCreator = useMemo(() => {
     if (leaderboardDisplayMode !== "creator") return null;
 
     // For Twitter contests, leaderboard is already aggregated by creator
-    // Just map the entries directly
-    if (contest?.platform === "twitter") {
+    if (contest?.platform === "twitter" || contest?.platform === "x") {
       return leaderboard.map((entry: any, index: number) => {
         const currentRank = entry.current_rank || index + 1;
         return {
           creator_id: entry.creator_id,
           creator_username: entry.app_username || entry.creator_id,
           creator_full_name: entry.app_full_name || null,
-          creator_pfp_url: null, // Twitter leaderboard doesn't include profile pics
+          creator_pfp_url: null,
           user_platform_pfp_url: null,
-          submissions: [entry], // Single aggregated entry (includes paid, earnings from twitter_campaign_leaderboard)
-          total_views: 0, // Not applicable for Twitter
-          total_earnings: entry.earnings || 0, // From twitter_campaign_leaderboard
+          submissions: [entry],
+          total_views: 0,
+          total_earnings: entry.earnings || 0,
           best_submission: entry,
           best_rank: currentRank,
           submission_count: entry.total_eligible_tweets || 0,
-          // Twitter-specific fields
           total_points: entry.total_points || 0,
           total_eligible_tweets: entry.total_eligible_tweets || 0,
           total_likes: entry.total_likes || 0,
@@ -453,6 +481,12 @@ export function ContestClientPage({
       });
     }
 
+    // Non-Twitter creator-wise: use server-side aggregated data (combined all views per creator)
+    if (creatorWiseLeaderboard.length > 0) {
+      return creatorWiseLeaderboard;
+    }
+
+    // Fallback: client-side grouping from current page only (legacy)
     const grouped = new Map<
       string,
       {
@@ -473,36 +507,27 @@ export function ContestClientPage({
 
     leaderboard.forEach((entry, index) => {
       const existing = grouped.get(entry.creator_id);
-      // Prefer API rank (matches contest/brand) for correct Winning Zone / expected reward
       const currentRank =
         entry.rank ??
         (leaderboardCurrentPage - 1) * leaderboardItemsPerPage + (index + 1);
 
       if (existing) {
-        // Add this submission to the creator's group
         existing.submissions.push(entry);
         existing.submission_ranks.push(currentRank);
         existing.total_views += entry.views || 0;
         existing.total_earnings += entry.earnings || 0;
         existing.best_rank = Math.min(existing.best_rank, currentRank);
-
-        // Update best submission if this one has more views
         if (
           !existing.best_submission ||
           entry.views > existing.best_submission.views
         ) {
           existing.best_submission = entry;
         }
-
         existing.submission_count = existing.submissions.length;
       } else {
-        // Create new group for this creator
         grouped.set(entry.creator_id, {
           creator_id: entry.creator_id,
-          creator_username:
-            (contest?.platform === "twitter"
-              ? (entry as any).app_username
-              : null) || entry.user_platform_username,
+          creator_username: entry.user_platform_username,
           creator_full_name: entry.user_full_name,
           creator_pfp_url: entry.creator_pfp_url,
           user_platform_pfp_url: entry.user_platform_pfp_url,
@@ -517,13 +542,8 @@ export function ContestClientPage({
       }
     });
 
-    // Convert map to array and sort by best rank (lowest rank = highest position)
     return Array.from(grouped.values()).sort((a, b) => {
-      // Sort by best rank first
-      if (a.best_rank !== b.best_rank) {
-        return a.best_rank - b.best_rank;
-      }
-      // If ranks are equal, sort by total views
+      if (a.best_rank !== b.best_rank) return a.best_rank - b.best_rank;
       return b.total_views - a.total_views;
     });
   }, [
@@ -532,7 +552,19 @@ export function ContestClientPage({
     contest?.platform,
     leaderboardCurrentPage,
     leaderboardItemsPerPage,
+    creatorWiseLeaderboard,
   ]);
+
+  const isCreatorModeTotals =
+    leaderboardDisplayMode === "creator" &&
+    contest?.platform?.toLowerCase() !== "twitter" &&
+    contest?.platform?.toLowerCase() !== "x";
+  const effectiveLeaderboardTotalEntries = isCreatorModeTotals
+    ? creatorTotalEntries
+    : totalLeaderboardEntries;
+  const effectiveLeaderboardTotalPages = isCreatorModeTotals
+    ? creatorTotalPages
+    : totalLeaderboardPages;
 
   // Keep track of how many creators are on each page in creator-wise view
   // so we can render continuous creator ranks across pagination
@@ -551,20 +583,90 @@ export function ContestClientPage({
     leaderboardCurrentPage,
   ]);
 
+  // Lazy-load submissions for selected creator when in creator-wise view (non-Twitter)
+  useEffect(() => {
+    if (
+      !contestId ||
+      !selectedCreatorId ||
+      leaderboardDisplayMode !== "creator" ||
+      contest?.platform?.toLowerCase() === "twitter" ||
+      contest?.platform?.toLowerCase() === "x"
+    ) {
+      if (!selectedCreatorId) setSelectedCreatorSubmissions([]);
+      setLoadingCreatorVideosModal(false);
+      return;
+    }
+    if (creatorWiseLeaderboard.length === 0) {
+      setSelectedCreatorSubmissions([]);
+      setLoadingCreatorVideosModal(false);
+      return;
+    }
+    const existing = creatorWiseLeaderboard.find(
+      (r) => r.creator_id === selectedCreatorId,
+    );
+    if (existing?.submissions?.length) {
+      setSelectedCreatorSubmissions(existing.submissions);
+      setLoadingCreatorVideosModal(false);
+      return;
+    }
+    setLoadingCreatorVideosModal(true);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/leaderboard/${contestId}/creators/${selectedCreatorId}/submissions`,
+        );
+        const data = await res.json();
+        if (!cancelled && data.submissions)
+          setSelectedCreatorSubmissions(data.submissions);
+      } catch (_) {
+        if (!cancelled) setSelectedCreatorSubmissions([]);
+      } finally {
+        if (!cancelled) setLoadingCreatorVideosModal(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      setLoadingCreatorVideosModal(false);
+    };
+  }, [
+    contestId,
+    selectedCreatorId,
+    leaderboardDisplayMode,
+    contest?.platform,
+    creatorWiseLeaderboard.length,
+    creatorWiseLeaderboard,
+  ]);
+
   // Get user's submissions (now memoized)
   const getUserSubmissions = () => userSubmissions;
 
   // Get best submission (now memoized)
   const getBestSubmission = () => bestSubmission;
 
-  // Get creator videos (memoized)
+  // Get creator videos (memoized); use API-included submissions when present so "All Videos" opens immediately
   const getCreatorVideos = useMemo(() => {
     if (!selectedCreatorId || !groupedLeaderboardByCreator) return [];
     const creatorGroup = groupedLeaderboardByCreator.find(
-      (group) => group.creator_id === selectedCreatorId
+      (group) => group.creator_id === selectedCreatorId,
     );
+    const isNonTwitterCreatorWise =
+      contest?.platform?.toLowerCase() !== "twitter" &&
+      contest?.platform?.toLowerCase() !== "x" &&
+      leaderboardDisplayMode === "creator" &&
+      creatorWiseLeaderboard.length > 0;
+    if (creatorGroup?.submissions?.length) return creatorGroup.submissions;
+    if (isNonTwitterCreatorWise && selectedCreatorSubmissions.length > 0)
+      return selectedCreatorSubmissions;
     return creatorGroup?.submissions || [];
-  }, [selectedCreatorId, groupedLeaderboardByCreator]);
+  }, [
+    selectedCreatorId,
+    groupedLeaderboardByCreator,
+    contest?.platform,
+    leaderboardDisplayMode,
+    creatorWiseLeaderboard.length,
+    selectedCreatorSubmissions,
+  ]);
 
   const handleRefreshMetrics = async () => {
     if (!contest?.id) return;
@@ -588,7 +690,7 @@ export function ContestClientPage({
             "Content-Type": "application/json",
             "x-refresh-source": "opportunities", // Identify this as opportunities refresh
           },
-        }
+        },
       );
 
       result = await response.json();
@@ -611,7 +713,7 @@ export function ContestClientPage({
           }
           try {
             const res = await fetch(
-              `/api/contests/${contest.id}/last-metrics-updated`
+              `/api/contests/${contest.id}/last-metrics-updated`,
             );
             if (!res.ok) return;
             const data = await res.json();
@@ -648,7 +750,7 @@ export function ContestClientPage({
     }
 
     const cooldownInfo = getMetricsRefreshCooldownInfoOpportunities(
-      contest?.last_metrics_updated
+      contest?.last_metrics_updated,
     );
 
     const isLocked =
@@ -672,7 +774,7 @@ export function ContestClientPage({
       disabledReason = "Metrics are locked after contest review begins";
     } else if (!cooldownInfo.canRefresh) {
       disabledReason = `Please wait ${formatRemainingTime(
-        cooldownInfo.remainingMs
+        cooldownInfo.remainingMs,
       )}`;
     }
 
@@ -684,9 +786,13 @@ export function ContestClientPage({
     };
   };
 
-  const fetchLeaderboard = async (pageToFetch: number = 1) => {
+  const fetchLeaderboard = async (
+    pageToFetch: number = 1,
+    groupByCreator: boolean = false,
+    silent: boolean = false,
+  ) => {
     if (!isMounted) return;
-    setLoadingLeaderboard(true);
+    if (!silent) setLoadingLeaderboard(true);
 
     if (USE_DUMMY_DATA_FOR_LEADERBOARD) {
       const { entries: allEntries } =
@@ -716,17 +822,22 @@ export function ContestClientPage({
             emptyDataRefetchAttemptedRef.current = null;
           }
 
-          setLoadingLeaderboard(false);
+          if (!silent) setLoadingLeaderboard(false);
         }
       }, 300);
       return;
     }
 
-    // Real API Call
+    // Real API Call (optionally groupBy=creator for combined views per creator)
     let leaderboardFetchError = null;
     try {
+      const params = new URLSearchParams({
+        page: String(pageToFetch),
+        limit: String(leaderboardItemsPerPage),
+      });
+      if (groupByCreator) params.set("groupBy", "creator");
       const response = await fetch(
-        `/api/leaderboard/${contestId}?page=${pageToFetch}&limit=${leaderboardItemsPerPage}`
+        `/api/leaderboard/${contestId}?${params.toString()}`,
       );
       const data = await response.json();
       if (!response.ok) {
@@ -734,15 +845,37 @@ export function ContestClientPage({
         throw new Error(leaderboardFetchError);
       }
       if (isMounted) {
-        setLeaderboard(data.leaderboard || []);
+        if (groupByCreator) {
+          const rows = data.leaderboard || [];
+          setCreatorWiseLeaderboard(
+            rows.map((r: any) => ({
+              creator_id: r.creator_id,
+              creator_username: r.creator_username ?? "N/A",
+              creator_full_name: r.creator_full_name ?? "Unknown Creator",
+              creator_pfp_url: r.creator_pfp_url ?? null,
+              user_platform_pfp_url: r.user_platform_pfp_url ?? null,
+              user_platform_username: r.user_platform_username ?? r.creator_username ?? "N/A",
+              user_full_name: r.user_full_name ?? r.creator_full_name ?? "Unknown Creator",
+              submissions: r.submissions ?? [],
+              submission_ranks: r.submission_ranks,
+              total_views: r.total_views ?? 0,
+              total_earnings: r.total_earnings ?? 0,
+              best_rank: r.best_rank ?? 0,
+              submission_count: r.submission_count ?? 0,
+              has_paid_submission: r.has_paid_submission,
+            })),
+          );
+          setCreatorTotalEntries(data.totalEntries ?? 0);
+          setCreatorTotalPages(data.totalPages ?? 0);
+        } else {
+          setLeaderboard(data.leaderboard || []);
+          setTotalLeaderboardEntries(data.totalEntries ?? 0);
+          setTotalLeaderboardPages(data.totalPages ?? 0);
+        }
         setLastUpdated(data.lastUpdated);
-        setLeaderboardCurrentPage(data.currentPage);
-        setTotalLeaderboardPages(data.totalPages);
-        setTotalLeaderboardEntries(data.totalEntries);
-        setContestType(data.contestType || null); // Set contest type from API
+        setLeaderboardCurrentPage(data.currentPage ?? pageToFetch);
+        setContestType(data.contestType || null);
 
-        // Mark as loaded only after successful fetch (even if empty - that's a valid response)
-        // Get platform from contest state (it should be available by the time this runs)
         const platform = contest?.platform || "unknown";
         const contestKey = `${contestId}-${platform}`;
         leaderboardLoadedRef.current = contestKey;
@@ -751,7 +884,7 @@ export function ContestClientPage({
       console.error("Error fetching leaderboard:", err);
       if (isMounted && !error) setError(leaderboardFetchError || err.message);
     } finally {
-      if (isMounted) setLoadingLeaderboard(false);
+      if (isMounted && !silent) setLoadingLeaderboard(false);
     }
   };
 
@@ -838,7 +971,7 @@ export function ContestClientPage({
       const { entries: allEntries, myRank } =
         generateAllDummyLeaderboardData(DUMMY_ENTRIES_COUNT);
       const myEntryData = allEntries.find(
-        (e) => e.creator_id === MY_DUMMY_SUBMISSION_USER_ID
+        (e) => e.creator_id === MY_DUMMY_SUBMISSION_USER_ID,
       );
 
       setTimeout(() => {
@@ -866,13 +999,13 @@ export function ContestClientPage({
     }
     try {
       const response = await fetch(
-        `/api/leaderboard/${contestId}/my-submission`
+        `/api/leaderboard/${contestId}/my-submission`,
       );
       const data = await response.json();
       if (!response.ok) {
         console.warn(
           "Failed to fetch user submission data:",
-          data.error || "Unknown error"
+          data.error || "Unknown error",
         );
         if (isMounted) setMyLeaderboardEntry(null);
         return;
@@ -910,7 +1043,7 @@ export function ContestClientPage({
 
     try {
       const response = await fetch(
-        `/api/contests/${contestId}/twitter-leaderboard?page=1&limit=${leaderboardItemsPerPage}`
+        `/api/contests/${contestId}/twitter-leaderboard?page=1&limit=${leaderboardItemsPerPage}`,
       );
       const data = await response.json();
 
@@ -959,14 +1092,14 @@ export function ContestClientPage({
 
     try {
       const response = await fetch(
-        `/api/contests/${contestId}/twitter-my-rank`
+        `/api/contests/${contestId}/twitter-my-rank`,
       );
       const data = await response.json();
 
       if (!response.ok) {
         console.warn(
           "Failed to fetch Twitter my-rank data:",
-          data.error || "Unknown error"
+          data.error || "Unknown error",
         );
         if (isMounted) setMyLeaderboardEntry(null);
         return;
@@ -1009,7 +1142,7 @@ export function ContestClientPage({
 
     try {
       const response = await fetch(
-        `/api/contests/${contestId}/twitter-metrics`
+        `/api/contests/${contestId}/twitter-metrics`,
       );
       const data = await response.json();
 
@@ -1065,7 +1198,7 @@ export function ContestClientPage({
           manual_points_reason,
           target_tweet_id,
           tweet_type
-        `
+        `,
         )
         .eq("contest_id", contestId)
         .order("tweet_created_at", { ascending: false });
@@ -1204,7 +1337,7 @@ export function ContestClientPage({
         if (visibleEntries.length > 0) {
           // Sort by intersection ratio to find the most visible section
           const mostVisible = visibleEntries.sort(
-            (a, b) => b.intersectionRatio - a.intersectionRatio
+            (a, b) => b.intersectionRatio - a.intersectionRatio,
           )[0];
           setActiveSection(mostVisible.target.id);
         }
@@ -1212,7 +1345,7 @@ export function ContestClientPage({
       {
         threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
         rootMargin: "-180px 0px -40% 0px", // Adjusted to account for page header + sticky nav height
-      }
+      },
     );
 
     sections.forEach((section) => {
@@ -1281,7 +1414,7 @@ export function ContestClientPage({
         if (user) {
           try {
             const response = await fetch(
-              `/api/leaderboard/${contestId}/my-submission`
+              `/api/leaderboard/${contestId}/my-submission`,
             );
             if (response.ok) {
               const data = await response.json();
@@ -1357,7 +1490,11 @@ export function ContestClientPage({
         const lastUpdateTime = new Date(lastUpdated).getTime();
         const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
         if (lastUpdateTime < fiveMinutesAgo) {
-          fetchLeaderboard(leaderboardCurrentPage);
+          const isCreatorWise =
+            contest?.platform?.toLowerCase() !== "twitter" &&
+            contest?.platform?.toLowerCase() !== "x" &&
+            leaderboardDisplayMode === "creator";
+          fetchLeaderboard(leaderboardCurrentPage, isCreatorWise);
         }
       }
     }, 60 * 1000);
@@ -1432,10 +1569,9 @@ export function ContestClientPage({
         // Note: myRankFetchedRef will be set in fetchMyTwitterRank after fetch completes
       }
     } else {
-      // For other platforms, fetch if we haven't loaded for this contest yet
       if (shouldFetch) {
-        fetchLeaderboard(1);
-        // Note: leaderboardLoadedRef will be set in fetchLeaderboard after successful fetch
+        fetchLeaderboard(1, false);
+        fetchLeaderboard(1, true, true);
       }
       if (!myLeaderboardEntry && myRankFetchedRef.current !== contestKey) {
         fetchMySubmissionData();
@@ -1490,7 +1626,7 @@ export function ContestClientPage({
         if (creatorProfileData) {
           if (creatorProfileData.categories) {
             localCreatorCategories = Array.isArray(
-              creatorProfileData.categories
+              creatorProfileData.categories,
             )
               ? creatorProfileData.categories
               : [];
@@ -1508,15 +1644,15 @@ export function ContestClientPage({
                     }
                     if (
                       !localCreatorSubcategories[item.category].includes(
-                        item.subcategory
+                        item.subcategory,
                       )
                     ) {
                       localCreatorSubcategories[item.category].push(
-                        item.subcategory
+                        item.subcategory,
                       );
                     }
                   }
-                }
+                },
               );
             } else if (typeof creatorProfileData.subcategories === "object") {
               // If it's already an object
@@ -1569,8 +1705,8 @@ export function ContestClientPage({
       try {
         const res = await fetch(
           `/api/twitter-apis/join-status?contestId=${encodeURIComponent(
-            contestId
-          )}`
+            contestId,
+          )}`,
         );
 
         if (!res.ok) return;
@@ -1604,7 +1740,8 @@ export function ContestClientPage({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(
-          data.error || "Failed to join Twitter (X) campaign. Please try again."
+          data.error ||
+            "Failed to join Twitter (X) campaign. Please try again.",
         );
       }
 
@@ -1724,20 +1861,20 @@ export function ContestClientPage({
                 "flex items-center gap-2 transition-all duration-200 hover:scale-105",
                 isDark
                   ? "border-gray-500"
-                  : "hover:bg-slate-100 border-slate-300 "
+                  : "hover:bg-slate-100 border-slate-300 ",
               )}
               onClick={() => router.push("/dashboard/opportunities")}
             >
               <ArrowLeft
                 className={cn(
                   "h-4 w-4",
-                  isDark ? "text-slate-300" : "text-slate-600"
+                  isDark ? "text-slate-300" : "text-slate-600",
                 )}
               />
               <span
                 className={cn(
                   "hidden sm:inline font-medium",
-                  isDark ? "text-slate-300" : "text-slate-600"
+                  isDark ? "text-slate-300" : "text-slate-600",
                 )}
               >
                 Back to Opportunities
@@ -1777,8 +1914,8 @@ export function ContestClientPage({
                         contest.status === "active"
                           ? "bg-gradient-to-r from-green-400 to-emerald-500 text-green-900 shadow-green-500/25"
                           : contest.status === "upcoming"
-                          ? "bg-gradient-to-r from-blue-400 to-cyan-500 text-blue-900 shadow-blue-500/25"
-                          : "bg-gradient-to-r from-slate-400 to-gray-500 text-slate-900 shadow-slate-500/25"
+                            ? "bg-gradient-to-r from-blue-400 to-cyan-500 text-blue-900 shadow-blue-500/25"
+                            : "bg-gradient-to-r from-slate-400 to-gray-500 text-slate-900 shadow-slate-500/25"
                       }`}
                     >
                       <span className="flex items-center gap-2">
@@ -1869,17 +2006,17 @@ export function ContestClientPage({
                       contest.contest_based_details?.cpm_contest
                         ? formatMoney(
                             contest.contest_based_details.cpm_contest
-                              .total_budget
+                              .total_budget,
                           )
                         : contest.contest_type === "leaderboard" &&
-                          contest.contest_based_details?.leaderboard_contest
-                        ? formatMoney(
-                            contest.contest_based_details.leaderboard_contest
-                              .total_prize
-                          )
-                        : contest.total_prize
-                        ? formatMoney(contest.total_prize || 0)
-                        : "$0.00"}
+                            contest.contest_based_details?.leaderboard_contest
+                          ? formatMoney(
+                              contest.contest_based_details.leaderboard_contest
+                                .total_prize,
+                            )
+                          : contest.total_prize
+                            ? formatMoney(contest.total_prize || 0)
+                            : "$0.00"}
                     </div>
                     {contest.contest_type === "leaderboard" &&
                       contest.contest_based_details?.leaderboard_contest
@@ -1902,7 +2039,7 @@ export function ContestClientPage({
                         <div className="text-white/80 text-sm font-semibold">
                           {formatMoney(
                             contest.contest_based_details.cpm_contest
-                              .cpm_rate_usd * 100
+                              .cpm_rate_usd * 100,
                           )}{" "}
                           {contest.platform?.toLowerCase() === "twitter"
                             ? "per 1000 points"
@@ -1935,7 +2072,7 @@ export function ContestClientPage({
             "mb-8 border overflow-hidden",
             isDark
               ? "border-purple-700/60 bg-purple-700/30"
-              : "border-[#7F39EC] bg-[#D9C0FF26]"
+              : "border-[#7F39EC] bg-[#D9C0FF26]",
           )}
         >
           <CardContent className="p-8 text-center relative">
@@ -1957,7 +2094,7 @@ export function ContestClientPage({
                   <p
                     className={cn(
                       "text-2xl font-bold mb-2",
-                      isDark ? "text-slate-200" : "text-slate-700"
+                      isDark ? "text-slate-200" : "text-slate-700",
                     )}
                   >
                     Submission Complete!
@@ -1965,7 +2102,7 @@ export function ContestClientPage({
                   <p
                     className={cn(
                       "text-base mb-1",
-                      isDark ? "text-slate-300" : "text-slate-600"
+                      isDark ? "text-slate-300" : "text-slate-600",
                     )}
                   >
                     You have successfully submitted for this opportunity
@@ -1973,7 +2110,7 @@ export function ContestClientPage({
                   <p
                     className={cn(
                       "text-sm",
-                      isDark ? "text-slate-300" : "text-slate-500"
+                      isDark ? "text-slate-300" : "text-slate-500",
                     )}
                   >
                     Submitted {formatTimeAgo(existingSubmission.created_at)}
@@ -1995,7 +2132,7 @@ export function ContestClientPage({
                   <p
                     className={cn(
                       "text-2xl font-bold mb-2",
-                      isDark ? "text-slate-200" : "text-slate-700"
+                      isDark ? "text-slate-200" : "text-slate-700",
                     )}
                   >
                     Submissions in Progress
@@ -2003,7 +2140,7 @@ export function ContestClientPage({
                   <p
                     className={cn(
                       "text-base mb-1",
-                      isDark ? "text-slate-300" : "text-slate-600"
+                      isDark ? "text-slate-300" : "text-slate-600",
                     )}
                   >
                     You have submitted {submissionCount} out of {maxSubmissions}{" "}
@@ -2012,7 +2149,7 @@ export function ContestClientPage({
                   <p
                     className={cn(
                       "text-sm mb-6",
-                      isDark ? "text-slate-300" : "text-slate-500"
+                      isDark ? "text-slate-300" : "text-slate-500",
                     )}
                   >
                     You can still submit {maxSubmissions - submissionCount} more
@@ -2051,14 +2188,14 @@ export function ContestClientPage({
                     <p
                       className={cn(
                         "text-lg max-w-md mx-auto leading-relaxed",
-                        isDark ? "text-white" : "text-black"
+                        isDark ? "text-white" : "text-black",
                       )}
                     >
                       {contest.status === "active"
                         ? "The stage is yours! Submit your content and let your creativity shine."
                         : contest.status === "upcoming"
-                        ? "Get ready! This opportunity hasn't started yet, but you can prepare."
-                        : "This opportunity has ended or is no longer active."}
+                          ? "Get ready! This opportunity hasn't started yet, but you can prepare."
+                          : "This opportunity has ended or is no longer active."}
                     </p>
                   </div>
 
@@ -2106,8 +2243,8 @@ export function ContestClientPage({
                                 ? hasJoinedTwitterCampaign
                                   ? "Joined"
                                   : joinCampaignLoading
-                                  ? "Joining..."
-                                  : "Join Twitter Campaign"
+                                    ? "Joining..."
+                                    : "Join Twitter Campaign"
                                 : "Submit Your Entry!"}
                             </span>
                           </div>
@@ -2129,7 +2266,7 @@ export function ContestClientPage({
                     <div
                       className={cn(
                         "text-sm mt-4 flex items-center justify-center gap-2",
-                        isDark ? "text-white" : "text-black"
+                        isDark ? "text-white" : "text-black",
                       )}
                     >
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
@@ -2149,21 +2286,21 @@ export function ContestClientPage({
             className={cn(
               "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
 
-              isDark ? "bg-[#170337]" : "bg-white border border-slate-200 "
+              isDark ? "bg-[#170337]" : "bg-white border border-slate-200 ",
             )}
           >
             <CardContent className="p-6 flex justify-between items-center">
               <div
                 className={cn(
                   "flex-1 space-y-2",
-                  isDark ? "text-white" : "text-slate-800"
+                  isDark ? "text-white" : "text-slate-800",
                 )}
               >
                 <p
                   className={cn(
                     "text-sm font-semibold uppercase tracking-wide",
 
-                    isDark ? "text-slate-200" : "text-slate-600"
+                    isDark ? "text-slate-200" : "text-slate-600",
                   )}
                 >
                   Platform
@@ -2171,7 +2308,7 @@ export function ContestClientPage({
                 <p
                   className={cn(
                     "text-2xl font-black capitalize",
-                    isDark ? "text-white" : "text-slate-800"
+                    isDark ? "text-white" : "text-slate-800",
                   )}
                 >
                   {contest.platform || "Not specified"}
@@ -2224,7 +2361,7 @@ export function ContestClientPage({
             className={cn(
               "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
 
-              isDark ? "bg-[#170337]" : "bg-white border border-slate-200 "
+              isDark ? "bg-[#170337]" : "bg-white border border-slate-200 ",
             )}
           >
             <CardContent className="p-6 flex justify-between items-center">
@@ -2233,7 +2370,7 @@ export function ContestClientPage({
                   className={cn(
                     "text-sm font-semibold uppercase tracking-wide",
 
-                    isDark ? "text-slate-200" : "text-slate-600"
+                    isDark ? "text-slate-200" : "text-slate-600",
                   )}
                 >
                   Duration
@@ -2242,7 +2379,7 @@ export function ContestClientPage({
                   className={cn(
                     "text-2xl font-black",
 
-                    isDark ? "text-white" : "text-slate-800"
+                    isDark ? "text-white" : "text-slate-800",
                   )}
                 >
                   {(() => {
@@ -2252,7 +2389,7 @@ export function ContestClientPage({
                     const end = new Date(contest.end_date);
                     const diffTime = Math.abs(end.getTime() - start.getTime());
                     const diffDays = Math.ceil(
-                      diffTime / (1000 * 60 * 60 * 24)
+                      diffTime / (1000 * 60 * 60 * 24),
                     );
                     return `${diffDays} day${diffDays !== 1 ? "s" : ""}`;
                   })()}
@@ -2261,7 +2398,7 @@ export function ContestClientPage({
                   className={cn(
                     "text-sm",
 
-                    isDark ? "text-slate-200" : "text-slate-600"
+                    isDark ? "text-slate-200" : "text-slate-600",
                   )}
                 >
                   {contest.start_date && contest.end_date
@@ -2319,21 +2456,21 @@ export function ContestClientPage({
             className={cn(
               "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
 
-              isDark ? "bg-[#170337]" : "bg-white border border-slate-200 "
+              isDark ? "bg-[#170337]" : "bg-white border border-slate-200 ",
             )}
           >
             <CardContent className="p-6 flex justify-between items-center">
               <div
                 className={cn(
                   "flex-1 space-y-2",
-                  isDark ? "text-white" : "text-slate-800"
+                  isDark ? "text-white" : "text-slate-800",
                 )}
               >
                 <p
                   className={cn(
                     "text-sm font-semibold uppercase tracking-wide",
 
-                    isDark ? "text-slate-200" : "text-slate-600"
+                    isDark ? "text-slate-200" : "text-slate-600",
                   )}
                 >
                   {contest.contest_type === "cpm"
@@ -2344,29 +2481,29 @@ export function ContestClientPage({
                   className={cn(
                     "text-2xl font-black",
 
-                    isDark ? "text-white" : "text-slate-800"
+                    isDark ? "text-white" : "text-slate-800",
                   )}
                 >
                   {contest.contest_type === "cpm" &&
                   contest.contest_based_details?.cpm_contest
                     ? formatMoney(
-                        contest.contest_based_details.cpm_contest.total_budget
+                        contest.contest_based_details.cpm_contest.total_budget,
                       )
                     : contest.contest_type === "leaderboard" &&
-                      contest.contest_based_details?.leaderboard_contest
-                    ? formatMoney(
-                        contest.contest_based_details.leaderboard_contest
-                          .total_prize
-                      )
-                    : contest.total_prize // Fallback to old field if necessary for older data
-                    ? formatMoney(contest.total_prize || 0)
-                    : "$0.00"}
+                        contest.contest_based_details?.leaderboard_contest
+                      ? formatMoney(
+                          contest.contest_based_details.leaderboard_contest
+                            .total_prize,
+                        )
+                      : contest.total_prize // Fallback to old field if necessary for older data
+                        ? formatMoney(contest.total_prize || 0)
+                        : "$0.00"}
                 </p>
                 <p
                   className={cn(
                     "text-sm",
 
-                    isDark ? "text-slate-200" : "text-slate-600"
+                    isDark ? "text-slate-200" : "text-slate-600",
                   )}
                 >
                   {contest.contest_type === "leaderboard" &&
@@ -2382,8 +2519,8 @@ export function ContestClientPage({
                           : ""
                       }`
                     : contest.contest_type === "cpm"
-                    ? "CPM based"
-                    : "Total prize"}
+                      ? "CPM based"
+                      : "Total prize"}
                 </p>
               </div>
               <div
@@ -2392,7 +2529,7 @@ export function ContestClientPage({
 
                   isDark
                     ? "bg-[#170337]"
-                    : "bg-gradient-to-br from-purple-500 to-purple-600"
+                    : "bg-gradient-to-br from-purple-500 to-purple-600",
                 )}
               >
                 <Trophy className="h-7 w-7" />
@@ -2452,20 +2589,20 @@ export function ContestClientPage({
                     "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                     isDark
                       ? "bg-[#170337]"
-                      : "bg-white border border-slate-200 "
+                      : "bg-white border border-slate-200 ",
                   )}
                 >
                   <CardContent className="p-6 flex justify-between items-center">
                     <div
                       className={cn(
                         "flex-1 space-y-2",
-                        isDark ? "text-white" : "text-slate-800"
+                        isDark ? "text-white" : "text-slate-800",
                       )}
                     >
                       <p
                         className={cn(
                           "text-sm font-semibold uppercase tracking-wide",
-                          isDark ? "text-slate-200" : "text-slate-600"
+                          isDark ? "text-slate-200" : "text-slate-600",
                         )}
                       >
                         Participants
@@ -2473,7 +2610,7 @@ export function ContestClientPage({
                       <p
                         className={cn(
                           "text-2xl font-black",
-                          isDark ? "text-white" : "text-slate-800"
+                          isDark ? "text-white" : "text-slate-800",
                         )}
                       >
                         {displayValue}
@@ -2481,7 +2618,7 @@ export function ContestClientPage({
                       <p
                         className={cn(
                           "text-sm",
-                          isDark ? "text-slate-200" : "text-slate-600"
+                          isDark ? "text-slate-200" : "text-slate-600",
                         )}
                       >
                         {maxParticipants
@@ -2502,20 +2639,20 @@ export function ContestClientPage({
               <div
                 className={cn(
                   "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                  isDark ? "bg-[#170337]" : "bg-white border border-slate-200 "
+                  isDark ? "bg-[#170337]" : "bg-white border border-slate-200 ",
                 )}
               >
                 <CardContent className="p-6 flex justify-between items-center">
                   <div
                     className={cn(
                       "flex-1 space-y-2",
-                      isDark ? "text-white" : "text-slate-800"
+                      isDark ? "text-white" : "text-slate-800",
                     )}
                   >
                     <p
                       className={cn(
                         "text-sm font-semibold uppercase tracking-wide",
-                        isDark ? "text-slate-200" : "text-slate-600"
+                        isDark ? "text-slate-200" : "text-slate-600",
                       )}
                     >
                       Submissions
@@ -2523,7 +2660,7 @@ export function ContestClientPage({
                     <p
                       className={cn(
                         "text-2xl font-black",
-                        isDark ? "text-white" : "text-slate-800"
+                        isDark ? "text-white" : "text-slate-800",
                       )}
                     >
                       {contest.live_submission_count !== null &&
@@ -2534,7 +2671,7 @@ export function ContestClientPage({
                     <p
                       className={cn(
                         "text-sm",
-                        isDark ? "text-slate-200" : "text-slate-600"
+                        isDark ? "text-slate-200" : "text-slate-600",
                       )}
                     >
                       Total entries
@@ -2574,7 +2711,7 @@ export function ContestClientPage({
               "mb-8 shadow-xl border-2 transition-all duration-300 hover:shadow-2xl overflow-hidden",
               isDark
                 ? "border-slate-700/60 bg-gradient-to-br from-slate-800/90 via-slate-900/80 to-slate-800/90 backdrop-blur-sm"
-                : "border-blue-200/80 bg-gradient-to-br from-blue-50/90 via-indigo-50/80 to-purple-50/90 backdrop-blur-sm"
+                : "border-blue-200/80 bg-gradient-to-br from-blue-50/90 via-indigo-50/80 to-purple-50/90 backdrop-blur-sm",
             )}
           >
             <CardHeader
@@ -2582,13 +2719,13 @@ export function ContestClientPage({
                 "border-b transition-all duration-300",
                 isDark
                   ? "bg-gradient-to-r from-blue-600/20 via-indigo-600/15 to-purple-600/20 border-blue-800/40"
-                  : "bg-gradient-to-r from-blue-500/15 via-indigo-500/10 to-purple-500/15 border-blue-200/60"
+                  : "bg-gradient-to-r from-blue-500/15 via-indigo-500/10 to-purple-500/15 border-blue-200/60",
               )}
             >
               <CardTitle
                 className={cn(
                   "flex items-center gap-3 transition-colors duration-300",
-                  isDark ? "text-blue-100" : "text-blue-900"
+                  isDark ? "text-blue-100" : "text-blue-900",
                 )}
               >
                 <div
@@ -2596,7 +2733,7 @@ export function ContestClientPage({
                     "p-2 rounded-lg transition-all duration-300",
                     isDark
                       ? "bg-blue-500/20 text-blue-300"
-                      : "bg-blue-100/80 text-blue-600"
+                      : "bg-blue-100/80 text-blue-600",
                   )}
                 >
                   <FileText className="h-6 w-6" />
@@ -2611,7 +2748,7 @@ export function ContestClientPage({
                     <h3
                       className={cn(
                         "text-lg font-semibold transition-colors duration-300",
-                        isDark ? "text-slate-100" : "text-slate-900"
+                        isDark ? "text-slate-100" : "text-slate-900",
                       )}
                     >
                       Current Status:
@@ -2623,7 +2760,7 @@ export function ContestClientPage({
                   <p
                     className={cn(
                       "leading-relaxed transition-colors duration-300",
-                      isDark ? "text-slate-300" : "text-slate-700"
+                      isDark ? "text-slate-300" : "text-slate-700",
                     )}
                   >
                     {getPostContestStatusDescription(postContestStatus)}
@@ -2634,19 +2771,19 @@ export function ContestClientPage({
                         "mt-4 p-4 rounded-xl border-2 transition-all duration-300",
                         isDark
                           ? "bg-gradient-to-r from-green-900/30 to-emerald-900/20 border-green-700/50"
-                          : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200/80"
+                          : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200/80",
                       )}
                     >
                       <div
                         className={cn(
                           "flex items-center gap-3 transition-colors duration-300",
-                          isDark ? "text-green-200" : "text-green-800"
+                          isDark ? "text-green-200" : "text-green-800",
                         )}
                       >
                         <div
                           className={cn(
                             "p-1.5 rounded-full transition-all duration-300",
-                            isDark ? "bg-green-500/20" : "bg-green-100/80"
+                            isDark ? "bg-green-500/20" : "bg-green-100/80",
                           )}
                         >
                           <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
@@ -2656,7 +2793,7 @@ export function ContestClientPage({
                       <p
                         className={cn(
                           "text-sm mt-2 transition-colors duration-300",
-                          isDark ? "text-green-300/90" : "text-green-700/90"
+                          isDark ? "text-green-300/90" : "text-green-700/90",
                         )}
                       >
                         All verification and payout processes have been
@@ -2671,14 +2808,14 @@ export function ContestClientPage({
                       "rounded-2xl p-6 border-2 shadow-lg transition-all duration-300 hover:scale-105",
                       isDark
                         ? "bg-gradient-to-br from-slate-800/80 to-slate-900/60 border-slate-600/40 backdrop-blur-sm"
-                        : "bg-gradient-to-br from-white/90 to-blue-50/50 border-blue-200/60 backdrop-blur-sm"
+                        : "bg-gradient-to-br from-white/90 to-blue-50/50 border-blue-200/60 backdrop-blur-sm",
                     )}
                   >
                     <div className="text-center space-y-2">
                       <div
                         className={cn(
                           "text-xs font-semibold uppercase tracking-wider transition-colors duration-300",
-                          isDark ? "text-slate-400" : "text-slate-600"
+                          isDark ? "text-slate-400" : "text-slate-600",
                         )}
                       >
                         Contest Ended
@@ -2686,7 +2823,7 @@ export function ContestClientPage({
                       <div
                         className={cn(
                           "text-lg font-bold transition-colors duration-300",
-                          isDark ? "text-slate-100" : "text-slate-900"
+                          isDark ? "text-slate-100" : "text-slate-900",
                         )}
                       >
                         {contest.end_date
@@ -2701,7 +2838,7 @@ export function ContestClientPage({
                         <div
                           className={cn(
                             "text-xs transition-colors duration-300",
-                            isDark ? "text-slate-500" : "text-slate-500"
+                            isDark ? "text-slate-500" : "text-slate-500",
                           )}
                         >
                           {formatLocalDateTime(contest.end_date, {
@@ -2733,7 +2870,7 @@ export function ContestClientPage({
                       variant="secondary"
                       className={cn(
                         "ml-1 sm:ml-2 px-2 py-0.5 text-xs sm:text-sm text-gray-700 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground",
-                        isDark ? "text-gray-300" : "text-gray-600 bg-gray-200"
+                        isDark ? "text-gray-300" : "text-gray-600 bg-gray-200",
                       )}
                     >
                       {totalLeaderboardEntries}
@@ -2775,7 +2912,7 @@ export function ContestClientPage({
                   "sticky top-16 z-40 rounded-xl shadow-md mb-8 -mx-2 lg:-mx-4",
                   isDark
                     ? "bg-[#170337] border-b"
-                    : "border-b bg-white border border-slate-200"
+                    : "border-b bg-white border border-slate-200",
                 )}
               >
                 <div className="container mx-auto px-4 py-3">
@@ -2792,7 +2929,7 @@ export function ContestClientPage({
                       .filter(
                         (section: any) =>
                           !section.conditional ||
-                          section.conditional === contest.contest_type
+                          section.conditional === contest.contest_type,
                       )
                       .map((section) => (
                         <button
@@ -2804,8 +2941,8 @@ export function ContestClientPage({
                                 ? "bg-blue-900/30 text-blue-300 border-b-2 border-blue-500"
                                 : "bg-blue-100 text-blue-700 border-b-2 border-blue-500"
                               : isDark
-                              ? "text-slate-200 hover:text-slate-200"
-                              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                                ? "text-slate-200 hover:text-slate-200"
+                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                           }`}
                         >
                           {section.label}
@@ -2818,14 +2955,14 @@ export function ContestClientPage({
             <div
               className={cn(
                 "bg-white rounded-xl shadow-xl",
-                isDark ? "bg-[#170337]" : "bg-white"
+                isDark ? "bg-[#170337]" : "bg-white",
               )}
             >
               <CardHeader className="border-b">
                 <CardTitle
                   className={cn(
                     "text-gray-800 flex items-center gap-2",
-                    isDark ? "text-white" : "text-gray-800"
+                    isDark ? "text-white" : "text-gray-800",
                   )}
                 >
                   {/* <ScrollText className="h-5 w-5 text-blue-500" /> */}
@@ -2843,7 +2980,7 @@ export function ContestClientPage({
                     "mt-6 dark:bg-slate-800 rounded-xl border shadow-sm hover:shadow-md transition-all duration-200",
                     isDark
                       ? "bg-[#170337] border-gray-600"
-                      : "bg-white border-slate-200"
+                      : "bg-white border-slate-200",
                   )}
                 >
                   <div className="p-6">
@@ -2858,7 +2995,7 @@ export function ContestClientPage({
                           <h3
                             className={cn(
                               "text-xl font-bold text-slate-900 dark:text-slate-100 mb-1",
-                              isDark ? "text-white" : "text-slate-900"
+                              isDark ? "text-white" : "text-slate-900",
                             )}
                           >
                             Earning Opportunities
@@ -2866,7 +3003,7 @@ export function ContestClientPage({
                           <p
                             className={cn(
                               "text-sm",
-                              isDark ? "text-gray-300" : "text-slate-600"
+                              isDark ? "text-gray-300" : "text-slate-600",
                             )}
                           >
                             {contest.contest_type === "cpm"
@@ -2881,7 +3018,7 @@ export function ContestClientPage({
                           "flex items-center gap-2 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg flex-shrink-0 self-start sm:self-auto",
                           isDark
                             ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
-                            : "bg-slate-100"
+                            : "bg-slate-100",
                         )}
                       >
                         {contest.platform?.toLowerCase() === "youtube" ? (
@@ -2894,7 +3031,7 @@ export function ContestClientPage({
                         <span
                           className={cn(
                             "text-sm font-medium capitalize",
-                            isDark ? "text-white" : "text-slate-700"
+                            isDark ? "text-white" : "text-slate-700",
                           )}
                         >
                           {contest.platform || "Multi-platform"}
@@ -2920,7 +3057,7 @@ export function ContestClientPage({
                       <div
                         className={cn(
                           "rounded-lg p-4",
-                          isDark ? "border border-[#D1B7F9]" : "bg-slate-50"
+                          isDark ? "border border-[#D1B7F9]" : "bg-slate-50",
                         )}
                       >
                         <div className="flex items-center gap-2 mb-2">
@@ -2928,7 +3065,7 @@ export function ContestClientPage({
                           <span
                             className={cn(
                               "text-sm font-medium",
-                              isDark ? "text-white" : "text-slate-600"
+                              isDark ? "text-white" : "text-slate-600",
                             )}
                           >
                             {contest.contest_type === "cpm"
@@ -2939,29 +3076,30 @@ export function ContestClientPage({
                         <div
                           className={cn(
                             "text-2xl font-bold",
-                            isDark ? "text-white" : "text-slate-900"
+                            isDark ? "text-white" : "text-slate-900",
                           )}
                         >
                           {contest.contest_type === "cpm" &&
                           contest.contest_based_details?.cpm_contest
                             ? formatMoney(
                                 contest.contest_based_details.cpm_contest
-                                  .cpm_rate_usd * 100
+                                  .cpm_rate_usd * 100,
                               )
                             : contest.contest_type === "leaderboard" &&
-                              contest.contest_based_details?.leaderboard_contest
-                            ? formatMoney(
                                 contest.contest_based_details
-                                  .leaderboard_contest.total_prize
-                              )
-                            : contest.total_prize
-                            ? formatMoney(contest.total_prize || 0)
-                            : "$0.00"}
+                                  ?.leaderboard_contest
+                              ? formatMoney(
+                                  contest.contest_based_details
+                                    .leaderboard_contest.total_prize,
+                                )
+                              : contest.total_prize
+                                ? formatMoney(contest.total_prize || 0)
+                                : "$0.00"}
                         </div>
                         <div
                           className={cn(
                             "text-xs",
-                            isDark ? "text-gray-300" : "text-slate-500"
+                            isDark ? "text-gray-300" : "text-slate-500",
                           )}
                         >
                           {contest.contest_type === "cpm"
@@ -2976,7 +3114,7 @@ export function ContestClientPage({
                       <div
                         className={cn(
                           "rounded-lg p-4",
-                          isDark ? "border border-[#D1B7F9]" : "bg-slate-50"
+                          isDark ? "border border-[#D1B7F9]" : "bg-slate-50",
                         )}
                       >
                         <div className="flex items-center gap-2 mb-2">
@@ -2984,7 +3122,7 @@ export function ContestClientPage({
                           <span
                             className={cn(
                               "text-sm font-medium",
-                              isDark ? "text-white" : "text-slate-600"
+                              isDark ? "text-white" : "text-slate-600",
                             )}
                           >
                             {contest.contest_type === "cpm"
@@ -2995,25 +3133,26 @@ export function ContestClientPage({
                         <div
                           className={cn(
                             "text-2xl font-bold",
-                            isDark ? "text-white" : "text-slate-900"
+                            isDark ? "text-white" : "text-slate-900",
                           )}
                         >
                           {contest.contest_type === "cpm" &&
                           contest.contest_based_details?.cpm_contest
                             ? formatMoney(
                                 contest.contest_based_details.cpm_contest
-                                  .total_budget
+                                  .total_budget,
                               )
                             : contest.contest_type === "leaderboard" &&
-                              contest.contest_based_details?.leaderboard_contest
-                            ? contest.contest_based_details.leaderboard_contest
-                                .winner_count
-                            : "N/A"}
+                                contest.contest_based_details
+                                  ?.leaderboard_contest
+                              ? contest.contest_based_details
+                                  .leaderboard_contest.winner_count
+                              : "N/A"}
                         </div>
                         <div
                           className={cn(
                             "text-xs",
-                            isDark ? "text-gray-300" : "text-slate-500"
+                            isDark ? "text-gray-300" : "text-slate-500",
                           )}
                         >
                           {contest.contest_type === "cpm"
@@ -3033,7 +3172,7 @@ export function ContestClientPage({
                                   "rounded-lg p-4",
                                   isDark
                                     ? "border border-[#D1B7F9]"
-                                    : "bg-slate-50"
+                                    : "bg-slate-50",
                                 )}
                               >
                                 <div className="flex items-center gap-2 mb-2">
@@ -3041,7 +3180,7 @@ export function ContestClientPage({
                                   <span
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-slate-600"
+                                      isDark ? "text-white" : "text-slate-600",
                                     )}
                                   >
                                     Min Views
@@ -3050,7 +3189,7 @@ export function ContestClientPage({
                                 <div
                                   className={cn(
                                     "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-slate-900"
+                                    isDark ? "text-white" : "text-slate-900",
                                   )}
                                 >
                                   {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
@@ -3058,7 +3197,7 @@ export function ContestClientPage({
                                 <div
                                   className={cn(
                                     "text-xs",
-                                    isDark ? "text-gray-300" : "text-slate-500"
+                                    isDark ? "text-gray-300" : "text-slate-500",
                                   )}
                                 >
                                   required
@@ -3072,7 +3211,7 @@ export function ContestClientPage({
                                   "rounded-lg p-4",
                                   isDark
                                     ? "border border-[#D1B7F9]"
-                                    : "bg-slate-50"
+                                    : "bg-slate-50",
                                 )}
                               >
                                 <div className="flex items-center gap-2 mb-2">
@@ -3080,7 +3219,7 @@ export function ContestClientPage({
                                   <span
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-slate-600"
+                                      isDark ? "text-white" : "text-slate-600",
                                     )}
                                   >
                                     Max Views
@@ -3089,7 +3228,7 @@ export function ContestClientPage({
                                 <div
                                   className={cn(
                                     "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-slate-900"
+                                    isDark ? "text-white" : "text-slate-900",
                                   )}
                                 >
                                   {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
@@ -3097,7 +3236,7 @@ export function ContestClientPage({
                                 <div
                                   className={cn(
                                     "text-xs",
-                                    isDark ? "text-gray-300" : "text-slate-500"
+                                    isDark ? "text-gray-300" : "text-slate-500",
                                   )}
                                 >
                                   counted
@@ -3119,20 +3258,20 @@ export function ContestClientPage({
                               "bg-gradient-to-r rounded-lg border p-4",
                               isDark
                                 ? "from-green-900/20 to-emerald-900/20 border-green-700/50"
-                                : "from-green-50 to-emerald-50 border-green-200"
+                                : "from-green-50 to-emerald-50 border-green-200",
                             )}
                           >
                             <div className="flex items-center gap-3 mb-3">
                               <Gift
                                 className={cn(
                                   "h-5 w-5",
-                                  isDark ? "text-green-400" : "text-green-600"
+                                  isDark ? "text-green-400" : "text-green-600",
                                 )}
                               />
                               <span
                                 className={cn(
                                   "font-semibold",
-                                  isDark ? "text-green-100" : "text-green-900"
+                                  isDark ? "text-green-100" : "text-green-900",
                                 )}
                               >
                                 Bonus Budget
@@ -3141,7 +3280,9 @@ export function ContestClientPage({
                                 <Info
                                   className={cn(
                                     "h-4 w-4 cursor-help",
-                                    isDark ? "text-green-400" : "text-green-600"
+                                    isDark
+                                      ? "text-green-400"
+                                      : "text-green-600",
                                   )}
                                 />
                                 <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center">
@@ -3158,13 +3299,15 @@ export function ContestClientPage({
                                   "rounded-lg p-3 border",
                                   isDark
                                     ? "bg-slate-800 border-green-700/30"
-                                    : "bg-white border-green-200"
+                                    : "bg-white border-green-200",
                                 )}
                               >
                                 <div
                                   className={cn(
                                     "text-xs mb-1",
-                                    isDark ? "text-green-300" : "text-green-700"
+                                    isDark
+                                      ? "text-green-300"
+                                      : "text-green-700",
                                   )}
                                 >
                                   Per Submission
@@ -3172,12 +3315,14 @@ export function ContestClientPage({
                                 <div
                                   className={cn(
                                     "text-lg font-bold",
-                                    isDark ? "text-green-100" : "text-green-900"
+                                    isDark
+                                      ? "text-green-100"
+                                      : "text-green-900",
                                   )}
                                 >
                                   {formatMoney(
                                     contest.contest_based_details
-                                      .leaderboard_contest.flat_fee_bonus
+                                      .leaderboard_contest.flat_fee_bonus,
                                   )}
                                 </div>
                               </div>
@@ -3188,7 +3333,7 @@ export function ContestClientPage({
                                     "rounded-lg p-3 border",
                                     isDark
                                       ? "bg-slate-800 border-green-700/30"
-                                      : "bg-white border-green-200"
+                                      : "bg-white border-green-200",
                                   )}
                                 >
                                   <div
@@ -3196,7 +3341,7 @@ export function ContestClientPage({
                                       "text-xs mb-1",
                                       isDark
                                         ? "text-green-300"
-                                        : "text-green-700"
+                                        : "text-green-700",
                                     )}
                                   >
                                     Total Budget
@@ -3206,12 +3351,12 @@ export function ContestClientPage({
                                       "text-lg font-bold",
                                       isDark
                                         ? "text-green-100"
-                                        : "text-green-900"
+                                        : "text-green-900",
                                     )}
                                   >
                                     {formatMoney(
                                       contest.contest_based_details
-                                        .leaderboard_contest.total_budget
+                                        .leaderboard_contest.total_budget,
                                     )}
                                   </div>
                                 </div>
@@ -3229,7 +3374,7 @@ export function ContestClientPage({
                               "p-3 rounded-lg border transition-all duration-300",
                               isDark
                                 ? "bg-gradient-to-r from-green-900/40 to-emerald-900/40 border-green-400/40"
-                                : "bg-gradient-to-r from-green-50 to-green-50 border-green-200"
+                                : "bg-gradient-to-r from-green-50 to-green-50 border-green-200",
                             )}
                           >
                             <div className="flex items-center justify-between">
@@ -3237,13 +3382,17 @@ export function ContestClientPage({
                                 <Gift
                                   className={cn(
                                     "h-5 w-5",
-                                    isDark ? "text-green-400" : "text-green-600"
+                                    isDark
+                                      ? "text-green-400"
+                                      : "text-green-600",
                                   )}
                                 />
                                 <span
                                   className={cn(
                                     "font-medium",
-                                    isDark ? "text-slate-100" : "text-slate-900"
+                                    isDark
+                                      ? "text-slate-100"
+                                      : "text-slate-900",
                                   )}
                                 >
                                   Guaranteed Bonus
@@ -3254,7 +3403,7 @@ export function ContestClientPage({
                                       "h-4 w-4 cursor-help",
                                       isDark
                                         ? "text-green-400"
-                                        : "text-green-600"
+                                        : "text-green-600",
                                     )}
                                   />
                                   <div
@@ -3262,7 +3411,7 @@ export function ContestClientPage({
                                       "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center",
                                       isDark
                                         ? "bg-slate-800 text-slate-100"
-                                        : "bg-slate-900 text-white"
+                                        : "bg-slate-900 text-white",
                                     )}
                                   >
                                     Every submission that gets verified will
@@ -3276,18 +3425,22 @@ export function ContestClientPage({
                                 <div
                                   className={cn(
                                     "text-lg font-bold",
-                                    isDark ? "text-green-100" : "text-green-900"
+                                    isDark
+                                      ? "text-green-100"
+                                      : "text-green-900",
                                   )}
                                 >
                                   {formatMoney(
                                     contest.contest_based_details.cpm_contest
-                                      .flat_fee_bonus
+                                      .flat_fee_bonus,
                                   )}
                                 </div>
                                 <div
                                   className={cn(
                                     "text-xs",
-                                    isDark ? "text-green-300" : "text-green-700"
+                                    isDark
+                                      ? "text-green-300"
+                                      : "text-green-700",
                                   )}
                                 >
                                   per verified submission
@@ -3301,19 +3454,23 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-sm font-medium",
-                                    isDark ? "text-green-200" : "text-green-800"
+                                    isDark
+                                      ? "text-green-200"
+                                      : "text-green-800",
                                   )}
                                 >
                                   💰 Flat Fee Bonus Cap:{" "}
                                   {formatMoney(
                                     contest.contest_based_details.cpm_contest
-                                      .flat_fee_bonus_cap
+                                      .flat_fee_bonus_cap,
                                   )}
                                 </p>
                                 <p
                                   className={cn(
                                     "text-xs mt-2",
-                                    isDark ? "text-green-400" : "text-green-600"
+                                    isDark
+                                      ? "text-green-400"
+                                      : "text-green-600",
                                   )}
                                 >
                                   Maximum total flat fee bonus to distribute
@@ -3332,20 +3489,20 @@ export function ContestClientPage({
                             "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-2.5 sm:p-3 rounded-lg border transition-all duration-300",
                             isDark
                               ? "bg-gradient-to-r from-purple-500/20 to-violet-500/20 border-purple-400/50"
-                              : "bg-gradient-to-r from-purple-50 to-violet-50 border-purple-200"
+                              : "bg-gradient-to-r from-purple-50 to-violet-50 border-purple-200",
                           )}
                         >
                           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                             <CheckCheck
                               className={cn(
                                 "h-5 w-5",
-                                isDark ? "text-purple-400" : "text-purple-600"
+                                isDark ? "text-purple-400" : "text-purple-600",
                               )}
                             />
                             <span
                               className={cn(
                                 "font-medium text-sm sm:text-base",
-                                isDark ? "text-slate-100" : "text-slate-900"
+                                isDark ? "text-slate-100" : "text-slate-900",
                               )}
                             >
                               Multiple Submissions
@@ -3354,7 +3511,9 @@ export function ContestClientPage({
                               <Info
                                 className={cn(
                                   "h-3.5 w-3.5 sm:h-4 sm:w-4 cursor-help",
-                                  isDark ? "text-purple-400" : "text-purple-600"
+                                  isDark
+                                    ? "text-purple-400"
+                                    : "text-purple-600",
                                 )}
                               />
                               <div
@@ -3362,7 +3521,7 @@ export function ContestClientPage({
                                   "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2.5 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 w-[180px] sm:w-auto sm:min-w-64 sm:max-w-80 text-center",
                                   isDark
                                     ? "bg-slate-800 text-slate-100 border border-slate-700"
-                                    : "bg-slate-900 text-white"
+                                    : "bg-slate-900 text-white",
                                 )}
                               >
                                 You can submit multiple pieces of content to
@@ -3376,7 +3535,7 @@ export function ContestClientPage({
                             <div
                               className={cn(
                                 "text-base sm:text-lg font-bold",
-                                isDark ? "text-purple-100" : "text-purple-900"
+                                isDark ? "text-purple-100" : "text-purple-900",
                               )}
                             >
                               Up to{" "}
@@ -3387,12 +3546,14 @@ export function ContestClientPage({
                               <div
                                 className={cn(
                                   "text-[10px] sm:text-xs mt-0.5",
-                                  isDark ? "text-purple-300" : "text-purple-700"
+                                  isDark
+                                    ? "text-purple-300"
+                                    : "text-purple-700",
                                 )}
                               >
                                 Cap:{" "}
                                 {formatMoney(
-                                  (contest as any).max_earnings_per_creator
+                                  (contest as any).max_earnings_per_creator,
                                 )}
                               </div>
                             )}
@@ -3407,20 +3568,20 @@ export function ContestClientPage({
                             "p-3 rounded-lg border transition-all duration-300",
                             isDark
                               ? "bg-gradient-to-r from-yellow-900/40 to-amber-900/40 border-yellow-400/40"
-                              : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200"
+                              : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200",
                           )}
                         >
                           <div className="flex items-center gap-3 mb-3">
                             <Star
                               className={cn(
                                 "h-5 w-5",
-                                isDark ? "text-amber-400" : "text-amber-600"
+                                isDark ? "text-amber-400" : "text-amber-600",
                               )}
                             />
                             <span
                               className={cn(
                                 "font-medium",
-                                isDark ? "text-slate-100" : "text-slate-900"
+                                isDark ? "text-slate-100" : "text-slate-900",
                               )}
                             >
                               Extra Bonuses
@@ -3429,7 +3590,7 @@ export function ContestClientPage({
                               <Info
                                 className={cn(
                                   "h-4 w-4 cursor-help",
-                                  isDark ? "text-amber-400" : "text-amber-600"
+                                  isDark ? "text-amber-400" : "text-amber-600",
                                 )}
                               />
                               <div
@@ -3437,7 +3598,7 @@ export function ContestClientPage({
                                   "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center",
                                   isDark
                                     ? "bg-slate-800 text-slate-100 border border-slate-700"
-                                    : "bg-slate-900 text-white"
+                                    : "bg-slate-900 text-white",
                                 )}
                               >
                                 These are additional earning opportunities. The
@@ -3452,7 +3613,7 @@ export function ContestClientPage({
                                 "prose prose-sm max-w-none",
                                 isDark
                                   ? "prose-invert text-white [&_*]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_b]:!text-white [&_em]:!text-white [&_i]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_li]:!text-white [&_ul]:!text-white [&_ol]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_a]:!text-white"
-                                  : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700"
+                                  : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700",
                               )}
                               dangerouslySetInnerHTML={{
                                 __html: (contest as any).bonus_details
@@ -3465,13 +3626,13 @@ export function ContestClientPage({
                               "mt-2 pt-2 border-t",
                               isDark
                                 ? "border-amber-400/50"
-                                : "border-amber-200"
+                                : "border-amber-200",
                             )}
                           >
                             <p
                               className={cn(
                                 "text-xs flex items-center gap-1",
-                                isDark ? "text-amber-300" : "text-amber-700"
+                                isDark ? "text-amber-300" : "text-amber-700",
                               )}
                             >
                               <Info className="h-3 w-3" />
@@ -3497,7 +3658,9 @@ export function ContestClientPage({
                       }}
                       className={cn(
                         "rounded-xl border shadow-sm",
-                        isDark ? "border-gray-600" : "bg-white border-slate-200"
+                        isDark
+                          ? "border-gray-600"
+                          : "bg-white border-slate-200",
                       )}
                     >
                       <div className="p-6">
@@ -3509,7 +3672,7 @@ export function ContestClientPage({
                             <h3
                               className={cn(
                                 "text-xl font-bold",
-                                isDark ? "text-white" : "text-slate-900"
+                                isDark ? "text-white" : "text-slate-900",
                               )}
                             >
                               Prize Structure
@@ -3517,7 +3680,7 @@ export function ContestClientPage({
                             <p
                               className={cn(
                                 "text-sm",
-                                isDark ? "text-gray-300" : "text-slate-600"
+                                isDark ? "text-gray-300" : "text-slate-600",
                               )}
                             >
                               Complete prize breakdown for all positions
@@ -3532,14 +3695,16 @@ export function ContestClientPage({
                               "bg-gradient-to-r rounded-lg p-4 border",
                               isDark
                                 ? "from-purple-900/20 to-violet-900/20 border-purple-700/50"
-                                : "from-purple-50 to-violet-50 border-purple-200"
+                                : "from-purple-50 to-violet-50 border-purple-200",
                             )}
                           >
                             <div className="flex items-center gap-3">
                               <Trophy
                                 className={cn(
                                   "h-6 w-6",
-                                  isDark ? "text-purple-400" : "text-purple-600"
+                                  isDark
+                                    ? "text-purple-400"
+                                    : "text-purple-600",
                                 )}
                               />
                               <div>
@@ -3548,7 +3713,7 @@ export function ContestClientPage({
                                     "text-sm font-medium",
                                     isDark
                                       ? "text-purple-200"
-                                      : "text-purple-800"
+                                      : "text-purple-800",
                                   )}
                                 >
                                   Total Prize Pool
@@ -3558,12 +3723,12 @@ export function ContestClientPage({
                                     "text-2xl font-bold",
                                     isDark
                                       ? "text-purple-100"
-                                      : "text-purple-900"
+                                      : "text-purple-900",
                                   )}
                                 >
                                   {formatMoney(
                                     contest.contest_based_details
-                                      .leaderboard_contest.total_prize
+                                      .leaderboard_contest.total_prize,
                                   )}
                                 </div>
                               </div>
@@ -3574,21 +3739,21 @@ export function ContestClientPage({
                               "rounded-lg p-4 border border-blue-200 dark:border-blue-700/50",
                               isDark
                                 ? "border-blue-700/50 bg-blue-900/30"
-                                : "border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20"
+                                : "border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20",
                             )}
                           >
                             <div className="flex items-center gap-3">
                               <Users
                                 className={cn(
                                   "h-6 w-6",
-                                  isDark ? "text-blue-400" : "text-blue-600"
+                                  isDark ? "text-blue-400" : "text-blue-600",
                                 )}
                               />
                               <div>
                                 <div
                                   className={cn(
                                     "text-sm font-medium",
-                                    isDark ? "text-blue-300" : "text-blue-800"
+                                    isDark ? "text-blue-300" : "text-blue-800",
                                   )}
                                 >
                                   Total Winners
@@ -3596,7 +3761,7 @@ export function ContestClientPage({
                                 <div
                                   className={cn(
                                     "text-2xl font-bold",
-                                    isDark ? "text-blue-200" : "text-blue-900"
+                                    isDark ? "text-blue-200" : "text-blue-900",
                                   )}
                                 >
                                   {
@@ -3614,14 +3779,16 @@ export function ContestClientPage({
                                 "bg-gradient-to-r rounded-lg p-4 border",
                                 isDark
                                   ? "from-green-900/20 to-emerald-900/20 border-green-700/50"
-                                  : "from-green-50 to-emerald-50 border-green-200"
+                                  : "from-green-50 to-emerald-50 border-green-200",
                               )}
                             >
                               <div className="flex items-center gap-3">
                                 <Gift
                                   className={cn(
                                     "h-6 w-6",
-                                    isDark ? "text-green-400" : "text-green-600"
+                                    isDark
+                                      ? "text-green-400"
+                                      : "text-green-600",
                                   )}
                                 />
                                 <div>
@@ -3630,7 +3797,7 @@ export function ContestClientPage({
                                       "text-sm font-medium",
                                       isDark
                                         ? "text-green-200"
-                                        : "text-green-800"
+                                        : "text-green-800",
                                     )}
                                   >
                                     Bonus Budget
@@ -3640,12 +3807,12 @@ export function ContestClientPage({
                                       "text-2xl font-bold",
                                       isDark
                                         ? "text-green-100"
-                                        : "text-green-900"
+                                        : "text-green-900",
                                     )}
                                   >
                                     {formatMoney(
                                       contest.contest_based_details
-                                        .leaderboard_contest.flat_fee_bonus
+                                        .leaderboard_contest.flat_fee_bonus,
                                     )}
                                   </div>
                                   <div
@@ -3653,7 +3820,7 @@ export function ContestClientPage({
                                       "text-xs mt-0.5",
                                       isDark
                                         ? "text-green-300"
-                                        : "text-green-700"
+                                        : "text-green-700",
                                     )}
                                   >
                                     per verified submission
@@ -3672,21 +3839,23 @@ export function ContestClientPage({
                               "mb-6 p-4 border rounded-lg",
                               isDark
                                 ? "bg-green-900/10 border-green-700/50"
-                                : "bg-green-50 border-green-200"
+                                : "bg-green-50 border-green-200",
                             )}
                           >
                             <div className="flex items-start gap-3">
                               <Gift
                                 className={cn(
                                   "h-5 w-5 mt-0.5 flex-shrink-0",
-                                  isDark ? "text-green-400" : "text-green-600"
+                                  isDark ? "text-green-400" : "text-green-600",
                                 )}
                               />
                               <div>
                                 <p
                                   className={cn(
                                     "text-sm font-semibold mb-1",
-                                    isDark ? "text-green-200" : "text-green-900"
+                                    isDark
+                                      ? "text-green-200"
+                                      : "text-green-900",
                                   )}
                                 >
                                   Additional Bonus Earnings
@@ -3694,14 +3863,16 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-sm",
-                                    isDark ? "text-green-300" : "text-green-800"
+                                    isDark
+                                      ? "text-green-300"
+                                      : "text-green-800",
                                   )}
                                 >
                                   Every verified submission receives{" "}
                                   <span className="font-bold">
                                     {formatMoney(
                                       contest.contest_based_details
-                                        .leaderboard_contest.flat_fee_bonus
+                                        .leaderboard_contest.flat_fee_bonus,
                                     )}
                                   </span>{" "}
                                   as a guaranteed bonus, on top of any prizes
@@ -3713,7 +3884,7 @@ export function ContestClientPage({
                                       <span className="font-bold">
                                         {formatMoney(
                                           contest.contest_based_details
-                                            .leaderboard_contest.total_budget
+                                            .leaderboard_contest.total_budget,
                                         )}
                                       </span>{" "}
                                       is reached
@@ -3731,7 +3902,7 @@ export function ContestClientPage({
                           <h4
                             className={cn(
                               "text-lg font-semibold mb-4",
-                              isDark ? "text-white" : "text-slate-900"
+                              isDark ? "text-white" : "text-slate-900",
                             )}
                           >
                             Prize Distribution
@@ -3741,18 +3912,20 @@ export function ContestClientPage({
                               "rounded-lg border border-slate-200 dark:border-slate-700 max-h-80 overflow-y-auto",
                               isDark
                                 ? "border-slate-700"
-                                : "bg-slate-50 border-slate-200"
+                                : "bg-slate-50 border-slate-200",
                             )}
                           >
                             <div
                               className={cn(
                                 "divide-y",
-                                isDark ? "divide-slate-700" : "divide-slate-200"
+                                isDark
+                                  ? "divide-slate-700"
+                                  : "divide-slate-200",
                               )}
                             >
                               {contest.contest_based_details.leaderboard_contest.prizes
                                 .sort(
-                                  (a: any, b: any) => a.position - b.position
+                                  (a: any, b: any) => a.position - b.position,
                                 )
                                 .map((prize: any, index: number) => (
                                   <div
@@ -3761,7 +3934,7 @@ export function ContestClientPage({
                                       "p-4 transition-colors",
                                       isDark
                                         ? "hover:bg-purple-900/30"
-                                        : "hover:bg-slate-100 dark:hover:bg-slate-800 "
+                                        : "hover:bg-slate-100 dark:hover:bg-slate-800 ",
                                     )}
                                   >
                                     <div className="flex items-center justify-between">
@@ -3775,7 +3948,7 @@ export function ContestClientPage({
                                               "font-medium",
                                               isDark
                                                 ? "text-slate-100"
-                                                : "text-slate-900"
+                                                : "text-slate-900",
                                             )}
                                           >
                                             Position {prize.position}
@@ -3788,16 +3961,16 @@ export function ContestClientPage({
                                               "text-sm",
                                               isDark
                                                 ? "text-slate-400"
-                                                : "text-slate-600"
+                                                : "text-slate-600",
                                             )}
                                           >
                                             {prize.position === 1
                                               ? "1st Place"
                                               : prize.position === 2
-                                              ? "2nd Place"
-                                              : prize.position === 3
-                                              ? "3rd Place"
-                                              : `${prize.position}th Place`}
+                                                ? "2nd Place"
+                                                : prize.position === 3
+                                                  ? "3rd Place"
+                                                  : `${prize.position}th Place`}
                                           </div>
                                         </div>
                                       </div>
@@ -3807,7 +3980,7 @@ export function ContestClientPage({
                                             "text-xl font-bold",
                                             isDark
                                               ? "text-white"
-                                              : "text-slate-900"
+                                              : "text-slate-900",
                                           )}
                                         >
                                           {formatMoney(prize.amount)}
@@ -3817,7 +3990,7 @@ export function ContestClientPage({
                                             "text-sm",
                                             isDark
                                               ? "text-slate-400"
-                                              : "text-slate-600"
+                                              : "text-slate-600",
                                           )}
                                         >
                                           {(
@@ -3859,7 +4032,7 @@ export function ContestClientPage({
                         "rounded-xl p-4 border shadow-sm",
                         isDark
                           ? "border-blue-400/50"
-                          : "bg-white border-blue-200 dark:border-blue-700/30"
+                          : "bg-white border-blue-200 dark:border-blue-700/30",
                       )}
                     >
                       <div className="flex items-center gap-3">
@@ -3868,7 +4041,7 @@ export function ContestClientPage({
                             "p-3 rounded-full",
                             isDark
                               ? "bg-blue-500/30 text-blue-400"
-                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-600"
+                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-600",
                           )}
                         >
                           <Play className="h-5 w-5" />
@@ -3877,7 +4050,7 @@ export function ContestClientPage({
                           <p
                             className={cn(
                               "text-xs font-medium uppercase tracking-wide",
-                              isDark ? "text-slate-300" : "text-slate-600"
+                              isDark ? "text-slate-300" : "text-slate-600",
                             )}
                           >
                             Start Date & Time
@@ -3885,7 +4058,7 @@ export function ContestClientPage({
                           <p
                             className={cn(
                               "text-lg font-bold",
-                              isDark ? "text-slate-100" : "text-slate-900"
+                              isDark ? "text-slate-100" : "text-slate-900",
                             )}
                           >
                             {contest.start_date
@@ -3902,7 +4075,7 @@ export function ContestClientPage({
                         "rounded-xl p-4 border shadow-sm",
                         isDark
                           ? "border-blue-400/50"
-                          : "bg-white border-blue-200 dark:border-blue-700/30"
+                          : "bg-white border-blue-200 dark:border-blue-700/30",
                       )}
                     >
                       <div className="flex items-center gap-3">
@@ -3911,7 +4084,7 @@ export function ContestClientPage({
                             "p-3 rounded-full",
                             isDark
                               ? "bg-blue-500/30 text-blue-400"
-                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-600"
+                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-600",
                           )}
                         >
                           <Clock className="h-5 w-5" />
@@ -3920,7 +4093,7 @@ export function ContestClientPage({
                           <p
                             className={cn(
                               "text-xs font-medium uppercase tracking-wide",
-                              isDark ? "text-slate-300" : "text-slate-600"
+                              isDark ? "text-slate-300" : "text-slate-600",
                             )}
                           >
                             End Date & Time
@@ -3928,7 +4101,7 @@ export function ContestClientPage({
                           <p
                             className={cn(
                               "text-lg font-bold",
-                              isDark ? "text-slate-100" : "text-slate-900"
+                              isDark ? "text-slate-100" : "text-slate-900",
                             )}
                           >
                             {contest.end_date
@@ -3945,7 +4118,7 @@ export function ContestClientPage({
                         "rounded-xl p-4 border shadow-sm",
                         isDark
                           ? "border-blue-400/50"
-                          : "bg-white border-blue-200 dark:border-blue-700/30"
+                          : "bg-white border-blue-200 dark:border-blue-700/30",
                       )}
                     >
                       <div className="flex items-center gap-3">
@@ -3954,7 +4127,7 @@ export function ContestClientPage({
                             "p-3 rounded-full",
                             isDark
                               ? "bg-blue-500/30 text-blue-400"
-                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-600"
+                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-600",
                           )}
                         >
                           <Monitor className="h-5 w-5" />
@@ -3963,7 +4136,7 @@ export function ContestClientPage({
                           <p
                             className={cn(
                               "text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wide",
-                              isDark ? "text-slate-300" : "text-slate-600"
+                              isDark ? "text-slate-300" : "text-slate-600",
                             )}
                           >
                             Platform
@@ -3971,7 +4144,7 @@ export function ContestClientPage({
                           <p
                             className={cn(
                               "text-lg font-bold",
-                              isDark ? "text-slate-100" : "text-slate-900"
+                              isDark ? "text-slate-100" : "text-slate-900",
                             )}
                           >
                             {contest.platform || "Not specified"}
@@ -3986,7 +4159,7 @@ export function ContestClientPage({
                         "rounded-xl p-4 border shadow-sm",
                         isDark
                           ? "border-blue-400/50"
-                          : "bg-white border-blue-200 dark:border-blue-700/30"
+                          : "bg-white border-blue-200 dark:border-blue-700/30",
                       )}
                     >
                       <div className="flex items-center gap-3">
@@ -3995,7 +4168,7 @@ export function ContestClientPage({
                             "p-3 rounded-full",
                             isDark
                               ? "bg-blue-500/30 text-blue-400"
-                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-600"
+                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-600",
                           )}
                         >
                           <Info className="h-5 w-5 " />
@@ -4004,7 +4177,7 @@ export function ContestClientPage({
                           <p
                             className={cn(
                               "text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wide",
-                              isDark ? "text-slate-300" : "text-slate-600"
+                              isDark ? "text-slate-300" : "text-slate-600",
                             )}
                           >
                             Status
@@ -4012,7 +4185,7 @@ export function ContestClientPage({
                           <p
                             className={cn(
                               "text-lg font-bold",
-                              isDark ? "text-slate-100" : "text-slate-900"
+                              isDark ? "text-slate-100" : "text-slate-900",
                             )}
                           >
                             {contest.status || "Not specified"}
@@ -4045,8 +4218,8 @@ export function ContestClientPage({
                                     ? "border-red-400/50 bg-red-900/20"
                                     : "border-cyan-400/50 bg-cyan-900/20"
                                   : campaignType === "raid"
-                                  ? "bg-white border-red-200"
-                                  : "bg-white border-cyan-200"
+                                    ? "bg-white border-red-200"
+                                    : "bg-white border-cyan-200",
                               )}
                             >
                               <div className="flex items-center gap-3">
@@ -4058,8 +4231,8 @@ export function ContestClientPage({
                                         ? "bg-red-500/30 text-red-400"
                                         : "bg-cyan-500/30 text-cyan-400"
                                       : campaignType === "raid"
-                                      ? "bg-red-100 text-red-600"
-                                      : "bg-cyan-100 text-cyan-600"
+                                        ? "bg-red-100 text-red-600"
+                                        : "bg-cyan-100 text-cyan-600",
                                   )}
                                 >
                                   <Tag className="h-5 w-5" />
@@ -4073,8 +4246,8 @@ export function ContestClientPage({
                                           ? "text-red-300"
                                           : "text-cyan-300"
                                         : campaignType === "raid"
-                                        ? "text-red-600"
-                                        : "text-cyan-600"
+                                          ? "text-red-600"
+                                          : "text-cyan-600",
                                     )}
                                   >
                                     Campaign Type
@@ -4087,8 +4260,8 @@ export function ContestClientPage({
                                           ? "text-red-100"
                                           : "text-cyan-100"
                                         : campaignType === "raid"
-                                        ? "text-red-900"
-                                        : "text-cyan-900"
+                                          ? "text-red-900"
+                                          : "text-cyan-900",
                                     )}
                                   >
                                     {campaignType === "raid"
@@ -4114,7 +4287,7 @@ export function ContestClientPage({
                       // Filter categories to only show those in user's profile
                       const filteredCategories = contest.categories.filter(
                         (categoryId: string) =>
-                          creatorCategories.includes(categoryId)
+                          creatorCategories.includes(categoryId),
                       );
 
                       return filteredCategories.length > 0 ? (
@@ -4128,13 +4301,13 @@ export function ContestClientPage({
                               "border rounded-xl p-4",
                               isDark
                                 ? "border-purple-600 bg-purple-950/50"
-                                : "border-purple-300 bg-purple-50/50"
+                                : "border-purple-300 bg-purple-50/50",
                             )}
                           >
                             <div className="flex flex-wrap gap-2">
                               {filteredCategories.map((categoryId: string) => {
                                 const category = CONTENT_TYPE_CATEGORIES.find(
-                                  (cat) => cat.id === categoryId
+                                  (cat) => cat.id === categoryId,
                                 );
                                 return (
                                   <span
@@ -4143,7 +4316,7 @@ export function ContestClientPage({
                                       "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
                                       isDark
                                         ? "bg-purple-600/30 text-purple-200 border border-purple-500/50"
-                                        : "bg-purple-100 text-purple-800 border border-purple-300"
+                                        : "bg-purple-100 text-purple-800 border border-purple-300",
                                     )}
                                   >
                                     {category ? category.name : categoryId}
@@ -4218,7 +4391,7 @@ export function ContestClientPage({
                               "border rounded-xl p-4",
                               isDark
                                 ? "border-indigo-600 bg-indigo-950/50"
-                                : "border-indigo-300 bg-indigo-50/50"
+                                : "border-indigo-300 bg-indigo-50/50",
                             )}
                           >
                             <div className="flex flex-wrap gap-2">
@@ -4228,10 +4401,10 @@ export function ContestClientPage({
                                     category: string;
                                     subcategory: string;
                                   },
-                                  index: number
+                                  index: number,
                                 ) => {
                                   const category = CONTENT_TYPE_CATEGORIES.find(
-                                    (cat) => cat.id === item.category
+                                    (cat) => cat.id === item.category,
                                   );
                                   return (
                                     <span
@@ -4240,14 +4413,14 @@ export function ContestClientPage({
                                         "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
                                         isDark
                                           ? "bg-indigo-600/30 text-indigo-200 border border-indigo-500/50"
-                                          : "bg-indigo-100 text-indigo-800 border border-indigo-300"
+                                          : "bg-indigo-100 text-indigo-800 border border-indigo-300",
                                       )}
                                     >
                                       {category ? category.name : item.category}
                                       : {item.subcategory}
                                     </span>
                                   );
-                                }
+                                },
                               )}
                             </div>
                           </div>
@@ -4264,7 +4437,7 @@ export function ContestClientPage({
                       // Filter interests to only show those in user's profile
                       const filteredInterests = contest.interests.filter(
                         (interest: string) =>
-                          creatorInterests.includes(interest)
+                          creatorInterests.includes(interest),
                       );
 
                       return filteredInterests.length > 0 ? (
@@ -4278,7 +4451,7 @@ export function ContestClientPage({
                               "border rounded-xl p-4",
                               isDark
                                 ? "border-yellow-600 bg-yellow-950/50"
-                                : "border-yellow-300 bg-yellow-50/50"
+                                : "border-yellow-300 bg-yellow-50/50",
                             )}
                           >
                             <div className="flex flex-wrap gap-2">
@@ -4289,7 +4462,7 @@ export function ContestClientPage({
                                     "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
                                     isDark
                                       ? "bg-yellow-600/30 text-yellow-200 border border-yellow-500/50"
-                                      : "bg-yellow-100 text-yellow-800 border border-yellow-300"
+                                      : "bg-yellow-100 text-yellow-800 border border-yellow-300",
                                   )}
                                 >
                                   {interest}
@@ -4331,13 +4504,13 @@ export function ContestClientPage({
                             "rounded-xl p-6 border space-y-4",
                             isDark
                               ? "bg-slate-900/40 border-slate-700"
-                              : "bg-slate-50 border-slate-200"
+                              : "bg-slate-50 border-slate-200",
                           )}
                         >
                           <h4
                             className={cn(
                               "font-semibold text-lg flex items-center gap-2",
-                              isDark ? "text-slate-100" : "text-slate-900"
+                              isDark ? "text-slate-100" : "text-slate-900",
                             )}
                           >
                             <Share2 className="h-5 w-5 text-sky-500" />
@@ -4349,7 +4522,7 @@ export function ContestClientPage({
                               <p
                                 className={cn(
                                   "text-xs uppercase tracking-wide font-medium",
-                                  isDark ? "text-slate-300" : "text-slate-600"
+                                  isDark ? "text-slate-300" : "text-slate-600",
                                 )}
                               >
                                 Tweet Link
@@ -4362,7 +4535,7 @@ export function ContestClientPage({
                                   "inline-flex items-center gap-1 text-sm font-medium underline break-all",
                                   isDark
                                     ? "text-sky-300 hover:text-sky-200"
-                                    : "text-sky-600 hover:text-sky-700"
+                                    : "text-sky-600 hover:text-sky-700",
                                 )}
                               >
                                 {raidTarget.link}
@@ -4376,7 +4549,7 @@ export function ContestClientPage({
                               <p
                                 className={cn(
                                   "text-xs uppercase tracking-wide font-medium",
-                                  isDark ? "text-slate-300" : "text-slate-600"
+                                  isDark ? "text-slate-300" : "text-slate-600",
                                 )}
                               >
                                 Tweet Description
@@ -4384,7 +4557,7 @@ export function ContestClientPage({
                               <p
                                 className={cn(
                                   "text-sm leading-relaxed",
-                                  isDark ? "text-slate-100" : "text-slate-800"
+                                  isDark ? "text-slate-100" : "text-slate-800",
                                 )}
                               >
                                 {raidTarget.description}
@@ -4398,7 +4571,9 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-xs uppercase tracking-wide font-medium",
-                                    isDark ? "text-slate-300" : "text-slate-600"
+                                    isDark
+                                      ? "text-slate-300"
+                                      : "text-slate-600",
                                   )}
                                 >
                                   Target Likes
@@ -4406,7 +4581,9 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-base font-semibold",
-                                    isDark ? "text-slate-100" : "text-slate-800"
+                                    isDark
+                                      ? "text-slate-100"
+                                      : "text-slate-800",
                                   )}
                                 >
                                   {raidTarget.metrics.likes ?? "Not specified"}
@@ -4416,7 +4593,9 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-xs uppercase tracking-wide font-medium",
-                                    isDark ? "text-slate-300" : "text-slate-600"
+                                    isDark
+                                      ? "text-slate-300"
+                                      : "text-slate-600",
                                   )}
                                 >
                                   Target Replies
@@ -4424,7 +4603,9 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-base font-semibold",
-                                    isDark ? "text-slate-100" : "text-slate-800"
+                                    isDark
+                                      ? "text-slate-100"
+                                      : "text-slate-800",
                                   )}
                                 >
                                   {raidTarget.metrics.comments ??
@@ -4435,7 +4616,9 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-xs uppercase tracking-wide font-medium",
-                                    isDark ? "text-slate-300" : "text-slate-600"
+                                    isDark
+                                      ? "text-slate-300"
+                                      : "text-slate-600",
                                   )}
                                 >
                                   Target Retweets
@@ -4443,7 +4626,9 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-base font-semibold",
-                                    isDark ? "text-slate-100" : "text-slate-800"
+                                    isDark
+                                      ? "text-slate-100"
+                                      : "text-slate-800",
                                   )}
                                 >
                                   {raidTarget.metrics.retweets ??
@@ -4463,7 +4648,7 @@ export function ContestClientPage({
                                       "text-xs uppercase tracking-wide font-medium mb-1",
                                       isDark
                                         ? "text-slate-300"
-                                        : "text-slate-600"
+                                        : "text-slate-600",
                                     )}
                                   >
                                     Suggested Keywords & Hashtags
@@ -4478,12 +4663,12 @@ export function ContestClientPage({
                                             "rounded-full text-xs px-3 py-1",
                                             isDark
                                               ? "border-slate-600 text-slate-100"
-                                              : "border-slate-300 text-slate-800"
+                                              : "border-slate-300 text-slate-800",
                                           )}
                                         >
                                           {keyword}
                                         </Badge>
-                                      )
+                                      ),
                                     )}
                                   </div>
                                 </div>
@@ -4495,7 +4680,7 @@ export function ContestClientPage({
                                       "text-xs uppercase tracking-wide font-medium mb-1",
                                       isDark
                                         ? "text-slate-300"
-                                        : "text-slate-600"
+                                        : "text-slate-600",
                                     )}
                                   >
                                     Accounts to Mention
@@ -4510,12 +4695,12 @@ export function ContestClientPage({
                                             "rounded-full text-xs px-3 py-1",
                                             isDark
                                               ? "border-slate-600 text-slate-100"
-                                              : "border-slate-300 text-slate-800"
+                                              : "border-slate-300 text-slate-800",
                                           )}
                                         >
                                           {mention}
                                         </Badge>
-                                      )
+                                      ),
                                     )}
                                   </div>
                                 </div>
@@ -4543,13 +4728,13 @@ export function ContestClientPage({
                             "rounded-xl p-4 border space-y-3",
                             isDark
                               ? "bg-slate-900/40 border-slate-700"
-                              : "bg-slate-50 border-slate-200"
+                              : "bg-slate-50 border-slate-200",
                           )}
                         >
                           <h4
                             className={cn(
                               "font-semibold text-sm flex items-center gap-2",
-                              isDark ? "text-slate-100" : "text-slate-900"
+                              isDark ? "text-slate-100" : "text-slate-900",
                             )}
                           >
                             Required Keywords & Mentions
@@ -4560,7 +4745,9 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-xs uppercase tracking-wide font-medium mb-1",
-                                    isDark ? "text-slate-300" : "text-slate-600"
+                                    isDark
+                                      ? "text-slate-300"
+                                      : "text-slate-600",
                                   )}
                                 >
                                   Keywords & Hashtags
@@ -4575,12 +4762,12 @@ export function ContestClientPage({
                                           "rounded-full text-xs px-3 py-1",
                                           isDark
                                             ? "border-slate-600 text-slate-100"
-                                            : "border-slate-300 text-slate-800"
+                                            : "border-slate-300 text-slate-800",
                                         )}
                                       >
                                         {keyword}
                                       </Badge>
-                                    )
+                                    ),
                                   )}
                                 </div>
                               </div>
@@ -4590,7 +4777,9 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-xs uppercase tracking-wide font-medium mb-1",
-                                    isDark ? "text-slate-300" : "text-slate-600"
+                                    isDark
+                                      ? "text-slate-300"
+                                      : "text-slate-600",
                                   )}
                                 >
                                   Accounts to Mention
@@ -4605,12 +4794,12 @@ export function ContestClientPage({
                                           "rounded-full text-xs px-3 py-1",
                                           isDark
                                             ? "border-slate-600 text-slate-100"
-                                            : "border-slate-300 text-slate-800"
+                                            : "border-slate-300 text-slate-800",
                                         )}
                                       >
                                         {mention}
                                       </Badge>
-                                    )
+                                    ),
                                   )}
                                 </div>
                               </div>
@@ -4627,13 +4816,13 @@ export function ContestClientPage({
                       "rounded-xl p-6 border",
                       isDark
                         ? "bg-purple-500/10 border-purple-400/50"
-                        : "bg-purple-50 border-purple-200"
+                        : "bg-purple-50 border-purple-200",
                     )}
                   >
                     <h4
                       className={cn(
                         "font-semibold text-lg mb-4",
-                        isDark ? "text-slate-100" : "text-slate-900"
+                        isDark ? "text-slate-100" : "text-slate-900",
                       )}
                     >
                       📝 Brief
@@ -4644,7 +4833,7 @@ export function ContestClientPage({
                           "prose prose-sm max-w-none [&_a]:break-words [&_a]:hover:underline",
                           isDark
                             ? "prose-invert text-white [&_*]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_b]:!text-white [&_em]:!text-white [&_i]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_a]:!text-blue-400 [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white"
-                            : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700"
+                            : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700",
                         )}
                         dangerouslySetInnerHTML={{ __html: contest.brief_html }}
                       />
@@ -4652,7 +4841,7 @@ export function ContestClientPage({
                       <p
                         className={cn(
                           "text-slate-600 dark:text-slate-400 text-sm",
-                          isDark ? "text-slate-300" : "text-slate-700"
+                          isDark ? "text-slate-300" : "text-slate-700",
                         )}
                       >
                         No brief provided
@@ -4667,27 +4856,27 @@ export function ContestClientPage({
                         "inline-flex items-center gap-2 rounded-lg px-3 py-2",
                         isDark
                           ? "bg-blue-900/30 border border-blue-700/50"
-                          : "bg-blue-50 border border-blue-200"
+                          : "bg-blue-50 border border-blue-200",
                       )}
                     >
                       <Tag
                         className={cn(
                           "h-4 w-4",
-                          isDark ? "text-blue-400" : "text-blue-600"
+                          isDark ? "text-blue-400" : "text-blue-600",
                         )}
                       />
                       <span
                         className={cn(
                           "text-sm font-medium",
-                          isDark ? "text-blue-100" : "text-blue-900"
+                          isDark ? "text-blue-100" : "text-blue-900",
                         )}
                       >
                         {(contest as any).content_type.toUpperCase()} -{" "}
                         {(contest as any).content_type === "ugc"
                           ? "Create Face videos"
                           : (contest as any).content_type === "clipping"
-                          ? "Video editing and clipping"
-                          : "Check rules to find out what kind of content you need to create"}
+                            ? "Video editing and clipping"
+                            : "Check rules to find out what kind of content you need to create"}
                       </span>
                     </div>
                   )}
@@ -4709,19 +4898,19 @@ export function ContestClientPage({
                   <div
                     className={cn(
                       "rounded-xl p-6 border",
-                      isDark ? "border-gray-600" : "bg-white border-orange-200"
+                      isDark ? "border-gray-600" : "bg-white border-orange-200",
                     )}
                   >
                     <h4
                       className={cn(
                         "font-semibold text-lg mb-4 flex items-center gap-2",
-                        isDark ? "text-slate-100" : "text-slate-900"
+                        isDark ? "text-slate-100" : "text-slate-900",
                       )}
                     >
                       <ScrollText
                         className={cn(
                           "h-5 w-5",
-                          isDark ? "text-orange-400" : "text-orange-600"
+                          isDark ? "text-orange-400" : "text-orange-600",
                         )}
                       />
                       Rules & Guidelines
@@ -4733,7 +4922,7 @@ export function ContestClientPage({
                           "prose prose-sm max-w-none [&_a]:break-words [&_a]:hover:underline",
                           isDark
                             ? "prose-invert text-white [&_*]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_b]:!text-white [&_em]:!text-white [&_i]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_a]:!text-blue-400 [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white"
-                            : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700"
+                            : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700",
                         )}
                         dangerouslySetInnerHTML={{
                           __html: (contest as any).rules_html,
@@ -4743,7 +4932,7 @@ export function ContestClientPage({
                       <div
                         className={cn(
                           "text-sm leading-relaxed whitespace-pre-wrap",
-                          isDark ? "text-slate-300" : "text-slate-700"
+                          isDark ? "text-slate-300" : "text-slate-700",
                         )}
                       >
                         {contest.rules}
@@ -4752,7 +4941,7 @@ export function ContestClientPage({
                       <div
                         className={cn(
                           "text-sm leading-relaxed whitespace-pre-wrap",
-                          isDark ? "text-slate-300" : "text-slate-700"
+                          isDark ? "text-slate-300" : "text-slate-700",
                         )}
                       >
                         {contest.rules_description}
@@ -4761,7 +4950,7 @@ export function ContestClientPage({
                       <div
                         className={cn(
                           "text-sm leading-relaxed whitespace-pre-wrap",
-                          isDark ? "text-slate-300" : "text-slate-700"
+                          isDark ? "text-slate-300" : "text-slate-700",
                         )}
                       >
                         {(contest as any).rules_text}
@@ -4771,13 +4960,13 @@ export function ContestClientPage({
                         <div
                           className={cn(
                             "text-sm leading-relaxed",
-                            isDark ? "text-slate-300" : "text-slate-700"
+                            isDark ? "text-slate-300" : "text-slate-700",
                           )}
                         >
                           <h4
                             className={cn(
                               "font-semibold mb-2",
-                              isDark ? "text-slate-100" : "text-slate-900"
+                              isDark ? "text-slate-100" : "text-slate-900",
                             )}
                           >
                             General Rules:
@@ -4785,7 +4974,7 @@ export function ContestClientPage({
                           <ul
                             className={cn(
                               "space-y-2 ml-4 list-disc",
-                              isDark ? "text-slate-400" : "text-slate-600"
+                              isDark ? "text-slate-400" : "text-slate-600",
                             )}
                           >
                             <li>
@@ -4821,13 +5010,13 @@ export function ContestClientPage({
                         <div
                           className={cn(
                             "border-t pt-3",
-                            isDark ? "border-slate-600" : "border-slate-200"
+                            isDark ? "border-slate-600" : "border-slate-200",
                           )}
                         >
                           <h4
                             className={cn(
                               "font-semibold mb-2",
-                              isDark ? "text-slate-100" : "text-slate-900"
+                              isDark ? "text-slate-100" : "text-slate-900",
                             )}
                           >
                             ⚠️ Important Notes:
@@ -4835,7 +5024,7 @@ export function ContestClientPage({
                           <ul
                             className={cn(
                               "space-y-1 ml-4 list-disc text-sm",
-                              isDark ? "text-slate-400" : "text-slate-600"
+                              isDark ? "text-slate-400" : "text-slate-600",
                             )}
                           >
                             <li>
@@ -4868,13 +5057,13 @@ export function ContestClientPage({
                           "rounded-xl p-6 border mt-6",
                           isDark
                             ? "border-slate-600"
-                            : "bg-white border-orange-200"
+                            : "bg-white border-orange-200",
                         )}
                       >
                         <h4
                           className={cn(
                             "font-semibold text-lg mb-4",
-                            isDark ? "text-slate-100" : "text-slate-900"
+                            isDark ? "text-slate-100" : "text-slate-900",
                           )}
                         >
                           📋 Terms & Conditions
@@ -4884,13 +5073,13 @@ export function ContestClientPage({
                             "rounded-lg p-4 border",
                             isDark
                               ? "border-gray-700"
-                              : "bg-slate-50 border-slate-200"
+                              : "bg-slate-50 border-slate-200",
                           )}
                         >
                           <pre
                             className={cn(
                               "whitespace-pre-wrap break-words font-sans text-sm",
-                              isDark ? "text-white" : "text-slate-700"
+                              isDark ? "text-white" : "text-slate-700",
                             )}
                           >
                             {
@@ -4929,14 +5118,14 @@ export function ContestClientPage({
                               url,
                               description,
                               type: "external",
-                            })
+                            }),
                           )
                       ).map((resource: any, idx: number) => {
                         const isImage =
                           resource.url &&
                           (resource.url.startsWith("data:image") ||
                             /\.(jpg|jpeg|png|gif|jfif|webp)$/i.test(
-                              resource.url
+                              resource.url,
                             ));
                         const isPdf =
                           resource.url && /\.pdf$/i.test(resource.url);
@@ -4949,7 +5138,7 @@ export function ContestClientPage({
                             key={idx}
                             className={cn(
                               "border rounded-xl p-5",
-                              isDark ? "border-gray-600" : "border-gray-300"
+                              isDark ? "border-gray-600" : "border-gray-300",
                             )}
                           >
                             <div className="flex flex-col md:flex-row justify-between">
@@ -5007,7 +5196,7 @@ export function ContestClientPage({
                                       "p-3 rounded-full flex-shrink-0",
                                       isDark
                                         ? "bg-[#FFFFFF42] text-white"
-                                        : "bg-purple-100 text-purple-600"
+                                        : "bg-purple-100 text-purple-600",
                                     )}
                                   >
                                     <ExternalLink className="h-5 w-5" />
@@ -5017,7 +5206,7 @@ export function ContestClientPage({
                                   <h4
                                     className={cn(
                                       "text-base font-semibold text-gray-900 dark:text-gray-100 mb-1",
-                                      isDark ? "text-white" : "text-slate-700"
+                                      isDark ? "text-white" : "text-slate-700",
                                     )}
                                   >
                                     {resource.description}
@@ -5027,7 +5216,7 @@ export function ContestClientPage({
                                       "text-sm text-gray-600 dark:text-gray-400",
                                       isDark
                                         ? "text-gray-300"
-                                        : "text-slate-700"
+                                        : "text-slate-700",
                                     )}
                                   >
                                     {resource.type === "external"
@@ -5051,10 +5240,10 @@ export function ContestClientPage({
                                   {isPdf
                                     ? "Open PDF"
                                     : isVideo
-                                    ? "Play Video"
-                                    : isImage
-                                    ? "View Image"
-                                    : "View Resource"}
+                                      ? "Play Video"
+                                      : isImage
+                                        ? "View Image"
+                                        : "View Resource"}
                                 </a>
                               </Button>
                             </div>
@@ -5066,13 +5255,13 @@ export function ContestClientPage({
                     <div
                       className={cn(
                         "text-center py-12 rounded-xl border border-gray-300",
-                        isDark ? "text-gray-300" : "bg-gray-50 text-slate-700"
+                        isDark ? "text-gray-300" : "bg-gray-50 text-slate-700",
                       )}
                     >
                       <div
                         className={cn(
                           "w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center",
-                          isDark ? "bg-blue-500/30" : "bg-blue-100"
+                          isDark ? "bg-blue-500/30" : "bg-blue-100",
                         )}
                       >
                         <Lightbulb className="h-8 w-8 text-blue-600 dark:text-blue-400" />
@@ -5080,7 +5269,7 @@ export function ContestClientPage({
                       <h4
                         className={cn(
                           "text-lg font-medium text-gray-900 dark:text-gray-100 mb-2",
-                          isDark ? "text-white" : "text-slate-700"
+                          isDark ? "text-white" : "text-slate-700",
                         )}
                       >
                         No additional resources provided
@@ -5088,7 +5277,7 @@ export function ContestClientPage({
                       <p
                         className={cn(
                           "text-gray-600 dark:text-gray-400",
-                          isDark ? "text-gray-300" : "text-slate-700"
+                          isDark ? "text-gray-300" : "text-slate-700",
                         )}
                       >
                         Check the brief and rules above for all contest
@@ -5114,7 +5303,7 @@ export function ContestClientPage({
                           <h3
                             className={cn(
                               "text-xl font-semibold",
-                              isDark ? "text-white" : "text-slate-900"
+                              isDark ? "text-white" : "text-slate-900",
                             )}
                           >
                             Inspiration Links
@@ -5125,13 +5314,13 @@ export function ContestClientPage({
                           {links.map(
                             (
                               item: { url: string; description: string },
-                              index: number
+                              index: number,
                             ) => {
                               // Process URL to replace [creator] with username
                               const username = userProfile?.username || "";
                               const processedUrl = processUrlWithCreator(
                                 item.url,
-                                username
+                                username,
                               );
 
                               return (
@@ -5141,7 +5330,7 @@ export function ContestClientPage({
                                     "border rounded-xl p-5",
                                     isDark
                                       ? "border-gray-600"
-                                      : "bg-white border-gray-300"
+                                      : "bg-white border-gray-300",
                                   )}
                                 >
                                   <div className="flex items-start gap-4">
@@ -5150,7 +5339,7 @@ export function ContestClientPage({
                                         "p-3 rounded-full flex-shrink-0",
                                         isDark
                                           ? "bg-[#FFFFFF42] text-white"
-                                          : "bg-purple-100 text-purple-600"
+                                          : "bg-purple-100 text-purple-600",
                                       )}
                                     >
                                       <ExternalLink className="h-5 w-5" />
@@ -5164,7 +5353,7 @@ export function ContestClientPage({
                                           "block text-base font-medium text-blue-600 hover:underline mb-2 break-all",
                                           isDark
                                             ? "text-purple-300"
-                                            : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                                            : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
                                         )}
                                       >
                                         {processedUrl}
@@ -5175,7 +5364,7 @@ export function ContestClientPage({
                                             "text-sm leading-relaxed",
                                             isDark
                                               ? "text-gray-300"
-                                              : "text-gray-700"
+                                              : "text-gray-700",
                                           )}
                                         >
                                           {item.description}
@@ -5185,7 +5374,7 @@ export function ContestClientPage({
                                   </div>
                                 </div>
                               );
-                            }
+                            },
                           )}
                         </div>
                       </div>
@@ -5203,7 +5392,7 @@ export function ContestClientPage({
                       <h4
                         className={cn(
                           "text-xl font-semibold flex items-center gap-2",
-                          isDark ? "text-white" : "text-slate-900"
+                          isDark ? "text-white" : "text-slate-900",
                         )}
                       >
                         <Copy className="h-5 w-5 text-green-600 dark:text-green-400" />
@@ -5215,13 +5404,13 @@ export function ContestClientPage({
                             "rounded-lg border p-4",
                             isDark
                               ? "border-[#C9A7FF] bg-[#C9A7FF26]"
-                              : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200"
+                              : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200",
                           )}
                         >
                           <p
                             className={cn(
                               "text-sm flex items-start gap-2",
-                              isDark ? "text-white" : "text-yellow-800"
+                              isDark ? "text-white" : "text-yellow-800",
                             )}
                           >
                             <span className="text-base flex-shrink-0">📝</span>
@@ -5239,19 +5428,19 @@ export function ContestClientPage({
                         {trackingLinks.map(
                           (
                             item: { url: string; description: string },
-                            index: number
+                            index: number,
                           ) => {
                             // Process URL to replace [creator] with username
                             const username = userProfile?.username || "";
                             const processedUrl = processUrlWithCreator(
                               item.url,
-                              username
+                              username,
                             );
 
                             const handleCopyLink = async () => {
                               try {
                                 await navigator.clipboard.writeText(
-                                  processedUrl
+                                  processedUrl,
                                 );
                                 toast({
                                   title: "Link Copied!",
@@ -5277,7 +5466,7 @@ export function ContestClientPage({
                                   "border rounded-lg p-4 hover:shadow-md transition-shadow duration-200",
                                   isDark
                                     ? "border-gray-600"
-                                    : "bg-white border-slate-200"
+                                    : "bg-white border-slate-200",
                                 )}
                               >
                                 <div className="flex items-start gap-3">
@@ -5286,7 +5475,7 @@ export function ContestClientPage({
                                       "mt-0.5 p-3 rounded-full flex-shrink-0",
                                       isDark
                                         ? "bg-green-900/40 text-green-400"
-                                        : "bg-green-100 text-green-600"
+                                        : "bg-green-100 text-green-600",
                                     )}
                                   >
                                     <Link2 className="h-5 w-5" />
@@ -5298,7 +5487,7 @@ export function ContestClientPage({
                                           "text-md font-medium break-all transition-colors",
                                           isDark
                                             ? "text-purple-300"
-                                            : "text-black"
+                                            : "text-black",
                                         )}
                                       >
                                         {processedUrl}
@@ -5311,7 +5500,7 @@ export function ContestClientPage({
                                           "p-2 h-auto rounded-md transition-colors duration-200 flex-shrink-0",
                                           isDark
                                             ? "text-white"
-                                            : "hover:bg-slate-100 text-slate-600"
+                                            : "hover:bg-slate-100 text-slate-600",
                                         )}
                                         title="Copy link"
                                       >
@@ -5324,7 +5513,7 @@ export function ContestClientPage({
                                           "text-sm leading-relaxed",
                                           isDark
                                             ? "text-white"
-                                            : "text-slate-600"
+                                            : "text-slate-600",
                                         )}
                                       >
                                         {item.description}
@@ -5334,7 +5523,7 @@ export function ContestClientPage({
                                 </div>
                               </div>
                             );
-                          }
+                          },
                         )}
                       </div>
                     </div>
@@ -5376,13 +5565,16 @@ export function ContestClientPage({
             ) : (
               <div className="space-y-3">
                 {/* Show empty state if no leaderboard entries */}
-                {leaderboard.length === 0 && totalLeaderboardEntries === 0 ? (
+                {(isCreatorModeTotals
+                  ? creatorWiseLeaderboard.length
+                  : leaderboard.length) === 0 &&
+                effectiveLeaderboardTotalEntries === 0 ? (
                   <div className="text-center py-8">
                     <Trophy className="mx-auto h-12 w-12 text-slate-400" />
                     <p
                       className={cn(
                         "mb-2",
-                        isDark ? "text-slate-300" : "text-slate-600"
+                        isDark ? "text-slate-300" : "text-slate-600",
                       )}
                     >
                       No submissions yet. Be the first!
@@ -5406,7 +5598,7 @@ export function ContestClientPage({
                             "flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 p-4 rounded-xl border shadow-sm",
                             isDark
                               ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-                              : "bg-[#D9C0FF26] border-[#D9C0FF]"
+                              : "bg-[#D9C0FF26] border-[#D9C0FF]",
                           )}
                         >
                           <div className="flex items-center gap-3">
@@ -5415,7 +5607,7 @@ export function ContestClientPage({
                                 "p-2 rounded-lg",
                                 isDark
                                   ? "bg-[#FFFFFF42] text-white"
-                                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                                  : "bg-[#D8C3FF] text-[#4A00BE]",
                               )}
                             >
                               <Eye className="h-4 w-4" />
@@ -5424,7 +5616,7 @@ export function ContestClientPage({
                               <span
                                 className={cn(
                                   "text-sm font-semibold",
-                                  isDark ? "text-white" : "text-slate-800"
+                                  isDark ? "text-white" : "text-slate-800",
                                 )}
                               >
                                 Earnings Display
@@ -5432,7 +5624,7 @@ export function ContestClientPage({
                               <p
                                 className={cn(
                                   "text-xs mt-0.5",
-                                  isDark ? "text-white" : "text-slate-700"
+                                  isDark ? "text-white" : "text-slate-700",
                                 )}
                               >
                                 Choose how to view your earnings breakdown
@@ -5444,7 +5636,7 @@ export function ContestClientPage({
                               "flex rounded-lg p-1 w-full sm:w-auto",
                               isDark
                                 ? "bg-[#C9A7FF26]  border-[#C9A7FF]"
-                                : "bg-[#D9C0FF26] border-[#D9C0FF]"
+                                : "bg-[#D9C0FF26] border-[#D9C0FF]",
                             )}
                           >
                             <Button
@@ -5461,8 +5653,8 @@ export function ContestClientPage({
                                     ? "bg-purple-600 text-white"
                                     : "bg-purple-500 text-white"
                                   : isDark
-                                  ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                  : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
                               }`}
                             >
                               <span className="flex items-center gap-1.5">
@@ -5484,8 +5676,8 @@ export function ContestClientPage({
                                     ? "bg-purple-600 text-white"
                                     : "bg-purple-500 text-white"
                                   : isDark
-                                  ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                  : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
                               }`}
                             >
                               <span className="flex items-center gap-1.5">
@@ -5505,7 +5697,7 @@ export function ContestClientPage({
                             "flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 p-4 rounded-xl border shadow-sm",
                             isDark
                               ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-                              : "bg-[#D9C0FF26] border-[#D9C0FF]"
+                              : "bg-[#D9C0FF26] border-[#D9C0FF]",
                           )}
                         >
                           <div className="flex items-center gap-3">
@@ -5514,7 +5706,7 @@ export function ContestClientPage({
                                 "p-2 rounded-lg",
                                 isDark
                                   ? "bg-[#FFFFFF42] text-white"
-                                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                                  : "bg-[#D8C3FF] text-[#4A00BE]",
                               )}
                             >
                               <ListOrdered className="h-4 w-4" />
@@ -5523,7 +5715,7 @@ export function ContestClientPage({
                               <span
                                 className={cn(
                                   "text-sm font-semibold",
-                                  isDark ? "text-white" : "text-slate-800"
+                                  isDark ? "text-white" : "text-slate-800",
                                 )}
                               >
                                 Leaderboard Display
@@ -5531,7 +5723,7 @@ export function ContestClientPage({
                               <p
                                 className={cn(
                                   "text-xs mt-0.5",
-                                  isDark ? "text-white" : "text-slate-700"
+                                  isDark ? "text-white" : "text-slate-700",
                                 )}
                               >
                                 View by creator or individual submissions
@@ -5543,7 +5735,7 @@ export function ContestClientPage({
                               "flex rounded-lg p-1 w-full sm:w-auto",
                               isDark
                                 ? "bg-[#C9A7FF26]  border-[#C9A7FF]"
-                                : "bg-[#D9C0FF26] border-[#D9C0FF]"
+                                : "bg-[#D9C0FF26] border-[#D9C0FF]",
                             )}
                           >
                             <Button
@@ -5553,17 +5745,15 @@ export function ContestClientPage({
                                   : "ghost"
                               }
                               size="sm"
-                              onClick={() =>
-                                setLeaderboardDisplayMode("submission")
-                              }
+                              onClick={() => setLeaderboardDisplayMode("submission")}
                               className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
                                 leaderboardDisplayMode === "submission"
                                   ? isDark
                                     ? "bg-purple-600 text-white"
                                     : "bg-purple-500 text-white"
                                   : isDark
-                                  ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                  : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
                               }`}
                             >
                               <span className="flex items-center gap-1.5">
@@ -5578,17 +5768,15 @@ export function ContestClientPage({
                                   : "ghost"
                               }
                               size="sm"
-                              onClick={() =>
-                                setLeaderboardDisplayMode("creator")
-                              }
+                              onClick={() => setLeaderboardDisplayMode("creator")}
                               className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
                                 leaderboardDisplayMode === "creator"
                                   ? isDark
                                     ? "bg-purple-600 text-white"
                                     : "bg-purple-500 text-white"
                                   : isDark
-                                  ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                  : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
                               }`}
                             >
                               <span className="flex items-center gap-1.5">
@@ -5619,7 +5807,7 @@ export function ContestClientPage({
                               "overflow-hidden mb-6 border",
                               isDark
                                 ? "border-[#C9A7FF] bg-[#000000]"
-                                : "border-[#D9C0FF] bg-white"
+                                : "border-[#D9C0FF] bg-white",
                             )}
                           >
                             <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-1 sm:space-x-1">
@@ -5629,7 +5817,7 @@ export function ContestClientPage({
                                     "flex flex-col items-center justify-center w-10 sm:w-12 flex-shrink-0 rounded-xl px-1 py-1.5",
                                     isDark
                                       ? "bg-[#C9A7FF26] text-[#F5EBFF]"
-                                      : "bg-[#D9C0FF40] text-[#4A00BE]"
+                                      : "bg-[#D9C0FF40] text-[#4A00BE]",
                                   )}
                                 >
                                   <div className="text-lg sm:text-xl font-extrabold leading-none">
@@ -5667,7 +5855,7 @@ export function ContestClientPage({
                                     <AvatarFallback
                                       className={cn(
                                         "bg-primary/20",
-                                        isDark ? "text-white" : "text-gray-900"
+                                        isDark ? "text-white" : "text-gray-900",
                                       )}
                                     >
                                       {(contest?.platform === "twitter"
@@ -5685,7 +5873,7 @@ export function ContestClientPage({
                                           "text-sm sm:text-base font-semibold truncate",
                                           isDark
                                             ? "text-white"
-                                            : "text-gray-700"
+                                            : "text-gray-700",
                                         )}
                                         title={
                                           contest?.platform === "twitter"
@@ -5712,7 +5900,7 @@ export function ContestClientPage({
                                           )}
                                       </p>
                                       {renderVerificationBadges(
-                                        displayEntry.status
+                                        displayEntry.status,
                                       )}
                                       {/* Show rejected badge for Twitter entries */}
                                       {contest?.platform === "twitter" &&
@@ -5738,7 +5926,7 @@ export function ContestClientPage({
                                               "h-4 w-4 flex-shrink-0",
                                               isDark
                                                 ? "text-red-400"
-                                                : "text-red-600"
+                                                : "text-red-600",
                                             )}
                                           />
                                           <p
@@ -5746,7 +5934,7 @@ export function ContestClientPage({
                                               "text-xs flex-1 truncate",
                                               isDark
                                                 ? "text-red-300"
-                                                : "text-red-600"
+                                                : "text-red-600",
                                             )}
                                           >
                                             <span className="font-medium">
@@ -5758,7 +5946,7 @@ export function ContestClientPage({
                                                   displayEntry as any
                                                 ).rejection_reason.substring(
                                                   0,
-                                                  50
+                                                  50,
                                                 )}...`
                                               : (displayEntry as any)
                                                   .rejection_reason}
@@ -5771,11 +5959,11 @@ export function ContestClientPage({
                                               className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                                               onClick={() => {
                                                 setRejectionReasonModalOpen(
-                                                  true
+                                                  true,
                                                 );
                                                 setRejectionReasonText(
                                                   (displayEntry as any)
-                                                    .rejection_reason
+                                                    .rejection_reason,
                                                 );
                                               }}
                                             >
@@ -5793,7 +5981,7 @@ export function ContestClientPage({
                                             "text-xs mb-2",
                                             isDark
                                               ? "text-red-300"
-                                              : "text-red-600"
+                                              : "text-red-600",
                                           )}
                                         >
                                           Your entry has been rejected.
@@ -5809,7 +5997,7 @@ export function ContestClientPage({
                                           "text-xs mb-2",
                                           isDark
                                             ? "text-gray-300"
-                                            : "text-slate-500"
+                                            : "text-slate-500",
                                         )}
                                       >
                                         Submitted:{" "}
@@ -5831,7 +6019,7 @@ export function ContestClientPage({
                                                 "h-3.5 w-3.5",
                                                 isDark
                                                   ? "text-gray-400"
-                                                  : "text-slate-500"
+                                                  : "text-slate-500",
                                               )}
                                             />
                                             <span
@@ -5839,7 +6027,7 @@ export function ContestClientPage({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-400"
-                                                  : "text-slate-600"
+                                                  : "text-slate-600",
                                               )}
                                             >
                                               {(displayEntry as any)
@@ -5854,7 +6042,7 @@ export function ContestClientPage({
                                                 "h-3.5 w-3.5",
                                                 isDark
                                                   ? "text-gray-400"
-                                                  : "text-slate-500"
+                                                  : "text-slate-500",
                                               )}
                                             />
                                             <span
@@ -5862,7 +6050,7 @@ export function ContestClientPage({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-400"
-                                                  : "text-slate-600"
+                                                  : "text-slate-600",
                                               )}
                                             >
                                               {(
@@ -5879,7 +6067,7 @@ export function ContestClientPage({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               {(displayEntry as any)
@@ -5893,7 +6081,7 @@ export function ContestClientPage({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               {(displayEntry as any)
@@ -5906,7 +6094,7 @@ export function ContestClientPage({
                                                 "h-3.5 w-3.5",
                                                 isDark
                                                   ? "text-gray-400"
-                                                  : "text-gray-600"
+                                                  : "text-gray-600",
                                               )}
                                             />
                                             <span
@@ -5914,7 +6102,7 @@ export function ContestClientPage({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               {(displayEntry as any)
@@ -5932,7 +6120,7 @@ export function ContestClientPage({
                                   <p
                                     className={cn(
                                       "text-base sm:text-lg font-bold",
-                                      isDark ? "text-white" : "text-gray-900"
+                                      isDark ? "text-white" : "text-gray-900",
                                     )}
                                   >
                                     {contest?.platform === "twitter" ? (
@@ -6028,7 +6216,7 @@ export function ContestClientPage({
                                               <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                                               <span className="whitespace-nowrap">
                                                 {formatMoney(
-                                                  displayEntry.earnings
+                                                  displayEntry.earnings,
                                                 )}{" "}
                                                 {contestType === "cpm"
                                                   ? "CPM"
@@ -6077,7 +6265,7 @@ export function ContestClientPage({
                                     contest.contest_type === "leaderboard" &&
                                     Array.isArray(
                                       contest.contest_based_details
-                                        ?.leaderboard_contest?.prizes
+                                        ?.leaderboard_contest?.prizes,
                                     ) &&
                                     myLeaderboardEntry?.rank
                                   ) {
@@ -6087,7 +6275,7 @@ export function ContestClientPage({
                                         .prizes as PrizeInfo[]
                                     ).find(
                                       (p) =>
-                                        p.position === myLeaderboardEntry?.rank
+                                        p.position === myLeaderboardEntry?.rank,
                                     );
                                     if (prizeInfo) {
                                       const prizeText =
@@ -6116,7 +6304,7 @@ export function ContestClientPage({
                                                 <div className="text-xs text-purple-600 dark:text-purple-500">
                                                   (
                                                   {formatMoney(
-                                                    prizeInfo.amount
+                                                    prizeInfo.amount,
                                                   )}{" "}
                                                   Prize +{" "}
                                                   {formatMoney(flatFeeBonus)}{" "}
@@ -6213,7 +6401,7 @@ export function ContestClientPage({
                                                 "flex rounded-lg p-1",
                                                 isDark
                                                   ? "bg-[#170337]"
-                                                  : "bg-white dark:bg-slate-700 shadow-sm border border-slate-200 dark:border-slate-600"
+                                                  : "bg-white dark:bg-slate-700 shadow-sm border border-slate-200 dark:border-slate-600",
                                               )}
                                             >
                                               <Button
@@ -6232,8 +6420,8 @@ export function ContestClientPage({
                                                       ? "bg-purple-600 text-white"
                                                       : "bg-purple-500 text-white"
                                                     : isDark
-                                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                                      ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                                      : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
                                                 }`}
                                               >
                                                 Simple
@@ -6254,8 +6442,8 @@ export function ContestClientPage({
                                                       ? "bg-purple-600 text-white"
                                                       : "bg-purple-500 text-white"
                                                     : isDark
-                                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                                      ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                                      : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
                                                 }`}
                                               >
                                                 Detailed
@@ -6274,7 +6462,7 @@ export function ContestClientPage({
                                               "text-sm",
                                               isDark
                                                 ? "text-gray-400"
-                                                : "text-gray-600"
+                                                : "text-gray-600",
                                             )}
                                           >
                                             No submissions found
@@ -6286,7 +6474,7 @@ export function ContestClientPage({
                                             getUserSubmissions();
                                           const totalPages = Math.ceil(
                                             userSubmissions.length /
-                                              modalItemsPerPage
+                                              modalItemsPerPage,
                                           );
                                           const startIndex =
                                             (modalCurrentPage - 1) *
@@ -6296,7 +6484,7 @@ export function ContestClientPage({
                                           const currentSubmissions =
                                             userSubmissions.slice(
                                               startIndex,
-                                              endIndex
+                                              endIndex,
                                             );
 
                                           return (
@@ -6306,7 +6494,7 @@ export function ContestClientPage({
                                                   // Get actual rank from leaderboard using O(1) lookup
                                                   const actualRank =
                                                     rankLookupMap.get(
-                                                      submission.id
+                                                      submission.id,
                                                     ) || "?";
 
                                                   // Earnings display based on modal view mode
@@ -6363,12 +6551,12 @@ export function ContestClientPage({
                                                               "font-semibold text-green-600 dark:text-green-400 text-sm",
                                                               isDark
                                                                 ? "text-green-400"
-                                                                : "text-green-600"
+                                                                : "text-green-600",
                                                             )}
                                                           >
                                                             {earningsLabel}:{" "}
                                                             {formatMoney(
-                                                              totalEarnings
+                                                              totalEarnings,
                                                             )}
                                                           </div>
                                                           <div
@@ -6376,7 +6564,7 @@ export function ContestClientPage({
                                                               "flex flex-wrap items-center gap-1.5 text-xs",
                                                               isDark
                                                                 ? "text-green-400 bg-green-900/20 border border-green-800"
-                                                                : "text-green-600 bg-green-50 border border-green-200"
+                                                                : "text-green-600 bg-green-50 border border-green-200",
                                                             )}
                                                           >
                                                             <div
@@ -6384,12 +6572,12 @@ export function ContestClientPage({
                                                                 "w-1.5 h-1.5 rounded-full flex-shrink-0",
                                                                 isDark
                                                                   ? "bg-green-400"
-                                                                  : "bg-green-500"
+                                                                  : "bg-green-500",
                                                               )}
                                                             ></div>
                                                             <span className="whitespace-nowrap">
                                                               {formatMoney(
-                                                                submission.earnings
+                                                                submission.earnings,
                                                               )}{" "}
                                                               {contestType ===
                                                               "cpm"
@@ -6401,14 +6589,14 @@ export function ContestClientPage({
                                                                 "text-green-600 dark:text-green-400",
                                                                 isDark
                                                                   ? "text-green-400"
-                                                                  : "text-green-600"
+                                                                  : "text-green-600",
                                                               )}
                                                             >
                                                               +
                                                             </span>
                                                             <span className="whitespace-nowrap">
                                                               {formatMoney(
-                                                                flatFeeBonus
+                                                                flatFeeBonus,
                                                               )}{" "}
                                                               Bonus
                                                             </span>
@@ -6422,12 +6610,12 @@ export function ContestClientPage({
                                                             "font-semibold text-green-600 dark:text-green-400",
                                                             isDark
                                                               ? "text-green-400"
-                                                              : "text-green-600"
+                                                              : "text-green-600",
                                                           )}
                                                         >
                                                           {earningsLabel}:{" "}
                                                           {formatMoney(
-                                                            totalEarnings
+                                                            totalEarnings,
                                                           )}
                                                         </span>
                                                       );
@@ -6461,7 +6649,7 @@ export function ContestClientPage({
                                                               "bg-primary/20 text-primary",
                                                               isDark
                                                                 ? "text-primary-foreground"
-                                                                : "text-primary"
+                                                                : "text-primary",
                                                             )}
                                                           >
                                                             {submission.user_platform_username?.[0]?.toUpperCase() ||
@@ -6475,7 +6663,7 @@ export function ContestClientPage({
                                                                 "text-sm sm:text-base font-semibold truncate",
                                                                 isDark
                                                                   ? "text-white"
-                                                                  : "text-gray-900"
+                                                                  : "text-gray-900",
                                                               )}
                                                             >
                                                               {contest?.platform ===
@@ -6491,7 +6679,7 @@ export function ContestClientPage({
                                                                 "(You)"}
                                                             </p>
                                                             {renderVerificationBadges(
-                                                              submission.status
+                                                              submission.status,
                                                             )}
                                                           </div>
                                                           <p
@@ -6499,12 +6687,12 @@ export function ContestClientPage({
                                                               "text-xs text-slate-600 dark:text-slate-400 mb-2",
                                                               isDark
                                                                 ? "text-gray-400"
-                                                                : "text-gray-600"
+                                                                : "text-gray-600",
                                                             )}
                                                           >
                                                             Submitted:{" "}
                                                             {formatTimeAgo(
-                                                              submission.created_at
+                                                              submission.created_at,
                                                             )}
                                                           </p>
                                                           <div
@@ -6512,7 +6700,7 @@ export function ContestClientPage({
                                                               "flex items-center gap-4 text-xs",
                                                               isDark
                                                                 ? "text-gray-400"
-                                                                : "text-gray-600"
+                                                                : "text-gray-600",
                                                             )}
                                                           >
                                                             <div className="flex items-center gap-1">
@@ -6545,7 +6733,7 @@ export function ContestClientPage({
                                                       </CardContent>
                                                     </Card>
                                                   );
-                                                }
+                                                },
                                               )}
 
                                               {/* Pagination Controls */}
@@ -6554,7 +6742,7 @@ export function ContestClientPage({
                                                   getUserSubmissions();
                                                 const totalPages = Math.ceil(
                                                   userSubmissions.length /
-                                                    modalItemsPerPage
+                                                    modalItemsPerPage,
                                                 );
 
                                                 if (totalPages <= 1)
@@ -6570,8 +6758,8 @@ export function ContestClientPage({
                                                           (prev) =>
                                                             Math.max(
                                                               1,
-                                                              prev - 1
-                                                            )
+                                                              prev - 1,
+                                                            ),
                                                         )
                                                       }
                                                       disabled={
@@ -6588,7 +6776,7 @@ export function ContestClientPage({
                                                         {
                                                           length: Math.min(
                                                             5,
-                                                            totalPages
+                                                            totalPages,
                                                           ),
                                                         },
                                                         (_, i) => {
@@ -6627,7 +6815,7 @@ export function ContestClientPage({
                                                               size="sm"
                                                               onClick={() =>
                                                                 setModalCurrentPage(
-                                                                  pageNum
+                                                                  pageNum,
                                                                 )
                                                               }
                                                               className="w-8 h-8 p-0"
@@ -6635,7 +6823,7 @@ export function ContestClientPage({
                                                               {pageNum}
                                                             </Button>
                                                           );
-                                                        }
+                                                        },
                                                       )}
                                                     </div>
 
@@ -6647,8 +6835,8 @@ export function ContestClientPage({
                                                           (prev) =>
                                                             Math.min(
                                                               totalPages,
-                                                              prev + 1
-                                                            )
+                                                              prev + 1,
+                                                            ),
                                                         )
                                                       }
                                                       disabled={
@@ -6688,24 +6876,24 @@ export function ContestClientPage({
                       const refreshLabelLarge = isRefreshingMetrics
                         ? "Updating..."
                         : isContestEnded
-                        ? "Contest Ended"
-                        : !cooldownInfo?.canRefresh
-                        ? `Wait ${cooldownInfo?.remainingMinutes}m`
-                        : "Refresh Metrics";
+                          ? "Contest Ended"
+                          : !cooldownInfo?.canRefresh
+                            ? `Wait ${cooldownInfo?.remainingMinutes}m`
+                            : "Refresh Metrics";
                       const refreshLabelSmall = isRefreshingMetrics
                         ? "Updating..."
                         : isContestEnded
-                        ? "Contest Ended"
-                        : !cooldownInfo?.canRefresh
-                        ? `${cooldownInfo?.remainingMinutes}m`
-                        : "Refresh";
+                          ? "Contest Ended"
+                          : !cooldownInfo?.canRefresh
+                            ? `${cooldownInfo?.remainingMinutes}m`
+                            : "Refresh";
                       return (
                         <div
                           className={cn(
                             "flex items-center justify-between p-4 rounded-xl border shadow-sm mb-4",
                             isDark
                               ? "bg-[#180438] border-gray-700"
-                              : "bg-white border-gray-300"
+                              : "bg-white border-gray-300",
                           )}
                         >
                           <div className="flex items-center gap-3">
@@ -6714,7 +6902,7 @@ export function ContestClientPage({
                                 "p-2 rounded-lg",
                                 isDark
                                   ? "bg-purple-900/30 text-purple-400"
-                                  : "bg-purple-100 text-purple-600"
+                                  : "bg-purple-100 text-purple-600",
                               )}
                             >
                               <RefreshCw className="h-5 w-5" />
@@ -6723,7 +6911,7 @@ export function ContestClientPage({
                               <h3
                                 className={cn(
                                   "text-lg font-semibold",
-                                  isDark ? "text-white" : "text-gray-900"
+                                  isDark ? "text-white" : "text-gray-900",
                                 )}
                               >
                                 Leaderboard Metrics
@@ -6731,12 +6919,12 @@ export function ContestClientPage({
                               <p
                                 className={cn(
                                   "text-sm",
-                                  isDark ? "text-gray-400" : "text-gray-600"
+                                  isDark ? "text-gray-400" : "text-gray-600",
                                 )}
                               >
                                 {contest?.last_metrics_updated
                                   ? `Last updated: ${formatTimeAgo(
-                                      contest.last_metrics_updated
+                                      contest.last_metrics_updated,
                                     )}`
                                   : "Metrics not yet updated"}
                               </p>
@@ -6752,8 +6940,8 @@ export function ContestClientPage({
                               isDisabled
                                 ? "opacity-60 cursor-not-allowed"
                                 : isDark
-                                ? "border-purple-600 text-purple-300 hover:bg-purple-900/30"
-                                : "border-purple-500 text-purple-600 hover:bg-purple-50"
+                                  ? "border-purple-600 text-purple-300 hover:bg-purple-900/30"
+                                  : "border-purple-500 text-purple-600 hover:bg-purple-50",
                             )}
                             title={
                               disabledReason ||
@@ -6787,7 +6975,7 @@ export function ContestClientPage({
                           <DialogTitle
                             className={cn(
                               "flex items-center gap-2",
-                              isDark ? "text-white" : "text-gray-700"
+                              isDark ? "text-white" : "text-gray-700",
                             )}
                           >
                             <Eye className="h-5 w-5" />
@@ -6795,10 +6983,10 @@ export function ContestClientPage({
                               const creatorGroup =
                                 groupedLeaderboardByCreator?.find(
                                   (group) =>
-                                    group.creator_id === selectedCreatorId
+                                    group.creator_id === selectedCreatorId,
                                 );
                               return creatorGroup
-                                ? `All Videos by ${creatorGroup.creator_username} (${getCreatorVideos.length})`
+                                ? `All Videos by ${(creatorGroup as any).user_platform_username ?? creatorGroup.creator_username}`
                                 : "Creator Videos";
                             })()}
                           </DialogTitle>
@@ -6806,12 +6994,18 @@ export function ContestClientPage({
 
                         {/* Scrollable Content Area */}
                         <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-                          {getCreatorVideos.length === 0 ? (
+                          {loadingCreatorVideosModal ? (
+                            <div className="flex items-center justify-center min-h-[200px]">
+                              <PageLoadingSpinner
+                                mode={isDark ? "dark" : "light"}
+                              />
+                            </div>
+                          ) : getCreatorVideos.length === 0 ? (
                             <div className="text-center py-8">
                               <p
                                 className={cn(
                                   "text-sm",
-                                  isDark ? "text-gray-400" : "text-gray-600"
+                                  isDark ? "text-gray-400" : "text-gray-600",
                                 )}
                               >
                                 No videos found
@@ -6821,7 +7015,7 @@ export function ContestClientPage({
                             (() => {
                               const totalPages = Math.ceil(
                                 getCreatorVideos.length /
-                                  creatorVideosItemsPerPage
+                                  creatorVideosItemsPerPage,
                               );
                               const startIndex =
                                 (creatorVideosCurrentPage - 1) *
@@ -6830,12 +7024,12 @@ export function ContestClientPage({
                                 startIndex + creatorVideosItemsPerPage;
                               const currentVideos = getCreatorVideos.slice(
                                 startIndex,
-                                endIndex
+                                endIndex,
                               );
                               const creatorGroup =
                                 groupedLeaderboardByCreator?.find(
                                   (group) =>
-                                    group.creator_id === selectedCreatorId
+                                    group.creator_id === selectedCreatorId,
                                 );
 
                               return (
@@ -6926,7 +7120,7 @@ export function ContestClientPage({
                                                     "font-semibold text-base",
                                                     isDark
                                                       ? "text-green-300"
-                                                      : "text-green-600"
+                                                      : "text-green-600",
                                                   )}
                                                 >
                                                   Earned:{" "}
@@ -6936,7 +7130,7 @@ export function ContestClientPage({
                                                   <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                                                   <span className="whitespace-nowrap">
                                                     {formatMoney(
-                                                      video.earnings
+                                                      video.earnings,
                                                     )}{" "}
                                                     Prize
                                                   </span>
@@ -6972,7 +7166,7 @@ export function ContestClientPage({
                                       contest.contest_type === "leaderboard" &&
                                       Array.isArray(
                                         contest.contest_based_details
-                                          ?.leaderboard_contest?.prizes
+                                          ?.leaderboard_contest?.prizes,
                                       )
                                     ) {
                                       const prizeInfo = actualRank
@@ -6981,7 +7175,7 @@ export function ContestClientPage({
                                               .leaderboard_contest
                                               .prizes as PrizeInfo[]
                                           ).find(
-                                            (p) => p.position === actualRank
+                                            (p) => p.position === actualRank,
                                           )
                                         : null;
                                       if (prizeInfo) {
@@ -7016,7 +7210,7 @@ export function ContestClientPage({
                                                   <div className="text-xs text-purple-600 dark:text-purple-500">
                                                     (
                                                     {formatMoney(
-                                                      prizeInfo.amount
+                                                      prizeInfo.amount,
                                                     )}{" "}
                                                     Prize +{" "}
                                                     {formatMoney(flatFeeBonus)}{" "}
@@ -7085,7 +7279,7 @@ export function ContestClientPage({
                                                     "text-sm sm:text-base font-semibold truncate",
                                                     isDark
                                                       ? "text-white"
-                                                      : "text-gray-700"
+                                                      : "text-gray-700",
                                                   )}
                                                 >
                                                   {contest?.platform ===
@@ -7096,7 +7290,7 @@ export function ContestClientPage({
                                                     : video.user_platform_username}
                                                 </p>
                                                 {renderVerificationBadges(
-                                                  video.status
+                                                  video.status,
                                                 )}
                                               </div>
                                               <p
@@ -7104,12 +7298,12 @@ export function ContestClientPage({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-slate-500"
+                                                    : "text-slate-500",
                                                 )}
                                               >
                                                 Submitted:{" "}
                                                 {formatTimeAgo(
-                                                  video.created_at
+                                                  video.created_at,
                                                 )}
                                               </p>
                                             </div>
@@ -7121,7 +7315,7 @@ export function ContestClientPage({
                                                   "text-base sm:text-lg font-bold",
                                                   isDark
                                                     ? "text-white"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 {video.views
@@ -7141,7 +7335,7 @@ export function ContestClientPage({
                                                       "h-7 w-7 sm:h-8 sm:w-8",
                                                       isDark
                                                         ? "text-gray-300"
-                                                        : "text-slate-500"
+                                                        : "text-slate-500",
                                                     )}
                                                     asChild
                                                   >
@@ -7175,7 +7369,7 @@ export function ContestClientPage({
                                         size="sm"
                                         onClick={() =>
                                           setCreatorVideosCurrentPage((prev) =>
-                                            Math.max(1, prev - 1)
+                                            Math.max(1, prev - 1),
                                           )
                                         }
                                         disabled={
@@ -7224,7 +7418,7 @@ export function ContestClientPage({
                                                 size="sm"
                                                 onClick={() =>
                                                   setCreatorVideosCurrentPage(
-                                                    pageNum
+                                                    pageNum,
                                                   )
                                                 }
                                                 className="w-8 h-8 p-0"
@@ -7232,7 +7426,7 @@ export function ContestClientPage({
                                                 {pageNum}
                                               </Button>
                                             );
-                                          }
+                                          },
                                         )}
                                       </div>
 
@@ -7241,7 +7435,7 @@ export function ContestClientPage({
                                         size="sm"
                                         onClick={() =>
                                           setCreatorVideosCurrentPage((prev) =>
-                                            Math.min(totalPages, prev + 1)
+                                            Math.min(totalPages, prev + 1),
                                           )
                                         }
                                         disabled={
@@ -7270,7 +7464,7 @@ export function ContestClientPage({
                           "border rounded-lg p-3 mb-4",
                           isDark
                             ? "bg-blue-700/30 border-blue-700/50"
-                            : "bg-blue-50 border-blue-200"
+                            : "bg-blue-50 border-blue-200",
                         )}
                       >
                         <div className="flex items-start gap-3">
@@ -7279,7 +7473,7 @@ export function ContestClientPage({
                               "flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5",
                               isDark
                                 ? "bg-blue-500/30 text-white"
-                                : "bg-blue-100 text-blue-600"
+                                : "bg-blue-100 text-blue-600",
                             )}
                           >
                             <Info className="w-3 h-3" />
@@ -7288,7 +7482,7 @@ export function ContestClientPage({
                             <p
                               className={cn(
                                 "text-md font-medium",
-                                isDark ? "text-white" : "text-blue-900"
+                                isDark ? "text-white" : "text-blue-900",
                               )}
                             >
                               Leaderboard Display
@@ -7296,7 +7490,7 @@ export function ContestClientPage({
                             <div
                               className={cn(
                                 "text-sm mt-1 space-y-1",
-                                isDark ? "text-gray-300" : "text-blue-700"
+                                isDark ? "text-gray-300" : "text-blue-700",
                               )}
                             >
                               <p>
@@ -7311,51 +7505,59 @@ export function ContestClientPage({
                                   undefined && (
                                   <div className="flex items-center gap-2 mt-2">
                                     <span className="font-medium">
-                                      Submissions:
+                                      {leaderboardDisplayMode === "creator" &&
+                                      creatorWiseLeaderboard.length > 0
+                                        ? "Creators:"
+                                        : "Submissions:"}
                                     </span>
                                     <span className="text-green-700 font-semibold">
-                                      {totalLeaderboardEntries} active
+                                      {effectiveLeaderboardTotalEntries} active
                                     </span>
                                     {contest.live_submission_count !==
-                                      totalLeaderboardEntries && (
-                                      <>
-                                        <span
-                                          className={cn(
-                                            "text-blue-600",
-                                            isDark
-                                              ? "text-gray-400"
-                                              : "text-blue-700"
-                                          )}
-                                        >
-                                          |
-                                        </span>
-                                        <span className="text-red-700 font-semibold">
-                                          {contest.live_submission_count -
-                                            totalLeaderboardEntries}{" "}
-                                          rejected
-                                        </span>
-                                        <span
-                                          className={cn(
-                                            "text-blue-600",
-                                            isDark
-                                              ? "text-gray-400"
-                                              : "text-blue-700"
-                                          )}
-                                        >
-                                          |
-                                        </span>
-                                        <span
-                                          className={cn(
-                                            "text-blue-700",
-                                            isDark
-                                              ? "text-gray-400"
-                                              : "text-blue-700"
-                                          )}
-                                        >
-                                          {contest.live_submission_count} total
-                                        </span>
-                                      </>
-                                    )}
+                                      effectiveLeaderboardTotalEntries &&
+                                      !(
+                                        leaderboardDisplayMode === "creator" &&
+                                        creatorWiseLeaderboard.length > 0
+                                      ) && (
+                                        <>
+                                          <span
+                                            className={cn(
+                                              "text-blue-600",
+                                              isDark
+                                                ? "text-gray-400"
+                                                : "text-blue-700",
+                                            )}
+                                          >
+                                            |
+                                          </span>
+                                          <span className="text-red-700 font-semibold">
+                                            {contest.live_submission_count -
+                                              effectiveLeaderboardTotalEntries}{" "}
+                                            rejected
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-blue-600",
+                                              isDark
+                                                ? "text-gray-400"
+                                                : "text-blue-700",
+                                            )}
+                                          >
+                                            |
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-blue-700",
+                                              isDark
+                                                ? "text-gray-400"
+                                                : "text-blue-700",
+                                            )}
+                                          >
+                                            {contest.live_submission_count}{" "}
+                                            total
+                                          </span>
+                                        </>
+                                      )}
                                   </div>
                                 )}
                             </div>
@@ -7370,30 +7572,33 @@ export function ContestClientPage({
                         groupedLeaderboardByCreator.map(
                           (creatorGroup, index) => {
                             // For Twitter, use current_rank from API.
-                            // For other platforms, use a continuous creator rank across pages
-                            // based on how many creators were shown on previous pages.
+                            // For server-side creator-wise (non-Twitter), best_rank is global creator rank from API.
+                            // Otherwise use continuous creator rank from client-side pagination.
                             const isTwitterCreator =
                               contest?.platform === "twitter" ||
                               contest?.platform === "x";
+                            const isServerCreatorWise =
+                              !isTwitterCreator &&
+                              creatorWiseLeaderboard.length > 0;
 
                             let rank: number;
                             if (
-                              isTwitterCreator &&
-                              (creatorGroup as any).best_rank
+                              (isTwitterCreator || isServerCreatorWise) &&
+                              (creatorGroup as any).best_rank != null
                             ) {
                               rank = (creatorGroup as any).best_rank;
                             } else {
                               const creatorOffset = Object.entries(
-                                creatorsPerPageRef.current
+                                creatorsPerPageRef.current,
                               )
                                 .filter(
                                   ([page]) =>
                                     Number(page) > 0 &&
-                                    Number(page) < leaderboardCurrentPage
+                                    Number(page) < leaderboardCurrentPage,
                                 )
                                 .reduce(
                                   (sum, [, count]) => sum + (count as number),
-                                  0
+                                  0,
                                 );
                               rank = creatorOffset + index + 1;
                             }
@@ -7417,8 +7622,10 @@ export function ContestClientPage({
                             const isLeaderboardContest =
                               contest?.contest_type === "leaderboard";
                             const hasPaidSubmission =
+                              (creatorGroup as any).has_paid_submission ===
+                                true ||
                               creatorGroup.submissions.some(
-                                (submission) => submission.status === "paid"
+                                (submission) => submission.status === "paid",
                               );
                             const hasPayoutsProcessed =
                               contestStatus === "ended" &&
@@ -7439,9 +7646,9 @@ export function ContestClientPage({
                                 ? "Paid"
                                 : "Total Earned"
                               : contestStatus === "active" &&
-                                isLeaderboardContest
-                              ? "Winning Zone"
-                              : "Expected";
+                                  isLeaderboardContest
+                                ? "Winning Zone"
+                                : "Expected";
 
                             const hasEarningsToDisplay =
                               creatorGroup.total_earnings > 0 ||
@@ -7464,7 +7671,7 @@ export function ContestClientPage({
                                       <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                                       <span className="whitespace-nowrap">
                                         {formatMoney(
-                                          creatorGroup.total_earnings
+                                          creatorGroup.total_earnings,
                                         )}{" "}
                                         {contestType === "cpm"
                                           ? "CPM"
@@ -7476,7 +7683,7 @@ export function ContestClientPage({
                                       <span className="whitespace-nowrap">
                                         {formatMoney(
                                           flatFeeBonus *
-                                            creatorGroup.submission_count
+                                            creatorGroup.submission_count,
                                         )}{" "}
                                         Bonus ({creatorGroup.submission_count}{" "}
                                         sub.)
@@ -7496,7 +7703,7 @@ export function ContestClientPage({
                               contest.contest_type === "leaderboard" &&
                               Array.isArray(
                                 contest.contest_based_details
-                                  ?.leaderboard_contest?.prizes
+                                  ?.leaderboard_contest?.prizes,
                               )
                             ) {
                               const prizes = contest.contest_based_details
@@ -7508,7 +7715,7 @@ export function ContestClientPage({
                               let totalPrizeAmount = 0;
                               for (const rank of submissionRanks) {
                                 const info = prizes.find(
-                                  (p) => p.position === rank
+                                  (p) => p.position === rank,
                                 );
                                 if (info) totalPrizeAmount += info.amount;
                               }
@@ -7540,7 +7747,7 @@ export function ContestClientPage({
                                         +{" "}
                                         {formatMoney(
                                           flatFeeBonus *
-                                            creatorGroup.submission_count
+                                            creatorGroup.submission_count,
                                         )}{" "}
                                         Bonus)
                                       </div>
@@ -7578,10 +7785,14 @@ export function ContestClientPage({
                                           creatorGroup.creator_pfp_url ??
                                           undefined
                                         }
-                                        alt={creatorGroup.creator_username}
+                                        alt={
+                                          (creatorGroup as any).user_platform_username ??
+                                          creatorGroup.creator_username
+                                        }
                                       />
                                       <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
-                                        {creatorGroup.creator_username?.[0]?.toUpperCase() ||
+                                        {((creatorGroup as any).user_platform_username ??
+                                          creatorGroup.creator_username)?.[0]?.toUpperCase() ||
                                           "U"}
                                       </AvatarFallback>
                                     </Avatar>
@@ -7593,7 +7804,7 @@ export function ContestClientPage({
                                             "text-sm sm:text-base font-semibold truncate",
                                             isDark
                                               ? "text-white"
-                                              : "text-gray-700"
+                                              : "text-gray-700",
                                           )}
                                         >
                                           {contest?.platform === "twitter"
@@ -7602,7 +7813,8 @@ export function ContestClientPage({
                                               (creatorGroup as any)
                                                 .app_username ||
                                               creatorGroup.creator_username
-                                            : creatorGroup.creator_username}
+                                            : (creatorGroup as any).user_platform_username ??
+                                              creatorGroup.creator_username}
                                         </p>
                                       </div>
                                       {contest?.platform === "twitter" ? (
@@ -7613,7 +7825,7 @@ export function ContestClientPage({
                                                 "h-3.5 w-3.5",
                                                 isDark
                                                   ? "text-gray-400"
-                                                  : "text-slate-500"
+                                                  : "text-slate-500",
                                               )}
                                             />
                                             <span
@@ -7621,7 +7833,7 @@ export function ContestClientPage({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-400"
-                                                  : "text-slate-600"
+                                                  : "text-slate-600",
                                               )}
                                             >
                                               {(creatorGroup as any)
@@ -7636,7 +7848,7 @@ export function ContestClientPage({
                                                 "h-3.5 w-3.5",
                                                 isDark
                                                   ? "text-gray-400"
-                                                  : "text-slate-500"
+                                                  : "text-slate-500",
                                               )}
                                             />
                                             <span
@@ -7644,7 +7856,7 @@ export function ContestClientPage({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-400"
-                                                  : "text-slate-600"
+                                                  : "text-slate-600",
                                               )}
                                             >
                                               {(
@@ -7661,7 +7873,7 @@ export function ContestClientPage({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               {(creatorGroup as any)
@@ -7675,7 +7887,7 @@ export function ContestClientPage({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               {(creatorGroup as any)
@@ -7688,7 +7900,7 @@ export function ContestClientPage({
                                                 "h-3.5 w-3.5",
                                                 isDark
                                                   ? "text-gray-400"
-                                                  : "text-gray-600"
+                                                  : "text-gray-600",
                                               )}
                                             />
                                             <span
@@ -7696,7 +7908,7 @@ export function ContestClientPage({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               {(creatorGroup as any)
@@ -7711,7 +7923,7 @@ export function ContestClientPage({
                                               "h-4 w-4",
                                               isDark
                                                 ? "text-gray-400"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           />
                                           <p
@@ -7719,7 +7931,7 @@ export function ContestClientPage({
                                               "text-xs",
                                               isDark
                                                 ? "text-gray-400"
-                                                : "text-slate-700"
+                                                : "text-slate-700",
                                             )}
                                           >
                                             {creatorGroup.submission_count}{" "}
@@ -7739,7 +7951,7 @@ export function ContestClientPage({
                                             "text-base sm:text-lg font-bold",
                                             isDark
                                               ? "text-white"
-                                              : "text-gray-700"
+                                              : "text-gray-700",
                                           )}
                                         >
                                           {typeof (creatorGroup as any)
@@ -7759,7 +7971,7 @@ export function ContestClientPage({
                                               "text-base sm:text-lg font-bold",
                                               isDark
                                                 ? "text-white"
-                                                : "text-gray-700"
+                                                : "text-gray-700",
                                             )}
                                           >
                                             {creatorGroup.total_views.toLocaleString()}{" "}
@@ -7770,7 +7982,7 @@ export function ContestClientPage({
                                             size="sm"
                                             onClick={() => {
                                               setSelectedCreatorId(
-                                                creatorGroup.creator_id
+                                                creatorGroup.creator_id,
                                               );
                                               setShowCreatorVideosModal(true);
                                               setCreatorVideosCurrentPage(1);
@@ -7783,7 +7995,7 @@ export function ContestClientPage({
                                                 "h-4 w-4",
                                                 isDark
                                                   ? "text-gray-400"
-                                                  : "text-gray-600"
+                                                  : "text-gray-600",
                                               )}
                                             />
                                           </Button>
@@ -7799,7 +8011,7 @@ export function ContestClientPage({
                                 </CardContent>
                               </div>
                             );
-                          }
+                          },
                         )
                       : // Submission-wise display (original)
                         leaderboard.map((entry, index) => {
@@ -7900,7 +8112,7 @@ export function ContestClientPage({
                                           "font-semibold text-base",
                                           isDark
                                             ? "text-green-300"
-                                            : "text-green-600"
+                                            : "text-green-600",
                                         )}
                                       >
                                         {leaderboardLabel}:{" "}
@@ -7942,7 +8154,7 @@ export function ContestClientPage({
                             contest.contest_type === "leaderboard" &&
                             Array.isArray(
                               contest.contest_based_details?.leaderboard_contest
-                                ?.prizes
+                                ?.prizes,
                             )
                           ) {
                             const prizeInfo = (
@@ -8047,7 +8259,7 @@ export function ContestClientPage({
                                           "text-sm sm:text-base font-semibold truncate",
                                           isDark
                                             ? "text-white"
-                                            : "text-gray-700"
+                                            : "text-gray-700",
                                         )}
                                       >
                                         {entry.user_platform_username}
@@ -8059,7 +8271,7 @@ export function ContestClientPage({
                                         "text-xs",
                                         isDark
                                           ? "text-gray-300"
-                                          : "text-slate-500"
+                                          : "text-slate-500",
                                       )}
                                     >
                                       Submitted:{" "}
@@ -8072,7 +8284,7 @@ export function ContestClientPage({
                                     <p
                                       className={cn(
                                         "text-base sm:text-lg font-bold",
-                                        isDark ? "text-white" : "text-gray-700"
+                                        isDark ? "text-white" : "text-gray-700",
                                       )}
                                     >
                                       {contest?.platform === "twitter" ? (
@@ -8106,7 +8318,7 @@ export function ContestClientPage({
                                             "h-7 w-7 sm:h-8 sm:w-8",
                                             isDark
                                               ? "text-gray-300"
-                                              : "text-slate-500"
+                                              : "text-slate-500",
                                           )}
                                           asChild
                                         >
@@ -8133,13 +8345,18 @@ export function ContestClientPage({
                         })}
 
                     {/* Pagination Controls */}
-                    {totalLeaderboardPages > 1 && (
+                    {effectiveLeaderboardTotalPages > 1 && (
                       <div className="flex items-center justify-center space-x-4 py-4 mt-4 border-t border-slate-200 dark:border-slate-700">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() =>
-                            fetchLeaderboard(leaderboardCurrentPage - 1)
+                            fetchLeaderboard(
+                              leaderboardCurrentPage - 1,
+                              contest?.platform?.toLowerCase() !== "twitter" &&
+                                contest?.platform?.toLowerCase() !== "x" &&
+                                leaderboardDisplayMode === "creator",
+                            )
                           }
                           disabled={leaderboardCurrentPage <= 1}
                         >
@@ -8148,20 +8365,25 @@ export function ContestClientPage({
                         <span
                           className={cn(
                             "text-sm font-medium",
-                            isDark ? "text-gray-300" : "text-slate-500"
+                            isDark ? "text-gray-300" : "text-slate-500",
                           )}
                         >
                           Page {leaderboardCurrentPage} of{" "}
-                          {totalLeaderboardPages}
+                          {effectiveLeaderboardTotalPages}
                         </span>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() =>
-                            fetchLeaderboard(leaderboardCurrentPage + 1)
+                            fetchLeaderboard(
+                              leaderboardCurrentPage + 1,
+                              contest?.platform?.toLowerCase() !== "twitter" &&
+                                contest?.platform?.toLowerCase() !== "x" &&
+                                leaderboardDisplayMode === "creator",
+                            )
                           }
                           disabled={
-                            leaderboardCurrentPage >= totalLeaderboardPages
+                            leaderboardCurrentPage >= effectiveLeaderboardTotalPages
                           }
                         >
                           Next
@@ -8319,7 +8541,7 @@ export function ContestClientPage({
                 <div
                   className={cn(
                     "rounded-xl shadow-md p-2",
-                    isDark ? "bg-[#180438]" : "bg-white"
+                    isDark ? "bg-[#180438]" : "bg-white",
                   )}
                 >
                   <CardHeader>
@@ -8340,7 +8562,7 @@ export function ContestClientPage({
                               "text-sm",
                               isDark
                                 ? "text-white border border-gray-500"
-                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                             )}
                           >
                             All ({allSubmissionsForAnalytics?.length || 0})
@@ -8351,12 +8573,12 @@ export function ContestClientPage({
                               "text-sm",
                               isDark
                                 ? "text-white border border-gray-500"
-                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                             )}
                           >
                             Verified (
                             {allSubmissionsForAnalytics?.filter(
-                              (s: any) => getAnalyticsStatus(s) === "verified"
+                              (s: any) => getAnalyticsStatus(s) === "verified",
                             ).length || 0}
                             )
                           </TabsTrigger>
@@ -8366,12 +8588,12 @@ export function ContestClientPage({
                               "text-sm",
                               isDark
                                 ? "text-white border border-gray-500"
-                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                             )}
                           >
                             Paid (
                             {allSubmissionsForAnalytics?.filter(
-                              (s: any) => getAnalyticsStatus(s) === "paid"
+                              (s: any) => getAnalyticsStatus(s) === "paid",
                             ).length || 0}
                             )
                           </TabsTrigger>
@@ -8381,12 +8603,12 @@ export function ContestClientPage({
                               "text-sm",
                               isDark
                                 ? "text-white border border-gray-500"
-                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                             )}
                           >
                             Pending (
                             {allSubmissionsForAnalytics?.filter(
-                              (s: any) => getAnalyticsStatus(s) === "pending"
+                              (s: any) => getAnalyticsStatus(s) === "pending",
                             ).length || 0}
                             )
                           </TabsTrigger>
@@ -8396,12 +8618,12 @@ export function ContestClientPage({
                               "text-sm",
                               isDark
                                 ? "text-white border border-gray-500"
-                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                             )}
                           >
                             Rejected (
                             {allSubmissionsForAnalytics?.filter(
-                              (s: any) => getAnalyticsStatus(s) === "rejected"
+                              (s: any) => getAnalyticsStatus(s) === "rejected",
                             ).length || 0}
                             )
                           </TabsTrigger>
@@ -8411,7 +8633,7 @@ export function ContestClientPage({
                               "text-sm",
                               isDark
                                 ? "text-white border border-gray-500"
-                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                             )}
                           >
                             Verified/Paid (
@@ -8489,7 +8711,7 @@ export function ContestClientPage({
                               (targetMetrics.quote_reposts
                                 ? parseInt(
                                     String(targetMetrics.quote_reposts),
-                                    10
+                                    10,
                                   )
                                 : null);
 
@@ -8501,7 +8723,9 @@ export function ContestClientPage({
                                     <h3
                                       className={cn(
                                         "text-lg font-semibold mb-4 flex items-center gap-2",
-                                        isDark ? "text-white" : "text-slate-900"
+                                        isDark
+                                          ? "text-white"
+                                          : "text-slate-900",
                                       )}
                                     >
                                       <Share2 className="h-5 w-5 text-sky-500" />
@@ -8512,7 +8736,7 @@ export function ContestClientPage({
                                         "rounded-xl p-6 border",
                                         isDark
                                           ? "bg-slate-900/40 border-slate-700"
-                                          : "bg-slate-50 border-slate-200"
+                                          : "bg-slate-50 border-slate-200",
                                       )}
                                     >
                                       <a
@@ -8523,7 +8747,7 @@ export function ContestClientPage({
                                           "inline-flex items-center gap-2 text-sm font-medium break-all hover:underline",
                                           isDark
                                             ? "text-sky-300 hover:text-sky-200"
-                                            : "text-sky-600 hover:text-sky-700"
+                                            : "text-sky-600 hover:text-sky-700",
                                         )}
                                       >
                                         {targetTweetUrl}
@@ -8551,7 +8775,7 @@ export function ContestClientPage({
                                           "text-lg font-semibold mb-4",
                                           isDark
                                             ? "text-white"
-                                            : "text-slate-900"
+                                            : "text-slate-900",
                                         )}
                                       >
                                         Target Metrics
@@ -8564,7 +8788,7 @@ export function ContestClientPage({
                                                 "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                                 isDark
                                                   ? "bg-[#170337]"
-                                                  : "bg-white border border-slate-200"
+                                                  : "bg-white border border-slate-200",
                                               )}
                                             >
                                               <CardContent className="p-6 flex justify-between items-center">
@@ -8573,7 +8797,7 @@ export function ContestClientPage({
                                                     "flex-1 space-y-2",
                                                     isDark
                                                       ? "text-white"
-                                                      : "text-slate-800"
+                                                      : "text-slate-800",
                                                   )}
                                                 >
                                                   <p
@@ -8581,7 +8805,7 @@ export function ContestClientPage({
                                                       "text-sm font-semibold uppercase tracking-wide",
                                                       isDark
                                                         ? "text-slate-200"
-                                                        : "text-slate-600"
+                                                        : "text-slate-600",
                                                     )}
                                                   >
                                                     Target Likes
@@ -8591,7 +8815,7 @@ export function ContestClientPage({
                                                       "text-2xl font-black",
                                                       isDark
                                                         ? "text-white"
-                                                        : "text-slate-800"
+                                                        : "text-slate-800",
                                                     )}
                                                   >
                                                     {targetLikes.toLocaleString()}
@@ -8610,7 +8834,7 @@ export function ContestClientPage({
                                                 "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                                 isDark
                                                   ? "bg-[#170337]"
-                                                  : "bg-white border border-slate-200"
+                                                  : "bg-white border border-slate-200",
                                               )}
                                             >
                                               <CardContent className="p-6 flex justify-between items-center">
@@ -8619,7 +8843,7 @@ export function ContestClientPage({
                                                     "flex-1 space-y-2",
                                                     isDark
                                                       ? "text-white"
-                                                      : "text-slate-800"
+                                                      : "text-slate-800",
                                                   )}
                                                 >
                                                   <p
@@ -8627,7 +8851,7 @@ export function ContestClientPage({
                                                       "text-sm font-semibold uppercase tracking-wide",
                                                       isDark
                                                         ? "text-slate-200"
-                                                        : "text-slate-600"
+                                                        : "text-slate-600",
                                                     )}
                                                   >
                                                     Target Comments
@@ -8637,7 +8861,7 @@ export function ContestClientPage({
                                                       "text-2xl font-black",
                                                       isDark
                                                         ? "text-white"
-                                                        : "text-slate-800"
+                                                        : "text-slate-800",
                                                     )}
                                                   >
                                                     {targetComments.toLocaleString()}
@@ -8656,7 +8880,7 @@ export function ContestClientPage({
                                                 "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                                 isDark
                                                   ? "bg-[#170337]"
-                                                  : "bg-white border border-slate-200"
+                                                  : "bg-white border border-slate-200",
                                               )}
                                             >
                                               <CardContent className="p-6 flex justify-between items-center">
@@ -8665,7 +8889,7 @@ export function ContestClientPage({
                                                     "flex-1 space-y-2",
                                                     isDark
                                                       ? "text-white"
-                                                      : "text-slate-800"
+                                                      : "text-slate-800",
                                                   )}
                                                 >
                                                   <p
@@ -8673,7 +8897,7 @@ export function ContestClientPage({
                                                       "text-sm font-semibold uppercase tracking-wide",
                                                       isDark
                                                         ? "text-slate-200"
-                                                        : "text-slate-600"
+                                                        : "text-slate-600",
                                                     )}
                                                   >
                                                     Target Retweets
@@ -8683,7 +8907,7 @@ export function ContestClientPage({
                                                       "text-2xl font-black",
                                                       isDark
                                                         ? "text-white"
-                                                        : "text-slate-800"
+                                                        : "text-slate-800",
                                                     )}
                                                   >
                                                     {targetRetweets.toLocaleString()}
@@ -8702,7 +8926,7 @@ export function ContestClientPage({
                                                 "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                                 isDark
                                                   ? "bg-[#170337]"
-                                                  : "bg-white border border-slate-200"
+                                                  : "bg-white border border-slate-200",
                                               )}
                                             >
                                               <CardContent className="p-6 flex justify-between items-center">
@@ -8711,7 +8935,7 @@ export function ContestClientPage({
                                                     "flex-1 space-y-2",
                                                     isDark
                                                       ? "text-white"
-                                                      : "text-slate-800"
+                                                      : "text-slate-800",
                                                   )}
                                                 >
                                                   <p
@@ -8719,7 +8943,7 @@ export function ContestClientPage({
                                                       "text-sm font-semibold uppercase tracking-wide",
                                                       isDark
                                                         ? "text-slate-200"
-                                                        : "text-slate-600"
+                                                        : "text-slate-600",
                                                     )}
                                                   >
                                                     Target Quote Reposts
@@ -8729,7 +8953,7 @@ export function ContestClientPage({
                                                       "text-2xl font-black",
                                                       isDark
                                                         ? "text-white"
-                                                        : "text-slate-800"
+                                                        : "text-slate-800",
                                                     )}
                                                   >
                                                     {targetQuoteReposts.toLocaleString()}
@@ -8770,7 +8994,7 @@ export function ContestClientPage({
                                           "text-lg font-semibold mb-4",
                                           isDark
                                             ? "text-white"
-                                            : "text-slate-900"
+                                            : "text-slate-900",
                                         )}
                                       >
                                         Current Progress
@@ -8790,7 +9014,7 @@ export function ContestClientPage({
                                               target !== null && target > 0
                                                 ? Math.min(
                                                     100,
-                                                    (current / target) * 100
+                                                    (current / target) * 100,
                                                   )
                                                 : 0;
 
@@ -8800,7 +9024,7 @@ export function ContestClientPage({
                                                   "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                                   isDark
                                                     ? "bg-[#170337]"
-                                                    : "bg-white border border-slate-200"
+                                                    : "bg-white border border-slate-200",
                                                 )}
                                               >
                                                 <CardContent className="p-6">
@@ -8810,7 +9034,7 @@ export function ContestClientPage({
                                                         "flex-1 space-y-1",
                                                         isDark
                                                           ? "text-white"
-                                                          : "text-slate-800"
+                                                          : "text-slate-800",
                                                       )}
                                                     >
                                                       <p
@@ -8818,7 +9042,7 @@ export function ContestClientPage({
                                                           "text-xs font-semibold uppercase tracking-wide",
                                                           isDark
                                                             ? "text-slate-200"
-                                                            : "text-slate-600"
+                                                            : "text-slate-600",
                                                         )}
                                                       >
                                                         Current Likes
@@ -8828,7 +9052,7 @@ export function ContestClientPage({
                                                           "text-2xl font-black",
                                                           isDark
                                                             ? "text-white"
-                                                            : "text-slate-800"
+                                                            : "text-slate-800",
                                                         )}
                                                       >
                                                         {current.toLocaleString()}
@@ -8839,7 +9063,7 @@ export function ContestClientPage({
                                                             "text-xs",
                                                             isDark
                                                               ? "text-slate-400"
-                                                              : "text-slate-500"
+                                                              : "text-slate-500",
                                                           )}
                                                         >
                                                           of{" "}
@@ -8853,7 +9077,7 @@ export function ContestClientPage({
                                                         "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                         isReached
                                                           ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                          : "bg-gradient-to-br from-pink-500 to-rose-600"
+                                                          : "bg-gradient-to-br from-pink-500 to-rose-600",
                                                       )}
                                                     >
                                                       {isReached ? (
@@ -8871,7 +9095,7 @@ export function ContestClientPage({
                                                             "h-2 rounded-full overflow-hidden",
                                                             isDark
                                                               ? "bg-slate-700"
-                                                              : "bg-slate-200"
+                                                              : "bg-slate-200",
                                                           )}
                                                         >
                                                           <div
@@ -8879,7 +9103,7 @@ export function ContestClientPage({
                                                               "h-full transition-all duration-500",
                                                               isReached
                                                                 ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                                : "bg-gradient-to-r from-pink-500 to-rose-600"
+                                                                : "bg-gradient-to-r from-pink-500 to-rose-600",
                                                             )}
                                                             style={{
                                                               width: `${progress}%`,
@@ -8891,7 +9115,7 @@ export function ContestClientPage({
                                                             "text-xs mt-1 text-center",
                                                             isDark
                                                               ? "text-slate-400"
-                                                              : "text-slate-500"
+                                                              : "text-slate-500",
                                                           )}
                                                         >
                                                           {progress.toFixed(0)}%
@@ -8917,7 +9141,7 @@ export function ContestClientPage({
                                               target !== null && target > 0
                                                 ? Math.min(
                                                     100,
-                                                    (current / target) * 100
+                                                    (current / target) * 100,
                                                   )
                                                 : 0;
 
@@ -8927,7 +9151,7 @@ export function ContestClientPage({
                                                   "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                                   isDark
                                                     ? "bg-[#170337]"
-                                                    : "bg-white border border-slate-200"
+                                                    : "bg-white border border-slate-200",
                                                 )}
                                               >
                                                 <CardContent className="p-6">
@@ -8937,7 +9161,7 @@ export function ContestClientPage({
                                                         "flex-1 space-y-1",
                                                         isDark
                                                           ? "text-white"
-                                                          : "text-slate-800"
+                                                          : "text-slate-800",
                                                       )}
                                                     >
                                                       <p
@@ -8945,7 +9169,7 @@ export function ContestClientPage({
                                                           "text-xs font-semibold uppercase tracking-wide",
                                                           isDark
                                                             ? "text-slate-200"
-                                                            : "text-slate-600"
+                                                            : "text-slate-600",
                                                         )}
                                                       >
                                                         Current Comments
@@ -8955,7 +9179,7 @@ export function ContestClientPage({
                                                           "text-2xl font-black",
                                                           isDark
                                                             ? "text-white"
-                                                            : "text-slate-800"
+                                                            : "text-slate-800",
                                                         )}
                                                       >
                                                         {current.toLocaleString()}
@@ -8966,7 +9190,7 @@ export function ContestClientPage({
                                                             "text-xs",
                                                             isDark
                                                               ? "text-slate-400"
-                                                              : "text-slate-500"
+                                                              : "text-slate-500",
                                                           )}
                                                         >
                                                           of{" "}
@@ -8980,7 +9204,7 @@ export function ContestClientPage({
                                                         "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                         isReached
                                                           ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                          : "bg-gradient-to-br from-orange-500 to-amber-600"
+                                                          : "bg-gradient-to-br from-orange-500 to-amber-600",
                                                       )}
                                                     >
                                                       {isReached ? (
@@ -8998,7 +9222,7 @@ export function ContestClientPage({
                                                             "h-2 rounded-full overflow-hidden",
                                                             isDark
                                                               ? "bg-slate-700"
-                                                              : "bg-slate-200"
+                                                              : "bg-slate-200",
                                                           )}
                                                         >
                                                           <div
@@ -9006,7 +9230,7 @@ export function ContestClientPage({
                                                               "h-full transition-all duration-500",
                                                               isReached
                                                                 ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                                : "bg-gradient-to-r from-orange-500 to-amber-600"
+                                                                : "bg-gradient-to-r from-orange-500 to-amber-600",
                                                             )}
                                                             style={{
                                                               width: `${progress}%`,
@@ -9018,7 +9242,7 @@ export function ContestClientPage({
                                                             "text-xs mt-1 text-center",
                                                             isDark
                                                               ? "text-slate-400"
-                                                              : "text-slate-500"
+                                                              : "text-slate-500",
                                                           )}
                                                         >
                                                           {progress.toFixed(0)}%
@@ -9044,7 +9268,7 @@ export function ContestClientPage({
                                               target !== null && target > 0
                                                 ? Math.min(
                                                     100,
-                                                    (current / target) * 100
+                                                    (current / target) * 100,
                                                   )
                                                 : 0;
 
@@ -9054,7 +9278,7 @@ export function ContestClientPage({
                                                   "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                                   isDark
                                                     ? "bg-[#170337]"
-                                                    : "bg-white border border-slate-200"
+                                                    : "bg-white border border-slate-200",
                                                 )}
                                               >
                                                 <CardContent className="p-6">
@@ -9064,7 +9288,7 @@ export function ContestClientPage({
                                                         "flex-1 space-y-1",
                                                         isDark
                                                           ? "text-white"
-                                                          : "text-slate-800"
+                                                          : "text-slate-800",
                                                       )}
                                                     >
                                                       <p
@@ -9072,7 +9296,7 @@ export function ContestClientPage({
                                                           "text-xs font-semibold uppercase tracking-wide",
                                                           isDark
                                                             ? "text-slate-200"
-                                                            : "text-slate-600"
+                                                            : "text-slate-600",
                                                         )}
                                                       >
                                                         Current Retweets
@@ -9082,7 +9306,7 @@ export function ContestClientPage({
                                                           "text-2xl font-black",
                                                           isDark
                                                             ? "text-white"
-                                                            : "text-slate-800"
+                                                            : "text-slate-800",
                                                         )}
                                                       >
                                                         {current.toLocaleString()}
@@ -9093,7 +9317,7 @@ export function ContestClientPage({
                                                             "text-xs",
                                                             isDark
                                                               ? "text-slate-400"
-                                                              : "text-slate-500"
+                                                              : "text-slate-500",
                                                           )}
                                                         >
                                                           of{" "}
@@ -9107,7 +9331,7 @@ export function ContestClientPage({
                                                         "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                         isReached
                                                           ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                          : "bg-gradient-to-br from-cyan-500 to-teal-600"
+                                                          : "bg-gradient-to-br from-cyan-500 to-teal-600",
                                                       )}
                                                     >
                                                       {isReached ? (
@@ -9125,7 +9349,7 @@ export function ContestClientPage({
                                                             "h-2 rounded-full overflow-hidden",
                                                             isDark
                                                               ? "bg-slate-700"
-                                                              : "bg-slate-200"
+                                                              : "bg-slate-200",
                                                           )}
                                                         >
                                                           <div
@@ -9133,7 +9357,7 @@ export function ContestClientPage({
                                                               "h-full transition-all duration-500",
                                                               isReached
                                                                 ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                                : "bg-gradient-to-r from-cyan-500 to-teal-600"
+                                                                : "bg-gradient-to-r from-cyan-500 to-teal-600",
                                                             )}
                                                             style={{
                                                               width: `${progress}%`,
@@ -9145,7 +9369,7 @@ export function ContestClientPage({
                                                             "text-xs mt-1 text-center",
                                                             isDark
                                                               ? "text-slate-400"
-                                                              : "text-slate-500"
+                                                              : "text-slate-500",
                                                           )}
                                                         >
                                                           {progress.toFixed(0)}%
@@ -9171,7 +9395,7 @@ export function ContestClientPage({
                                               target !== null && target > 0
                                                 ? Math.min(
                                                     100,
-                                                    (current / target) * 100
+                                                    (current / target) * 100,
                                                   )
                                                 : 0;
 
@@ -9181,7 +9405,7 @@ export function ContestClientPage({
                                                   "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                                   isDark
                                                     ? "bg-[#170337]"
-                                                    : "bg-white border border-slate-200"
+                                                    : "bg-white border border-slate-200",
                                                 )}
                                               >
                                                 <CardContent className="p-6">
@@ -9191,7 +9415,7 @@ export function ContestClientPage({
                                                         "flex-1 space-y-1",
                                                         isDark
                                                           ? "text-white"
-                                                          : "text-slate-800"
+                                                          : "text-slate-800",
                                                       )}
                                                     >
                                                       <p
@@ -9199,7 +9423,7 @@ export function ContestClientPage({
                                                           "text-xs font-semibold uppercase tracking-wide",
                                                           isDark
                                                             ? "text-slate-200"
-                                                            : "text-slate-600"
+                                                            : "text-slate-600",
                                                         )}
                                                       >
                                                         Current Quote Reposts
@@ -9209,7 +9433,7 @@ export function ContestClientPage({
                                                           "text-2xl font-black",
                                                           isDark
                                                             ? "text-white"
-                                                            : "text-slate-800"
+                                                            : "text-slate-800",
                                                         )}
                                                       >
                                                         {current.toLocaleString()}
@@ -9220,7 +9444,7 @@ export function ContestClientPage({
                                                             "text-xs",
                                                             isDark
                                                               ? "text-slate-400"
-                                                              : "text-slate-500"
+                                                              : "text-slate-500",
                                                           )}
                                                         >
                                                           of{" "}
@@ -9234,7 +9458,7 @@ export function ContestClientPage({
                                                         "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                         isReached
                                                           ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                          : "bg-gradient-to-br from-indigo-500 to-violet-600"
+                                                          : "bg-gradient-to-br from-indigo-500 to-violet-600",
                                                       )}
                                                     >
                                                       {isReached ? (
@@ -9252,7 +9476,7 @@ export function ContestClientPage({
                                                             "h-2 rounded-full overflow-hidden",
                                                             isDark
                                                               ? "bg-slate-700"
-                                                              : "bg-slate-200"
+                                                              : "bg-slate-200",
                                                           )}
                                                         >
                                                           <div
@@ -9260,7 +9484,7 @@ export function ContestClientPage({
                                                               "h-full transition-all duration-500",
                                                               isReached
                                                                 ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                                : "bg-gradient-to-r from-indigo-500 to-violet-600"
+                                                                : "bg-gradient-to-r from-indigo-500 to-violet-600",
                                                             )}
                                                             style={{
                                                               width: `${progress}%`,
@@ -9272,7 +9496,7 @@ export function ContestClientPage({
                                                             "text-xs mt-1 text-center",
                                                             isDark
                                                               ? "text-slate-400"
-                                                              : "text-slate-500"
+                                                              : "text-slate-500",
                                                           )}
                                                         >
                                                           {progress.toFixed(0)}%
@@ -9291,7 +9515,7 @@ export function ContestClientPage({
                                               "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                               isDark
                                                 ? "bg-[#170337]"
-                                                : "bg-white border border-slate-200"
+                                                : "bg-white border border-slate-200",
                                             )}
                                           >
                                             <CardContent className="p-6 flex justify-between items-center">
@@ -9300,7 +9524,7 @@ export function ContestClientPage({
                                                   "flex-1 space-y-2",
                                                   isDark
                                                     ? "text-white"
-                                                    : "text-slate-800"
+                                                    : "text-slate-800",
                                                 )}
                                               >
                                                 <p
@@ -9308,7 +9532,7 @@ export function ContestClientPage({
                                                     "text-sm font-semibold uppercase tracking-wide",
                                                     isDark
                                                       ? "text-slate-200"
-                                                      : "text-slate-600"
+                                                      : "text-slate-600",
                                                   )}
                                                 >
                                                   Current Views
@@ -9318,7 +9542,7 @@ export function ContestClientPage({
                                                     "text-2xl font-black",
                                                     isDark
                                                       ? "text-white"
-                                                      : "text-slate-800"
+                                                      : "text-slate-800",
                                                   )}
                                                 >
                                                   {(
@@ -9345,8 +9569,8 @@ export function ContestClientPage({
                                                 ? "bg-green-900/30 border-green-700"
                                                 : "bg-green-50 border-green-200"
                                               : isDark
-                                              ? "bg-yellow-900/30 border-yellow-700"
-                                              : "bg-yellow-50 border-yellow-200"
+                                                ? "bg-yellow-900/30 border-yellow-700"
+                                                : "bg-yellow-50 border-yellow-200",
                                           )}
                                         >
                                           {twitterMetrics.targets_reached ? (
@@ -9355,7 +9579,7 @@ export function ContestClientPage({
                                                 "h-6 w-6 flex-shrink-0",
                                                 isDark
                                                   ? "text-green-400"
-                                                  : "text-green-600"
+                                                  : "text-green-600",
                                               )}
                                             />
                                           ) : (
@@ -9364,7 +9588,7 @@ export function ContestClientPage({
                                                 "h-6 w-6 flex-shrink-0",
                                                 isDark
                                                   ? "text-yellow-400"
-                                                  : "text-yellow-600"
+                                                  : "text-yellow-600",
                                               )}
                                             />
                                           )}
@@ -9377,8 +9601,8 @@ export function ContestClientPage({
                                                     ? "text-green-300"
                                                     : "text-green-800"
                                                   : isDark
-                                                  ? "text-yellow-300"
-                                                  : "text-yellow-800"
+                                                    ? "text-yellow-300"
+                                                    : "text-yellow-800",
                                               )}
                                             >
                                               {twitterMetrics.targets_reached
@@ -9393,8 +9617,8 @@ export function ContestClientPage({
                                                     ? "text-green-400"
                                                     : "text-green-700"
                                                   : isDark
-                                                  ? "text-yellow-400"
-                                                  : "text-yellow-700"
+                                                    ? "text-yellow-400"
+                                                    : "text-yellow-700",
                                               )}
                                             >
                                               {twitterMetrics.targets_reached
@@ -9416,7 +9640,7 @@ export function ContestClientPage({
                             <h3
                               className={cn(
                                 "text-lg font-semibold mb-4",
-                                isDark ? "text-white" : "text-slate-900"
+                                isDark ? "text-white" : "text-slate-900",
                               )}
                             >
                               Campaign Metrics
@@ -9429,14 +9653,14 @@ export function ContestClientPage({
                                   label: string,
                                   value: string | number,
                                   iconBgClass: string,
-                                  barGradientClass: string
+                                  barGradientClass: string,
                                 ) => (
                                   <div
                                     className={cn(
                                       "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                                       isDark
                                         ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
-                                        : "bg-gradient-to-br from-white to-blue-50 border border-blue-100"
+                                        : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
                                     )}
                                   >
                                     <div className="p-6 relative z-10">
@@ -9444,7 +9668,7 @@ export function ContestClientPage({
                                         <div
                                           className={cn(
                                             "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                                            iconBgClass
+                                            iconBgClass,
                                           )}
                                         >
                                           {icon}
@@ -9455,7 +9679,7 @@ export function ContestClientPage({
                                               "text-sm font-medium uppercase tracking-wide",
                                               isDark
                                                 ? "text-white/90 drop-shadow-sm"
-                                                : "text-gray-500"
+                                                : "text-gray-500",
                                             )}
                                           >
                                             {label}
@@ -9465,7 +9689,7 @@ export function ContestClientPage({
                                               "text-2xl font-bold mt-1",
                                               isDark
                                                 ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
-                                                : "text-gray-900"
+                                                : "text-gray-900",
                                             )}
                                           >
                                             {typeof value === "number"
@@ -9477,7 +9701,7 @@ export function ContestClientPage({
                                       <div
                                         className={cn(
                                           "h-1 w-full rounded-full",
-                                          barGradientClass
+                                          barGradientClass,
                                         )}
                                       ></div>
                                     </div>
@@ -9495,7 +9719,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-br from-blue-500 to-blue-600 text-white",
                                       isDark
                                         ? "bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400 shadow-lg shadow-blue-400/70 animate-pulse"
-                                        : "bg-gradient-to-r from-blue-200 to-blue-300"
+                                        : "bg-gradient-to-r from-blue-200 to-blue-300",
                                     )}
                                     {renderMetricCard(
                                       <ThumbsUp className="h-6 w-6 text-white" />,
@@ -9506,7 +9730,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-br from-pink-500 to-pink-600 text-white",
                                       isDark
                                         ? "bg-gradient-to-r from-pink-400 via-rose-400 to-red-400 shadow-lg shadow-pink-400/70 animate-pulse"
-                                        : "bg-gradient-to-r from-pink-200 to-pink-300"
+                                        : "bg-gradient-to-r from-pink-200 to-pink-300",
                                     )}
                                     {renderMetricCard(
                                       <MessageCircle className="h-6 w-6 text-white" />,
@@ -9517,7 +9741,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-br from-orange-500 to-orange-600 text-white",
                                       isDark
                                         ? "bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-400 shadow-lg shadow-orange-400/70 animate-pulse"
-                                        : "bg-gradient-to-r from-orange-200 to-orange-300"
+                                        : "bg-gradient-to-r from-orange-200 to-orange-300",
                                     )}
                                     {renderMetricCard(
                                       <Share2 className="h-6 w-6 text-white" />,
@@ -9528,7 +9752,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-br from-cyan-500 to-cyan-600 text-white",
                                       isDark
                                         ? "bg-gradient-to-r from-cyan-400 via-teal-400 to-green-400 shadow-lg shadow-cyan-400/70 animate-pulse"
-                                        : "bg-gradient-to-r from-cyan-200 to-cyan-300"
+                                        : "bg-gradient-to-r from-cyan-200 to-cyan-300",
                                     )}
                                     {renderMetricCard(
                                       <RefreshCw className="h-6 w-6 text-white" />,
@@ -9540,7 +9764,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white",
                                       isDark
                                         ? "bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 shadow-lg shadow-indigo-400/70 animate-pulse"
-                                        : "bg-gradient-to-r from-indigo-200 to-indigo-300"
+                                        : "bg-gradient-to-r from-indigo-200 to-indigo-300",
                                     )}
                                     {renderMetricCard(
                                       <Eye className="h-6 w-6 text-white" />,
@@ -9551,7 +9775,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-br from-green-500 to-green-600 text-white",
                                       isDark
                                         ? "bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400 shadow-lg shadow-green-400/70 animate-pulse"
-                                        : "bg-gradient-to-r from-green-200 to-green-300"
+                                        : "bg-gradient-to-r from-green-200 to-green-300",
                                     )}
                                     {renderMetricCard(
                                       <TrendingUp className="h-6 w-6 text-white" />,
@@ -9562,7 +9786,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white",
                                       isDark
                                         ? "bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 shadow-lg shadow-yellow-400/70 animate-pulse"
-                                        : "bg-gradient-to-r from-yellow-200 to-yellow-300"
+                                        : "bg-gradient-to-r from-yellow-200 to-yellow-300",
                                     )}
                                     {renderMetricCard(
                                       <Users className="h-6 w-6 text-white" />,
@@ -9573,7 +9797,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-br from-purple-500 to-purple-600 text-white",
                                       isDark
                                         ? "bg-gradient-to-r from-purple-400 via-indigo-400 to-violet-400 shadow-lg shadow-purple-400/70 animate-pulse"
-                                        : "bg-gradient-to-r from-purple-200 to-purple-300"
+                                        : "bg-gradient-to-r from-purple-200 to-purple-300",
                                     )}
                                   </>
                                 );
@@ -9590,14 +9814,14 @@ export function ContestClientPage({
                           "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
                           isDark
                             ? "bg-[#170337] border border-[#D1B7F9]"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                       >
                         <CardContent className="p-4 flex justify-between">
                           <div
                             className={cn(
                               "flex-1 space-y-3",
-                              isDark ? "text-white" : "text-black"
+                              isDark ? "text-white" : "text-black",
                             )}
                           >
                             <p className="text-lg font-medium">
@@ -9612,7 +9836,7 @@ export function ContestClientPage({
                               "w-10 h-10 flex items-center justify-center rounded-full",
                               isDark
                                 ? "bg-[#FFFFFF42] text-white"
-                                : "bg-purple-100 text-[#4A00BE]"
+                                : "bg-purple-100 text-[#4A00BE]",
                             )}
                           >
                             <Users className="h-5 w-5" />
@@ -9625,14 +9849,14 @@ export function ContestClientPage({
                           "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
                           isDark
                             ? "bg-[#170337] border border-[#D1B7F9]"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                       >
                         <CardContent className="p-4 flex justify-between">
                           <div
                             className={cn(
                               "flex-1 space-y-3",
-                              isDark ? "text-white" : "text-black"
+                              isDark ? "text-white" : "text-black",
                             )}
                           >
                             <p className="text-lg font-medium">
@@ -9649,7 +9873,7 @@ export function ContestClientPage({
                                       s.status === "verified" ||
                                       s.status === "paid"
                                     );
-                                  }
+                                  },
                                 ).length
                               }
                             </p>
@@ -9659,7 +9883,7 @@ export function ContestClientPage({
                               "w-10 h-10 flex items-center justify-center rounded-full",
                               isDark
                                 ? "bg-[#FFFFFF42] text-white"
-                                : "bg-purple-100 text-[#4A00BE]"
+                                : "bg-purple-100 text-[#4A00BE]",
                             )}
                           >
                             <Trophy className="h-4 w-4" />
@@ -9672,14 +9896,14 @@ export function ContestClientPage({
                           "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
                           isDark
                             ? "bg-[#170337] border border-[#D1B7F9]"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                       >
                         <CardContent className="p-4 flex justify-between">
                           <div
                             className={cn(
                               "flex-1 space-y-3",
-                              isDark ? "text-white" : "text-black"
+                              isDark ? "text-white" : "text-black",
                             )}
                           >
                             <p className="text-lg font-medium">
@@ -9691,10 +9915,10 @@ export function ContestClientPage({
                                     const start = new Date(contest.start_date);
                                     const end = new Date(contest.end_date);
                                     const diffTime = Math.abs(
-                                      end.getTime() - start.getTime()
+                                      end.getTime() - start.getTime(),
                                     );
                                     const diffDays = Math.ceil(
-                                      diffTime / (1000 * 60 * 60 * 24)
+                                      diffTime / (1000 * 60 * 60 * 24),
                                     );
                                     return `${diffDays} days`;
                                   })()
@@ -9706,7 +9930,7 @@ export function ContestClientPage({
                               "w-10 h-10 flex items-center justify-center rounded-full",
                               isDark
                                 ? "bg-[#FFFFFF42] text-white"
-                                : "bg-purple-100 text-[#4A00BE]"
+                                : "bg-purple-100 text-[#4A00BE]",
                             )}
                           >
                             <Calendar className="h-4 w-4" />
@@ -9721,7 +9945,7 @@ export function ContestClientPage({
                         <h3
                           className={cn(
                             "font-medium mb-4",
-                            isDark ? "text-white" : "text-gray-900"
+                            isDark ? "text-white" : "text-gray-900",
                           )}
                         >
                           Views Statistics
@@ -9733,7 +9957,7 @@ export function ContestClientPage({
                               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                               isDark
                                 ? "bg-[#170337] border border-[#D1B7F9]"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           >
                             <div className="flex items-center justify-between">
@@ -9741,7 +9965,7 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-sm font-medium",
-                                    isDark ? "text-white" : "text-gray-600"
+                                    isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
                                   Total Views
@@ -9749,14 +9973,14 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {filteredAnalyticsSubmissions
                                     ?.reduce(
                                       (sum: number, s: any) =>
                                         sum + (s.views || 0),
-                                      0
+                                      0,
                                     )
                                     .toLocaleString() || 0}
                                 </p>
@@ -9766,7 +9990,7 @@ export function ContestClientPage({
                                   "w-10 h-10 flex items-center justify-center rounded-full",
                                   isDark
                                     ? "bg-blue-900/50 text-blue-300"
-                                    : "bg-blue-100 text-blue-600"
+                                    : "bg-blue-100 text-blue-600",
                                 )}
                               >
                                 <Eye className="h-5 w-5" />
@@ -9780,7 +10004,7 @@ export function ContestClientPage({
                               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                               isDark
                                 ? "bg-[#170337] border border-[#D1B7F9]"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           >
                             <div className="flex items-center justify-between">
@@ -9788,7 +10012,7 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-sm font-medium",
-                                    isDark ? "text-white" : "text-gray-600"
+                                    isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
                                   Avg Views
@@ -9796,7 +10020,7 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {filteredAnalyticsSubmissions?.length > 0
@@ -9804,8 +10028,8 @@ export function ContestClientPage({
                                         filteredAnalyticsSubmissions.reduce(
                                           (sum: number, s: any) =>
                                             sum + (s.views || 0),
-                                          0
-                                        ) / filteredAnalyticsSubmissions.length
+                                          0,
+                                        ) / filteredAnalyticsSubmissions.length,
                                       ).toLocaleString()
                                     : 0}
                                 </p>
@@ -9815,7 +10039,7 @@ export function ContestClientPage({
                                   "w-10 h-10 flex items-center justify-center rounded-full",
                                   isDark
                                     ? "bg-green-900/50 text-green-400"
-                                    : "bg-green-100 text-green-600"
+                                    : "bg-green-100 text-green-600",
                                 )}
                               >
                                 <BarChart3 className="h-5 w-5" />
@@ -9829,7 +10053,7 @@ export function ContestClientPage({
                               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                               isDark
                                 ? "bg-[#170337] border border-[#D1B7F9]"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           >
                             <div className="flex items-center justify-between">
@@ -9837,7 +10061,7 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-sm font-medium",
-                                    isDark ? "text-white" : "text-gray-600"
+                                    isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
                                   Highest Views
@@ -9845,14 +10069,14 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {filteredAnalyticsSubmissions?.length > 0
                                     ? Math.max(
                                         ...filteredAnalyticsSubmissions.map(
-                                          (s: any) => s.views || 0
-                                        )
+                                          (s: any) => s.views || 0,
+                                        ),
                                       ).toLocaleString()
                                     : 0}
                                 </p>
@@ -9862,7 +10086,7 @@ export function ContestClientPage({
                                   "w-10 h-10 flex items-center justify-center rounded-full",
                                   isDark
                                     ? "bg-yellow-900/50 text-yellow-400"
-                                    : "bg-yellow-100 text-yellow-600"
+                                    : "bg-yellow-100 text-yellow-600",
                                 )}
                               >
                                 <TrendingUp className="h-5 w-5" />
@@ -9876,7 +10100,7 @@ export function ContestClientPage({
                               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                               isDark
                                 ? "bg-[#170337] border border-[#D1B7F9]"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           >
                             <div className="flex items-center justify-between">
@@ -9884,7 +10108,7 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-sm font-medium",
-                                    isDark ? "text-white" : "text-gray-600"
+                                    isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
                                   Filtered Views
@@ -9892,14 +10116,14 @@ export function ContestClientPage({
                                 <p
                                   className={cn(
                                     "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {filteredAnalyticsSubmissions
                                     ?.reduce(
                                       (sum: number, s: any) =>
                                         sum + (s.views || 0),
-                                      0
+                                      0,
                                     )
                                     .toLocaleString() || 0}
                                 </p>
@@ -9909,7 +10133,7 @@ export function ContestClientPage({
                                   "w-10 h-10 flex items-center justify-center rounded-full",
                                   isDark
                                     ? "bg-purple-900/50 text-purple-300"
-                                    : "bg-purple-100 text-purple-600"
+                                    : "bg-purple-100 text-purple-600",
                                 )}
                               >
                                 <CheckCircle2 className="h-5 w-5" />
@@ -9935,7 +10159,9 @@ export function ContestClientPage({
         <DialogContent
           className={cn(
             "max-w-md",
-            isDark ? "bg-[#1a1a1a] border-gray-700" : "bg-white border-gray-300"
+            isDark
+              ? "bg-[#1a1a1a] border-gray-700"
+              : "bg-white border-gray-300",
           )}
         >
           <DialogHeader>
@@ -9948,7 +10174,9 @@ export function ContestClientPage({
           <div
             className={cn(
               "mt-4 p-4 rounded-lg",
-              isDark ? "bg-[#2a2a2a] text-gray-200" : "bg-gray-50 text-gray-800"
+              isDark
+                ? "bg-[#2a2a2a] text-gray-200"
+                : "bg-gray-50 text-gray-800",
             )}
           >
             <p className="text-sm whitespace-pre-wrap">{rejectionReasonText}</p>
