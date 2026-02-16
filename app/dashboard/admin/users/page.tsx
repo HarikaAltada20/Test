@@ -68,6 +68,7 @@ type CreatorProfile = {
   id: string;
   youtube_account?: any | null;
   instagram_account?: any | null;
+  twitter_account?: any | null;
   total_contests_participated?: number | null;
   total_contests_won?: number | null;
   total_views?: number | null;
@@ -295,6 +296,7 @@ const allColumns = {
     { id: "username", label: "Username" },
     { id: "youtube_account", label: "YouTube Account" },
     { id: "instagram_account", label: "Instagram Account" },
+    { id: "twitter_account", label: "Twitter Account" },
     { id: "contests_participated", label: "Contests Participated" },
     { id: "contests_won", label: "Contests Won" },
     { id: "total_views", label: "Total Views" },
@@ -834,6 +836,22 @@ export default function AdminUsersPage() {
           try {
             const account = typeof ig === "string" ? JSON.parse(ig) : ig;
             return account?.name_of_account || account?.username || null;
+          } catch {
+            return null;
+          }
+        }
+        return null;
+      case "twitter_account":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          const profile = profiles[0];
+          const tw = profile?.twitter_account;
+          if (!tw) return null;
+          try {
+            const account = typeof tw === "string" ? JSON.parse(tw) : tw;
+            return account?.name || account?.username || null;
           } catch {
             return null;
           }
@@ -1540,6 +1558,38 @@ export default function AdminUsersPage() {
 
               if (aEmpty !== bEmpty) {
                 // non-empty (false) comes before empty (true)
+                return aEmpty ? 1 : -1;
+              }
+
+              if (!aEmpty && !bEmpty) {
+                const cmp = aName.localeCompare(bName);
+                if (cmp !== 0) {
+                  return sortOrder === "asc" ? cmp : -cmp;
+                }
+              }
+
+              return 0;
+            }
+            case "twitter_account": {
+              const getTwName = (profile: CreatorProfile | null) => {
+                const tw = profile?.twitter_account;
+                if (!tw) return "";
+                try {
+                  const account = typeof tw === "string" ? JSON.parse(tw) : tw;
+                  const rawName = account?.name || account?.username || "";
+                  return normalizeForAlphabetSort(rawName);
+                } catch {
+                  return "";
+                }
+              };
+
+              const aName = getTwName(aProfile);
+              const bName = getTwName(bProfile);
+
+              const aEmpty = !aName;
+              const bEmpty = !bName;
+
+              if (aEmpty !== bEmpty) {
                 return aEmpty ? 1 : -1;
               }
 
@@ -2503,6 +2553,12 @@ export default function AdminUsersPage() {
                         <SortableHeader
                           columnId="instagram_account"
                           label="Instagram Account"
+                        />
+                      )}
+                      {isColumnVisible("twitter_account") && (
+                        <SortableHeader
+                          columnId="twitter_account"
+                          label="Twitter Account"
                         />
                       )}
                       {isColumnVisible("contests_participated") && (
@@ -3704,6 +3760,73 @@ export default function AdminUsersPage() {
                                         {account?.account_type && (
                                           <div className="text-xs text-muted-foreground">
                                             {account.account_type}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  } catch {
+                                    return (
+                                      <Badge variant="secondary">
+                                        Connected
+                                      </Badge>
+                                    );
+                                  }
+                                })()}
+                              </TableCell>
+                            )}
+                            {isColumnVisible("twitter_account") && (
+                              <TableCell className="min-w-[200px] border-r">
+                                {(() => {
+                                  const twAccount =
+                                    creatorProfile?.twitter_account;
+                                  if (!twAccount) return "-";
+                                  try {
+                                    const account =
+                                      typeof twAccount === "string"
+                                        ? JSON.parse(twAccount)
+                                        : twAccount;
+
+                                    const twitterUrl = account?.username
+                                      ? `https://twitter.com/${account.username}`
+                                      : "";
+
+                                    return (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-2">
+                                          <div className="font-medium text-sm">
+                                            {account?.name ||
+                                              account?.username ||
+                                              "Twitter"}
+                                          </div>
+                                          {twitterUrl && (
+                                            <a
+                                              href={twitterUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-sky-500 hover:text-sky-600 transition-colors"
+                                              title="Visit Twitter Profile"
+                                            >
+                                              <svg
+                                                className="w-5 h-5"
+                                                fill="currentColor"
+                                                viewBox="0 0 24 24"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                              >
+                                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                                              </svg>
+                                            </a>
+                                          )}
+                                        </div>
+                                        {account?.username && (
+                                          <div className="text-xs text-muted-foreground">
+                                            @{account.username}
+                                          </div>
+                                        )}
+                                        {account?.followers_count !==
+                                          undefined && (
+                                          <div className="text-xs text-muted-foreground">
+                                            {account.followers_count.toLocaleString()}{" "}
+                                            followers
                                           </div>
                                         )}
                                       </div>
