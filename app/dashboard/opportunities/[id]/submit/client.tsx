@@ -2161,71 +2161,70 @@ export default function SubmitContentPage({
 
     const performFetch = async () => {
       try {
-        const mediaRes = await fetch(
-          `https://graph.instagram.com/${igBusinessAccountID}/media?fields=id,media_type,media_product_type,video_title,caption,permalink,thumbnail_url,timestamp&access_token=${accessToken}`
-        );
-        // Added media_product_type, video_title to fields if available, to better identify reels.
+        // Instagram /media returns ~25 items per page; paginate to fetch ALL reels (no archiving workaround needed)
+        const fields =
+          "id,media_type,media_product_type,video_title,caption,permalink,thumbnail_url,timestamp";
+        let nextUrl: string | null = `https://graph.instagram.com/${igBusinessAccountID}/media?fields=${fields}&access_token=${accessToken}&limit=50`;
+        const allMediaItems: any[] = [];
 
-        const mediaData = await mediaRes.json();
+        while (nextUrl) {
+          const mediaRes = await fetch(nextUrl);
+          const mediaData = await mediaRes.json();
 
-        if (!mediaRes.ok || mediaData.error) {
-          console.error(
-            "[fetchInstagramReels] API Error response:",
-            mediaData.error
-          );
-
-          // Check if it's a token-related error
-          if (
-            mediaData.error?.type === "OAuthException" ||
-            mediaData.error?.message?.includes("token") ||
-            mediaData.error?.message?.includes("expired") ||
-            mediaRes.status === 401
-          ) {
-            // Token expired - try automatic refresh
-            const refreshSuccess = await autoRefreshInstagramTokenAndRetry(
-              async () => {
-                // Retry with the new token
-                if (
-                  instagramAccount?.access_token &&
-                  instagramAccount?.app_scoped_user_id
-                ) {
-                  await fetchInstagramReels(
-                    instagramAccount.access_token,
-                    instagramAccount.app_scoped_user_id
-                  );
-                }
-              }
+          if (!mediaRes.ok || mediaData.error) {
+            console.error(
+              "[fetchInstagramReels] API Error response:",
+              mediaData.error
             );
 
-            if (!refreshSuccess) {
-              setIsInstagramTokenExpired(true);
-              setError(
-                "Your Instagram connection has expired. Please re-connect your Instagram account."
+            if (
+              mediaData.error?.type === "OAuthException" ||
+              mediaData.error?.message?.includes("token") ||
+              mediaData.error?.message?.includes("expired") ||
+              mediaRes.status === 401
+            ) {
+              const refreshSuccess = await autoRefreshInstagramTokenAndRetry(
+                async () => {
+                  if (
+                    instagramAccount?.access_token &&
+                    instagramAccount?.app_scoped_user_id
+                  ) {
+                    await fetchInstagramReels(
+                      instagramAccount.access_token,
+                      instagramAccount.app_scoped_user_id
+                    );
+                  }
+                }
               );
+              if (!refreshSuccess) {
+                setIsInstagramTokenExpired(true);
+                setError(
+                  "Your Instagram connection has expired. Please re-connect your Instagram account."
+                );
+              }
+              return;
             }
-            return;
+
+            throw new Error(
+              mediaData.error?.message ||
+                "Failed to fetch Instagram media IDs using Business Account ID"
+            );
           }
 
-          throw new Error(
-            mediaData.error?.message ||
-            "Failed to fetch Instagram media IDs using Business Account ID"
-          );
+          const pageData = mediaData.data;
+          if (pageData && pageData.length > 0) {
+            allMediaItems.push(...pageData);
+          }
+          nextUrl = mediaData.paging?.next || null;
         }
 
-        const potentialContent = mediaData.data;
-        if (!potentialContent || potentialContent.length === 0) {
+        const potentialContent = allMediaItems;
+        if (potentialContent.length === 0) {
           setUserReels([]);
-          // setIsLoadingReels(false); // Done in finally
           return;
         }
 
         const allFetchedReels: InstagramReel[] = [];
-        // The /media endpoint returns a mix. We need to filter for Reels.
-        // Reels often have media_product_type === 'REELS' or media_type === 'VIDEO'
-        // The structure from /media might be slightly different than direct /media_id calls.
-        // We may need to iterate and fetch full details for each *potential* reel if thumbnail_url or other specific fields are missing here.
-        // For now, let's assume the direct /media call with expanded fields gives enough info.
-
         for (const item of potentialContent) {
           // Prioritize media_product_type if available, otherwise check media_type.
           // Instagram API can be a bit varied here. If it's a VIDEO, we should include it.
