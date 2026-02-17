@@ -23,6 +23,17 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const contestId = searchParams.get("contestId");
+    const contestTypeFilter = (searchParams.get("type") ?? "all")
+      .trim()
+      .toLowerCase() as "all" | "leaderboard" | "cpm";
+    const contentType = (searchParams.get("contentType") ?? "video")
+      .trim()
+      .toLowerCase() as "video" | "text_image";
+    const videoPlatform = (searchParams.get("videoPlatform") ?? "all")
+      .trim()
+      .toLowerCase() as "video" | "all" | "youtube" | "instagram";
+    const twitterParam = searchParams.get("twitter");
+    const twitterAnalytics = twitterParam === "true" || twitterParam === "1";
 
     if (contestId) {
       // Get detailed analytics for a specific contest
@@ -131,7 +142,10 @@ export async function GET(request: NextRequest) {
         }
       });
     } else {
-      // Get list of all contests with basic metrics
+      // Get list of all contests with basic metrics (include Twitter from twitter_campaign_tweets)
+      const statusParam = searchParams.get("status");
+      const submissionStatus = statusParam?.trim().toLowerCase() || null;
+
       const { data: contests } = await supabase
         .from("contests")
         .select(`
@@ -146,12 +160,7 @@ export async function GET(request: NextRequest) {
           live_submission_count,
           post_contest_status,
           moderation_status,
-          submissions (
-            id,
-            views,
-            created_at,
-            platform
-          )
+          thumbnail_url
         `)
         .eq("advertiser_id", user.id)
         .order("created_at", { ascending: false });
@@ -160,42 +169,183 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Failed to fetch contests" }, { status: 500 });
       }
 
-      // Calculate metrics for each contest
-      const contestsWithMetrics = contests.map(contest => {
-        const totalViews = contest.submissions?.reduce((sum, sub) => sum + (sub.views || 0), 0) || 0;
-        const totalSubmissions = contest.submissions?.length || 0;
-        
-        // Calculate total spent for this contest
-        let totalSpent = 0;
-        const details = contest.contest_based_details;
-        if (contest.contest_type === "leaderboard" && details?.leaderboard_contest?.total_prize) {
-          totalSpent = details.leaderboard_contest.total_prize;
-        } else if (contest.contest_type === "cpm" && details?.cpm_contest?.total_budget) {
-          totalSpent = details.cpm_contest.total_budget;
+      const contestsFilteredByType =
+        contestTypeFilter === "all"
+          ? contests
+          : contests.filter(
+              (contest) =>
+                (contest as { contest_type?: string }).contest_type ===
+                contestTypeFilter,
+            );
+
+      const normalizePlatformKey = (c: { platform?: string | null; contest_based_details?: unknown }) => {
+        const p = (c.platform ?? "").toString().trim().toLowerCase();
+        if (p === "x" || p === "twitter") return "twitter";
+        const details = c.contest_based_details as { twitter_campaign?: unknown } | null | undefined;
+        if (details?.twitter_campaign != null) return "twitter";
+        return p || "unknown";
+      };
+
+      const allowedPlatforms = ((): string[] => {
+        const videoPlatforms =
+          contentType === "video"
+            ? videoPlatform === "youtube"
+              ? ["youtube"]
+              : videoPlatform === "instagram"
+                ? ["instagram"]
+                : ["youtube", "instagram"]
+            : [];
+        const twitterPlatform = twitterAnalytics ? ["twitter"] : [];
+        if (videoPlatforms.length > 0 && twitterPlatform.length > 0) {
+          return [...videoPlatforms, ...twitterPlatform];
         }
+        if (contentType === "text_image") return twitterPlatform;
+        if (videoPlatforms.length > 0) return videoPlatforms;
+        return ["youtube", "instagram", "twitter"];
+      })();
+      const contestsFiltered =
+        allowedPlatforms.length === 0
+          ? []
+          : contestsFilteredByType.filter((c) =>
+              allowedPlatforms.includes(normalizePlatformKey(c)),
+            );
 
-        const avgViewsPerSubmission = totalSubmissions > 0 ? totalViews / totalSubmissions : 0;
-        const costPerView = totalViews > 0 ? totalSpent / totalViews : 0;
-        const roi = totalViews > 0 ? (totalViews / totalSpent) * 100 : 0; // Views per dollar spent
+      let submissionsQuery = supabase
+        .from("submissions")
+        .select("id, views, created_at, platform, contest_id, other_stats, status")
+        .in("contest_id", contestsFiltered.map((c) => c.id));
+      if (submissionStatus && submissionStatus !== "all") {
+        if (submissionStatus === "verifiedpaid") {
+          submissionsQuery = submissionsQuery.in("status", ["verified", "paid"]);
+        } else {
+          submissionsQuery = submissionsQuery.eq("status", submissionStatus);
+        }
+      }
+      const { data: allSubmissions } = await submissionsQuery;
 
-        return {
-          ...contest,
-          metrics: {
-            totalViews,
-            totalSubmissions,
-            totalSpent,
-            avgViewsPerSubmission: Math.round(avgViewsPerSubmission * 100) / 100,
-            costPerView: Math.round(costPerView * 100) / 100,
-            roi: Math.round(roi * 100) / 100
+      const twitterContestIds = contestsFiltered
+        .filter((c) => normalizePlatformKey(c) === "twitter")
+        .map((c) => c.id);
+      const twitterCountByContest: Record<string, number> = {};
+      const twitterViewsByContest: Record<string, number> = {};
+      const twitterLikesByContest: Record<string, number> = {};
+      const twitterRepliesByContest: Record<string, number> = {};
+      const twitterRetweetsByContest: Record<string, number> = {};
+      const twitterQuoteRepostsByContest: Record<string, number> = {};
+      if (twitterContestIds.length > 0) {
+        let tweetsQuery = supabase
+          .from("twitter_campaign_tweets")
+          .select("contest_id, impressions, likes, replies, retweets, quote_reposts")
+          .in("contest_id", twitterContestIds);
+        if (submissionStatus && submissionStatus !== "all") {
+          if (submissionStatus === "verifiedpaid") {
+            tweetsQuery = tweetsQuery.in("moderation_status", ["verified", "paid"]);
+          } else {
+            tweetsQuery = tweetsQuery.eq("moderation_status", submissionStatus);
           }
-        };
-      });
+        }
+        const { data: tweets } = await tweetsQuery;
+        const list = tweets || [];
+        list.forEach((row: {
+          contest_id?: string;
+          impressions?: number;
+          likes?: number;
+          replies?: number;
+          retweets?: number;
+          quote_reposts?: number;
+        }) => {
+          const cid = row.contest_id;
+          if (cid) {
+            twitterCountByContest[cid] = (twitterCountByContest[cid] || 0) + 1;
+            twitterViewsByContest[cid] = (twitterViewsByContest[cid] || 0) + (Number(row.impressions) || 0);
+            twitterLikesByContest[cid] = (twitterLikesByContest[cid] || 0) + (Number(row.likes) || 0);
+            twitterRepliesByContest[cid] = (twitterRepliesByContest[cid] || 0) + (Number(row.replies) || 0);
+            twitterRetweetsByContest[cid] = (twitterRetweetsByContest[cid] || 0) + (Number(row.retweets) || 0);
+            twitterQuoteRepostsByContest[cid] = (twitterQuoteRepostsByContest[cid] || 0) + (Number(row.quote_reposts) || 0);
+          }
+        });
+      }
+
+      const contestsWithMetrics = contestsFiltered
+        .map((contest) => {
+          const isTwitter = normalizePlatformKey(contest) === "twitter";
+          let totalViews: number;
+          let totalSubmissions: number;
+          let submissions: { id: string; views: number; created_at?: string; platform?: string; other_stats?: unknown; status?: string }[];
+
+          if (isTwitter) {
+            totalSubmissions = twitterCountByContest[contest.id] || 0;
+            totalViews = twitterViewsByContest[contest.id] || 0;
+            const twitterMetrics = totalSubmissions > 0
+              ? {
+                  likes: twitterLikesByContest[contest.id] || 0,
+                  replies: twitterRepliesByContest[contest.id] || 0,
+                  retweets: twitterRetweetsByContest[contest.id] || 0,
+                  quote_reposts: twitterQuoteRepostsByContest[contest.id] || 0,
+                  impressions: totalViews,
+                }
+              : undefined;
+            submissions = totalSubmissions > 0
+              ? [{ id: "twitter-aggregate", views: totalViews, other_stats: { twitter: twitterMetrics, x: twitterMetrics } }]
+              : [];
+          } else {
+            const subs = allSubmissions?.filter((s) => s.contest_id === contest.id) || [];
+            totalSubmissions = subs.length;
+            totalViews = subs.reduce((sum, s) => sum + (s.views || 0), 0);
+            submissions = subs.map((s: { id: string; views?: number; created_at?: string; platform?: string; other_stats?: unknown; status?: string }) => ({
+              id: s.id,
+              views: s.views || 0,
+              created_at: s.created_at,
+              platform: s.platform,
+              other_stats: s.other_stats,
+              status: s.status,
+            }));
+          }
+
+          let totalSpent = 0;
+          const details = contest.contest_based_details;
+          if (contest.contest_type === "leaderboard" && details?.leaderboard_contest?.total_prize) {
+            totalSpent = details.leaderboard_contest.total_prize;
+          } else if (contest.contest_type === "cpm" && details?.cpm_contest?.total_budget) {
+            totalSpent = details.cpm_contest.total_budget;
+          }
+
+          const avgViewsPerSubmission = totalSubmissions > 0 ? totalViews / totalSubmissions : 0;
+          const costPerView = totalViews > 0 ? totalSpent / totalViews : 0;
+          const roi = totalViews > 0 && totalSpent > 0 ? (totalViews / totalSpent) * 100 : 0;
+
+          const out: Record<string, unknown> = {
+            ...contest,
+            submissions,
+            live_submission_count: totalSubmissions,
+            metrics: {
+              totalViews,
+              totalSubmissions,
+              totalSpent,
+              avgViewsPerSubmission: Math.round(avgViewsPerSubmission * 100) / 100,
+              costPerView: Math.round(costPerView * 100) / 100,
+              roi: Math.round(roi * 100) / 100,
+            },
+          };
+          if (isTwitter && totalSubmissions > 0) {
+            out.twitter_metrics = {
+              likes: twitterLikesByContest[contest.id] || 0,
+              replies: twitterRepliesByContest[contest.id] || 0,
+              retweets: twitterRetweetsByContest[contest.id] || 0,
+              quote_reposts: twitterQuoteRepostsByContest[contest.id] || 0,
+              impressions: totalViews,
+            };
+          }
+          return out;
+        })
+        .filter((c) => (c.metrics as ContestMetrics).totalSubmissions > 0);
 
       // Calculate summary statistics
+      type ContestMetrics = { totalViews: number; totalSubmissions: number; totalSpent: number };
       const totalContests = contestsWithMetrics.length;
-      const totalViews = contestsWithMetrics.reduce((sum, contest) => sum + contest.metrics.totalViews, 0);
-      const totalSubmissions = contestsWithMetrics.reduce((sum, contest) => sum + contest.metrics.totalSubmissions, 0);
-      const totalSpent = contestsWithMetrics.reduce((sum, contest) => sum + contest.metrics.totalSpent, 0);
+      const totalViews = contestsWithMetrics.reduce((sum, contest) => sum + (contest.metrics as ContestMetrics).totalViews, 0);
+      const totalSubmissions = contestsWithMetrics.reduce((sum, contest) => sum + (contest.metrics as ContestMetrics).totalSubmissions, 0);
+      const totalSpent = contestsWithMetrics.reduce((sum, contest) => sum + (contest.metrics as ContestMetrics).totalSpent, 0);
       const avgCostPerView = totalViews > 0 ? totalSpent / totalViews : 0;
 
       // Performance comparison

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/utils/supabase/client";
 import ContestTile from "./ContestTile";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -11,6 +10,10 @@ interface ContestAnalyticsProps {
   userId: string;
   activeFilter?: string;
   onFilterChange?: (filter: string) => void;
+  contentType?: "video" | "text_image";
+  videoPlatform?: "video" | "all" | "youtube" | "instagram";
+  twitterAnalytics?: boolean;
+  contestTypeFilter?: "all" | "leaderboard" | "cpm";
 }
 
 interface Contest {
@@ -47,6 +50,10 @@ export default function ContestAnalytics({
   userId,
   activeFilter = "all",
   onFilterChange,
+  contentType = "video",
+  videoPlatform = "all",
+  twitterAnalytics = false,
+  contestTypeFilter = "all",
 }: ContestAnalyticsProps) {
   const [contests, setContests] = useState<Contest[]>([]);
   const [filteredContests, setFilteredContests] = useState<Contest[]>([]);
@@ -56,116 +63,42 @@ export default function ContestAnalytics({
 
   useEffect(() => {
     fetchContests();
-  }, [userId]);
-
-  useEffect(() => {
-    filterContests();
-  }, [contests, activeFilter]);
+  }, [
+    userId,
+    activeFilter,
+    contentType,
+    videoPlatform,
+    twitterAnalytics,
+    contestTypeFilter,
+  ]);
 
   const fetchContests = async () => {
     try {
       setLoading(true);
-      const supabase = createClient();
-
-      const { data, error } = await supabase
-        .from("contests")
-        .select(
-          `
-          id,
-          title,
-          platform,
-          contest_type,
-          start_date,
-          end_date,
-          created_at,
-          live_submission_count,
-          post_contest_status,
-          moderation_status,
-          contest_based_details,
-          thumbnail_url,
-          submissions (
-            id,
-            views,
-            other_stats,
-            status,
-            created_at
-          )
-        `
-        )
-        .eq("advertiser_id", userId)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      // Filter to only show live or ended contests (contests with submissions)
-      const liveOrEndedContests = (data || []).filter((contest: Contest) => {
-        // Only show contests that have submissions (live or ended)
-        return contest.submissions && contest.submissions.length > 0;
-      });
-
-      setContests(liveOrEndedContests);
+      const params = new URLSearchParams();
+      if (activeFilter && activeFilter !== "all") params.set("status", activeFilter);
+      params.set("contentType", contentType);
+      params.set("videoPlatform", videoPlatform);
+      params.set("twitter", twitterAnalytics ? "true" : "false");
+      if (contestTypeFilter && contestTypeFilter !== "all") {
+        params.set("type", contestTypeFilter);
+      }
+      const qs = params.toString();
+      const url = `/api/analytics/contests${qs ? `?${qs}` : ""}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to fetch contests");
+      const json = await res.json();
+      const list = json.contests || [];
+      setContests(list);
+      setFilteredContests(list);
     } catch (err) {
       console.error("Error fetching contests:", err);
       setError("Failed to fetch contests");
+      setContests([]);
+      setFilteredContests([]);
     } finally {
       setLoading(false);
     }
-  };
-
-  const filterContests = () => {
-    let filtered = [...contests];
-
-    // Apply filtering and recalculate metrics based on filtered submissions
-    filtered = contests.map((contest) => {
-      let filteredSubmissions = contest.submissions || [];
-
-      switch (activeFilter) {
-        case "verifiedPaid":
-          filteredSubmissions =
-            contest.submissions?.filter(
-              (sub) => sub.status === "verified" || sub.status === "paid"
-            ) || [];
-          break;
-        case "pending":
-          filteredSubmissions =
-            contest.submissions?.filter((sub) => sub.status === "pending") ||
-            [];
-          break;
-        case "verified":
-          filteredSubmissions =
-            contest.submissions?.filter((sub) => sub.status === "verified") ||
-            [];
-          break;
-        case "rejected":
-          filteredSubmissions =
-            contest.submissions?.filter((sub) => sub.status === "rejected") ||
-            [];
-          break;
-        case "paid":
-          filteredSubmissions =
-            contest.submissions?.filter((sub) => sub.status === "paid") || [];
-          break;
-        default:
-          // "all" - no filtering needed
-          break;
-      }
-
-      // Return contest with filtered submissions
-      return {
-        ...contest,
-        submissions: filteredSubmissions,
-        live_submission_count: filteredSubmissions.length,
-      };
-    });
-
-    // Only show contests that have submissions after filtering (unless it's "all")
-    if (activeFilter !== "all") {
-      filtered = filtered.filter(
-        (contest) => contest.submissions && contest.submissions.length > 0
-      );
-    }
-
-    setFilteredContests(filtered);
   };
 
   const calculateSummaryStats = () => {

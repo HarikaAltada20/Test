@@ -17,6 +17,9 @@ import {
   Eye,
   XCircle,
   Clock,
+  Youtube,
+  Instagram,
+  Twitter,
 } from "lucide-react";
 import {
   Tooltip,
@@ -31,12 +34,23 @@ import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
 
 interface BrandDetailedAnalyticsProps {
   userId: string;
+  contentType?: "video" | "text_image";
+  videoPlatform?: "video" | "all" | "youtube" | "instagram";
+  twitterAnalytics?: boolean;
+  contestTypeFilter: "all" | "leaderboard" | "cpm";
+  onContestTypeFilterChange: (value: "all" | "leaderboard" | "cpm") => void;
+  activeFilter?: string;
 }
 
 export default function BrandDetailedAnalytics({
   userId,
+  contentType = "video",
+  videoPlatform = "all",
+  twitterAnalytics = false,
+  contestTypeFilter,
+  onContestTypeFilterChange,
+  activeFilter = "all",
 }: BrandDetailedAnalyticsProps) {
-  const [contestTypeFilter, setContestTypeFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
@@ -44,12 +58,26 @@ export default function BrandDetailedAnalytics({
 
   useEffect(() => {
     fetchAnalyticsData();
-  }, [contestTypeFilter]);
+  }, [
+    contestTypeFilter,
+    contentType,
+    videoPlatform,
+    twitterAnalytics,
+    activeFilter,
+  ]);
 
   const fetchAnalyticsData = async () => {
     try {
       setLoading(true);
-      const url = `/api/analytics/brand-detailed?type=${contestTypeFilter}`;
+      const params = new URLSearchParams();
+      params.set("type", contestTypeFilter);
+      params.set("contentType", contentType);
+      params.set("videoPlatform", videoPlatform);
+      params.set("twitter", twitterAnalytics ? "true" : "false");
+      if (activeFilter && activeFilter !== "all") {
+        params.set("status", activeFilter);
+      }
+      const url = `/api/analytics/brand-detailed?${params.toString()}`;
 
       const response = await fetch(url);
 
@@ -91,10 +119,14 @@ export default function BrandDetailedAnalytics({
     );
   }
 
-  const { overview } = analyticsData;
+  const { overview, platformStats = {}, twitterStats } = analyticsData;
 
   // Fallback values to prevent errors when data is missing
   const safeOverview = {
+    totalQuoteReposts: 0,
+    totalLikes: 0,
+    totalComments: 0,
+    totalShares: 0,
     totalContests: 0,
     totalDraftContests: 0,
     totalPendingContests: 0,
@@ -116,6 +148,22 @@ export default function BrandDetailedAnalytics({
     totalRejectedViews: 0,
     totalPaidViews: 0,
     totalExpectedViews: 0,
+    viewsByStatusYoutubeInstagram: {
+      expected: 0,
+      verified: 0,
+      pending: 0,
+      rejected: 0,
+      paid: 0,
+      total: 0,
+    },
+    viewsByStatusTwitter: {
+      expected: 0,
+      verified: 0,
+      pending: 0,
+      rejected: 0,
+      paid: 0,
+      total: 0,
+    },
     totalMoneyPaid: 0,
     totalProjectedSpent: 0,
     moneyPaidUnpublished: 0,
@@ -140,13 +188,17 @@ export default function BrandDetailedAnalytics({
       </div>
 
       {/* Contest Type Filter */}
-      <div className="flex items-center justify-between">
+      {/* <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Contest Overview</h2>
         <ContestTypeFilter
           value={contestTypeFilter as any}
-          onChange={(value) => setContestTypeFilter(value)}
+          onChange={(value) =>
+            onContestTypeFilterChange(
+              value as "all" | "leaderboard" | "cpm",
+            )
+          }
         />
-      </div>
+      </div> */}
 
       {/* Contest Status Overview */}
       <div className="flex items-center justify-between">
@@ -157,14 +209,14 @@ export default function BrandDetailedAnalytics({
         <div
           className={cn(
             "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
             <div
               className={cn(
                 "p-2 rounded-full",
-                isDark ? "bg-blue-900/50" : "bg-blue-50"
+                isDark ? "bg-blue-900/50" : "bg-blue-50",
               )}
             >
               <FileText className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-blue-500" />
@@ -173,7 +225,7 @@ export default function BrandDetailedAnalytics({
               <CardTitle
                 className={cn(
                   "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900"
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
                 Draft Contests
@@ -194,7 +246,7 @@ export default function BrandDetailedAnalytics({
             <div
               className={cn(
                 "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {safeOverview.totalDraftContests}
@@ -202,7 +254,7 @@ export default function BrandDetailedAnalytics({
             <p
               className={cn(
                 "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700"
+                isDark ? "text-gray-300" : "text-gray-700",
               )}
             >
               Draft contests
@@ -213,14 +265,14 @@ export default function BrandDetailedAnalytics({
         <div
           className={cn(
             "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
             <div
               className={cn(
                 "p-2 rounded-full",
-                isDark ? "bg-yellow-900/50" : "bg-yellow-100"
+                isDark ? "bg-yellow-900/50" : "bg-yellow-100",
               )}
             >
               <AlertCircle className="h-6 w-6 sm:h-7 sm:w-7 text-yellow-500" />
@@ -229,7 +281,7 @@ export default function BrandDetailedAnalytics({
               <CardTitle
                 className={cn(
                   "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900"
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
                 Pending Approval
@@ -250,7 +302,7 @@ export default function BrandDetailedAnalytics({
             <div
               className={cn(
                 "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {safeOverview.totalPendingContests}
@@ -258,7 +310,7 @@ export default function BrandDetailedAnalytics({
             <p
               className={cn(
                 "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700"
+                isDark ? "text-gray-300" : "text-gray-700",
               )}
             >
               Pending approval
@@ -269,14 +321,14 @@ export default function BrandDetailedAnalytics({
         <div
           className={cn(
             "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
             <div
               className={cn(
                 "p-2 rounded-full",
-                isDark ? "bg-green-900/50" : "bg-green-100"
+                isDark ? "bg-green-900/50" : "bg-green-100",
               )}
             >
               <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 text-green-500" />
@@ -285,7 +337,7 @@ export default function BrandDetailedAnalytics({
               <CardTitle
                 className={cn(
                   "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900"
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
                 Approved
@@ -306,7 +358,7 @@ export default function BrandDetailedAnalytics({
             <div
               className={cn(
                 "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {safeOverview.totalApprovedContests}
@@ -314,7 +366,7 @@ export default function BrandDetailedAnalytics({
             <p
               className={cn(
                 "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700"
+                isDark ? "text-gray-300" : "text-gray-700",
               )}
             >
               Approved contests
@@ -325,14 +377,14 @@ export default function BrandDetailedAnalytics({
         <div
           className={cn(
             "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
             <div
               className={cn(
                 "p-2 rounded-full",
-                isDark ? "bg-purple-900/50" : "bg-purple-100"
+                isDark ? "bg-purple-900/50" : "bg-purple-100",
               )}
             >
               <PlayCircle className="h-6 w-6 sm:h-7 sm:w-7 text-purple-500" />
@@ -341,7 +393,7 @@ export default function BrandDetailedAnalytics({
               <CardTitle
                 className={cn(
                   "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900"
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
                 Published
@@ -362,7 +414,7 @@ export default function BrandDetailedAnalytics({
             <div
               className={cn(
                 "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {safeOverview.totalPublishedContests}
@@ -370,7 +422,7 @@ export default function BrandDetailedAnalytics({
             <p
               className={cn(
                 "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700"
+                isDark ? "text-gray-300" : "text-gray-700",
               )}
             >
               Published contests
@@ -381,14 +433,14 @@ export default function BrandDetailedAnalytics({
         <div
           className={cn(
             "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
             <div
               className={cn(
                 "p-2 rounded-full",
-                isDark ? "bg-emerald-900/50" : "bg-emerald-100"
+                isDark ? "bg-emerald-900/50" : "bg-emerald-100",
               )}
             >
               <Eye className="h-6 w-6 sm:h-7 sm:w-7 text-emerald-500" />
@@ -397,7 +449,7 @@ export default function BrandDetailedAnalytics({
               <CardTitle
                 className={cn(
                   "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900"
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
                 Active (Live)
@@ -418,7 +470,7 @@ export default function BrandDetailedAnalytics({
             <div
               className={cn(
                 "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {safeOverview.totalActiveContests}
@@ -426,7 +478,7 @@ export default function BrandDetailedAnalytics({
             <p
               className={cn(
                 "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700"
+                isDark ? "text-gray-300" : "text-gray-700",
               )}
             >
               Currently live
@@ -437,14 +489,14 @@ export default function BrandDetailedAnalytics({
         <div
           className={cn(
             "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
             <div
               className={cn(
                 "p-2 rounded-full",
-                isDark ? "bg-green-900/50" : "bg-green-100"
+                isDark ? "bg-green-900/50" : "bg-green-100",
               )}
             >
               <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 text-green-600" />
@@ -453,7 +505,7 @@ export default function BrandDetailedAnalytics({
               <CardTitle
                 className={cn(
                   "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900"
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
                 Completed
@@ -475,7 +527,7 @@ export default function BrandDetailedAnalytics({
             <div
               className={cn(
                 "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {safeOverview.totalCompletedContests}
@@ -483,7 +535,7 @@ export default function BrandDetailedAnalytics({
             <p
               className={cn(
                 "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700"
+                isDark ? "text-gray-300" : "text-gray-700",
               )}
             >
               Payouts processed
@@ -494,14 +546,14 @@ export default function BrandDetailedAnalytics({
         <div
           className={cn(
             "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
             <div
               className={cn(
                 "p-2 rounded-full",
-                isDark ? "bg-red-900/50" : "bg-red-100"
+                isDark ? "bg-red-900/50" : "bg-red-100",
               )}
             >
               <XCircle className="h-6 w-6 sm:h-7 sm:w-7 text-red-500" />
@@ -510,7 +562,7 @@ export default function BrandDetailedAnalytics({
               <CardTitle
                 className={cn(
                   "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900"
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
                 Total Rejected
@@ -531,7 +583,7 @@ export default function BrandDetailedAnalytics({
             <div
               className={cn(
                 "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {safeOverview.totalRejectedContests}
@@ -539,7 +591,7 @@ export default function BrandDetailedAnalytics({
             <p
               className={cn(
                 "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700"
+                isDark ? "text-gray-300" : "text-gray-700",
               )}
             >
               Rejected contests
@@ -550,14 +602,14 @@ export default function BrandDetailedAnalytics({
         <div
           className={cn(
             "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
             <div
               className={cn(
                 "p-2 rounded-full",
-                isDark ? "bg-orange-900/50" : "bg-orange-100"
+                isDark ? "bg-orange-900/50" : "bg-orange-100",
               )}
             >
               <Clock className="h-6 w-6 sm:h-7 sm:w-7  text-orange-500" />
@@ -566,7 +618,7 @@ export default function BrandDetailedAnalytics({
               <CardTitle
                 className={cn(
                   "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900"
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
                 Upcoming
@@ -587,7 +639,7 @@ export default function BrandDetailedAnalytics({
             <div
               className={cn(
                 "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {safeOverview.totalUpcomingContests}
@@ -595,7 +647,7 @@ export default function BrandDetailedAnalytics({
             <p
               className={cn(
                 "text-xs",
-                isDark ? "text-gray-300" : "text-muted-foreground"
+                isDark ? "text-gray-300" : "text-muted-foreground",
               )}
             >
               Scheduled contests
@@ -606,14 +658,14 @@ export default function BrandDetailedAnalytics({
         <div
           className={cn(
             "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
             <div
               className={cn(
                 "p-2 rounded-full",
-                isDark ? "bg-gray-700" : "bg-gray-100"
+                isDark ? "bg-gray-700" : "bg-gray-100",
               )}
             >
               <StopCircle className="h-6 w-6 sm:h-7 sm:w-7 text-gray-500" />
@@ -622,7 +674,7 @@ export default function BrandDetailedAnalytics({
               <CardTitle
                 className={cn(
                   "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900"
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
                 Ended
@@ -644,7 +696,7 @@ export default function BrandDetailedAnalytics({
             <div
               className={cn(
                 "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {safeOverview.totalEndedContests}
@@ -652,7 +704,7 @@ export default function BrandDetailedAnalytics({
             <p
               className={cn(
                 "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700"
+                isDark ? "text-gray-300" : "text-gray-700",
               )}
             >
               Published but ended
@@ -665,7 +717,7 @@ export default function BrandDetailedAnalytics({
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         <Card
           className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -683,7 +735,7 @@ export default function BrandDetailedAnalytics({
 
         <Card
           className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -701,7 +753,7 @@ export default function BrandDetailedAnalytics({
 
         <Card
           className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -719,7 +771,7 @@ export default function BrandDetailedAnalytics({
 
         <Card
           className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -737,7 +789,7 @@ export default function BrandDetailedAnalytics({
 
         <Card
           className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -754,242 +806,157 @@ export default function BrandDetailedAnalytics({
         </Card>
       </div>
 
-      {/* View Analytics */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-        <Card
-          className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                Expected Views
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Pending + Verified + Paid views
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-8 h-8 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              )}
-            >
-              <Eye className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {safeOverview.totalExpectedViews.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">Pending + Verified</p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                Verified Views
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Views from submissions marked as verified
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-8 h-8 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              )}
-            >
-              <CheckCircle className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {safeOverview.totalVerifiedViews.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">Verified</p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                Pending Views
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Views from submissions marked as pending
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-8 h-8 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              )}
-            >
-              <Eye className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {safeOverview.totalPendingViews.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">Pending</p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                Rejected Views
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>From rejected entries</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-8 h-8 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              )}
-            >
-              <AlertCircle className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {safeOverview.totalRejectedViews.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              From rejected entries
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">Paid Views</CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>From paid entries</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-8 h-8 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              )}
-            >
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {safeOverview.totalPaidViews.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">From paid entries</p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">Total Views</CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    All views across all submissions
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-8 h-8 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              )}
-            >
-              <Video className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {safeOverview.totalViews.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">All views</p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Views by status: one section — YouTube & Instagram when video, Twitter only when Text/Image + Twitter selected */}
+      {(contentType === "video" ||
+        (contentType === "text_image" && twitterAnalytics)) && (
+        <>
+          
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+            {(contentType === "video"
+              ? [
+                  {
+                    label: "Expected Views",
+                    sub: "Pending + Verified + Paid",
+                    tooltip: "Pending + Verified + Paid views",
+                    value:
+                      safeOverview.viewsByStatusYoutubeInstagram?.expected ?? 0,
+                    Icon: Eye,
+                  },
+                  {
+                    label: "Verified Views",
+                    sub: "Verified",
+                    tooltip: "Views from submissions marked as verified",
+                    value:
+                      safeOverview.viewsByStatusYoutubeInstagram?.verified ?? 0,
+                    Icon: CheckCircle,
+                  },
+                  {
+                    label: "Pending Views",
+                    sub: "Pending",
+                    tooltip: "Views from submissions marked as pending",
+                    value:
+                      safeOverview.viewsByStatusYoutubeInstagram?.pending ?? 0,
+                    Icon: Eye,
+                  },
+                  {
+                    label: "Rejected Views",
+                    sub: "From rejected entries",
+                    tooltip: "From rejected  entries",
+                    value:
+                      safeOverview.viewsByStatusYoutubeInstagram?.rejected ?? 0,
+                    Icon: AlertCircle,
+                  },
+                  {
+                    label: "Paid Views",
+                    sub: "From paid entries",
+                    tooltip: "From paid entries",
+                    value:
+                      safeOverview.viewsByStatusYoutubeInstagram?.paid ?? 0,
+                    Icon: DollarSign,
+                  },
+                  {
+                    label: "Total Views",
+                    sub: "All views",
+                    tooltip: "All views across submissions",
+                    value:
+                      safeOverview.viewsByStatusYoutubeInstagram?.total ?? 0,
+                    Icon: Video,
+                  },
+                ]
+              : [
+                  {
+                    label: "Expected Views",
+                    sub: "Pending + Verified + Paid",
+                    tooltip: "Pending + Verified + Paid views (Twitter)",
+                    value:
+                      safeOverview.viewsByStatusTwitter?.expected ?? 0,
+                    Icon: Eye,
+                  },
+                  {
+                    label: "Verified Views",
+                    sub: "Verified",
+                    tooltip:
+                      "Views from Twitter submissions marked as verified",
+                    value:
+                      safeOverview.viewsByStatusTwitter?.verified ?? 0,
+                    Icon: CheckCircle,
+                  },
+                  {
+                    label: "Pending Views",
+                    sub: "Pending",
+                    tooltip:
+                      "Views from Twitter submissions marked as pending",
+                    value:
+                      safeOverview.viewsByStatusTwitter?.pending ?? 0,
+                    Icon: Eye,
+                  },
+                  {
+                    label: "Rejected Views",
+                    sub: "From rejected entries",
+                    tooltip: "From rejected Twitter entries",
+                    value:
+                      safeOverview.viewsByStatusTwitter?.rejected ?? 0,
+                    Icon: AlertCircle,
+                  },
+                  {
+                    label: "Paid Views",
+                    sub: "From paid entries",
+                    tooltip: "From paid Twitter entries",
+                    value: safeOverview.viewsByStatusTwitter?.paid ?? 0,
+                    Icon: DollarSign,
+                  },
+                  {
+                    label: "Total Views",
+                    sub: "All views",
+                    tooltip:
+                      "All Twitter views (impressions) across submissions",
+                    value: safeOverview.viewsByStatusTwitter?.total ?? 0,
+                    Icon: Video,
+                  },
+                ]
+            ).map(({ label, sub, tooltip, value, Icon }) => (
+              <Card
+                key={label}
+                className={cn(
+                  isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
+                )}
+              >
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-sm font-medium">
+                      {label}
+                    </CardTitle>
+                    <TooltipProvider delayDuration={0}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-4 w-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>{tooltip}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <div
+                    className={cn(
+                      "w-8 h-8 flex items-center justify-center rounded-full",
+                      isDark
+                        ? "bg-[#FFFFFF36] text-white"
+                        : "bg-[#D8C3FF] text-[#4A00BE]",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {value.toLocaleString()}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{sub}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Financial Breakdown */}
       <div className="flex items-center justify-between">
@@ -1001,7 +968,7 @@ export default function BrandDetailedAnalytics({
           className={cn(
             isDark
               ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300"
+              : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1025,7 +992,7 @@ export default function BrandDetailedAnalytics({
                 "w-10 h-10 flex items-center justify-center rounded-full",
                 isDark
                   ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  : "bg-[#D8C3FF] text-[#4A00BE]",
               )}
             >
               <DollarSign className="h-4 w-4" />
@@ -1045,7 +1012,7 @@ export default function BrandDetailedAnalytics({
           className={cn(
             isDark
               ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300"
+              : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1070,7 +1037,7 @@ export default function BrandDetailedAnalytics({
                 "w-10 h-10 flex items-center justify-center rounded-full",
                 isDark
                   ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  : "bg-[#D8C3FF] text-[#4A00BE]",
               )}
             >
               <DollarSign className="h-4 w-4" />
@@ -1090,7 +1057,7 @@ export default function BrandDetailedAnalytics({
           className={cn(
             isDark
               ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300"
+              : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1115,7 +1082,7 @@ export default function BrandDetailedAnalytics({
                 "w-10 h-10 flex items-center justify-center rounded-full",
                 isDark
                   ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  : "bg-[#D8C3FF] text-[#4A00BE]",
               )}
             >
               <DollarSign className="h-4 w-4" />
@@ -1124,7 +1091,7 @@ export default function BrandDetailedAnalytics({
           <CardContent>
             <div className="text-2xl font-bold">
               {formatCurrencyFromCents(
-                safeOverview.totalMoneyPaid + safeOverview.moneyPaidUnpublished
+                safeOverview.totalMoneyPaid + safeOverview.moneyPaidUnpublished,
               )}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -1140,7 +1107,7 @@ export default function BrandDetailedAnalytics({
           className={cn(
             isDark
               ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300"
+              : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1164,7 +1131,7 @@ export default function BrandDetailedAnalytics({
                 "w-10 h-10 flex items-center justify-center rounded-full",
                 isDark
                   ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  : "bg-[#D8C3FF] text-[#4A00BE]",
               )}
             >
               <DollarSign className="h-4 w-4" />
@@ -1173,7 +1140,7 @@ export default function BrandDetailedAnalytics({
           <CardContent>
             <div className="text-2xl font-bold">
               {formatCurrencyFromCents(
-                safeOverview.paymentsBreakdown.withoutCommission
+                safeOverview.paymentsBreakdown.withoutCommission,
               )}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -1186,7 +1153,7 @@ export default function BrandDetailedAnalytics({
           className={cn(
             isDark
               ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300"
+              : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1210,7 +1177,7 @@ export default function BrandDetailedAnalytics({
                 "w-10 h-10 flex items-center justify-center rounded-full",
                 isDark
                   ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  : "bg-[#D8C3FF] text-[#4A00BE]",
               )}
             >
               <DollarSign className="h-4 w-4" />
@@ -1219,7 +1186,7 @@ export default function BrandDetailedAnalytics({
           <CardContent>
             <div className="text-2xl font-bold">
               {formatCurrencyFromCents(
-                safeOverview.paymentsBreakdown.commission
+                safeOverview.paymentsBreakdown.commission,
               )}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -1232,7 +1199,7 @@ export default function BrandDetailedAnalytics({
           className={cn(
             isDark
               ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300"
+              : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1256,7 +1223,7 @@ export default function BrandDetailedAnalytics({
                 "w-10 h-10 flex items-center justify-center rounded-full",
                 isDark
                   ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  : "bg-[#D8C3FF] text-[#4A00BE]",
               )}
             >
               <DollarSign className="h-4 w-4" />
@@ -1265,7 +1232,7 @@ export default function BrandDetailedAnalytics({
           <CardContent>
             <div className="text-2xl font-bold">
               {formatCurrencyFromCents(
-                safeOverview.paymentsBreakdown.withCommission
+                safeOverview.paymentsBreakdown.withCommission,
               )}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -1281,7 +1248,7 @@ export default function BrandDetailedAnalytics({
           className={cn(
             isDark
               ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300"
+              : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1306,7 +1273,7 @@ export default function BrandDetailedAnalytics({
                 "w-10 h-10 flex items-center justify-center rounded-full",
                 isDark
                   ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  : "bg-[#D8C3FF] text-[#4A00BE]",
               )}
             >
               <DollarSign className="h-4 w-4" />
@@ -1326,7 +1293,7 @@ export default function BrandDetailedAnalytics({
           className={cn(
             isDark
               ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300"
+              : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1351,7 +1318,7 @@ export default function BrandDetailedAnalytics({
                 "w-10 h-10 flex items-center justify-center rounded-full",
                 isDark
                   ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  : "bg-[#D8C3FF] text-[#4A00BE]",
               )}
             >
               <DollarSign className="h-4 w-4" />
@@ -1361,7 +1328,7 @@ export default function BrandDetailedAnalytics({
             <div className="text-2xl font-bold">
               {formatCurrencyFromCents(
                 safeOverview.totalProjectedSpent +
-                  (safeOverview.paymentsBreakdown.commission || 0)
+                  (safeOverview.paymentsBreakdown.commission || 0),
               )}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -1374,7 +1341,7 @@ export default function BrandDetailedAnalytics({
           className={cn(
             isDark
               ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300"
+              : "bg-white border border-gray-300",
           )}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1399,7 +1366,7 @@ export default function BrandDetailedAnalytics({
                 "w-10 h-10 flex items-center justify-center rounded-full",
                 isDark
                   ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  : "bg-[#D8C3FF] text-[#4A00BE]",
               )}
             >
               <DollarSign className="h-4 w-4" />
