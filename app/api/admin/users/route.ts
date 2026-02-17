@@ -13,62 +13,82 @@ export async function GET(req: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Fetch all users with advertiser_profiles joined
-    const { data: users, error: usersError } = await supabase
-      .from("users")
-      .select(
-        `
-        *,
-        advertiser_profiles (
-          id,
-          company_name,
-          website_url,
-          total_money_spent,
-          total_contests_run,
-          available_deposit_balance,
-          withdrawable_balance,
-          subscription_info
-        )
-      `
+    // Supabase defaults to 1000 rows max per request; fetch in chunks to get all users
+    const CHUNK = 1000;
+    const usersSelect = `
+      *,
+      advertiser_profiles (
+        id,
+        company_name,
+        website_url,
+        total_money_spent,
+        total_contests_run,
+        available_deposit_balance,
+        withdrawable_balance,
+        subscription_info
       )
-      .order("created_at", { ascending: false });
+    `;
+    let users: any[] = [];
+    let usersFrom = 0;
+    while (true) {
+      const { data: chunk, error: usersError } = await supabase
+        .from("users")
+        .select(usersSelect)
+        .order("created_at", { ascending: false })
+        .range(usersFrom, usersFrom + CHUNK - 1);
 
-    if (usersError) {
-      console.error("Error fetching users:", usersError);
-      return NextResponse.json({ error: usersError.message }, { status: 500 });
+      if (usersError) {
+        console.error("Error fetching users:", usersError);
+        return NextResponse.json(
+          { error: usersError.message },
+          { status: 500 }
+        );
+      }
+      users = users.concat(chunk || []);
+      if (!chunk || chunk.length < CHUNK) break;
+      usersFrom += CHUNK;
     }
 
-    // Fetch all creator_profiles separately
-    const { data: creatorProfiles, error: creatorProfilesError } =
-      await supabase.from("creator_profiles").select(
-        `
-        id,
-        youtube_account,
-        instagram_account,
-        twitter_account,
-        total_contests_participated,
-        total_contests_won,
-        total_views,
-        total_money_won,
-        withdrawable_balance,
-        total_submissions_made,
-        total_submissions_won,
-        date_of_birth,
-        gender,
-        country,
-        state,
-        city,
-        address,
-        languages,
-        categories,
-        subcategories,
-        interests
-      `
-      );
+    // Fetch all creator_profiles in chunks (same 1000-row limit)
+    const creatorProfilesSelect = `
+      id,
+      youtube_account,
+      instagram_account,
+      twitter_account,
+      total_contests_participated,
+      total_contests_won,
+      total_views,
+      total_money_won,
+      withdrawable_balance,
+      total_submissions_made,
+      total_submissions_won,
+      date_of_birth,
+      gender,
+      country,
+      state,
+      city,
+      address,
+      languages,
+      categories,
+      subcategories,
+      interests
+    `;
+    let creatorProfiles: any[] = [];
+    let profilesFrom = 0;
+    while (true) {
+      const { data: profileChunk, error: creatorProfilesError } =
+        await supabase
+          .from("creator_profiles")
+          .select(creatorProfilesSelect)
+          .range(profilesFrom, profilesFrom + CHUNK - 1);
 
-    if (creatorProfilesError) {
-      console.error("Error fetching creator profiles:", creatorProfilesError);
-      // Continue even if creator profiles fail - just won't have that data
+      if (creatorProfilesError) {
+        console.error("Error fetching creator profiles:", creatorProfilesError);
+        break; // Continue without creator profile data
+      }
+      creatorProfiles = creatorProfiles.concat(profileChunk || []);
+      if (!profileChunk || profileChunk.length < CHUNK) break;
+      profilesFrom += CHUNK;
     }
 
     // Create a map of creator profiles by user id

@@ -87,72 +87,62 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid Instagram URL format' }, { status: 400 });
     }
 
-    // Define the fields you want to retrieve for the media
     const fields = 'id,media_type,media_product_type,caption,permalink,thumbnail_url,timestamp,username';
-    const igApiUrl = `https://graph.instagram.com/${userAppScopedId}/media?fields=${fields}&access_token=${userAccessToken}`;
 
-    // console.log(`Fetching user's media from Instagram: ${igApiUrl.replace(userAccessToken, '[USER_ACCESS_TOKEN_REDACTED]')}`);
+    // Paginate through all user media so link submission works for reels not on the first page
+    let nextUrl: string | null = `https://graph.instagram.com/${userAppScopedId}/media?fields=${fields}&access_token=${userAccessToken}&limit=50`;
+    let foundMedia: any = null;
 
-    const igResponse = await fetch(igApiUrl);
-
-    if (!igResponse.ok) {
-      let errorData;
-      try {
-        errorData = await igResponse.json();
-      } catch (e) {
-        errorData = { message: "Failed to parse error JSON from Instagram API, and request was not successful.", instagram_status: igResponse.status, instagram_status_text: igResponse.statusText };
+    while (nextUrl) {
+      const igResponse = await fetch(nextUrl);
+      if (!igResponse.ok) {
+        let errorData;
+        try {
+          errorData = await igResponse.json();
+        } catch (e) {
+          errorData = { message: "Failed to parse error JSON from Instagram API.", instagram_status: igResponse.status, instagram_status_text: igResponse.statusText };
+        }
+        console.error('Instagram API Error fetching user media:', errorData);
+        return NextResponse.json({
+          error: 'Failed to fetch media from Instagram.',
+          details: errorData
+        }, { status: igResponse.status > 0 ? igResponse.status : 500 });
       }
-      console.error('Instagram API Error fetching user media:', errorData);
-      return NextResponse.json({ 
-        error: 'Failed to fetch media from Instagram.', 
-        details: errorData 
-      }, { status: igResponse.status > 0 ? igResponse.status : 500 }); // Use Instagram's status if valid, else 500
-    }
 
-    const igData = await igResponse.json();
-
-    if (!igData.data || !Array.isArray(igData.data)) {
+      const igData = await igResponse.json();
+      if (!igData.data || !Array.isArray(igData.data)) {
         console.error('Unexpected response structure from Instagram /media endpoint:', igData);
         return NextResponse.json({ error: 'Unexpected response structure from Instagram when fetching media.' }, { status: 500 });
-    }
-
-    // The shortcode extracted from the user-provided URL
-    const userProvidedShortcode = extractInstagramShortcode(mediaUrl); 
-    // It should exist because we checked `if (!shortcode)` earlier, 
-    // but good to be defensive or ensure `shortcode` is used directly here.
-    if (!userProvidedShortcode) { 
-        // This case should ideally be caught by the earlier `if (!shortcode)` check
-        return NextResponse.json({ error: 'Could not extract shortcode from provided URL for comparison.' }, { status: 400 });
-    }
-
-    let foundMedia: any = null;
-    for (const mediaItem of igData.data) {
-      const apiMediaShortcode = extractInstagramShortcode(mediaItem.permalink);
-      if (apiMediaShortcode && apiMediaShortcode === userProvidedShortcode) {
-        foundMedia = mediaItem;
-        break;
       }
+
+      for (const mediaItem of igData.data) {
+        const apiMediaShortcode = extractInstagramShortcode(mediaItem.permalink);
+        if (apiMediaShortcode && apiMediaShortcode === shortcode) {
+          foundMedia = mediaItem;
+          break;
+        }
+      }
+      if (foundMedia) break;
+      nextUrl = igData.paging?.next || null;
     }
 
     if (foundMedia) {
       const mediaInfo: InstagramMediaInfo = {
         id: foundMedia.id,
-        media_type: foundMedia.media_type,
+        media_type: foundMedia.media_product_type === 'REELS' ? 'REEL' : (foundMedia.media_type || 'VIDEO'),
         media_product_type: foundMedia.media_product_type,
-        caption: foundMedia.caption || '', // Ensure caption is at least an empty string
+        caption: foundMedia.caption || '',
         permalink: foundMedia.permalink,
         thumbnail_url: foundMedia.thumbnail_url,
         timestamp: foundMedia.timestamp,
-        username: foundMedia.username, // Will be undefined if not in fields or not returned
+        username: foundMedia.username,
       };
       return NextResponse.json({ valid: true, mediaInfo });
     } else {
-      // Note: This only checks the first page of results from the /media endpoint.
-      // If pagination is needed for users with many media items, this logic would need enhancement.
-      console.log(`Media with permalink ${mediaUrl} not found in user's (${userAppScopedId}) first page of media.`);
-      return NextResponse.json({ 
-        valid: false, 
-        error: 'Media not found for the given URL among the recent media of the authenticated user, or it does not belong to them.' 
+      console.log(`Media with permalink ${mediaUrl} not found in user's (${userAppScopedId}) media after paginating.`);
+      return NextResponse.json({
+        valid: false,
+        error: 'Media not found for the given URL. It may not belong to your connected account, or the link may be invalid.'
       }, { status: 404 });
     }
 

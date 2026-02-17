@@ -23,10 +23,13 @@ export default async function AdminDashboardPage({
 
   try {
     // Fetch platform-wide statistics for admin
+    // Use count-only queries for users to avoid Supabase's default 1000-row limit
     const [
       { data: allContests },
       { data: allSubmissions },
-      { data: allUsers },
+      { count: totalUsersCount },
+      { count: totalCreatorsCount },
+      { count: totalBrandsCount },
     ] = await Promise.all([
       supabase
         .from("contests_with_status")
@@ -34,7 +37,17 @@ export default async function AdminDashboardPage({
           "id, contest_type, contest_based_details, created_at, moderation_status, status, post_contest_status, payment_details"
         ),
       supabase.from("submissions").select("id, views, status, contest_id"),
-      supabase.from("users").select("id, user_type, created_at"),
+      supabase
+        .from("users")
+        .select("*", { count: "exact", head: true }),
+      supabase
+        .from("users")
+        .select("*", { count: "exact", head: true })
+        .eq("user_type", "creator"),
+      supabase
+        .from("users")
+        .select("*", { count: "exact", head: true })
+        .eq("user_type", "advertiser"),
     ]);
 
     // Apply optional contest type filter
@@ -145,12 +158,9 @@ export default async function AdminDashboardPage({
     const paidSubmissions = filteredSubmissions.filter(
       (s: any) => s.status === "paid"
     ).length;
-    const totalUsers = allUsers?.length || 0;
-    const totalCreators =
-      allUsers?.filter((user: any) => user.user_type === "creator").length || 0;
-    const totalBrands =
-      allUsers?.filter((user: any) => user.user_type === "advertiser").length ||
-      0;
+    const totalUsers = totalUsersCount ?? 0;
+    const totalCreators = totalCreatorsCount ?? 0;
+    const totalBrands = totalBrandsCount ?? 0;
 
     const parsePayment = (pd: any) => {
       if (!pd) return null as any;
