@@ -561,7 +561,8 @@ export default function CreatorAnalytics({
                           @{creator.creator.username}
                         </h3>
                         <div className="flex items-center gap-1 sm:gap-2 mt-0.5 sm:mt-1 flex-wrap">
-                          {activeTab === "submissions" || activeTab === "earnings" ? (
+                          {(creator.submissionsYoutubeInstagram ?? 0) > 0 ||
+                          (creator.submissionsTwitter ?? 0) > 0 ? (
                             <>
                               {(creator.submissionsYoutubeInstagram ?? 0) > 0 && (
                                 <span className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
@@ -608,7 +609,7 @@ export default function CreatorAnalytics({
                             </>
                           ) : (
                             <>
-                              {creator.platforms.map((platform: string) => (
+                              {creator.platforms?.map((platform: string) => (
                                 <PlatformIcon
                                   key={platform}
                                   platform={platform}
