@@ -267,7 +267,7 @@ interface ContestDetailClientProps {
 const sanitizeTwitterList = (value: unknown): string[] => {
   if (!Array.isArray(value)) return [];
   return value.filter(
-    (item): item is string => typeof item === "string" && item.trim() !== ""
+    (item): item is string => typeof item === "string" && item.trim() !== "",
   );
 };
 
@@ -283,7 +283,7 @@ export default function ContestDetailClient({
   const supabase = createClient();
   const { toast, toasts } = useToast();
   const [currentSubmissions, setCurrentSubmissions] = useState<Submission[]>(
-    initialSubmissions || []
+    initialSubmissions || [],
   );
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
     string | null
@@ -365,10 +365,10 @@ export default function ContestDetailClient({
   const twitterCampaignDetails =
     currentContest.contest_based_details?.twitter_campaign;
   const adminTwitterKeywords = sanitizeTwitterList(
-    twitterCampaignDetails?.keywords
+    twitterCampaignDetails?.keywords,
   );
   const adminTwitterMentions = sanitizeTwitterList(
-    twitterCampaignDetails?.mentions
+    twitterCampaignDetails?.mentions,
   );
   const hasTwitterRequirements =
     adminTwitterKeywords.length > 0 || adminTwitterMentions.length > 0;
@@ -389,7 +389,7 @@ export default function ContestDetailClient({
   const [loadingMetrics, setLoadingMetrics] = useState(false);
 
   const markCreatorSubmissionsVerifiedLocally = (
-    creatorId: string | null | undefined
+    creatorId: string | null | undefined,
   ) => {
     if (!creatorId) return;
 
@@ -409,16 +409,15 @@ export default function ContestDetailClient({
               status: "verified",
               moderation_status: "verified",
             }
-          : submission
-      )
+          : submission,
+      ),
     );
   };
 
-  // Rejection modal state
+  // Rejection modal state (array supports bulk reject from CreatorSubmissionsModal)
   const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
-  const [pendingRejectionSubmission, setPendingRejectionSubmission] = useState<
-    string | null
-  >(null);
+  const [pendingRejectionSubmissionIds, setPendingRejectionSubmissionIds] =
+    useState<string[]>([]);
 
   // Twitter rejection modal state
   const [twitterRejectionModalOpen, setTwitterRejectionModalOpen] =
@@ -455,7 +454,7 @@ export default function ContestDetailClient({
       const overrideAdjustment = manualAdjustmentOverrides[creatorId] || 0;
       return baseAdjustment + overrideAdjustment;
     },
-    [creatorModerationData, manualAdjustmentOverrides]
+    [creatorModerationData, manualAdjustmentOverrides],
   );
   const creatorManualPointsAdjustments = useMemo(() => {
     const adjustments: Record<string, number> = {};
@@ -605,7 +604,7 @@ export default function ContestDetailClient({
   const hasPreviousPage = currentPage > 1;
   const paginatedSubmissions = sortedSubmissions.slice(
     (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
+    currentPage * itemsPerPage,
   );
 
   // Filter submissions for analytics based on active analytics tab
@@ -619,7 +618,7 @@ export default function ContestDetailClient({
         return status === "verified" || status === "paid";
       }
       return status === activeAnalyticsTab;
-    }
+    },
   );
 
   // Creator-wise grouping logic
@@ -656,7 +655,7 @@ export default function ContestDetailClient({
       creatorIds.forEach((creatorId) => {
         const leaderboardData = creatorModerationData[creatorId] || {};
         const creatorSubmissions = filteredSubmissions.filter(
-          (s: any) => s.creator_id === creatorId
+          (s: any) => s.creator_id === creatorId,
         );
         const firstSubmission = creatorSubmissions[0];
         const submissionManualPointsTotal = creatorSubmissions.reduce(
@@ -667,7 +666,7 @@ export default function ContestDetailClient({
               0;
             return sum + submissionManualPoints;
           },
-          0
+          0,
         );
         const creatorManualAdjustment =
           getCreatorManualAdjustment(creatorId) || 0;
@@ -700,7 +699,7 @@ export default function ContestDetailClient({
                   otherStats: submission.other_stats,
                   status: status,
                   runningTotal: calculatedBasePoints,
-                }
+                },
               );
             }
           }
@@ -715,7 +714,7 @@ export default function ContestDetailClient({
             : Math.max(
                 0,
                 (leaderboardData.total_points || 0) -
-                  (leaderboardData.manual_points_adjustment || 0)
+                  (leaderboardData.manual_points_adjustment || 0),
               );
 
         const verifiedSubmissionCount = creatorSubmissions.filter(
@@ -729,7 +728,7 @@ export default function ContestDetailClient({
               status === "approved" ||
               status === "paid"
             );
-          }
+          },
         ).length;
 
         grouped[creatorId] = {
@@ -757,13 +756,13 @@ export default function ContestDetailClient({
                 (s.is_twitter_tweet &&
                   (!(s as any).moderation_status ||
                     (s as any).moderation_status === "pending")) ||
-                (!s.is_twitter_tweet && s.status === "pending")
+                (!s.is_twitter_tweet && s.status === "pending"),
             ).length,
             rejected: creatorSubmissions.filter(
               (s: any) =>
                 (s.is_twitter_tweet &&
                   (s as any).moderation_status === "rejected") ||
-                (!s.is_twitter_tweet && s.status === "rejected")
+                (!s.is_twitter_tweet && s.status === "rejected"),
             ).length,
             verified_paid: creatorSubmissions.filter((s: any) => {
               const status =
@@ -807,7 +806,7 @@ export default function ContestDetailClient({
             (currentContest?.contest_type === "cpm" &&
               creatorSubmissions.some(
                 (s: any) =>
-                  (s as any).paid || (s as any).moderation_status === "paid"
+                  (s as any).paid || (s as any).moderation_status === "paid",
               )) ||
             false,
           paid_at: leaderboardData.paid_at || null,
@@ -817,7 +816,7 @@ export default function ContestDetailClient({
           eligibleTweets: Math.max(
             0,
             verifiedSubmissionCount,
-            leaderboardData.total_eligible_tweets ?? 0
+            leaderboardData.total_eligible_tweets ?? 0,
           ),
         };
       });
@@ -846,7 +845,7 @@ export default function ContestDetailClient({
       verifiedCreators.forEach((group: any, index: number) => {
         const verifiedRank = index + 1; // Rank among verified/paid creators only (1, 2, 3, ...)
         const prizeForRank = prizes.find(
-          (p: any) => p.position === verifiedRank
+          (p: any) => p.position === verifiedRank,
         );
         if (prizeForRank) {
           group.earnings.expected = prizeForRank.amount;
@@ -881,7 +880,7 @@ export default function ContestDetailClient({
             const rankForPrize = group.paid_rank || group.current_rank || null;
             if (rankForPrize != null) {
               const prizeForRank = prizes.find(
-                (p: any) => p.position === rankForPrize
+                (p: any) => p.position === rankForPrize,
               );
               if (prizeForRank) {
                 group.earnings.expected = prizeForRank.amount;
@@ -939,7 +938,7 @@ export default function ContestDetailClient({
       const groupsArray = Object.values(grouped);
       if (activeStatusTab !== "all") {
         return groupsArray.filter(
-          (group: any) => group.submissions && group.submissions.length > 0
+          (group: any) => group.submissions && group.submissions.length > 0,
         );
       }
 
@@ -1130,7 +1129,7 @@ export default function ContestDetailClient({
         const submissionManualPoints = Number(
           (submission as any).manual_points_adjustment ??
             submission.other_stats?.manual_points_adjustment ??
-            0
+            0,
         );
         const submissionTotalPoints = submission.other_stats?.points || 0;
 
@@ -1157,7 +1156,7 @@ export default function ContestDetailClient({
                 group.metrics.creator_manual_points_adjustment +
                 group.metrics.tweet_manual_points_adjustment,
               otherStats: submission.other_stats,
-            }
+            },
           );
         }
       } else {
@@ -1248,7 +1247,7 @@ export default function ContestDetailClient({
               calculatedTotalPoints: calculatedTotalPoints,
               currentPoints: group.metrics.points,
               willOverwrite: group.metrics.points !== calculatedTotalPoints,
-            }
+            },
           );
         }
 
@@ -1375,7 +1374,7 @@ export default function ContestDetailClient({
               maxEarningsPerCreator: maxEarningsPerCreator,
               finalExpectedEarnings: finalExpectedEarnings,
               isCapped: group.isCapped,
-            }
+            },
           );
         });
       }
@@ -1434,7 +1433,7 @@ export default function ContestDetailClient({
               bonusBudget: bonusBudget,
               remainingBudget: remainingBudget,
               expectedBonus: group.bonus.expected,
-            }
+            },
           );
         });
       }
@@ -1475,7 +1474,7 @@ export default function ContestDetailClient({
 
         // Rank ONLY eligible creators by total views (primary metric for non-Twitter leaderboards)
         eligibleCreators.sort(
-          (a: any, b: any) => (b.metrics?.views || 0) - (a.metrics?.views || 0)
+          (a: any, b: any) => (b.metrics?.views || 0) - (a.metrics?.views || 0),
         );
 
         eligibleCreators.forEach((group: any, index: number) => {
@@ -1488,7 +1487,7 @@ export default function ContestDetailClient({
 
           // If any submission is paid, mirror the prize in granted earnings
           const hasPaidSubmissions = (group.submissions || []).some(
-            (s: any) => s.status === "paid" || s.paid
+            (s: any) => s.status === "paid" || s.paid,
           );
           if (
             hasPaidSubmissions &&
@@ -1563,7 +1562,7 @@ export default function ContestDetailClient({
 
     // Sort creators by total points (descending) and assign ranks
     const sortedCreators = Array.from(creatorPointsMap.entries()).sort(
-      (a, b) => b[1] - a[1] // Sort by points descending
+      (a, b) => b[1] - a[1], // Sort by points descending
     );
 
     // Create map: creatorId -> rank (1-based)
@@ -1634,7 +1633,7 @@ export default function ContestDetailClient({
   const showRejectionReasonColumn = useMemo(() => {
     if (!groupSubmissionsByCreator) return false;
     return groupSubmissionsByCreator.some(
-      (g: any) => g.creator_rejection_reason || g.statusCounts.rejected > 0
+      (g: any) => g.creator_rejection_reason || g.statusCounts.rejected > 0,
     );
   }, [groupSubmissionsByCreator]);
 
@@ -1659,12 +1658,12 @@ export default function ContestDetailClient({
         // Check all submissions for this creator (not filtered ones)
         const creatorAllSubmissions = currentSubmissions.filter(
           (s: any) =>
-            s.creator_id === creatorId && (s as any).is_twitter_tweet === true
+            s.creator_id === creatorId && (s as any).is_twitter_tweet === true,
         );
 
         // Check if creator has at least one eligible tweet
         const hasEligibleTweet = creatorAllSubmissions.some(
-          (s: any) => (s as any).filter_status === "eligible"
+          (s: any) => (s as any).filter_status === "eligible",
         );
 
         if (activeEligibilityTab === "eligible") {
@@ -1707,7 +1706,7 @@ export default function ContestDetailClient({
   const paginatedCreatorGroups = filteredCreatorGroups
     ? filteredCreatorGroups.slice(
         (creatorWisePage - 1) * creatorWiseItemsPerPage,
-        creatorWisePage * creatorWiseItemsPerPage
+        creatorWisePage * creatorWiseItemsPerPage,
       )
     : [];
 
@@ -1772,7 +1771,8 @@ export default function ContestDetailClient({
     const twitterTweetIds = currentSubmissions
       .filter(
         (s: any) =>
-          s.is_twitter_tweet === true || s.platform?.toLowerCase() === "twitter"
+          s.is_twitter_tweet === true ||
+          s.platform?.toLowerCase() === "twitter",
       )
       .map((s) => s.id)
       .filter(Boolean);
@@ -1783,8 +1783,8 @@ export default function ContestDetailClient({
       try {
         const res = await fetch(
           `/api/contests/${contestId}/twitter-bonus-status?tweetIds=${encodeURIComponent(
-            twitterTweetIds.join(",")
-          )}`
+            twitterTweetIds.join(","),
+          )}`,
         );
         if (!res.ok || cancelled) return;
         const data = await res.json();
@@ -1799,12 +1799,12 @@ export default function ContestDetailClient({
               bonus_amount: status.bonus_amount,
               bonus_paid_at: status.bonus_paid_at ?? (sub as any).bonus_paid_at,
             };
-          })
+          }),
         );
       } catch (err) {
         console.error(
           "[contest-detail-client] Failed to fetch Twitter bonus status:",
-          err
+          err,
         );
       }
     })();
@@ -1854,7 +1854,7 @@ export default function ContestDetailClient({
                 className: dark(
                   "bg-gray-700",
                   "text-gray-100",
-                  "border-gray-500"
+                  "border-gray-500",
                 ),
               }
             : {
@@ -1862,7 +1862,7 @@ export default function ContestDetailClient({
                 className: light(
                   "bg-gray-200",
                   "text-gray-800",
-                  "border-gray-400"
+                  "border-gray-400",
                 ),
               };
         case "pending_approval":
@@ -1872,7 +1872,7 @@ export default function ContestDetailClient({
                 className: dark(
                   "bg-yellow-900/40",
                   "text-yellow-200",
-                  "border-yellow-500"
+                  "border-yellow-500",
                 ),
               }
             : {
@@ -1880,7 +1880,7 @@ export default function ContestDetailClient({
                 className: light(
                   "bg-yellow-100",
                   "text-yellow-900",
-                  "border-yellow-400"
+                  "border-yellow-400",
                 ),
               };
         case "approved":
@@ -1890,7 +1890,7 @@ export default function ContestDetailClient({
                 className: dark(
                   "bg-blue-900/40",
                   "text-blue-200",
-                  "border-blue-500"
+                  "border-blue-500",
                 ),
               }
             : {
@@ -1898,7 +1898,7 @@ export default function ContestDetailClient({
                 className: light(
                   "bg-blue-100",
                   "text-blue-800",
-                  "border-blue-400"
+                  "border-blue-400",
                 ),
               };
         case "rejected":
@@ -1908,7 +1908,7 @@ export default function ContestDetailClient({
                 className: dark(
                   "bg-red-900/40",
                   "text-red-200",
-                  "border-red-500"
+                  "border-red-500",
                 ),
               }
             : {
@@ -1916,7 +1916,7 @@ export default function ContestDetailClient({
                 className: light(
                   "bg-red-100",
                   "text-red-800",
-                  "border-red-400"
+                  "border-red-400",
                 ),
               };
         default:
@@ -1926,7 +1926,7 @@ export default function ContestDetailClient({
                 className: dark(
                   "bg-slate-700",
                   "text-slate-100",
-                  "border-slate-500"
+                  "border-slate-500",
                 ),
               }
             : {
@@ -1934,7 +1934,7 @@ export default function ContestDetailClient({
                 className: light(
                   "bg-slate-200",
                   "text-slate-800",
-                  "border-slate-400"
+                  "border-slate-400",
                 ),
               };
       }
@@ -1949,7 +1949,7 @@ export default function ContestDetailClient({
               className: dark(
                 "bg-green-900/40",
                 "text-green-200",
-                "border-green-500"
+                "border-green-500",
               ),
             }
           : {
@@ -1957,7 +1957,7 @@ export default function ContestDetailClient({
               className: light(
                 "bg-green-100",
                 "text-green-800",
-                "border-green-400"
+                "border-green-400",
               ),
             };
       case "upcoming":
@@ -1967,7 +1967,7 @@ export default function ContestDetailClient({
               className: dark(
                 "bg-blue-900/40",
                 "text-blue-200",
-                "border-blue-500"
+                "border-blue-500",
               ),
             }
           : {
@@ -1975,7 +1975,7 @@ export default function ContestDetailClient({
               className: light(
                 "bg-blue-100",
                 "text-blue-800",
-                "border-blue-400"
+                "border-blue-400",
               ),
             };
       case "ended":
@@ -1986,7 +1986,7 @@ export default function ContestDetailClient({
                 className: dark(
                   "bg-yellow-900/40",
                   "text-yellow-200",
-                  "border-yellow-500"
+                  "border-yellow-500",
                 ),
               }
             : {
@@ -1994,7 +1994,7 @@ export default function ContestDetailClient({
                 className: light(
                   "bg-yellow-100",
                   "text-yellow-900",
-                  "border-yellow-400"
+                  "border-yellow-400",
                 ),
               };
         }
@@ -2005,7 +2005,7 @@ export default function ContestDetailClient({
                 className: dark(
                   "bg-orange-900/40",
                   "text-orange-200",
-                  "border-orange-500"
+                  "border-orange-500",
                 ),
               }
             : {
@@ -2013,7 +2013,7 @@ export default function ContestDetailClient({
                 className: light(
                   "bg-orange-100",
                   "text-orange-900",
-                  "border-orange-400"
+                  "border-orange-400",
                 ),
               };
         }
@@ -2024,7 +2024,7 @@ export default function ContestDetailClient({
                 className: dark(
                   "bg-purple-900/40",
                   "text-purple-200",
-                  "border-purple-500"
+                  "border-purple-500",
                 ),
               }
             : {
@@ -2032,7 +2032,7 @@ export default function ContestDetailClient({
                 className: light(
                   "bg-purple-100",
                   "text-purple-800",
-                  "border-purple-400"
+                  "border-purple-400",
                 ),
               };
         }
@@ -2043,7 +2043,7 @@ export default function ContestDetailClient({
                 className: dark(
                   "bg-green-900/40",
                   "text-green-200",
-                  "border-green-500"
+                  "border-green-500",
                 ),
               }
             : {
@@ -2051,7 +2051,7 @@ export default function ContestDetailClient({
                 className: light(
                   "bg-green-100",
                   "text-green-800",
-                  "border-green-400"
+                  "border-green-400",
                 ),
               };
         }
@@ -2061,7 +2061,7 @@ export default function ContestDetailClient({
               className: dark(
                 "bg-gray-700",
                 "text-gray-100",
-                "border-gray-500"
+                "border-gray-500",
               ),
             }
           : {
@@ -2069,7 +2069,7 @@ export default function ContestDetailClient({
               className: light(
                 "bg-gray-200",
                 "text-gray-800",
-                "border-gray-400"
+                "border-gray-400",
               ),
             };
       case "incomplete":
@@ -2079,7 +2079,7 @@ export default function ContestDetailClient({
               className: dark(
                 "bg-yellow-900/40",
                 "text-yellow-200",
-                "border-yellow-500"
+                "border-yellow-500",
               ),
             }
           : {
@@ -2087,7 +2087,7 @@ export default function ContestDetailClient({
               className: light(
                 "bg-yellow-100",
                 "text-yellow-900",
-                "border-yellow-400"
+                "border-yellow-400",
               ),
             };
       default:
@@ -2097,7 +2097,7 @@ export default function ContestDetailClient({
               className: dark(
                 "bg-slate-700",
                 "text-slate-100",
-                "border-slate-500"
+                "border-slate-500",
               ),
             }
           : {
@@ -2105,7 +2105,7 @@ export default function ContestDetailClient({
               className: light(
                 "bg-slate-200",
                 "text-slate-800",
-                "border-slate-400"
+                "border-slate-400",
               ),
             };
     }
@@ -2175,7 +2175,7 @@ export default function ContestDetailClient({
       isCustom?: boolean;
       customRemarks?: string;
     },
-    options?: { skipReload?: boolean }
+    options?: { skipReload?: boolean },
   ) => {
     console.log("🚀 Starting submission status update:", {
       submissionId,
@@ -2208,7 +2208,7 @@ export default function ContestDetailClient({
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ tweetId: submissionId }),
-            }
+            },
           );
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || "Failed to pay bonus");
@@ -2222,8 +2222,8 @@ export default function ContestDetailClient({
                     bonus_paid_at: new Date().toISOString(),
                     ...(bonusAmount > 0 ? { bonus_amount: bonusAmount } : {}),
                   }
-                : s
-            )
+                : s,
+            ),
           );
           toast({
             title: "Bonus paid",
@@ -2275,7 +2275,7 @@ export default function ContestDetailClient({
                     customRemarks: paymentDetails.customRemarks,
                   }),
                 }),
-              }
+              },
             );
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to pay tweet");
@@ -2289,7 +2289,7 @@ export default function ContestDetailClient({
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ tweetId: submissionId }),
-                }
+                },
               );
               const bonusData = await bonusRes.json();
               bonusAmountFromApi = bonusData?.amount ?? 0;
@@ -2329,8 +2329,8 @@ export default function ContestDetailClient({
                         : {}),
                       ...("status" in s ? { status: "paid" } : {}),
                     }
-                  : s
-              )
+                  : s,
+              ),
             );
             toast({
               title: "Success",
@@ -2352,7 +2352,7 @@ export default function ContestDetailClient({
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ tweetId: submissionId }),
-                }
+                },
               );
               const bonusData = await bonusRes.json();
               const noBonusConfigured = bonusData?.error
@@ -2473,7 +2473,7 @@ export default function ContestDetailClient({
           }
 
           return merged;
-        })
+        }),
       );
 
       // Enhanced toast messages for better UX
@@ -2534,21 +2534,21 @@ export default function ContestDetailClient({
 
       // Clear contest cache and refresh contest list to update budget tracker
       console.log(
-        "[contest-detail-client] Dispatching contests:refresh event from handleUpdateSubmissionStatus..."
+        "[contest-detail-client] Dispatching contests:refresh event from handleUpdateSubmissionStatus...",
       );
       window.dispatchEvent(new CustomEvent("contests:refresh"));
 
       // Also directly call the clear cache API to ensure it happens
       try {
         console.log(
-          "[contest-detail-client] Directly calling clear cache API..."
+          "[contest-detail-client] Directly calling clear cache API...",
         );
         await fetch("/api/contests/clear-cache", { method: "POST" });
         console.log("[contest-detail-client] Direct cache clear completed");
       } catch (error) {
         console.error(
           "[contest-detail-client] Direct cache clear failed:",
-          error
+          error,
         );
       }
 
@@ -2560,7 +2560,7 @@ export default function ContestDetailClient({
               submissionId,
               newStatus,
             },
-          })
+          }),
         );
       }
     } catch (error: any) {
@@ -2609,44 +2609,29 @@ export default function ContestDetailClient({
   };
 
   const handleRejectSubmission = (submissionId: string) => {
-    setPendingRejectionSubmission(submissionId);
+    setPendingRejectionSubmissionIds([submissionId]);
     setRejectionModalOpen(true);
   };
 
   const handleRejectionConfirm = async (
     reason: string,
-    additionalNotes?: string
+    additionalNotes?: string,
   ) => {
-    if (pendingRejectionSubmission) {
-      // Combine reason with additional notes if provided
-      const fullReason = additionalNotes
-        ? `${reason}\n\nAdditional Notes: ${additionalNotes}`
-        : reason;
+    if (pendingRejectionSubmissionIds.length === 0) return;
+    const fullReason = additionalNotes
+      ? `${reason}\n\nAdditional Notes: ${additionalNotes}`
+      : reason;
 
-      // Check if this is a Twitter tweet
-      const submission = currentSubmissions.find(
-        (s) => s.id === pendingRejectionSubmission
-      );
+    for (const id of pendingRejectionSubmissionIds) {
+      const submission = currentSubmissions.find((s) => s.id === id);
       if ((submission as any)?.is_twitter_tweet) {
-        // Use Twitter moderation endpoint
-        await handleModerateTwitterTweet(
-          pendingRejectionSubmission,
-          "reject",
-          fullReason
-        );
-        // Update the reason separately if needed
-        // The moderation endpoint will handle the status update
+        await handleModerateTwitterTweet(id, "reject", fullReason);
       } else {
-        // Use regular submission status update
-        handleUpdateSubmissionStatus(
-          pendingRejectionSubmission,
-          "rejected",
-          fullReason
-        );
+        await handleUpdateSubmissionStatus(id, "rejected", fullReason);
       }
-      setRejectionModalOpen(false);
-      setPendingRejectionSubmission(null);
     }
+    setRejectionModalOpen(false);
+    setPendingRejectionSubmissionIds([]);
   };
 
   const handleMarkAsPaid = (submissionId: string) => {
@@ -2672,7 +2657,7 @@ export default function ContestDetailClient({
         pendingPaymentSubmission,
         "paid",
         undefined,
-        paymentDetails as any
+        paymentDetails as any,
       );
       setPaymentModalOpen(false);
       setPendingPaymentSubmission(null);
@@ -2686,7 +2671,7 @@ export default function ContestDetailClient({
       amountInCents?: number;
       isCustom?: boolean;
       customRemarks?: string;
-    }
+    },
   ) => {
     setIsLoadingSubmission((prev) => ({ ...prev, [creatorId]: true }));
     try {
@@ -2703,7 +2688,7 @@ export default function ContestDetailClient({
             isCustom: paymentDetails.isCustom,
             customRemarks: paymentDetails.customRemarks,
           }),
-        }
+        },
       );
 
       const result = await response.json();
@@ -2734,7 +2719,7 @@ export default function ContestDetailClient({
             const earnings =
               cpmRate > 0
                 ? Math.round((totalPoints * cpmRate * 100) / 1000)
-                : result.amount ?? 0;
+                : (result.amount ?? 0);
             return {
               ...s,
               paid: true,
@@ -2744,7 +2729,7 @@ export default function ContestDetailClient({
                 : {}),
               ...("status" in s ? { status: "paid" } : {}),
             };
-          })
+          }),
         );
       }
 
@@ -2773,7 +2758,7 @@ export default function ContestDetailClient({
   // Creator-wise: pay both expected reward (leaderboard/CPM) and flat bonus for all tweets
   const handleCreatorMarkBothPaid = async (
     creatorId: string,
-    tweetIds: string[]
+    tweetIds: string[],
   ) => {
     setIsLoadingSubmission((prev) => ({ ...prev, [creatorId]: true }));
     try {
@@ -2784,7 +2769,7 @@ export default function ContestDetailClient({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ creatorId }),
-        }
+        },
       );
       const mainData = await mainRes.json();
       if (!mainRes.ok) {
@@ -2800,7 +2785,7 @@ export default function ContestDetailClient({
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ tweetId }),
-            }
+            },
           );
           const bonusData = await bonusRes.json().catch(() => ({}));
           const noBonusConfigured = bonusData?.error
@@ -2810,10 +2795,10 @@ export default function ContestDetailClient({
             console.error(
               "[handleCreatorMarkBothPaid] Bonus payment failed for tweet",
               tweetId,
-              bonusData
+              bonusData,
             );
           }
-        })
+        }),
       );
 
       toast({
@@ -2857,7 +2842,7 @@ export default function ContestDetailClient({
     try {
       console.log("🍪 [DEBUG] Checking cookie status...");
       const response = await fetch(
-        `/api/admin/download-reel?checkCookies=true`
+        `/api/admin/download-reel?checkCookies=true`,
       );
 
       if (response.ok) {
@@ -2868,7 +2853,7 @@ export default function ContestDetailClient({
         console.warn(
           "🍪 [DEBUG] Cookie status check failed:",
           response.status,
-          response.statusText
+          response.statusText,
         );
         const errorText = await response.text();
         console.warn("🍪 [DEBUG] Error response:", errorText);
@@ -2889,7 +2874,7 @@ export default function ContestDetailClient({
 
     if (!isDevelopment() || !isInstagram) {
       console.log(
-        "🍪 [DEBUG] Skipping logCookieStatus - not dev or not Instagram"
+        "🍪 [DEBUG] Skipping logCookieStatus - not dev or not Instagram",
       );
       return;
     }
@@ -2922,7 +2907,7 @@ export default function ContestDetailClient({
   const handleDownloadReel = async (submissionId: string) => {
     const requestStartTime = Date.now();
     console.log(
-      `[DOWNLOAD] [DEBUG] Starting download for submission: ${submissionId}`
+      `[DOWNLOAD] [DEBUG] Starting download for submission: ${submissionId}`,
     );
 
     // Set loading state
@@ -2945,7 +2930,7 @@ export default function ContestDetailClient({
       // Check cookie status for Instagram downloads (development only)
       if (isInstagram) {
         console.log(
-          "🍪 [DOWNLOAD] [DEBUG] Instagram submission detected, checking cookies..."
+          "🍪 [DOWNLOAD] [DEBUG] Instagram submission detected, checking cookies...",
         );
         const cookieData = await checkCookieStatus();
         console.log("🍪 [DOWNLOAD] [DEBUG] Cookie data received:", cookieData);
@@ -2953,12 +2938,12 @@ export default function ContestDetailClient({
           logCookieStatus(cookieData, isInstagram);
         } else {
           console.warn(
-            "🍪 [DOWNLOAD] [DEBUG] No cookie data returned from checkCookieStatus"
+            "🍪 [DOWNLOAD] [DEBUG] No cookie data returned from checkCookieStatus",
           );
         }
       } else {
         console.log(
-          "🍪 [DOWNLOAD] [DEBUG] Not an Instagram submission, skipping cookie check"
+          "🍪 [DOWNLOAD] [DEBUG] Not an Instagram submission, skipping cookie check",
         );
       }
 
@@ -2992,7 +2977,7 @@ export default function ContestDetailClient({
         if (cookieStatus) {
           console.log(
             "🍪 [DOWNLOAD] Cookie Status from Response:",
-            cookieStatus
+            cookieStatus,
           );
           if (cookieWarning) {
             console.warn("⚠️ [DOWNLOAD] Cookie Warning:", cookieWarning);
@@ -3003,7 +2988,7 @@ export default function ContestDetailClient({
       if (!response.ok || contentType?.includes("application/json")) {
         // Handle error response
         console.error(
-          `[DOWNLOAD] [ERROR] API returned error status: ${response.status}`
+          `[DOWNLOAD] [ERROR] API returned error status: ${response.status}`,
         );
         let errorData;
         try {
@@ -3014,7 +2999,7 @@ export default function ContestDetailClient({
         } catch (parseError: any) {
           console.error(
             `[DOWNLOAD] [ERROR] Failed to parse error response:`,
-            parseError
+            parseError,
           );
           // If response is not JSON, create a generic error
           errorData = {
@@ -3073,7 +3058,7 @@ export default function ContestDetailClient({
 
       const totalTime = Date.now() - requestStartTime;
       console.log(
-        `[DOWNLOAD] [DEBUG] Download completed successfully in ${totalTime}ms`
+        `[DOWNLOAD] [DEBUG] Download completed successfully in ${totalTime}ms`,
       );
 
       toast({
@@ -3106,7 +3091,7 @@ export default function ContestDetailClient({
     setConfirmReversal(null);
     if (needRejectionReason) {
       // After confirming reversal, open rejection reason modal
-      setPendingRejectionSubmission(id);
+      setPendingRejectionSubmissionIds([id]);
       setRejectionModalOpen(true);
       return;
     }
@@ -3250,7 +3235,7 @@ export default function ContestDetailClient({
 
     try {
       const response = await fetch(
-        `/api/contests/${contestId}/twitter-metrics`
+        `/api/contests/${contestId}/twitter-metrics`,
       );
       const data = await response.json();
 
@@ -3304,7 +3289,7 @@ export default function ContestDetailClient({
             "Content-Type": "application/json",
           },
           signal: controller.signal,
-        }
+        },
       );
 
       clearTimeout(timeoutId);
@@ -3328,7 +3313,7 @@ export default function ContestDetailClient({
           }
           try {
             const res = await fetch(
-              `/api/contests/${contestId}/last-metrics-updated`
+              `/api/contests/${contestId}/last-metrics-updated`,
             );
             if (!res.ok) return;
             const data = await res.json();
@@ -3534,7 +3519,7 @@ export default function ContestDetailClient({
         }
 
         expectedEarnings = Math.round(
-          (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000
+          (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000,
         );
       }
     }
@@ -3633,7 +3618,7 @@ export default function ContestDetailClient({
   const handleModerateTwitterTweet = async (
     tweetId: string,
     action: "approve" | "reject" | "pending" | "paid",
-    reason?: string
+    reason?: string,
   ) => {
     setIsLoadingSubmission((prev) => ({ ...prev, [tweetId]: true }));
     try {
@@ -3641,10 +3626,10 @@ export default function ContestDetailClient({
         action === "approve"
           ? "approve"
           : action === "reject"
-          ? "reject"
-          : action === "paid"
-          ? "paid"
-          : "pending";
+            ? "reject"
+            : action === "paid"
+              ? "paid"
+              : "pending";
       const response = await fetch(
         `/api/contests/${contestId}/moderate-submission`,
         {
@@ -3658,7 +3643,7 @@ export default function ContestDetailClient({
             reason:
               reason || (action === "reject" ? "Rejected by admin" : null),
           }),
-        }
+        },
       );
 
       const result = await response.json();
@@ -3690,7 +3675,7 @@ export default function ContestDetailClient({
             const manualPoints = (sub as any).manual_points_adjustment || 0;
             creatorPointsMap.set(
               cid,
-              (creatorPointsMap.get(cid) || 0) + basePoints + manualPoints
+              (creatorPointsMap.get(cid) || 0) + basePoints + manualPoints,
             );
             const status =
               creatorModerationData?.[cid]?.moderation_status ??
@@ -3701,11 +3686,11 @@ export default function ContestDetailClient({
             .filter(
               ([cid]) =>
                 creatorStatusMap.get(cid) === "verified" ||
-                creatorStatusMap.get(cid) === "paid"
+                creatorStatusMap.get(cid) === "paid",
             )
             .sort((a, b) => b[1] - a[1]);
           const rankIdx = verifiedOrPaidCreators.findIndex(
-            ([cid]) => cid === creatorId
+            ([cid]) => cid === creatorId,
           );
           const prizeRank = rankIdx >= 0 ? rankIdx + 1 : undefined;
           const prizeForRank = prizeRank
@@ -3758,10 +3743,10 @@ export default function ContestDetailClient({
         action === "approve"
           ? "verified"
           : action === "reject"
-          ? "rejected"
-          : action === "paid"
-          ? "paid"
-          : "pending";
+            ? "rejected"
+            : action === "paid"
+              ? "paid"
+              : "pending";
       setCurrentSubmissions((prev) =>
         prev.map(
           (sub): Submission =>
@@ -3778,8 +3763,8 @@ export default function ContestDetailClient({
                       }
                     : {}),
                 }
-              : sub
-        )
+              : sub,
+        ),
       );
 
       toast({
@@ -3788,32 +3773,32 @@ export default function ContestDetailClient({
           action === "approve"
             ? "approved"
             : action === "reject"
-            ? "rejected"
-            : action === "paid"
-            ? "marked as paid"
-            : "set to pending"
+              ? "rejected"
+              : action === "paid"
+                ? "marked as paid"
+                : "set to pending"
         } successfully`,
       });
 
       // Clear contest cache and refresh contest list to update budget tracker
       console.log(
-        "[contest-detail-client] Dispatching contests:refresh event from handleModerateTwitterTweet..."
+        "[contest-detail-client] Dispatching contests:refresh event from handleModerateTwitterTweet...",
       );
       window.dispatchEvent(new CustomEvent("contests:refresh"));
 
       // Also directly call the clear cache API to ensure it happens
       try {
         console.log(
-          "[contest-detail-client] Directly calling clear cache API from Twitter moderation..."
+          "[contest-detail-client] Directly calling clear cache API from Twitter moderation...",
         );
         await fetch("/api/contests/clear-cache", { method: "POST" });
         console.log(
-          "[contest-detail-client] Direct cache clear completed from Twitter moderation"
+          "[contest-detail-client] Direct cache clear completed from Twitter moderation",
         );
       } catch (error) {
         console.error(
           "[contest-detail-client] Direct cache clear failed from Twitter moderation:",
-          error
+          error,
         );
       }
 
@@ -3870,7 +3855,7 @@ export default function ContestDetailClient({
           (s: any) =>
             (s as any).creator_id === creatorId &&
             ((s as any).is_twitter_tweet ||
-              s.platform?.toLowerCase() === "twitter")
+              s.platform?.toLowerCase() === "twitter"),
         );
         // Reverse paid tweets first (sets to pending and debits)
         for (const submission of creatorTweets) {
@@ -3887,7 +3872,7 @@ export default function ContestDetailClient({
                   tweetId: submission.id,
                   action: "pending",
                 }),
-              }
+              },
             );
             if (!res.ok) {
               const err = await res.json();
@@ -3910,7 +3895,7 @@ export default function ContestDetailClient({
                   ? { reason: "Creator reversal" }
                   : {}),
               }),
-            }
+            },
           );
           if (!res.ok) {
             const err = await res.json();
@@ -3930,7 +3915,7 @@ export default function ContestDetailClient({
               creatorId,
               action,
             }),
-          }
+          },
         );
         if (!leaderboardRes.ok) {
           const err = await leaderboardRes.json();
@@ -3952,7 +3937,7 @@ export default function ContestDetailClient({
               creatorId: creatorId,
               action: action,
             }),
-          }
+          },
         );
 
         if (!response.ok) {
@@ -3978,7 +3963,7 @@ export default function ContestDetailClient({
     } catch (error: any) {
       console.error(
         `Error ${action === "approve" ? "approving" : "rejecting"} creator:`,
-        error
+        error,
       );
       toast({
         title: "Error",
@@ -3997,7 +3982,7 @@ export default function ContestDetailClient({
   // Handle Twitter rejection confirmation
   const handleTwitterRejectionConfirm = async (
     reason: string,
-    additionalNotes?: string
+    additionalNotes?: string,
   ) => {
     if (!pendingTwitterRejection) return;
 
@@ -4023,7 +4008,7 @@ export default function ContestDetailClient({
             (s: any) =>
               (s as any).creator_id === creatorId &&
               ((s as any).is_twitter_tweet ||
-                s.platform?.toLowerCase() === "twitter")
+                s.platform?.toLowerCase() === "twitter"),
           );
           for (const submission of creatorTweets) {
             const res = await fetch(
@@ -4036,7 +4021,7 @@ export default function ContestDetailClient({
                   action: "reject",
                   reason: fullReason,
                 }),
-              }
+              },
             );
             if (!res.ok) {
               const err = await res.json();
@@ -4054,7 +4039,7 @@ export default function ContestDetailClient({
                 action: "reject",
                 reason: fullReason,
               }),
-            }
+            },
           );
           if (!leaderboardRes.ok) {
             const err = await leaderboardRes.json();
@@ -4078,7 +4063,7 @@ export default function ContestDetailClient({
                 action: "reject",
                 reason: fullReason,
               }),
-            }
+            },
           );
 
           if (!response.ok) {
@@ -4116,7 +4101,7 @@ export default function ContestDetailClient({
       await handleModerateTwitterTweet(
         pendingTwitterRejection.id,
         "reject",
-        fullReason
+        fullReason,
       );
     }
 
@@ -4125,7 +4110,7 @@ export default function ContestDetailClient({
   };
 
   const handleRejectTwitterTweet = (tweetId: string) => {
-    setPendingRejectionSubmission(tweetId);
+    setPendingRejectionSubmissionIds([tweetId]);
     setRejectionModalOpen(true);
   };
 
@@ -4162,7 +4147,7 @@ export default function ContestDetailClient({
             points,
             reason,
           }),
-        }
+        },
       );
 
       const result = await response.json();
@@ -4270,7 +4255,7 @@ export default function ContestDetailClient({
             <h1
               className={cn(
                 "text-lg sm:text-xl md:text-2xl font-bold text-gray-900 break-words",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {currentContest.title}
@@ -4281,7 +4266,7 @@ export default function ContestDetailClient({
             <Badge
               className={cn(
                 contestStatusBadgeInfo.className,
-                "capitalize text-sm font-medium px-3 py-1 rounded-full"
+                "capitalize text-sm font-medium px-3 py-1 rounded-full",
               )}
             >
               {contestStatusBadgeInfo.text}
@@ -4296,7 +4281,7 @@ export default function ContestDetailClient({
                   "capitalize text-sm font-medium px-3 py-1 rounded-full",
                   isDark
                     ? "bg-purple-500/20 text-purple-300 border-purple-400"
-                    : "bg-purple-100 text-purple-900 border-purple-400"
+                    : "bg-purple-100 text-purple-900 border-purple-400",
                 )}
               >
                 {currentContest.contest_type === "cpm" ? "CPM" : "Leaderboard"}
@@ -4320,7 +4305,7 @@ export default function ContestDetailClient({
                   className={cn(
                     isDark
                       ? "py-3 border border-purple-400 text-purple-400"
-                      : "border-purple-500 text-purple-500"
+                      : "border-purple-500 text-purple-500",
                   )}
                 >
                   <Settings className="h-4 w-4" />
@@ -4348,7 +4333,7 @@ export default function ContestDetailClient({
                       htmlFor="status"
                       className={cn(
                         "text-sm font-medium",
-                        isDark ? "text-white" : "text-gray-900"
+                        isDark ? "text-white" : "text-gray-900",
                       )}
                     >
                       New Status
@@ -4385,7 +4370,7 @@ export default function ContestDetailClient({
                       htmlFor="reason"
                       className={cn(
                         "text-sm font-medium",
-                        isDark ? "text-white" : "text-gray-900"
+                        isDark ? "text-white" : "text-gray-900",
                       )}
                     >
                       Reason (Optional)
@@ -4407,7 +4392,7 @@ export default function ContestDetailClient({
                       "w-full text-md rounded-full flex items-center justify-center",
                       isDark
                         ? "bg-[#7F39EC] py-3 text-white"
-                        : " bg-[#D9C0FF61] py-3 text-[#7F39EC] "
+                        : " bg-[#D9C0FF61] py-3 text-[#7F39EC] ",
                     )}
                   >
                     {isUpdatingStatus ? (
@@ -4426,7 +4411,7 @@ export default function ContestDetailClient({
                         "w-full text-md rounded-full",
                         isDark
                           ? "py-3 border border-[#FF5353] text-[#FF5353]"
-                          : "bg-[#FF323224] text-[#E50000] py-3"
+                          : "bg-[#FF323224] text-[#E50000] py-3",
                       )}
                     >
                       Cancel
@@ -4448,7 +4433,7 @@ export default function ContestDetailClient({
                     `/api/contests/${contestId}/publish`,
                     {
                       method: "POST",
-                    }
+                    },
                   );
                   if (response.ok) {
                     window.location.reload();
@@ -4519,7 +4504,7 @@ export default function ContestDetailClient({
               "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
               isDark
                 ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
-                : "bg-gradient-to-br from-white to-gray-50 border border-gray-100"
+                : "bg-gradient-to-br from-white to-gray-50 border border-gray-100",
             )}
           >
             <div className="p-6 relative z-10">
@@ -4529,7 +4514,7 @@ export default function ContestDetailClient({
                     "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
                     isDark
                       ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                      : "bg-white border border-gray-200"
+                      : "bg-white border border-gray-200",
                   )}
                 >
                   {getPlatformIcon(currentContest.platform)}
@@ -4538,7 +4523,7 @@ export default function ContestDetailClient({
                   <p
                     className={cn(
                       "text-sm font-medium uppercase tracking-wide",
-                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500",
                     )}
                   >
                     Platform
@@ -4548,7 +4533,7 @@ export default function ContestDetailClient({
                       "capitalize text-2xl font-bold mt-1",
                       isDark
                         ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
-                        : "text-gray-900"
+                        : "text-gray-900",
                     )}
                   >
                     {currentContest.platform || "N/A"}
@@ -4560,7 +4545,7 @@ export default function ContestDetailClient({
                   "h-1 w-full rounded-full",
                   isDark
                     ? "bg-gradient-to-r from-pink-400 via-purple-400 to-cyan-400 shadow-lg shadow-purple-400/70 animate-pulse"
-                    : "bg-gradient-to-r from-purple-200 to-purple-300"
+                    : "bg-gradient-to-r from-purple-200 to-purple-300",
                 )}
               ></div>
             </div>
@@ -4585,7 +4570,7 @@ export default function ContestDetailClient({
               "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
               isDark
                 ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
-                : "bg-gradient-to-br from-white to-blue-50 border border-blue-100"
+                : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
             )}
           >
             <div className="p-6 relative z-10">
@@ -4595,13 +4580,13 @@ export default function ContestDetailClient({
                     "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
                     isDark
                       ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                      : "bg-gradient-to-br from-blue-500 to-blue-600 text-white"
+                      : "bg-gradient-to-br from-blue-500 to-blue-600 text-white",
                   )}
                 >
                   <Calendar
                     className={cn(
                       "h-6 w-6",
-                      isDark ? "text-white" : "text-white"
+                      isDark ? "text-white" : "text-white",
                     )}
                   />
                 </div>
@@ -4609,7 +4594,7 @@ export default function ContestDetailClient({
                   <p
                     className={cn(
                       "text-sm font-medium uppercase tracking-wide",
-                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500",
                     )}
                   >
                     Duration
@@ -4619,7 +4604,7 @@ export default function ContestDetailClient({
                       "text-2xl font-bold mt-1",
                       isDark
                         ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-cyan-200 bg-clip-text text-transparent"
-                        : "text-gray-900"
+                        : "text-gray-900",
                     )}
                   >
                     {durationDays !== null
@@ -4633,7 +4618,7 @@ export default function ContestDetailClient({
                   <p
                     className={cn(
                       "text-sm font-medium",
-                      isDark ? "text-white/80 drop-shadow-sm" : "text-gray-600"
+                      isDark ? "text-white/80 drop-shadow-sm" : "text-gray-600",
                     )}
                   >
                     {formatLocalDateTime(currentContest.start_date, {
@@ -4653,7 +4638,7 @@ export default function ContestDetailClient({
                   "h-1 w-full rounded-full",
                   isDark
                     ? "bg-gradient-to-r from-cyan-400 via-blue-400 to-teal-400 shadow-lg shadow-blue-400/70 animate-pulse"
-                    : "bg-gradient-to-r from-blue-200 to-blue-300"
+                    : "bg-gradient-to-r from-blue-200 to-blue-300",
                 )}
               ></div>
             </div>
@@ -4686,7 +4671,7 @@ export default function ContestDetailClient({
                   "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                   isDark
                     ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-yellow-500/20"
-                    : "bg-gradient-to-br from-white to-yellow-50 border border-yellow-100"
+                    : "bg-gradient-to-br from-white to-yellow-50 border border-yellow-100",
                 )}
               >
                 <div className="p-6 relative z-10">
@@ -4696,13 +4681,13 @@ export default function ContestDetailClient({
                         "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
                         isDark
                           ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                          : "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white"
+                          : "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white",
                       )}
                     >
                       <Trophy
                         className={cn(
                           "h-6 w-6",
-                          isDark ? "text-white" : "text-white"
+                          isDark ? "text-white" : "text-white",
                         )}
                       />
                     </div>
@@ -4712,7 +4697,7 @@ export default function ContestDetailClient({
                           "text-sm font-medium uppercase tracking-wide",
                           isDark
                             ? "text-white/90 drop-shadow-sm"
-                            : "text-gray-500"
+                            : "text-gray-500",
                         )}
                       >
                         Prize Pool
@@ -4722,12 +4707,12 @@ export default function ContestDetailClient({
                           "text-2xl font-bold mt-1",
                           isDark
                             ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-yellow-200 bg-clip-text text-transparent"
-                            : "text-gray-900"
+                            : "text-gray-900",
                         )}
                       >
                         {formatMoney(
                           currentContest.contest_based_details
-                            .leaderboard_contest.total_prize
+                            .leaderboard_contest.total_prize,
                         )}
                       </p>
                     </div>
@@ -4738,7 +4723,7 @@ export default function ContestDetailClient({
                         "text-sm font-medium",
                         isDark
                           ? "text-white/80 drop-shadow-sm"
-                          : "text-gray-600"
+                          : "text-gray-600",
                       )}
                     >
                       {
@@ -4757,7 +4742,7 @@ export default function ContestDetailClient({
                         "pt-4 mb-4",
                         isDark
                           ? "border-t border-white/30"
-                          : "border-t border-yellow-200"
+                          : "border-t border-yellow-200",
                       )}
                     >
                       <div className="flex items-center justify-between">
@@ -4767,7 +4752,7 @@ export default function ContestDetailClient({
                               "text-sm font-medium uppercase tracking-wide",
                               isDark
                                 ? "text-white/90 drop-shadow-sm"
-                                : "text-gray-500"
+                                : "text-gray-500",
                             )}
                           >
                             Total Budget
@@ -4777,12 +4762,12 @@ export default function ContestDetailClient({
                               "text-xl font-bold mt-1",
                               isDark
                                 ? "text-cyan-300 drop-shadow-sm"
-                                : "text-blue-600"
+                                : "text-blue-600",
                             )}
                           >
                             {formatMoney(
                               currentContest.contest_based_details
-                                .leaderboard_contest.total_budget
+                                .leaderboard_contest.total_budget,
                             )}
                           </p>
                           <p
@@ -4790,7 +4775,7 @@ export default function ContestDetailClient({
                               "text-xs mt-1",
                               isDark
                                 ? "text-white/70 drop-shadow-sm"
-                                : "text-gray-600"
+                                : "text-gray-600",
                             )}
                           >
                             For bonuses & extras
@@ -4801,7 +4786,7 @@ export default function ContestDetailClient({
                             "w-10 h-10 flex items-center justify-center rounded-lg",
                             isDark
                               ? "bg-cyan-400/30 text-cyan-300 backdrop-blur-sm"
-                              : "bg-blue-100 text-blue-600"
+                              : "bg-blue-100 text-blue-600",
                           )}
                         >
                           <span className="text-lg">💰</span>
@@ -4815,7 +4800,7 @@ export default function ContestDetailClient({
                       "h-1 w-full rounded-full",
                       isDark
                         ? "bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 shadow-lg shadow-yellow-400/70 animate-pulse"
-                        : "bg-gradient-to-r from-yellow-200 to-yellow-300"
+                        : "bg-gradient-to-r from-yellow-200 to-yellow-300",
                     )}
                   ></div>
                 </div>
@@ -4857,8 +4842,8 @@ export default function ContestDetailClient({
                           ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-red-500/20"
                           : "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-cyan-500/20"
                         : campaignType === "raid"
-                        ? "bg-gradient-to-br from-white to-red-50 border border-red-100"
-                        : "bg-gradient-to-br from-white to-cyan-50 border border-cyan-100"
+                          ? "bg-gradient-to-br from-white to-red-50 border border-red-100"
+                          : "bg-gradient-to-br from-white to-cyan-50 border border-cyan-100",
                     )}
                   >
                     <div className="p-6 relative z-10">
@@ -4871,14 +4856,14 @@ export default function ContestDetailClient({
                                 ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
                                 : "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
                               : campaignType === "raid"
-                              ? "bg-gradient-to-br from-red-500 to-red-600 text-white"
-                              : "bg-gradient-to-br from-cyan-500 to-cyan-600 text-white"
+                                ? "bg-gradient-to-br from-red-500 to-red-600 text-white"
+                                : "bg-gradient-to-br from-cyan-500 to-cyan-600 text-white",
                           )}
                         >
                           <Tag
                             className={cn(
                               "h-6 w-6",
-                              isDark ? "text-white" : "text-white"
+                              isDark ? "text-white" : "text-white",
                             )}
                           />
                         </div>
@@ -4891,8 +4876,8 @@ export default function ContestDetailClient({
                                   ? "text-white/90 drop-shadow-sm"
                                   : "text-white/90 drop-shadow-sm"
                                 : campaignType === "raid"
-                                ? "text-gray-500"
-                                : "text-gray-500"
+                                  ? "text-gray-500"
+                                  : "text-gray-500",
                             )}
                           >
                             Campaign Type
@@ -4905,8 +4890,8 @@ export default function ContestDetailClient({
                                   ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-red-200 bg-clip-text text-transparent"
                                   : "text-white drop-shadow-lg bg-gradient-to-r from-white to-cyan-200 bg-clip-text text-transparent"
                                 : campaignType === "raid"
-                                ? "text-gray-900"
-                                : "text-gray-900"
+                                  ? "text-gray-900"
+                                  : "text-gray-900",
                             )}
                           >
                             {campaignType === "raid" ? "Raid" : "Awareness"}
@@ -4922,8 +4907,8 @@ export default function ContestDetailClient({
                                 ? "text-white/80 drop-shadow-sm"
                                 : "text-white/80 drop-shadow-sm"
                               : campaignType === "raid"
-                              ? "text-gray-600"
-                              : "text-gray-600"
+                                ? "text-gray-600"
+                                : "text-gray-600",
                           )}
                         >
                           {campaignType === "raid"
@@ -4939,8 +4924,8 @@ export default function ContestDetailClient({
                               ? "bg-gradient-to-r from-red-400 via-pink-400 to-orange-400 shadow-lg shadow-red-400/70 animate-pulse"
                               : "bg-gradient-to-r from-cyan-400 via-blue-400 to-teal-400 shadow-lg shadow-cyan-400/70 animate-pulse"
                             : campaignType === "raid"
-                            ? "bg-gradient-to-r from-red-200 to-red-300"
-                            : "bg-gradient-to-r from-cyan-200 to-cyan-300"
+                              ? "bg-gradient-to-r from-red-200 to-red-300"
+                              : "bg-gradient-to-r from-cyan-200 to-cyan-300",
                         )}
                       ></div>
                     </div>
@@ -4974,7 +4959,7 @@ export default function ContestDetailClient({
                     "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                     isDark
                       ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
-                      : "bg-gradient-to-br from-white to-purple-50 border border-purple-100"
+                      : "bg-gradient-to-br from-white to-purple-50 border border-purple-100",
                   )}
                 >
                   <div className="p-6 relative z-10">
@@ -4984,13 +4969,13 @@ export default function ContestDetailClient({
                           "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
                           isDark
                             ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                            : "bg-gradient-to-br from-purple-500 to-purple-600 text-white"
+                            : "bg-gradient-to-br from-purple-500 to-purple-600 text-white",
                         )}
                       >
                         <Users
                           className={cn(
                             "h-6 w-6",
-                            isDark ? "text-white" : "text-white"
+                            isDark ? "text-white" : "text-white",
                           )}
                         />
                       </div>
@@ -5000,7 +4985,7 @@ export default function ContestDetailClient({
                             "text-sm font-medium uppercase tracking-wide",
                             isDark
                               ? "text-white/90 drop-shadow-sm"
-                              : "text-gray-500"
+                              : "text-gray-500",
                           )}
                         >
                           Participants
@@ -5010,7 +4995,7 @@ export default function ContestDetailClient({
                             "text-2xl font-bold mt-1",
                             isDark
                               ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
-                              : "text-gray-900"
+                              : "text-gray-900",
                           )}
                         >
                           {displayValue}
@@ -5023,7 +5008,7 @@ export default function ContestDetailClient({
                           "text-sm font-medium",
                           isDark
                             ? "text-white/80 drop-shadow-sm"
-                            : "text-gray-600"
+                            : "text-gray-600",
                         )}
                       >
                         {maxParticipants
@@ -5036,7 +5021,7 @@ export default function ContestDetailClient({
                         "h-1 w-full rounded-full",
                         isDark
                           ? "bg-gradient-to-r from-purple-400 via-indigo-400 to-violet-400 shadow-lg shadow-purple-400/70 animate-pulse"
-                          : "bg-gradient-to-r from-purple-200 to-purple-300"
+                          : "bg-gradient-to-r from-purple-200 to-purple-300",
                       )}
                     ></div>
                   </div>
@@ -5054,7 +5039,7 @@ export default function ContestDetailClient({
                   "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                   isDark
                     ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-emerald-500/20"
-                    : "bg-white border border-gray-100"
+                    : "bg-white border border-gray-100",
                 )}
               >
                 <div className="p-6 relative z-10">
@@ -5064,13 +5049,13 @@ export default function ContestDetailClient({
                         "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
                         isDark
                           ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                          : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white"
+                          : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white",
                       )}
                     >
                       <DollarSign
                         className={cn(
                           "h-6 w-6",
-                          isDark ? "text-white" : "text-white"
+                          isDark ? "text-white" : "text-white",
                         )}
                       />
                     </div>
@@ -5080,7 +5065,7 @@ export default function ContestDetailClient({
                           "text-sm font-medium uppercase tracking-wide",
                           isDark
                             ? "text-white/90 drop-shadow-sm"
-                            : "text-gray-500"
+                            : "text-gray-500",
                         )}
                       >
                         Total Budget
@@ -5090,12 +5075,12 @@ export default function ContestDetailClient({
                           "text-2xl font-bold mt-1",
                           isDark
                             ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent"
-                            : "text-gray-900"
+                            : "text-gray-900",
                         )}
                       >
                         {formatMoney(
                           currentContest.contest_based_details.cpm_contest
-                            .total_budget
+                            .total_budget,
                         )}
                       </p>
                     </div>
@@ -5106,7 +5091,7 @@ export default function ContestDetailClient({
                         "text-sm font-medium",
                         isDark
                           ? "text-white/80 drop-shadow-sm"
-                          : "text-gray-600"
+                          : "text-gray-600",
                       )}
                     >
                       $
@@ -5122,7 +5107,7 @@ export default function ContestDetailClient({
                       "h-1 w-full rounded-full",
                       isDark
                         ? "bg-gradient-to-r from-emerald-400 via-green-400 to-teal-400 shadow-lg shadow-emerald-400/70 animate-pulse"
-                        : "bg-gradient-to-r from-emerald-200 to-emerald-300"
+                        : "bg-gradient-to-r from-emerald-200 to-emerald-300",
                     )}
                   ></div>
                 </div>
@@ -5163,7 +5148,7 @@ export default function ContestDetailClient({
               "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
               isDark
                 ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
-                : "bg-gradient-to-br from-white to-purple-50 border border-purple-100"
+                : "bg-gradient-to-br from-white to-purple-50 border border-purple-100",
             )}
           >
             <div className="p-6 relative z-10">
@@ -5173,13 +5158,13 @@ export default function ContestDetailClient({
                     "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
                     isDark
                       ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                      : "bg-gradient-to-br from-purple-500 to-purple-600 text-white"
+                      : "bg-gradient-to-br from-purple-500 to-purple-600 text-white",
                   )}
                 >
                   <Users
                     className={cn(
                       "h-6 w-6",
-                      isDark ? "text-white" : "text-white"
+                      isDark ? "text-white" : "text-white",
                     )}
                   />
                 </div>
@@ -5187,7 +5172,7 @@ export default function ContestDetailClient({
                   <p
                     className={cn(
                       "text-sm font-medium uppercase tracking-wide",
-                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500",
                     )}
                   >
                     Submissions
@@ -5197,7 +5182,7 @@ export default function ContestDetailClient({
                       "text-2xl font-bold mt-1",
                       isDark
                         ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
-                        : "text-gray-900"
+                        : "text-gray-900",
                     )}
                   >
                     {currentSubmissions.length}
@@ -5208,7 +5193,7 @@ export default function ContestDetailClient({
                 <p
                   className={cn(
                     "text-sm font-medium",
-                    isDark ? "text-white/80 drop-shadow-sm" : "text-gray-600"
+                    isDark ? "text-white/80 drop-shadow-sm" : "text-gray-600",
                   )}
                 >
                   Total entries
@@ -5219,7 +5204,7 @@ export default function ContestDetailClient({
                   "h-1 w-full rounded-full",
                   isDark
                     ? "bg-gradient-to-r from-purple-400 via-violet-400 to-fuchsia-400 shadow-lg shadow-purple-400/70 animate-pulse"
-                    : "bg-gradient-to-r from-purple-200 to-purple-300"
+                    : "bg-gradient-to-r from-purple-200 to-purple-300",
                 )}
               ></div>
             </div>
@@ -5236,7 +5221,7 @@ export default function ContestDetailClient({
                 "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                 isDark
                   ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-indigo-500/20"
-                  : "bg-gradient-to-br from-white to-indigo-50 border border-indigo-100"
+                  : "bg-gradient-to-br from-white to-indigo-50 border border-indigo-100",
               )}
             >
               <div className="p-6 relative z-10">
@@ -5246,13 +5231,13 @@ export default function ContestDetailClient({
                       "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm mr-4",
                       isDark
                         ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                        : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white"
+                        : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white",
                     )}
                   >
                     <BarChart3
                       className={cn(
                         "h-6 w-6",
-                        isDark ? "text-white" : "text-white"
+                        isDark ? "text-white" : "text-white",
                       )}
                     />
                   </div>
@@ -5262,7 +5247,7 @@ export default function ContestDetailClient({
                         "text-lg font-bold",
                         isDark
                           ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-indigo-200 bg-clip-text text-transparent"
-                          : "text-gray-900"
+                          : "text-gray-900",
                       )}
                     >
                       Budget Tracker
@@ -5272,7 +5257,7 @@ export default function ContestDetailClient({
                         "text-sm",
                         isDark
                           ? "text-white/80 drop-shadow-sm"
-                          : "text-gray-600"
+                          : "text-gray-600",
                       )}
                     >
                       Monitor spending progress
@@ -5310,7 +5295,7 @@ export default function ContestDetailClient({
                 "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                 isDark
                   ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-emerald-500/20"
-                  : "bg-gradient-to-br from-white to-emerald-50 border border-emerald-100"
+                  : "bg-gradient-to-br from-white to-emerald-50 border border-emerald-100",
               )}
             >
               <div className="p-6 relative z-10">
@@ -5320,7 +5305,7 @@ export default function ContestDetailClient({
                       "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm mr-4",
                       isDark
                         ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                        : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white"
+                        : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white",
                     )}
                   >
                     <BarChart3 className="h-6 w-6 text-white" />
@@ -5331,7 +5316,7 @@ export default function ContestDetailClient({
                         "text-lg font-bold",
                         isDark
                           ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent"
-                          : "text-gray-900"
+                          : "text-gray-900",
                       )}
                     >
                       Budget Tracker
@@ -5341,7 +5326,7 @@ export default function ContestDetailClient({
                         "text-sm",
                         isDark
                           ? "text-white/80 drop-shadow-sm"
-                          : "text-gray-600"
+                          : "text-gray-600",
                       )}
                     >
                       Monitor bonus spending progress
@@ -5418,7 +5403,7 @@ export default function ContestDetailClient({
                 "px-4 pt-5 pb-4 border-b rounded-t-xl font-semibold shadow-xl",
                 isDark
                   ? "bg-[#170337] border-gray-600 text-white"
-                  : "bg-white text-purple-500 "
+                  : "bg-white text-purple-500 ",
               )}
             >
               <h1 className="text-xl flex items-center gap-2">
@@ -5429,7 +5414,7 @@ export default function ContestDetailClient({
             <div
               className={cn(
                 "p-4 bg-white rounded-b-xl shadow-xl",
-                isDark ? "bg-[#170337]" : "bg-white"
+                isDark ? "bg-[#170337]" : "bg-white",
               )}
             >
               <CardContent className="space-y-6 py-6 px-4">
@@ -5456,7 +5441,7 @@ export default function ContestDetailClient({
                         "prose prose-md max-w-none p-4 rounded-lg border [&_a]:break-words [&_a]:hover:underline",
                         isDark
                           ? "bg-[#170337] text-white border-gray-600 [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
-                          : "bg-white text-foreground"
+                          : "bg-white text-foreground",
                       )}
                       style={isDark ? { color: "white" } : undefined}
                       dangerouslySetInnerHTML={{
@@ -5476,7 +5461,7 @@ export default function ContestDetailClient({
                   <div
                     className={cn(
                       "border rounded-xl transition-all duration-300",
-                      isDark ? "border-gray-600" : "border-gray-300"
+                      isDark ? "border-gray-600" : "border-gray-300",
                     )}
                   >
                     <CardContent className="p-4">
@@ -5486,7 +5471,7 @@ export default function ContestDetailClient({
                             "w-10 h-10 flex items-center justify-center rounded-full ",
                             isDark
                               ? "bg-[#FFFFFF42] text-white"
-                              : "bg-purple-100 text-[#4A00BE]"
+                              : "bg-purple-100 text-[#4A00BE]",
                           )}
                         >
                           <Monitor className="h-5 w-5" />
@@ -5495,7 +5480,7 @@ export default function ContestDetailClient({
                           <p
                             className={cn(
                               "text-md font-medium tracking-wide",
-                              isDark ? "text-white" : "text-black"
+                              isDark ? "text-white" : "text-black",
                             )}
                           >
                             Platform
@@ -5503,7 +5488,7 @@ export default function ContestDetailClient({
                           <p
                             className={cn(
                               "text-lg md:text-xl font-bold capitalize",
-                              isDark ? "text-white" : "text-black"
+                              isDark ? "text-white" : "text-black",
                             )}
                           >
                             {currentContest.platform}
@@ -5517,7 +5502,7 @@ export default function ContestDetailClient({
                   <div
                     className={cn(
                       "border rounded-xl transition-all duration-300",
-                      isDark ? "border-gray-600" : "border-gray-300"
+                      isDark ? "border-gray-600" : "border-gray-300",
                     )}
                   >
                     <CardContent className="p-4">
@@ -5527,7 +5512,7 @@ export default function ContestDetailClient({
                             "w-10 h-10 flex items-center justify-center rounded-full ",
                             isDark
                               ? "bg-[#FFFFFF42] text-white"
-                              : "bg-purple-100 text-[#4A00BE]"
+                              : "bg-purple-100 text-[#4A00BE]",
                           )}
                         >
                           <Info className="h-5 w-5" />
@@ -5536,7 +5521,7 @@ export default function ContestDetailClient({
                           <p
                             className={cn(
                               "text-md font-medium tracking-wide",
-                              isDark ? "text-white" : "text-black"
+                              isDark ? "text-white" : "text-black",
                             )}
                           >
                             Status
@@ -5544,7 +5529,7 @@ export default function ContestDetailClient({
                           <p
                             className={cn(
                               "text-lg md:text-xl font-bold capitalize",
-                              isDark ? "text-white" : "text-black"
+                              isDark ? "text-white" : "text-black",
                             )}
                           >
                             {contestStatusBadgeInfo.text}
@@ -5561,7 +5546,7 @@ export default function ContestDetailClient({
                   <div
                     className={cn(
                       "border rounded-xl transition-all duration-300",
-                      isDark ? "border-gray-600" : "border-gray-300"
+                      isDark ? "border-gray-600" : "border-gray-300",
                     )}
                   >
                     <CardContent className="p-4">
@@ -5571,7 +5556,7 @@ export default function ContestDetailClient({
                             "w-10 h-10 flex items-center justify-center rounded-full ",
                             isDark
                               ? "bg-[#FFFFFF42] text-white"
-                              : "bg-purple-100 text-[#4A00BE]"
+                              : "bg-purple-100 text-[#4A00BE]",
                           )}
                         >
                           <Play className="h-5 w-5" />
@@ -5592,7 +5577,7 @@ export default function ContestDetailClient({
                   <div
                     className={cn(
                       "border rounded-xl transition-all duration-300",
-                      isDark ? "border-gray-600" : "border-gray-300"
+                      isDark ? "border-gray-600" : "border-gray-300",
                     )}
                   >
                     <CardContent className="p-4">
@@ -5602,7 +5587,7 @@ export default function ContestDetailClient({
                             "w-10 h-10 flex items-center justify-center rounded-full ",
                             isDark
                               ? "bg-[#FFFFFF42] text-white"
-                              : "bg-purple-100 text-[#4A00BE]"
+                              : "bg-purple-100 text-[#4A00BE]",
                           )}
                         >
                           <Clock className="h-5 w-5" />
@@ -5630,7 +5615,7 @@ export default function ContestDetailClient({
                       <div
                         className={cn(
                           "border rounded-xl transition-all duration-300",
-                          isDark ? "border-gray-600" : "border-gray-300"
+                          isDark ? "border-gray-600" : "border-gray-300",
                         )}
                       >
                         <CardContent className="p-4">
@@ -5640,7 +5625,7 @@ export default function ContestDetailClient({
                                 "w-10 h-10 flex items-center justify-center rounded-full flex-shrink-0",
                                 isDark
                                   ? "bg-[#FFFFFF42] text-white"
-                                  : "bg-purple-100 text-[#4A00BE]"
+                                  : "bg-purple-100 text-[#4A00BE]",
                               )}
                             >
                               <Globe className="h-5 w-5" />
@@ -5654,13 +5639,13 @@ export default function ContestDetailClient({
                                       "p-3 rounded-lg border",
                                       isDark
                                         ? "bg-[#170337] border-gray-600"
-                                        : "bg-gray-50 border-gray-200"
+                                        : "bg-gray-50 border-gray-200",
                                     )}
                                   >
                                     <p
                                       className={cn(
                                         "font-semibold text-base mb-2",
-                                        isDark ? "text-white" : "text-gray-900"
+                                        isDark ? "text-white" : "text-gray-900",
                                       )}
                                     >
                                       {regionName}
@@ -5674,7 +5659,7 @@ export default function ContestDetailClient({
                                             "text-xs",
                                             isDark
                                               ? "bg-gray-700 text-gray-200 border-gray-600"
-                                              : "bg-white text-gray-700 border-gray-300"
+                                              : "bg-white text-gray-700 border-gray-300",
                                           )}
                                         >
                                           {country}
@@ -5682,7 +5667,7 @@ export default function ContestDetailClient({
                                       ))}
                                     </div>
                                   </div>
-                                )
+                                ),
                               )}
                             </div>
                           </div>
@@ -5706,7 +5691,7 @@ export default function ContestDetailClient({
                         <div
                           className={cn(
                             "border rounded-xl transition-all duration-300",
-                            isDark ? "border-gray-600" : "border-gray-300"
+                            isDark ? "border-gray-600" : "border-gray-300",
                           )}
                         >
                           <CardContent className="p-4">
@@ -5716,7 +5701,7 @@ export default function ContestDetailClient({
                                   "w-10 h-10 flex items-center justify-center rounded-full ",
                                   isDark
                                     ? "bg-[#FFFFFF42] text-white"
-                                    : "bg-purple-100 text-[#4A00BE]"
+                                    : "bg-purple-100 text-[#4A00BE]",
                                 )}
                               >
                                 <Trophy className="h-5 w-5" />
@@ -5728,7 +5713,7 @@ export default function ContestDetailClient({
                                 <p className="text-lg md:text-xl font-bold ">
                                   {formatMoney(
                                     currentContest.contest_based_details
-                                      .leaderboard_contest.total_prize
+                                      .leaderboard_contest.total_prize,
                                   )}
                                 </p>
                               </div>
@@ -5740,7 +5725,7 @@ export default function ContestDetailClient({
                         <div
                           className={cn(
                             "border rounded-xl transition-all duration-300",
-                            isDark ? "border-gray-600" : "border-gray-300"
+                            isDark ? "border-gray-600" : "border-gray-300",
                           )}
                         >
                           <CardContent className="p-4">
@@ -5750,7 +5735,7 @@ export default function ContestDetailClient({
                                   "w-10 h-10 flex items-center justify-center rounded-full ",
                                   isDark
                                     ? "bg-[#FFFFFF42] text-white"
-                                    : "bg-purple-100 text-[#4A00BE]"
+                                    : "bg-purple-100 text-[#4A00BE]",
                                 )}
                               >
                                 <Users className="h-5 w-5" />
@@ -5816,7 +5801,7 @@ export default function ContestDetailClient({
                         <div className="space-y-4">
                           {Array.isArray(
                             currentContest.contest_based_details
-                              .leaderboard_contest.prizes
+                              .leaderboard_contest.prizes,
                           ) &&
                             currentContest.contest_based_details.leaderboard_contest.prizes
                               .sort((a: any, b: any) => a.position - b.position)
@@ -5827,7 +5812,7 @@ export default function ContestDetailClient({
                                     "flex items-center justify-between py-3 px-3 rounded-lg border",
                                     isDark
                                       ? "border-gray-600"
-                                      : "border-gray-400"
+                                      : "border-gray-400",
                                   )}
                                 >
                                   <div className="flex items-center gap-3">
@@ -5836,7 +5821,7 @@ export default function ContestDetailClient({
                                         "w-8 h-8 rounded-full flex items-center justify-center border font-bold text-sm",
                                         isDark
                                           ? "border-gray-500 text-gray-300"
-                                          : "border-gray-500 text-gray-500"
+                                          : "border-gray-500 text-gray-500",
                                       )}
                                     >
                                       {prize.position}
@@ -5848,7 +5833,9 @@ export default function ContestDetailClient({
                                   <span
                                     className={cn(
                                       "font-bold text-lg",
-                                      isDark ? "text-gray-300" : "text-gray-600"
+                                      isDark
+                                        ? "text-gray-300"
+                                        : "text-gray-600",
                                     )}
                                   >
                                     {formatMoney(prize.amount)}
@@ -5870,13 +5857,13 @@ export default function ContestDetailClient({
                         <div
                           className={cn(
                             "flex justify-between items-center p-3 rounded-md border",
-                            isDark ? "border-gray-600" : "border-gray-400"
+                            isDark ? "border-gray-600" : "border-gray-400",
                           )}
                         >
                           <span
                             className={cn(
                               "text-md font-medium tracking-wide",
-                              isDark ? "text-white" : "text-black"
+                              isDark ? "text-white" : "text-black",
                             )}
                           >
                             CPM Rate:
@@ -5885,7 +5872,7 @@ export default function ContestDetailClient({
                             $
                             {parseFloat(
                               currentContest.contest_based_details.cpm_contest
-                                .cpm_rate_usd
+                                .cpm_rate_usd,
                             ).toFixed(2)}{" "}
                             per 1000 {isTwitterCpmCampaign ? "points" : "views"}
                           </span>
@@ -5893,13 +5880,13 @@ export default function ContestDetailClient({
                         <div
                           className={cn(
                             "flex justify-between items-center p-3 rounded-md border",
-                            isDark ? "border-gray-600" : "border-gray-400"
+                            isDark ? "border-gray-600" : "border-gray-400",
                           )}
                         >
                           <span
                             className={cn(
                               "text-md font-medium tracking-wide",
-                              isDark ? "text-white" : "text-black"
+                              isDark ? "text-white" : "text-black",
                             )}
                           >
                             Total Budget:
@@ -5907,7 +5894,7 @@ export default function ContestDetailClient({
                           <span className="font-semibold text-md text-foreground">
                             {formatMoney(
                               currentContest.contest_based_details.cpm_contest
-                                .total_budget
+                                .total_budget,
                             )}
                           </span>
                         </div>
@@ -5916,13 +5903,13 @@ export default function ContestDetailClient({
                           <div
                             className={cn(
                               "flex justify-between items-center p-3 rounded-md border",
-                              isDark ? "border-gray-600" : "border-gray-400"
+                              isDark ? "border-gray-600" : "border-gray-400",
                             )}
                           >
                             <span
                               className={cn(
                                 "text-md font-medium",
-                                isDark ? "text-white" : "text-black"
+                                isDark ? "text-white" : "text-black",
                               )}
                             >
                               Min Views:
@@ -5937,13 +5924,13 @@ export default function ContestDetailClient({
                           <div
                             className={cn(
                               "flex justify-between items-center p-3 rounded-md border",
-                              isDark ? "border-gray-600" : "border-gray-400"
+                              isDark ? "border-gray-600" : "border-gray-400",
                             )}
                           >
                             <span
                               className={cn(
                                 "text-md font-medium",
-                                isDark ? "text-white" : "text-black"
+                                isDark ? "text-white" : "text-black",
                               )}
                             >
                               Max Views (Cap):
@@ -5975,7 +5962,7 @@ export default function ContestDetailClient({
                             "p-3 border rounded-lg text-[13px] text-black",
                             isDark
                               ? "border-gray-600 text-white"
-                              : "border-gray-400 text-black"
+                              : "border-gray-400 text-black",
                           )}
                         >
                           <div className="whitespace-pre-wrap break-words">
@@ -6026,13 +6013,13 @@ export default function ContestDetailClient({
                                     "flex justify-between items-center p-3 rounded-md border",
                                     isDark
                                       ? "border-gray-600"
-                                      : "border-gray-400"
+                                      : "border-gray-400",
                                   )}
                                 >
                                   <span
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-black"
+                                      isDark ? "text-white" : "text-black",
                                     )}
                                   >
                                     Likes Weight:
@@ -6041,7 +6028,7 @@ export default function ContestDetailClient({
                                     {typeof twitterPointsConfig.likes_weight ===
                                     "number"
                                       ? twitterPointsConfig.likes_weight.toFixed(
-                                          2
+                                          2,
                                         )
                                       : twitterPointsConfig.likes_weight}
                                   </span>
@@ -6053,13 +6040,13 @@ export default function ContestDetailClient({
                                     "flex justify-between items-center p-3 rounded-md border",
                                     isDark
                                       ? "border-gray-600"
-                                      : "border-gray-400"
+                                      : "border-gray-400",
                                   )}
                                 >
                                   <span
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-black"
+                                      isDark ? "text-white" : "text-black",
                                     )}
                                   >
                                     Comments Weight:
@@ -6068,14 +6055,14 @@ export default function ContestDetailClient({
                                     {typeof twitterPointsConfig.comments_weight ===
                                     "object"
                                       ? twitterPointsConfig.comments_weight.base_weight?.toFixed(
-                                          2
+                                          2,
                                         ) || "N/A"
                                       : typeof twitterPointsConfig.comments_weight ===
-                                        "number"
-                                      ? twitterPointsConfig.comments_weight.toFixed(
-                                          2
-                                        )
-                                      : twitterPointsConfig.comments_weight}
+                                          "number"
+                                        ? twitterPointsConfig.comments_weight.toFixed(
+                                            2,
+                                          )
+                                        : twitterPointsConfig.comments_weight}
                                   </span>
                                 </div>
                               )}
@@ -6085,13 +6072,13 @@ export default function ContestDetailClient({
                                     "flex justify-between items-center p-3 rounded-md border",
                                     isDark
                                       ? "border-gray-600"
-                                      : "border-gray-400"
+                                      : "border-gray-400",
                                   )}
                                 >
                                   <span
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-black"
+                                      isDark ? "text-white" : "text-black",
                                     )}
                                   >
                                     Retweets Weight:
@@ -6100,14 +6087,14 @@ export default function ContestDetailClient({
                                     {typeof twitterPointsConfig.retweets_weight ===
                                     "object"
                                       ? twitterPointsConfig.retweets_weight.base_weight?.toFixed(
-                                          2
+                                          2,
                                         ) || "N/A"
                                       : typeof twitterPointsConfig.retweets_weight ===
-                                        "number"
-                                      ? twitterPointsConfig.retweets_weight.toFixed(
-                                          2
-                                        )
-                                      : twitterPointsConfig.retweets_weight}
+                                          "number"
+                                        ? twitterPointsConfig.retweets_weight.toFixed(
+                                            2,
+                                          )
+                                        : twitterPointsConfig.retweets_weight}
                                   </span>
                                 </div>
                               )}
@@ -6118,13 +6105,13 @@ export default function ContestDetailClient({
                                     "flex justify-between items-center p-3 rounded-md border",
                                     isDark
                                       ? "border-gray-600"
-                                      : "border-gray-400"
+                                      : "border-gray-400",
                                   )}
                                 >
                                   <span
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-black"
+                                      isDark ? "text-white" : "text-black",
                                     )}
                                   >
                                     Quote Reposts Weight:
@@ -6133,14 +6120,14 @@ export default function ContestDetailClient({
                                     {typeof twitterPointsConfig.quote_reposts_weight ===
                                     "object"
                                       ? twitterPointsConfig.quote_reposts_weight.base_weight?.toFixed(
-                                          2
+                                          2,
                                         ) || "N/A"
                                       : typeof twitterPointsConfig.quote_reposts_weight ===
-                                        "number"
-                                      ? twitterPointsConfig.quote_reposts_weight.toFixed(
-                                          2
-                                        )
-                                      : twitterPointsConfig.quote_reposts_weight}
+                                          "number"
+                                        ? twitterPointsConfig.quote_reposts_weight.toFixed(
+                                            2,
+                                          )
+                                        : twitterPointsConfig.quote_reposts_weight}
                                   </span>
                                 </div>
                               )}
@@ -6151,13 +6138,13 @@ export default function ContestDetailClient({
                                     "flex justify-between items-center p-3 rounded-md border",
                                     isDark
                                       ? "border-gray-600"
-                                      : "border-gray-400"
+                                      : "border-gray-400",
                                   )}
                                 >
                                   <span
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-black"
+                                      isDark ? "text-white" : "text-black",
                                     )}
                                   >
                                     Impressions Weight:
@@ -6166,7 +6153,7 @@ export default function ContestDetailClient({
                                     {typeof twitterPointsConfig.impressions_weight ===
                                     "number"
                                       ? twitterPointsConfig.impressions_weight.toFixed(
-                                          2
+                                          2,
                                         )
                                       : twitterPointsConfig.impressions_weight}
                                   </span>
@@ -6195,15 +6182,15 @@ export default function ContestDetailClient({
                               const hasMultipliers =
                                 (commentsWeightObj &&
                                   Object.keys(commentsWeightObj).some(
-                                    (k) => k !== "base_weight"
+                                    (k) => k !== "base_weight",
                                   )) ||
                                 (retweetsWeightObj &&
                                   Object.keys(retweetsWeightObj).some(
-                                    (k) => k !== "base_weight"
+                                    (k) => k !== "base_weight",
                                   )) ||
                                 (quoteRepostsWeightObj &&
                                   Object.keys(quoteRepostsWeightObj).some(
-                                    (k) => k !== "base_weight"
+                                    (k) => k !== "base_weight",
                                   ));
 
                               if (!hasMultipliers) return null;
@@ -6217,7 +6204,7 @@ export default function ContestDetailClient({
                                   {/* Comment Multipliers */}
                                   {commentsWeightObj &&
                                     Object.keys(commentsWeightObj).some(
-                                      (k) => k !== "base_weight"
+                                      (k) => k !== "base_weight",
                                     ) && (
                                       <div className="space-y-2">
                                         <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
@@ -6231,7 +6218,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6239,7 +6226,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Likes:
@@ -6258,7 +6245,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6266,7 +6253,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Replies:
@@ -6285,7 +6272,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6293,7 +6280,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Impressions:
@@ -6312,7 +6299,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6320,7 +6307,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Retweets:
@@ -6339,7 +6326,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6347,7 +6334,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Quote Reposts:
@@ -6366,7 +6353,7 @@ export default function ContestDetailClient({
                                   {/* Retweet Multipliers */}
                                   {retweetsWeightObj &&
                                     Object.keys(retweetsWeightObj).some(
-                                      (k) => k !== "base_weight"
+                                      (k) => k !== "base_weight",
                                     ) && (
                                       <div className="space-y-2">
                                         <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
@@ -6380,7 +6367,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6388,7 +6375,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Likes:
@@ -6407,7 +6394,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6415,7 +6402,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Replies:
@@ -6434,7 +6421,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6442,7 +6429,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Impressions:
@@ -6461,7 +6448,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6469,7 +6456,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Retweets:
@@ -6488,7 +6475,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6496,7 +6483,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Quote Reposts:
@@ -6515,7 +6502,7 @@ export default function ContestDetailClient({
                                   {/* Quote Repost Multipliers */}
                                   {quoteRepostsWeightObj &&
                                     Object.keys(quoteRepostsWeightObj).some(
-                                      (k) => k !== "base_weight"
+                                      (k) => k !== "base_weight",
                                     ) && (
                                       <div className="space-y-2">
                                         <h5 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
@@ -6529,7 +6516,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6537,7 +6524,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Likes:
@@ -6556,7 +6543,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6564,7 +6551,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Replies:
@@ -6583,7 +6570,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6591,7 +6578,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Impressions:
@@ -6610,7 +6597,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6618,7 +6605,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Retweets:
@@ -6637,7 +6624,7 @@ export default function ContestDetailClient({
                                                 "flex justify-between items-center p-2 rounded-md border text-xs",
                                                 isDark
                                                   ? "border-gray-700"
-                                                  : "border-gray-300"
+                                                  : "border-gray-300",
                                               )}
                                             >
                                               <span
@@ -6645,7 +6632,7 @@ export default function ContestDetailClient({
                                                   "text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-700"
+                                                    : "text-gray-700",
                                                 )}
                                               >
                                                 Quote Reposts:
@@ -6679,13 +6666,13 @@ export default function ContestDetailClient({
                                     "flex justify-between items-center p-3 rounded-md border",
                                     isDark
                                       ? "border-gray-600"
-                                      : "border-gray-400"
+                                      : "border-gray-400",
                                   )}
                                 >
                                   <span
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-black"
+                                      isDark ? "text-white" : "text-black",
                                     )}
                                   >
                                     Comment Base Points:
@@ -6701,13 +6688,13 @@ export default function ContestDetailClient({
                                     "flex justify-between items-center p-3 rounded-md border",
                                     isDark
                                       ? "border-gray-600"
-                                      : "border-gray-400"
+                                      : "border-gray-400",
                                   )}
                                 >
                                   <span
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-black"
+                                      isDark ? "text-white" : "text-black",
                                     )}
                                   >
                                     Retweet Base Points:
@@ -6724,13 +6711,13 @@ export default function ContestDetailClient({
                                     "flex justify-between items-center p-3 rounded-md border",
                                     isDark
                                       ? "border-gray-600"
-                                      : "border-gray-400"
+                                      : "border-gray-400",
                                   )}
                                 >
                                   <span
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-black"
+                                      isDark ? "text-white" : "text-black",
                                     )}
                                   >
                                     Quote Repost Base Points:
@@ -6807,7 +6794,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -6815,7 +6802,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Likes:
@@ -6834,7 +6821,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -6842,7 +6829,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Replies:
@@ -6861,7 +6848,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -6869,7 +6856,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Impressions:
@@ -6888,7 +6875,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -6896,7 +6883,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Retweets:
@@ -6915,7 +6902,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -6923,7 +6910,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Quote Reposts:
@@ -6953,7 +6940,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -6961,7 +6948,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Likes:
@@ -6980,7 +6967,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -6988,7 +6975,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Replies:
@@ -7007,7 +6994,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -7015,7 +7002,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Impressions:
@@ -7034,7 +7021,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -7042,7 +7029,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Retweets:
@@ -7061,7 +7048,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -7069,7 +7056,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Quote Reposts:
@@ -7099,7 +7086,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -7107,7 +7094,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Likes:
@@ -7126,7 +7113,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -7134,7 +7121,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Replies:
@@ -7153,7 +7140,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -7161,7 +7148,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Impressions:
@@ -7180,7 +7167,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -7188,7 +7175,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Retweets:
@@ -7207,7 +7194,7 @@ export default function ContestDetailClient({
                                               "flex justify-between items-center p-2 rounded-md border text-xs",
                                               isDark
                                                 ? "border-gray-700"
-                                                : "border-gray-300"
+                                                : "border-gray-300",
                                             )}
                                           >
                                             <span
@@ -7215,7 +7202,7 @@ export default function ContestDetailClient({
                                                 "text-xs",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               Quote Reposts:
@@ -7246,7 +7233,7 @@ export default function ContestDetailClient({
                     <h3
                       className={cn(
                         "font-semibold text-lg",
-                        isDark ? "text-white" : "text-foreground"
+                        isDark ? "text-white" : "text-foreground",
                       )}
                     >
                       Payment Information
@@ -7257,7 +7244,7 @@ export default function ContestDetailClient({
                         "rounded-xl p-4",
                         isDark
                           ? "bg-gradient-to-r from-blue-900/20 to-indigo-900/20 border border-blue-700/50"
-                          : "bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200"
+                          : "bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200",
                       )}
                     >
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -7265,13 +7252,13 @@ export default function ContestDetailClient({
                           <div
                             className={cn(
                               "p-2 rounded-lg",
-                              isDark ? "bg-blue-800/30" : "bg-blue-100"
+                              isDark ? "bg-blue-800/30" : "bg-blue-100",
                             )}
                           >
                             <Trophy
                               className={cn(
                                 "h-5 w-5",
-                                isDark ? "text-blue-400" : "text-blue-600"
+                                isDark ? "text-blue-400" : "text-blue-600",
                               )}
                             />
                           </div>
@@ -7279,7 +7266,7 @@ export default function ContestDetailClient({
                             <p
                               className={cn(
                                 "text-xs font-medium uppercase tracking-wide",
-                                isDark ? "text-blue-300" : "text-blue-800"
+                                isDark ? "text-blue-300" : "text-blue-800",
                               )}
                             >
                               Prize Pool
@@ -7287,7 +7274,7 @@ export default function ContestDetailClient({
                             <p
                               className={cn(
                                 "text-xl font-bold",
-                                isDark ? "text-blue-100" : "text-blue-900"
+                                isDark ? "text-blue-100" : "text-blue-900",
                               )}
                             >
                               {(() => {
@@ -7295,11 +7282,11 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                        (currentContest as any).payment_details
+                                        (currentContest as any).payment_details,
                                       )
                                     : (currentContest as any).payment_details;
                                 return formatMoney(
-                                  paymentDetails.total_prize_pool || 0
+                                  paymentDetails.total_prize_pool || 0,
                                 );
                               })()}
                             </p>
@@ -7310,13 +7297,13 @@ export default function ContestDetailClient({
                           <div
                             className={cn(
                               "p-2 rounded-lg",
-                              isDark ? "bg-purple-800/30" : "bg-purple-100"
+                              isDark ? "bg-purple-800/30" : "bg-purple-100",
                             )}
                           >
                             <CreditCard
                               className={cn(
                                 "h-5 w-5",
-                                isDark ? "text-purple-400" : "text-purple-600"
+                                isDark ? "text-purple-400" : "text-purple-600",
                               )}
                             />
                           </div>
@@ -7324,7 +7311,7 @@ export default function ContestDetailClient({
                             <p
                               className={cn(
                                 "text-xs font-medium uppercase tracking-wide",
-                                isDark ? "text-purple-300" : "text-purple-800"
+                                isDark ? "text-purple-300" : "text-purple-800",
                               )}
                             >
                               Commission (
@@ -7333,7 +7320,7 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                        (currentContest as any).payment_details
+                                        (currentContest as any).payment_details,
                                       )
                                     : (currentContest as any).payment_details;
                                 return (
@@ -7345,7 +7332,7 @@ export default function ContestDetailClient({
                             <p
                               className={cn(
                                 "text-xl font-bold",
-                                isDark ? "text-purple-100" : "text-purple-900"
+                                isDark ? "text-purple-100" : "text-purple-900",
                               )}
                             >
                               {(() => {
@@ -7353,11 +7340,11 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                        (currentContest as any).payment_details
+                                        (currentContest as any).payment_details,
                                       )
                                     : (currentContest as any).payment_details;
                                 return formatMoney(
-                                  paymentDetails.commission_amount || 0
+                                  paymentDetails.commission_amount || 0,
                                 );
                               })()}
                             </p>
@@ -7369,7 +7356,7 @@ export default function ContestDetailClient({
                       <div
                         className={cn(
                           "mt-4 pt-4 border-t",
-                          isDark ? "border-blue-700/50" : "border-blue-200"
+                          isDark ? "border-blue-700/50" : "border-blue-200",
                         )}
                       >
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -7377,13 +7364,13 @@ export default function ContestDetailClient({
                             <div
                               className={cn(
                                 "p-2 rounded-lg",
-                                isDark ? "bg-green-800/30" : "bg-green-100"
+                                isDark ? "bg-green-800/30" : "bg-green-100",
                               )}
                             >
                               <DollarSign
                                 className={cn(
                                   "h-5 w-5",
-                                  isDark ? "text-green-400" : "text-green-600"
+                                  isDark ? "text-green-400" : "text-green-600",
                                 )}
                               />
                             </div>
@@ -7391,7 +7378,7 @@ export default function ContestDetailClient({
                               <p
                                 className={cn(
                                   "text-xs font-medium uppercase tracking-wide",
-                                  isDark ? "text-green-300" : "text-green-800"
+                                  isDark ? "text-green-300" : "text-green-800",
                                 )}
                               >
                                 Total Paid
@@ -7399,7 +7386,7 @@ export default function ContestDetailClient({
                               <p
                                 className={cn(
                                   "text-lg font-bold",
-                                  isDark ? "text-green-100" : "text-green-900"
+                                  isDark ? "text-green-100" : "text-green-900",
                                 )}
                               >
                                 {(() => {
@@ -7408,11 +7395,11 @@ export default function ContestDetailClient({
                                       .payment_details === "string"
                                       ? JSON.parse(
                                           (currentContest as any)
-                                            .payment_details
+                                            .payment_details,
                                         )
                                       : (currentContest as any).payment_details;
                                   return formatMoney(
-                                    paymentDetails.total_amount_paid || 0
+                                    paymentDetails.total_amount_paid || 0,
                                   );
                                 })()}
                               </p>
@@ -7424,7 +7411,7 @@ export default function ContestDetailClient({
                               typeof (currentContest as any).payment_details ===
                               "string"
                                 ? JSON.parse(
-                                    (currentContest as any).payment_details
+                                    (currentContest as any).payment_details,
                                   )
                                 : (currentContest as any).payment_details;
                             const walletUsed =
@@ -7442,7 +7429,7 @@ export default function ContestDetailClient({
                                         "p-2 rounded-lg",
                                         isDark
                                           ? "bg-emerald-800/30"
-                                          : "bg-emerald-100"
+                                          : "bg-emerald-100",
                                       )}
                                     >
                                       <Wallet
@@ -7450,7 +7437,7 @@ export default function ContestDetailClient({
                                           "h-5 w-5",
                                           isDark
                                             ? "text-emerald-400"
-                                            : "text-emerald-600"
+                                            : "text-emerald-600",
                                         )}
                                       />
                                     </div>
@@ -7460,7 +7447,7 @@ export default function ContestDetailClient({
                                           "text-xs font-medium uppercase tracking-wide",
                                           isDark
                                             ? "text-emerald-300"
-                                            : "text-emerald-800"
+                                            : "text-emerald-800",
                                         )}
                                       >
                                         From Wallet
@@ -7470,7 +7457,7 @@ export default function ContestDetailClient({
                                           "text-lg font-bold",
                                           isDark
                                             ? "text-emerald-100"
-                                            : "text-emerald-900"
+                                            : "text-emerald-900",
                                         )}
                                       >
                                         {formatMoney(walletUsed)}
@@ -7483,7 +7470,7 @@ export default function ContestDetailClient({
                                         "p-2 rounded-lg",
                                         isDark
                                           ? "bg-indigo-800/30"
-                                          : "bg-indigo-100"
+                                          : "bg-indigo-100",
                                       )}
                                     >
                                       <CreditCard
@@ -7491,7 +7478,7 @@ export default function ContestDetailClient({
                                           "h-5 w-5",
                                           isDark
                                             ? "text-indigo-400"
-                                            : "text-indigo-600"
+                                            : "text-indigo-600",
                                         )}
                                       />
                                     </div>
@@ -7501,7 +7488,7 @@ export default function ContestDetailClient({
                                           "text-xs font-medium uppercase tracking-wide",
                                           isDark
                                             ? "text-indigo-300"
-                                            : "text-indigo-800"
+                                            : "text-indigo-800",
                                         )}
                                       >
                                         From Card
@@ -7511,7 +7498,7 @@ export default function ContestDetailClient({
                                           "text-lg font-bold",
                                           isDark
                                             ? "text-indigo-100"
-                                            : "text-indigo-900"
+                                            : "text-indigo-900",
                                         )}
                                       >
                                         {formatMoney(stripeUsed)}
@@ -7529,7 +7516,7 @@ export default function ContestDetailClient({
                                       "p-2 rounded-lg",
                                       isDark
                                         ? "bg-emerald-800/30"
-                                        : "bg-emerald-100"
+                                        : "bg-emerald-100",
                                     )}
                                   >
                                     <Wallet
@@ -7537,7 +7524,7 @@ export default function ContestDetailClient({
                                         "h-5 w-5",
                                         isDark
                                           ? "text-emerald-400"
-                                          : "text-emerald-600"
+                                          : "text-emerald-600",
                                       )}
                                     />
                                   </div>
@@ -7547,7 +7534,7 @@ export default function ContestDetailClient({
                                         "text-xs font-medium uppercase tracking-wide",
                                         isDark
                                           ? "text-emerald-300"
-                                          : "text-emerald-800"
+                                          : "text-emerald-800",
                                       )}
                                     >
                                       Payment Method
@@ -7557,7 +7544,7 @@ export default function ContestDetailClient({
                                         "text-lg font-bold",
                                         isDark
                                           ? "text-emerald-100"
-                                          : "text-emerald-900"
+                                          : "text-emerald-900",
                                       )}
                                     >
                                       Wallet
@@ -7574,7 +7561,7 @@ export default function ContestDetailClient({
                                       "p-2 rounded-lg",
                                       isDark
                                         ? "bg-indigo-800/30"
-                                        : "bg-indigo-100"
+                                        : "bg-indigo-100",
                                     )}
                                   >
                                     <CreditCard
@@ -7582,7 +7569,7 @@ export default function ContestDetailClient({
                                         "h-5 w-5",
                                         isDark
                                           ? "text-indigo-400"
-                                          : "text-indigo-600"
+                                          : "text-indigo-600",
                                       )}
                                     />
                                   </div>
@@ -7592,7 +7579,7 @@ export default function ContestDetailClient({
                                         "text-xs font-medium uppercase tracking-wide",
                                         isDark
                                           ? "text-indigo-300"
-                                          : "text-indigo-800"
+                                          : "text-indigo-800",
                                       )}
                                     >
                                       Payment Method
@@ -7602,7 +7589,7 @@ export default function ContestDetailClient({
                                         "text-lg font-bold",
                                         isDark
                                           ? "text-indigo-100"
-                                          : "text-indigo-900"
+                                          : "text-indigo-900",
                                       )}
                                     >
                                       Credit Card
@@ -7619,20 +7606,20 @@ export default function ContestDetailClient({
                         <div
                           className={cn(
                             "mt-4 pt-4 border-t flex items-center justify-between",
-                            isDark ? "border-blue-700/50" : "border-blue-200"
+                            isDark ? "border-blue-700/50" : "border-blue-200",
                           )}
                         >
                           <div className="flex items-center gap-2">
                             <CheckCircle2
                               className={cn(
                                 "h-4 w-4",
-                                isDark ? "text-green-400" : "text-green-600"
+                                isDark ? "text-green-400" : "text-green-600",
                               )}
                             />
                             <span
                               className={cn(
                                 "text-sm font-medium",
-                                isDark ? "text-green-300" : "text-green-800"
+                                isDark ? "text-green-300" : "text-green-800",
                               )}
                             >
                               Payment{" "}
@@ -7641,7 +7628,7 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                        (currentContest as any).payment_details
+                                        (currentContest as any).payment_details,
                                       )
                                     : (currentContest as any).payment_details;
                                 return paymentDetails.payment_status ===
@@ -7656,14 +7643,14 @@ export default function ContestDetailClient({
                               typeof (currentContest as any).payment_details ===
                               "string"
                                 ? JSON.parse(
-                                    (currentContest as any).payment_details
+                                    (currentContest as any).payment_details,
                                   )
                                 : (currentContest as any).payment_details;
                             return paymentDetails.paid_at ? (
                               <span
                                 className={cn(
                                   "text-xs",
-                                  isDark ? "text-blue-400" : "text-blue-700"
+                                  isDark ? "text-blue-400" : "text-blue-700",
                                 )}
                               >
                                 Paid on{" "}
@@ -7691,7 +7678,7 @@ export default function ContestDetailClient({
                     <div
                       className={cn(
                         "border rounded-lg p-4",
-                        isDark ? "border-gray-600" : "border-gray-300"
+                        isDark ? "border-gray-600" : "border-gray-300",
                       )}
                     >
                       <div
@@ -7699,7 +7686,7 @@ export default function ContestDetailClient({
                           "prose prose-md max-w-none [&_a]:break-words [&_a]:overflow-wrap-anywhere [&_a]:hover:underline",
                           isDark
                             ? "bg-[#170337] text-white prose-invert border-gray-600"
-                            : "bg-white text-foreground"
+                            : "bg-white text-foreground",
                         )}
                         dangerouslySetInnerHTML={{
                           __html: (currentContest as any).rules_html,
@@ -7715,13 +7702,13 @@ export default function ContestDetailClient({
                       "rounded-xl p-4 border space-y-3",
                       isDark
                         ? "bg-slate-900/40 border-slate-700"
-                        : "bg-slate-50 border-slate-200"
+                        : "bg-slate-50 border-slate-200",
                     )}
                   >
                     <h4
                       className={cn(
                         "font-semibold text-sm flex items-center gap-2",
-                        isDark ? "text-slate-100" : "text-slate-900"
+                        isDark ? "text-slate-100" : "text-slate-900",
                       )}
                     >
                       Required Keywords & Mentions
@@ -7732,7 +7719,7 @@ export default function ContestDetailClient({
                           <p
                             className={cn(
                               "text-xs uppercase tracking-wide font-medium mb-1",
-                              isDark ? "text-slate-300" : "text-slate-600"
+                              isDark ? "text-slate-300" : "text-slate-600",
                             )}
                           >
                             Keywords & Hashtags
@@ -7746,7 +7733,7 @@ export default function ContestDetailClient({
                                   "rounded-full text-xs px-3 py-1",
                                   isDark
                                     ? "border-slate-600 text-slate-100"
-                                    : "border-slate-300 text-slate-800"
+                                    : "border-slate-300 text-slate-800",
                                 )}
                               >
                                 {keyword}
@@ -7760,7 +7747,7 @@ export default function ContestDetailClient({
                           <p
                             className={cn(
                               "text-xs uppercase tracking-wide font-medium mb-1",
-                              isDark ? "text-slate-300" : "text-slate-600"
+                              isDark ? "text-slate-300" : "text-slate-600",
                             )}
                           >
                             Accounts to Mention
@@ -7774,7 +7761,7 @@ export default function ContestDetailClient({
                                   "rounded-full text-xs px-3 py-1",
                                   isDark
                                     ? "border-slate-600 text-slate-100"
-                                    : "border-slate-300 text-slate-800"
+                                    : "border-slate-300 text-slate-800",
                                 )}
                               >
                                 {mention}
@@ -7800,13 +7787,13 @@ export default function ContestDetailClient({
                         "border rounded-xl p-4",
                         isDark
                           ? "border-blue-600 bg-blue-950/50"
-                          : "border-blue-300 bg-blue-50/50"
+                          : "border-blue-300 bg-blue-50/50",
                       )}
                     >
                       <p
                         className={cn(
                           "text-lg font-semibold uppercase tracking-wide",
-                          isDark ? "text-blue-300" : "text-blue-900"
+                          isDark ? "text-blue-300" : "text-blue-900",
                         )}
                       >
                         {(currentContest as any).content_type.toUpperCase()}
@@ -7814,15 +7801,15 @@ export default function ContestDetailClient({
                       <p
                         className={cn(
                           "text-sm mt-1",
-                          isDark ? "text-blue-400" : "text-blue-700"
+                          isDark ? "text-blue-400" : "text-blue-700",
                         )}
                       >
                         This contest is looking for{" "}
                         {(currentContest as any).content_type === "ugc"
                           ? "User Generated Content"
                           : (currentContest as any).content_type === "clipping"
-                          ? "Clipping/Editing"
-                          : "Other"}{" "}
+                            ? "Clipping/Editing"
+                            : "Other"}{" "}
                         type submissions.{" "}
                         {(currentContest as any).content_type === "other"
                           ? "( Check rules for more details what kind of content you can create ) "
@@ -7846,14 +7833,14 @@ export default function ContestDetailClient({
                           "border rounded-xl p-4",
                           isDark
                             ? "border-purple-600 bg-purple-950/50"
-                            : "border-purple-300 bg-purple-50/50"
+                            : "border-purple-300 bg-purple-50/50",
                         )}
                       >
                         <div className="flex flex-wrap gap-2">
                           {currentContest.categories.map(
                             (categoryId: string) => {
                               const category = CONTENT_TYPE_CATEGORIES.find(
-                                (cat) => cat.id === categoryId
+                                (cat) => cat.id === categoryId,
                               );
                               return (
                                 <span
@@ -7862,13 +7849,13 @@ export default function ContestDetailClient({
                                     "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
                                     isDark
                                       ? "bg-purple-600/30 text-purple-200 border border-purple-500/50"
-                                      : "bg-purple-100 text-purple-800 border border-purple-300"
+                                      : "bg-purple-100 text-purple-800 border border-purple-300",
                                   )}
                                 >
                                   {category ? category.name : categoryId}
                                 </span>
                               );
-                            }
+                            },
                           )}
                         </div>
                       </div>
@@ -7920,17 +7907,17 @@ export default function ContestDetailClient({
                             "border rounded-xl p-4",
                             isDark
                               ? "border-indigo-600 bg-indigo-950/50"
-                              : "border-indigo-300 bg-indigo-50/50"
+                              : "border-indigo-300 bg-indigo-50/50",
                           )}
                         >
                           <div className="flex flex-wrap gap-2">
                             {subcategoriesToDisplay.map(
                               (
                                 item: { category: string; subcategory: string },
-                                index: number
+                                index: number,
                               ) => {
                                 const category = CONTENT_TYPE_CATEGORIES.find(
-                                  (cat) => cat.id === item.category
+                                  (cat) => cat.id === item.category,
                                 );
                                 return (
                                   <span
@@ -7939,14 +7926,14 @@ export default function ContestDetailClient({
                                       "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
                                       isDark
                                         ? "bg-indigo-600/30 text-indigo-200 border border-indigo-500/50"
-                                        : "bg-indigo-100 text-indigo-800 border border-indigo-300"
+                                        : "bg-indigo-100 text-indigo-800 border border-indigo-300",
                                     )}
                                   >
                                     {category ? category.name : item.category}:{" "}
                                     {item.subcategory}
                                   </span>
                                 );
-                              }
+                              },
                             )}
                           </div>
                         </div>
@@ -7968,7 +7955,7 @@ export default function ContestDetailClient({
                           "border rounded-xl p-4",
                           isDark
                             ? "border-yellow-600 bg-yellow-950/50"
-                            : "border-yellow-300 bg-yellow-50/50"
+                            : "border-yellow-300 bg-yellow-50/50",
                         )}
                       >
                         <div className="flex flex-wrap gap-2">
@@ -7979,7 +7966,7 @@ export default function ContestDetailClient({
                                 "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
                                 isDark
                                   ? "bg-yellow-600/30 text-yellow-200 border border-yellow-500/50"
-                                  : "bg-yellow-100 text-yellow-800 border border-yellow-300"
+                                  : "bg-yellow-100 text-yellow-800 border border-yellow-300",
                               )}
                             >
                               {interest}
@@ -8005,13 +7992,13 @@ export default function ContestDetailClient({
                         "border p-4 rounded-lg",
                         isDark
                           ? "bg-green-950/40 border-green-800"
-                          : "border-green-300 bg-green-50/50 rounded-xl p-4"
+                          : "border-green-300 bg-green-50/50 rounded-xl p-4",
                       )}
                     >
                       <p
                         className={cn(
                           "text-2xl font-bold mb-2",
-                          isDark ? "text-green-300" : "text-green-900"
+                          isDark ? "text-green-300" : "text-green-900",
                         )}
                       >
                         {formatMoney(
@@ -8023,14 +8010,14 @@ export default function ContestDetailClient({
                               currentContest.contest_based_details
                                 ?.leaderboard_contest as any
                             )?.flat_fee_bonus ||
-                            0
+                            0,
                         )}{" "}
                         per verified submission
                       </p>
                       <p
                         className={cn(
                           "text-sm",
-                          isDark ? "text-green-400" : "text-green-700"
+                          isDark ? "text-green-400" : "text-green-700",
                         )}
                       >
                         🎁 Each creator earns this guaranteed amount for EVERY
@@ -8048,13 +8035,13 @@ export default function ContestDetailClient({
                               "mt-3 pt-3 border-t",
                               isDark
                                 ? "border-green-700/50"
-                                : "border-green-200"
+                                : "border-green-200",
                             )}
                           >
                             <p
                               className={cn(
                                 "text-sm font-medium",
-                                isDark ? "text-green-200" : "text-green-800"
+                                isDark ? "text-green-200" : "text-green-800",
                               )}
                             >
                               💰 Flat Fee Bonus Cap:{" "}
@@ -8062,13 +8049,13 @@ export default function ContestDetailClient({
                                 (
                                   currentContest.contest_based_details
                                     ?.cpm_contest as any
-                                )?.flat_fee_bonus_cap
+                                )?.flat_fee_bonus_cap,
                               )}
                             </p>
                             <p
                               className={cn(
                                 "text-xs mt-1",
-                                isDark ? "text-green-400" : "text-green-600"
+                                isDark ? "text-green-400" : "text-green-600",
                               )}
                             >
                               Maximum total flat fee bonus to distribute across
@@ -8088,7 +8075,7 @@ export default function ContestDetailClient({
                       <CheckCheck
                         className={cn(
                           "h-5 w-5",
-                          isDark ? "text-purple-400" : "text-purple-600"
+                          isDark ? "text-purple-400" : "text-purple-600",
                         )}
                       />
                       Multiple Submissions Allowed
@@ -8098,13 +8085,13 @@ export default function ContestDetailClient({
                         "border rounded-xl p-4",
                         isDark
                           ? "border-purple-600/50 bg-purple-900/20"
-                          : "border-purple-300 bg-purple-50/50"
+                          : "border-purple-300 bg-purple-50/50",
                       )}
                     >
                       <p
                         className={cn(
                           "text-lg font-semibold mb-2",
-                          isDark ? "text-purple-200" : "text-purple-900"
+                          isDark ? "text-purple-200" : "text-purple-900",
                         )}
                       >
                         Creators can submit up to{" "}
@@ -8114,7 +8101,7 @@ export default function ContestDetailClient({
                       <p
                         className={cn(
                           "text-sm mb-3",
-                          isDark ? "text-purple-300" : "text-purple-700"
+                          isDark ? "text-purple-300" : "text-purple-700",
                         )}
                       >
                         Allow multiple submissions to maximize creator
@@ -8127,24 +8114,24 @@ export default function ContestDetailClient({
                             "mt-3 pt-3 border-t",
                             isDark
                               ? "border-purple-700/50"
-                              : "border-purple-200"
+                              : "border-purple-200",
                           )}
                         >
                           <p
                             className={cn(
                               "text-sm font-medium",
-                              isDark ? "text-purple-200" : "text-purple-800"
+                              isDark ? "text-purple-200" : "text-purple-800",
                             )}
                           >
                             💡 Earnings Cap for This Contest:{" "}
                             {formatMoney(
-                              (currentContest as any).max_earnings_per_creator
+                              (currentContest as any).max_earnings_per_creator,
                             )}
                           </p>
                           <p
                             className={cn(
                               "text-xs mt-1",
-                              isDark ? "text-purple-400" : "text-purple-600"
+                              isDark ? "text-purple-400" : "text-purple-600",
                             )}
                           >
                             Creators can still submit after reaching this cap,
@@ -8164,7 +8151,7 @@ export default function ContestDetailClient({
                     <h3
                       className={cn(
                         "font-semibold text-lg flex items-center gap-2",
-                        isDark ? "text-white" : "text-foreground"
+                        isDark ? "text-white" : "text-foreground",
                       )}
                     >
                       <Star className="h-5 w-5 text-amber-600" />
@@ -8175,7 +8162,7 @@ export default function ContestDetailClient({
                         "border rounded-xl p-4",
                         isDark
                           ? "border-amber-500"
-                          : "border-amber-300 bg-amber-50/50"
+                          : "border-amber-300 bg-amber-50/50",
                       )}
                     >
                       <div
@@ -8183,7 +8170,7 @@ export default function ContestDetailClient({
                           "prose prose-md max-w-none",
                           isDark
                             ? "text-white [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
-                            : "text-foreground"
+                            : "text-foreground",
                         )}
                         style={isDark ? { color: "white" } : undefined}
                         dangerouslySetInnerHTML={{
@@ -8194,7 +8181,7 @@ export default function ContestDetailClient({
                       <p
                         className={cn(
                           "text-xs mt-3 italic",
-                          isDark ? "text-amber-300" : "text-amber-700"
+                          isDark ? "text-amber-300" : "text-amber-700",
                         )}
                       >
                         ℹ️ These bonuses are handled manually by you. Make sure
@@ -8215,7 +8202,7 @@ export default function ContestDetailClient({
                         <h3
                           className={cn(
                             "text-xl font-semibold flex items-center gap-2",
-                            isDark ? "text-white" : "text-gray-900"
+                            isDark ? "text-white" : "text-gray-900",
                           )}
                         >
                           <Share2 className="h-5 w-5" />
@@ -8227,7 +8214,7 @@ export default function ContestDetailClient({
                         <div
                           className={cn(
                             "border rounded-xl p-6 transition-all duration-200",
-                            isDark ? "border-gray-600" : "border-gray-300"
+                            isDark ? "border-gray-600" : "border-gray-300",
                           )}
                         >
                           <div className="flex items-start gap-4">
@@ -8236,7 +8223,7 @@ export default function ContestDetailClient({
                                 "p-3 rounded-full flex-shrink-0",
                                 isDark
                                   ? "bg-[#FFFFFF42] text-white"
-                                  : "bg-sky-100 text-sky-600"
+                                  : "bg-sky-100 text-sky-600",
                               )}
                             >
                               <ExternalLink className="h-5 w-5 " />
@@ -8255,7 +8242,7 @@ export default function ContestDetailClient({
                                     "block text-base font-medium hover:underline mb-1 break-all",
                                     isDark
                                       ? "text-sky-300"
-                                      : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                                      : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
                                   )}
                                 >
                                   {
@@ -8273,7 +8260,7 @@ export default function ContestDetailClient({
                                     "text-sm leading-relaxed",
                                     isDark
                                       ? "text-white"
-                                      : "text-gray-700 dark:text-gray-300"
+                                      : "text-gray-700 dark:text-gray-300",
                                   )}
                                 >
                                   {
@@ -8359,13 +8346,13 @@ export default function ContestDetailClient({
                                                 "inline-flex items-center px-2 py-1 rounded-full text-xs",
                                                 isDark
                                                   ? "bg-purple-900/50 text-purple-200 border border-purple-500/60"
-                                                  : "bg-purple-50 text-purple-700 border border-purple-200"
+                                                  : "bg-purple-50 text-purple-700 border border-purple-200",
                                               )}
                                             >
                                               <Tag className="h-3 w-3 mr-1" />
                                               {kw}
                                             </span>
-                                          )
+                                          ),
                                         )}
                                       </div>
                                     )}
@@ -8385,12 +8372,12 @@ export default function ContestDetailClient({
                                                 "inline-flex items-center px-2 py-1 rounded-full text-xs",
                                                 isDark
                                                   ? "bg-slate-800 text-slate-100 border border-slate-600"
-                                                  : "bg-slate-50 text-slate-700 border border-slate-200"
+                                                  : "bg-slate-50 text-slate-700 border border-slate-200",
                                               )}
                                             >
                                               @{m.replace(/^@/, "")}
                                             </span>
-                                          )
+                                          ),
                                         )}
                                       </div>
                                     )}
@@ -8412,7 +8399,7 @@ export default function ContestDetailClient({
                         <h3
                           className={cn(
                             "text-xl font-semibold",
-                            isDark ? "text-white" : "text-gray-900"
+                            isDark ? "text-white" : "text-gray-900",
                           )}
                         >
                           Inspiration Links
@@ -8425,7 +8412,7 @@ export default function ContestDetailClient({
                             key={idx}
                             className={cn(
                               "border rounded-xl p-6 transition-all duration-200",
-                              isDark ? "border-gray-600" : "border-gray-300"
+                              isDark ? "border-gray-600" : "border-gray-300",
                             )}
                           >
                             <div className="flex items-start gap-4">
@@ -8434,7 +8421,7 @@ export default function ContestDetailClient({
                                   "p-3 rounded-full flex-shrink-0",
                                   isDark
                                     ? "bg-[#FFFFFF42] text-white"
-                                    : "bg-purple-100 text-purple-600"
+                                    : "bg-purple-100 text-purple-600",
                                 )}
                               >
                                 <ExternalLink className="h-5 w-5 " />
@@ -8448,7 +8435,7 @@ export default function ContestDetailClient({
                                     "block text-base font-medium hover:underline mb-2 break-all",
                                     isDark
                                       ? "text-purple-300"
-                                      : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                                      : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
                                   )}
                                 >
                                   {item.url}
@@ -8458,7 +8445,7 @@ export default function ContestDetailClient({
                                     "text-sm leading-relaxed",
                                     isDark
                                       ? "text-white"
-                                      : "text-gray-700 dark:text-gray-300"
+                                      : "text-gray-700 dark:text-gray-300",
                                   )}
                                 >
                                   {item.description}
@@ -8479,7 +8466,7 @@ export default function ContestDetailClient({
                         <h3
                           className={cn(
                             "px-2 text-xl font-semibold",
-                            isDark ? "text-white" : "text-gray-900"
+                            isDark ? "text-white" : "text-gray-900",
                           )}
                         >
                           Tracking Links
@@ -8489,7 +8476,7 @@ export default function ContestDetailClient({
                             "rounded-md border p-3 text-sm",
                             isDark
                               ? "border-[#C9A7FF] bg-[#C9A7FF26] text-white"
-                              : "border-yellow-200 bg-yellow-50 text-yellow-900"
+                              : "border-yellow-200 bg-yellow-50 text-yellow-900",
                           )}
                         >
                           <span className="font-medium">Note:</span> change the
@@ -8504,7 +8491,7 @@ export default function ContestDetailClient({
                           const username = getCurrentUserUsername();
                           const processedUrl = processUrlWithCreator(
                             item.url,
-                            username
+                            username,
                           );
 
                           return (
@@ -8514,14 +8501,14 @@ export default function ContestDetailClient({
                                 "border rounded-xl p-6 transition-all duration-200",
                                 isDark
                                   ? "border-gray-600"
-                                  : "border-gray-300 bg-white"
+                                  : "border-gray-300 bg-white",
                               )}
                             >
                               <div className="flex items-start gap-4">
                                 <div
                                   className={cn(
                                     "p-3 rounded-full flex-shrink-0",
-                                    isDark ? "bg-green-900/40" : "bg-green-100"
+                                    isDark ? "bg-green-900/40" : "bg-green-100",
                                   )}
                                 >
                                   <ExternalLink
@@ -8529,7 +8516,7 @@ export default function ContestDetailClient({
                                       "h-5 w-5",
                                       isDark
                                         ? "text-green-400"
-                                        : "text-green-600"
+                                        : "text-green-600",
                                     )}
                                   />
                                 </div>
@@ -8543,7 +8530,7 @@ export default function ContestDetailClient({
                                         "text-base font-medium hover:underline break-all flex-1",
                                         isDark
                                           ? "text-purple-300"
-                                          : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                                          : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
                                       )}
                                     >
                                       {processedUrl}
@@ -8556,7 +8543,7 @@ export default function ContestDetailClient({
                                         "p-1.5 rounded-md transition-colors duration-200 flex-shrink-0",
                                         isDark
                                           ? "text-gray-300"
-                                          : "hover:bg-gray-100 text-gray-600"
+                                          : "hover:bg-gray-100 text-gray-600",
                                       )}
                                       title="Copy link"
                                     >
@@ -8568,7 +8555,7 @@ export default function ContestDetailClient({
                                       "text-sm leading-relaxed",
                                       isDark
                                         ? "text-white"
-                                        : "text-gray-700 dark:text-gray-300"
+                                        : "text-gray-700 dark:text-gray-300",
                                     )}
                                   >
                                     {item.description}
@@ -8594,7 +8581,7 @@ export default function ContestDetailClient({
                         <h3
                           className={cn(
                             "text-xl font-semibold",
-                            isDark ? "text-white" : "text-gray-900"
+                            isDark ? "text-white" : "text-gray-900",
                           )}
                         >
                           Resources
@@ -8609,17 +8596,17 @@ export default function ContestDetailClient({
                                 url,
                                 description,
                                 type: "external",
-                              })
+                              }),
                             )
                         ).map((resource, idx) => {
                           const isImage =
                             resource.url.startsWith("data:image") ||
                             /\.(jpg|jpeg|png|gif|jfif|webp)$/i.test(
-                              resource.url
+                              resource.url,
                             );
                           const isPdf = /\.pdf$/i.test(resource.url);
                           const isVideo = /\.(mp4|mov|avi|webm)$/i.test(
-                            resource.url
+                            resource.url,
                           );
                           const isInternal = resource.type === "internal";
                           return (
@@ -8627,7 +8614,7 @@ export default function ContestDetailClient({
                               key={idx}
                               className={cn(
                                 "border rounded-xl p-6 transition-all duration-200",
-                                isDark ? "border-gray-600" : "border-gray-300"
+                                isDark ? "border-gray-600" : "border-gray-300",
                               )}
                             >
                               <div className="flex flex-col md:flex-row justify-between">
@@ -8685,7 +8672,7 @@ export default function ContestDetailClient({
                                         "p-3 rounded-full flex-shrink-0",
                                         isDark
                                           ? "bg-[#FFFFFF42] text-white"
-                                          : "bg-purple-100 text-purple-600"
+                                          : "bg-purple-100 text-purple-600",
                                       )}
                                     >
                                       <ExternalLink className="h-5 w-5" />
@@ -8695,7 +8682,9 @@ export default function ContestDetailClient({
                                     <h4
                                       className={cn(
                                         "text-base font-semibold mb-1",
-                                        isDark ? "text-white" : "text-gray-900 "
+                                        isDark
+                                          ? "text-white"
+                                          : "text-gray-900 ",
                                       )}
                                     >
                                       {resource.description}
@@ -8703,7 +8692,7 @@ export default function ContestDetailClient({
                                     <p
                                       className={cn(
                                         "text-sm",
-                                        isDark ? "text-white" : "text-gray-600"
+                                        isDark ? "text-white" : "text-gray-600",
                                       )}
                                     >
                                       {resource.type === "external"
@@ -8728,10 +8717,10 @@ export default function ContestDetailClient({
                                     {isPdf
                                       ? "Open PDF"
                                       : isVideo
-                                      ? "Play Video"
-                                      : isImage
-                                      ? "View Image"
-                                      : "View Resource"}
+                                        ? "Play Video"
+                                        : isImage
+                                          ? "View Image"
+                                          : "View Resource"}
                                   </a>
                                 </Button>
                               </div>
@@ -8758,7 +8747,7 @@ export default function ContestDetailClient({
                             "p-4 rounded-full",
                             isDark
                               ? "bg-[#FFFFFF36] text-white"
-                              : "bg-[#D8C3FF] text-[#4A00BE]"
+                              : "bg-[#D8C3FF] text-[#4A00BE]",
                           )}
                         >
                           <Trophy className="h-6 w-6" />
@@ -8767,7 +8756,7 @@ export default function ContestDetailClient({
                           <h2
                             className={cn(
                               "text-2xl font-bold",
-                              isDark ? "text-white" : "text-gray-900 "
+                              isDark ? "text-white" : "text-gray-900 ",
                             )}
                           >
                             Submissions Leaderboard
@@ -8780,7 +8769,7 @@ export default function ContestDetailClient({
                             <div
                               className={cn(
                                 "flex items-center gap-1 text-sm",
-                                isDark ? "text-white" : "text-slate-600"
+                                isDark ? "text-white" : "text-slate-600",
                               )}
                             >
                               <div className="px-[3px]">|</div>
@@ -8790,13 +8779,13 @@ export default function ContestDetailClient({
                               <div
                                 className={cn(
                                   "flex items-center gap-1 text-sm",
-                                  isDark ? "text-white" : "text-slate-600"
+                                  isDark ? "text-white" : "text-slate-600",
                                 )}
                               >
                                 <div className="px-[3px]">|</div>
                                 Last updated:{" "}
                                 {formatTimeAgo(
-                                  currentContest.last_metrics_updated
+                                  currentContest.last_metrics_updated,
                                 )}
                               </div>
                             )}
@@ -8815,7 +8804,7 @@ export default function ContestDetailClient({
                                 "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all",
                                 isDisabled
                                   ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
-                                  : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]"
+                                  : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
                               )}
                               title={
                                 disabledReason ||
@@ -8830,8 +8819,8 @@ export default function ContestDetailClient({
                               {isRefreshingMetrics
                                 ? "Updating..."
                                 : !cooldownInfo.canRefresh
-                                ? `Wait ${cooldownInfo.remainingMinutes}m`
-                                : "Refresh Metrics"}
+                                  ? `Wait ${cooldownInfo.remainingMinutes}m`
+                                  : "Refresh Metrics"}
                             </button>
                           );
                         })()}
@@ -8857,7 +8846,7 @@ export default function ContestDetailClient({
                             "flex-1 gap-3 items-center px-1 border",
                             isDark
                               ? "text-white border-gray-400"
-                              : "text-[#7F39EC] border-[#7F39EC]"
+                              : "text-[#7F39EC] border-[#7F39EC]",
                           )}
                         >
                           <div className="flex items-center gap-1">
@@ -8870,7 +8859,7 @@ export default function ContestDetailClient({
                               "px-1.5 py-0.5 text-sm h-5",
                               isDark
                                 ? "text-white bg-[#FFFFFF36]"
-                                : "text-[#7F39EC] bg-purple-200"
+                                : "text-[#7F39EC] bg-purple-200",
                             )}
                           >
                             {currentSubmissions.length}
@@ -8882,7 +8871,7 @@ export default function ContestDetailClient({
                             "flex-1 gap-3 items-center px-1 border",
                             isDark
                               ? "text-white border-gray-400"
-                              : "text-[#7F39EC] border-[#7F39EC]"
+                              : "text-[#7F39EC] border-[#7F39EC]",
                           )}
                         >
                           <div className="flex items-center gap-1">
@@ -8898,7 +8887,7 @@ export default function ContestDetailClient({
                               "px-1.5 py-0.5 text-sm h-5",
                               isDark
                                 ? "text-white bg-[#FFFFFF36]"
-                                : "text-[#7F39EC] bg-purple-200"
+                                : "text-[#7F39EC] bg-purple-200",
                             )}
                           >
                             {
@@ -8917,7 +8906,7 @@ export default function ContestDetailClient({
                             "flex-1 gap-3 items-center px-1 border",
                             isDark
                               ? "text-white border-gray-400"
-                              : "text-[#7F39EC] border-[#7F39EC]"
+                              : "text-[#7F39EC] border-[#7F39EC]",
                           )}
                         >
                           <div className="flex items-center gap-1">
@@ -8932,7 +8921,7 @@ export default function ContestDetailClient({
                               "px-1.5 py-0.5 text-sm h-5",
                               isDark
                                 ? "text-white bg-[#FFFFFF36]"
-                                : "text-[#7F39EC] bg-purple-200"
+                                : "text-[#7F39EC] bg-purple-200",
                             )}
                           >
                             {
@@ -8949,7 +8938,7 @@ export default function ContestDetailClient({
                             "flex-1 gap-3 items-center px-1 border",
                             isDark
                               ? "text-white border-gray-400"
-                              : "text-[#7F39EC] border-[#7F39EC]"
+                              : "text-[#7F39EC] border-[#7F39EC]",
                           )}
                         >
                           <div className="flex items-center gap-1">
@@ -8964,7 +8953,7 @@ export default function ContestDetailClient({
                               "px-1.5 py-0.5 text-sm h-5",
                               isDark
                                 ? "text-white bg-[#FFFFFF36]"
-                                : "text-[#7F39EC] bg-purple-200"
+                                : "text-[#7F39EC] bg-purple-200",
                             )}
                           >
                             {
@@ -8981,7 +8970,7 @@ export default function ContestDetailClient({
                             "flex-1 gap-3 items-center px-1 border",
                             isDark
                               ? "text-white border-gray-400"
-                              : "text-[#7F39EC] border-[#7F39EC]"
+                              : "text-[#7F39EC] border-[#7F39EC]",
                           )}
                         >
                           <div className="flex items-center gap-1">
@@ -8996,12 +8985,12 @@ export default function ContestDetailClient({
                               "px-1.5 py-0.5 text-sm h-5",
                               isDark
                                 ? "text-white bg-[#FFFFFF36]"
-                                : "text-[#7F39EC] bg-purple-200"
+                                : "text-[#7F39EC] bg-purple-200",
                             )}
                           >
                             {
                               currentSubmissions.filter(
-                                (s) => s.status === "rejected"
+                                (s) => s.status === "rejected",
                               ).length
                             }
                           </Badge>
@@ -9012,7 +9001,7 @@ export default function ContestDetailClient({
                             "flex-1 gap-3 items-center px-1 border",
                             isDark
                               ? "text-white border-gray-400"
-                              : "text-[#7F39EC] border-[#7F39EC]"
+                              : "text-[#7F39EC] border-[#7F39EC]",
                           )}
                         >
                           <div className="flex items-center gap-1">
@@ -9027,7 +9016,7 @@ export default function ContestDetailClient({
                               "px-1.5 py-0.5 text-sm h-5",
                               isDark
                                 ? "text-white bg-[#FFFFFF36]"
-                                : "text-[#7F39EC] bg-purple-200"
+                                : "text-[#7F39EC] bg-purple-200",
                             )}
                           >
                             {
@@ -9063,7 +9052,7 @@ export default function ContestDetailClient({
                                 "flex-1 gap-2 items-center px-2 border",
                                 isDark
                                   ? "text-white border-gray-400"
-                                  : "text-[#7F39EC] border-[#7F39EC]"
+                                  : "text-[#7F39EC] border-[#7F39EC]",
                               )}
                             >
                               <div className="flex items-center gap-1">
@@ -9078,12 +9067,12 @@ export default function ContestDetailClient({
                                   "px-1.5 py-0.5 text-xs h-5",
                                   isDark
                                     ? "text-white bg-[#FFFFFF36]"
-                                    : "text-[#7F39EC] bg-purple-200"
+                                    : "text-[#7F39EC] bg-purple-200",
                                 )}
                               >
                                 {
                                   currentSubmissions.filter(
-                                    (s) => (s as any).is_twitter_tweet === true
+                                    (s) => (s as any).is_twitter_tweet === true,
                                   ).length
                                 }
                               </Badge>
@@ -9094,7 +9083,7 @@ export default function ContestDetailClient({
                                 "flex-1 gap-2 items-center px-2 border",
                                 isDark
                                   ? "text-white border-gray-400"
-                                  : "text-[#7F39EC] border-[#7F39EC]"
+                                  : "text-[#7F39EC] border-[#7F39EC]",
                               )}
                             >
                               <div className="flex items-center gap-1">
@@ -9109,14 +9098,14 @@ export default function ContestDetailClient({
                                   "px-1.5 py-0.5 text-xs h-5",
                                   isDark
                                     ? "text-white bg-[#FFFFFF36]"
-                                    : "text-[#7F39EC] bg-purple-200"
+                                    : "text-[#7F39EC] bg-purple-200",
                                 )}
                               >
                                 {
                                   currentSubmissions.filter(
                                     (s) =>
                                       (s as any).is_twitter_tweet === true &&
-                                      (s as any).filter_status === "eligible"
+                                      (s as any).filter_status === "eligible",
                                   ).length
                                 }
                               </Badge>
@@ -9127,7 +9116,7 @@ export default function ContestDetailClient({
                                 "flex-1 gap-2 items-center px-2 border",
                                 isDark
                                   ? "text-white border-gray-400"
-                                  : "text-[#7F39EC] border-[#7F39EC]"
+                                  : "text-[#7F39EC] border-[#7F39EC]",
                               )}
                             >
                               <div className="flex items-center gap-1">
@@ -9142,14 +9131,14 @@ export default function ContestDetailClient({
                                   "px-1.5 py-0.5 text-xs h-5",
                                   isDark
                                     ? "text-white bg-[#FFFFFF36]"
-                                    : "text-[#7F39EC] bg-purple-200"
+                                    : "text-[#7F39EC] bg-purple-200",
                                 )}
                               >
                                 {
                                   currentSubmissions.filter(
                                     (s) =>
                                       (s as any).is_twitter_tweet === true &&
-                                      (s as any).filter_status !== "eligible"
+                                      (s as any).filter_status !== "eligible",
                                   ).length
                                 }
                               </Badge>
@@ -9164,7 +9153,7 @@ export default function ContestDetailClient({
                 <div
                   className={cn(
                     "p-4 rounded-xl shadow-xl",
-                    isDark ? "bg-[#170337]" : "bg-white "
+                    isDark ? "bg-[#170337]" : "bg-white ",
                   )}
                 >
                   <CardContent className="p-0">
@@ -9174,7 +9163,7 @@ export default function ContestDetailClient({
                         <div className="flex flex-col gap-2 text-md sm:flex-row sm:items-center sm:gap-3">
                           <span
                             className={cn(
-                              isDark ? "text-white" : "text-slate-600"
+                              isDark ? "text-white" : "text-slate-600",
                             )}
                           >
                             View
@@ -9188,7 +9177,7 @@ export default function ContestDetailClient({
                             <SelectTrigger
                               className={cn(
                                 "h-12 w-full sm:w-[180px]",
-                                isDark ? "border-gray-500" : "border-gray-300"
+                                isDark ? "border-gray-500" : "border-gray-300",
                               )}
                             >
                               <SelectValue placeholder="View mode" />
@@ -9209,7 +9198,7 @@ export default function ContestDetailClient({
                             <span
                               className={cn(
                                 "text-md",
-                                isDark ? "text-white" : "text-slate-700"
+                                isDark ? "text-white" : "text-slate-700",
                               )}
                             >
                               Sort by
@@ -9223,7 +9212,7 @@ export default function ContestDetailClient({
                                   "h-12 w-full sm:w-[220px]",
                                   isDark
                                     ? "border-gray-500"
-                                    : "border-slate-300"
+                                    : "border-slate-300",
                                 )}
                               >
                                 <SelectValue placeholder="Sort submissions" />
@@ -9254,7 +9243,7 @@ export default function ContestDetailClient({
                                 "border-b",
                                 isDark
                                   ? "bg-[#391A6A] border-gray-600"
-                                  : "bg-slate-100 hover:bg-slate-100 border-slate-200"
+                                  : "bg-slate-100 hover:bg-slate-100 border-slate-200",
                               )}
                             >
                               <TableHead className="w-12">#</TableHead>
@@ -9395,7 +9384,7 @@ export default function ContestDetailClient({
                               // Use status directly (no normalization needed since we use "verified" instead of "approved")
                               const normalizedStatusForBadge = statusToUse;
                               const submissionStatus = getSubmissionStatusBadge(
-                                normalizedStatusForBadge
+                                normalizedStatusForBadge,
                               );
                               const isLoading =
                                 isLoadingSubmission[submission.id] || false;
@@ -9432,7 +9421,7 @@ export default function ContestDetailClient({
                                       // Use creator's rank based on total points
                                       currentRank =
                                         creatorRankingMap.get(
-                                          submission.creator_id || ""
+                                          submission.creator_id || "",
                                         ) || 0;
                                     } else {
                                       // For other platforms, use global submission rank (not page index)
@@ -9443,11 +9432,11 @@ export default function ContestDetailClient({
                                       const prizeForRank =
                                         contestDetails.prizes.find(
                                           (prize: any) =>
-                                            prize.position === currentRank
+                                            prize.position === currentRank,
                                         );
                                       if (prizeForRank) {
                                         const prizeAmount = centsToDollars(
-                                          prizeForRank.amount
+                                          prizeForRank.amount,
                                         );
                                         return {
                                           amount: prizeAmount,
@@ -9569,7 +9558,7 @@ export default function ContestDetailClient({
                                   if (isTwitterLeaderboard) {
                                     // For Twitter leaderboard, use creator's prize amount based on rank
                                     const creatorRank = creatorRankingMap.get(
-                                      submission.creator_id || ""
+                                      submission.creator_id || "",
                                     );
                                     if (creatorRank) {
                                       const contestDetails =
@@ -9577,18 +9566,19 @@ export default function ContestDetailClient({
                                           ?.leaderboard_contest;
                                       const prizeForRank =
                                         contestDetails?.prizes?.find(
-                                          (p: any) => p.position === creatorRank
+                                          (p: any) =>
+                                            p.position === creatorRank,
                                         );
                                       if (prizeForRank) {
                                         dollars = centsToDollars(
-                                          prizeForRank.amount
+                                          prizeForRank.amount,
                                         );
                                       }
                                     }
                                     // Fallback to submission.earnings if rank lookup fails
                                     if (dollars === 0 && submission.earnings) {
                                       dollars = centsToDollars(
-                                        submission.earnings
+                                        submission.earnings,
                                       );
                                     }
                                   } else {
@@ -9637,7 +9627,7 @@ export default function ContestDetailClient({
                                       !isDeleted &&
                                       (isDark
                                         ? "bg-gradient-to-r from-violet-900/20 to-transparent border-l-4 border-l-violet-400"
-                                        : "bg-gradient-to-r from-yellow-50 to-transparent border-l-4 border-l-yellow-400")
+                                        : "bg-gradient-to-r from-yellow-50 to-transparent border-l-4 border-l-yellow-400"),
                                   )}
                                 >
                                   <TableCell className="font-bold text-center">
@@ -9651,8 +9641,8 @@ export default function ContestDetailClient({
                                                 ? "text-yellow-400"
                                                 : "text-yellow-500"
                                               : rank === 2
-                                              ? "text-gray-400"
-                                              : "text-amber-600"
+                                                ? "text-gray-400"
+                                                : "text-amber-600",
                                           )}
                                         />
                                       )}
@@ -9688,7 +9678,7 @@ export default function ContestDetailClient({
                                             "font-semibold text-sm truncate",
                                             isDark
                                               ? "text-white"
-                                              : "text-slate-900"
+                                              : "text-slate-900",
                                           )}
                                         >
                                           {submission.creator_display_name ||
@@ -9699,7 +9689,7 @@ export default function ContestDetailClient({
                                             "text-xs font-mono",
                                             isDark
                                               ? "text-white"
-                                              : "text-slate-600"
+                                              : "text-slate-600",
                                           )}
                                         >
                                           {submission.creator_username ||
@@ -9715,7 +9705,7 @@ export default function ContestDetailClient({
                                                 "text-xs hover:underline flex items-center gap-1 transition-colors whitespace-nowrap",
                                                 isDark
                                                   ? "text-purple-400"
-                                                  : "text-blue-600 hover:text-blue-800"
+                                                  : "text-blue-600 hover:text-blue-800",
                                               )}
                                             >
                                               <PlayCircle className="h-3 w-3" />
@@ -9725,7 +9715,7 @@ export default function ContestDetailClient({
                                               <button
                                                 onClick={() =>
                                                   handleDownloadReel(
-                                                    submission.id
+                                                    submission.id,
                                                   )
                                                 }
                                                 disabled={
@@ -9739,7 +9729,7 @@ export default function ContestDetailClient({
                                                     : "text-blue-600 hover:text-blue-800",
                                                   downloadingSubmissionId ===
                                                     submission.id &&
-                                                    "opacity-50 cursor-not-allowed"
+                                                    "opacity-50 cursor-not-allowed",
                                                 )}
                                                 title="Download Reel/Short"
                                               >
@@ -9779,19 +9769,19 @@ export default function ContestDetailClient({
                                                 submission.other_stats
                                                   ?.tweet_type === "retweet"
                                                 ? "bg-purple-100 text-purple-700 border-purple-300"
-                                                : "bg-blue-100 text-blue-700 border-blue-300"
+                                                : "bg-blue-100 text-blue-700 border-blue-300",
                                             )}
                                           >
                                             {submission.other_stats
                                               ?.tweet_type === "reply"
                                               ? "REPLY"
                                               : submission.other_stats
-                                                  ?.tweet_type === "quote"
-                                              ? "QUOTE"
-                                              : submission.other_stats
-                                                  ?.tweet_type === "retweet"
-                                              ? "RETWEET"
-                                              : "TWEET"}
+                                                    ?.tweet_type === "quote"
+                                                ? "QUOTE"
+                                                : submission.other_stats
+                                                      ?.tweet_type === "retweet"
+                                                  ? "RETWEET"
+                                                  : "TWEET"}
                                           </Badge>
                                           {isDeleted && (
                                             <Badge
@@ -9806,7 +9796,7 @@ export default function ContestDetailClient({
                                               "text-xs",
                                               isDark
                                                 ? "text-slate-400"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             from @{submission.creator_username}
@@ -9818,7 +9808,7 @@ export default function ContestDetailClient({
                                             "text-sm line-clamp-3",
                                             isDark
                                               ? "text-white"
-                                              : "text-slate-900"
+                                              : "text-slate-900",
                                           )}
                                           title={
                                             submission.other_stats
@@ -9841,7 +9831,7 @@ export default function ContestDetailClient({
                                               "text-xs flex items-center gap-1 hover:underline",
                                               isDark
                                                 ? "text-purple-400"
-                                                : "text-purple-600"
+                                                : "text-purple-600",
                                             )}
                                           >
                                             Click to view tweet
@@ -9862,7 +9852,7 @@ export default function ContestDetailClient({
                                               "font-bold text-sm",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-900"
+                                                : "text-slate-900",
                                             )}
                                           >
                                             {formatMetricValue(
@@ -9870,7 +9860,7 @@ export default function ContestDetailClient({
                                                 ?.base_points || 0) +
                                                 ((submission as any)
                                                   .manual_points_adjustment ||
-                                                  0)
+                                                  0),
                                             )}
                                           </span>
                                           <span
@@ -9878,7 +9868,7 @@ export default function ContestDetailClient({
                                               "text-xs",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             total
@@ -9893,7 +9883,7 @@ export default function ContestDetailClient({
                                               "font-bold text-sm",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-900"
+                                                : "text-slate-900",
                                             )}
                                           >
                                             {formatMetricValue(
@@ -9901,7 +9891,7 @@ export default function ContestDetailClient({
                                                 ?.base_points ||
                                                 submission.other_stats
                                                   ?.points ||
-                                                0
+                                                0,
                                             )}
                                           </span>
                                           <span
@@ -9909,7 +9899,7 @@ export default function ContestDetailClient({
                                               "text-xs",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             base
@@ -9926,12 +9916,12 @@ export default function ContestDetailClient({
                                                 .manual_points_adjustment > 0
                                                 ? "text-green-600"
                                                 : (submission as any)
-                                                    .manual_points_adjustment <
-                                                  0
-                                                ? "text-red-600"
-                                                : isDark
-                                                ? "text-white"
-                                                : "text-slate-900"
+                                                      .manual_points_adjustment <
+                                                    0
+                                                  ? "text-red-600"
+                                                  : isDark
+                                                    ? "text-white"
+                                                    : "text-slate-900",
                                             )}
                                           >
                                             {(submission as any)
@@ -9940,7 +9930,7 @@ export default function ContestDetailClient({
                                               : ""}
                                             {formatMetricValue(
                                               (submission as any)
-                                                .manual_points_adjustment || 0
+                                                .manual_points_adjustment || 0,
                                             )}
                                           </span>
                                           <span
@@ -9948,7 +9938,7 @@ export default function ContestDetailClient({
                                               "text-xs",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             manual
@@ -9960,7 +9950,7 @@ export default function ContestDetailClient({
                                                 "text-xs mt-0.5 italic truncate max-w-[100px]",
                                                 isDark
                                                   ? "text-slate-400"
-                                                  : "text-slate-600"
+                                                  : "text-slate-600",
                                               )}
                                               title={
                                                 (submission as any)
@@ -9974,7 +9964,7 @@ export default function ContestDetailClient({
                                                     submission as any
                                                   ).manual_points_reason.substring(
                                                     0,
-                                                    15
+                                                    15,
                                                   ) + "..."
                                                 : (submission as any)
                                                     .manual_points_reason}
@@ -9992,12 +9982,12 @@ export default function ContestDetailClient({
                                                 "font-bold text-sm",
                                                 isDark
                                                   ? "text-white"
-                                                  : "text-slate-900"
+                                                  : "text-slate-900",
                                               )}
                                             >
                                               {formatMetricValue(
                                                 submission.other_stats?.likes ||
-                                                  0
+                                                  0,
                                               )}
                                             </span>
                                           </div>
@@ -10006,7 +9996,7 @@ export default function ContestDetailClient({
                                               "text-xs",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             likes
@@ -10023,12 +10013,12 @@ export default function ContestDetailClient({
                                                 "font-bold text-sm",
                                                 isDark
                                                   ? "text-white"
-                                                  : "text-slate-900"
+                                                  : "text-slate-900",
                                               )}
                                             >
                                               {formatMetricValue(
                                                 submission.other_stats
-                                                  ?.replies || 0
+                                                  ?.replies || 0,
                                               )}
                                             </span>
                                           </div>
@@ -10037,7 +10027,7 @@ export default function ContestDetailClient({
                                               "text-xs",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             replies
@@ -10052,12 +10042,12 @@ export default function ContestDetailClient({
                                               "font-bold text-sm",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-900"
+                                                : "text-slate-900",
                                             )}
                                           >
                                             {formatMetricValue(
                                               submission.other_stats
-                                                ?.retweets || 0
+                                                ?.retweets || 0,
                                             )}
                                           </span>
                                           <span
@@ -10065,7 +10055,7 @@ export default function ContestDetailClient({
                                               "text-xs",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             retweets
@@ -10080,12 +10070,12 @@ export default function ContestDetailClient({
                                               "font-bold text-sm",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-900"
+                                                : "text-slate-900",
                                             )}
                                           >
                                             {formatMetricValue(
                                               submission.other_stats
-                                                ?.quote_reposts || 0
+                                                ?.quote_reposts || 0,
                                             )}
                                           </span>
                                           <span
@@ -10093,7 +10083,7 @@ export default function ContestDetailClient({
                                               "text-xs",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             quote reposts
@@ -10110,12 +10100,12 @@ export default function ContestDetailClient({
                                                 "font-bold text-sm",
                                                 isDark
                                                   ? "text-white"
-                                                  : "text-slate-900"
+                                                  : "text-slate-900",
                                               )}
                                             >
                                               {formatMetricValue(
                                                 submission.other_stats
-                                                  ?.impressions || 0
+                                                  ?.impressions || 0,
                                               )}
                                             </span>
                                           </div>
@@ -10124,7 +10114,7 @@ export default function ContestDetailClient({
                                               "text-xs",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             impressions
@@ -10141,7 +10131,7 @@ export default function ContestDetailClient({
                                                 "text-xs italic truncate max-w-[150px]",
                                                 isDark
                                                   ? "text-slate-400"
-                                                  : "text-slate-600"
+                                                  : "text-slate-600",
                                               )}
                                               title={
                                                 (submission as any)
@@ -10155,7 +10145,7 @@ export default function ContestDetailClient({
                                                     submission as any
                                                   ).manual_points_reason.substring(
                                                     0,
-                                                    20
+                                                    20,
                                                   ) + "..."
                                                 : (submission as any)
                                                     .manual_points_reason}
@@ -10167,7 +10157,7 @@ export default function ContestDetailClient({
                                               "text-xs",
                                               isDark
                                                 ? "text-slate-500"
-                                                : "text-slate-400"
+                                                : "text-slate-400",
                                             )}
                                           >
                                             —
@@ -10185,7 +10175,7 @@ export default function ContestDetailClient({
                                               "font-bold  text-sm",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-900"
+                                                : "text-slate-900",
                                             )}
                                           >
                                             {formatMetricValue(metrics.views)}
@@ -10195,7 +10185,7 @@ export default function ContestDetailClient({
                                               "text-xs ",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             views
@@ -10211,7 +10201,7 @@ export default function ContestDetailClient({
                                                 "font-bold text-sm",
                                                 isDark
                                                   ? "text-white"
-                                                  : "text-slate-900"
+                                                  : "text-slate-900",
                                               )}
                                             >
                                               {formatMetricValue(metrics.likes)}
@@ -10222,7 +10212,7 @@ export default function ContestDetailClient({
                                               "text-xs ",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             likes
@@ -10238,11 +10228,11 @@ export default function ContestDetailClient({
                                                 "font-bold text-sm",
                                                 isDark
                                                   ? "text-white"
-                                                  : "text-slate-900 dark:text-slate-100"
+                                                  : "text-slate-900 dark:text-slate-100",
                                               )}
                                             >
                                               {formatMetricValue(
-                                                metrics.comments
+                                                metrics.comments,
                                               )}
                                             </span>
                                           </div>
@@ -10251,7 +10241,7 @@ export default function ContestDetailClient({
                                               "text-xs ",
                                               isDark
                                                 ? "text-white"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             comments
@@ -10273,24 +10263,25 @@ export default function ContestDetailClient({
                                       </TableCell>
                                       <TableCell className="text-center font-mono text-sm">
                                         {formatMetricValue(
-                                          (metrics as any).saves
+                                          (metrics as any).saves,
                                         )}
                                       </TableCell>
                                       <TableCell className="text-center font-mono text-sm">
                                         {formatMetricValue(
-                                          (metrics as any).reach
+                                          (metrics as any).reach,
                                         )}
                                       </TableCell>
                                       <TableCell className="text-center font-mono text-sm">
                                         {formatMetricValue(
-                                          (metrics as any).total_interactions
+                                          (metrics as any).total_interactions,
                                         )}
                                       </TableCell>
                                       <TableCell className="text-center font-mono text-sm">
                                         <div className="flex flex-col items-center">
                                           <span className="font-bold">
                                             {formatWatchTime(
-                                              (metrics as any).avg_watch_time_ms
+                                              (metrics as any)
+                                                .avg_watch_time_ms,
                                             )}
                                           </span>
                                           <span
@@ -10298,7 +10289,7 @@ export default function ContestDetailClient({
                                               "text-xs",
                                               isDark
                                                 ? "text-slate-400"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             avg
@@ -10310,7 +10301,7 @@ export default function ContestDetailClient({
                                           <span className="font-bold">
                                             {formatWatchTime(
                                               (metrics as any)
-                                                .total_watch_time_ms
+                                                .total_watch_time_ms,
                                             )}
                                           </span>
                                           <span
@@ -10318,7 +10309,7 @@ export default function ContestDetailClient({
                                               "text-xs",
                                               isDark
                                                 ? "text-slate-400"
-                                                : "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             total
@@ -10356,20 +10347,20 @@ export default function ContestDetailClient({
                                               className={cn(
                                                 "text-lg font-bold tracking-wide",
                                                 expectedInfo.className.includes(
-                                                  "text-slate-500"
+                                                  "text-slate-500",
                                                 )
                                                   ? isDark
                                                     ? "text-slate-400"
                                                     : "text-slate-500"
                                                   : expectedInfo.className.includes(
-                                                      "text-slate-700"
-                                                    )
-                                                  ? isDark
-                                                    ? "text-slate-200"
-                                                    : "text-slate-700"
-                                                  : isDark
-                                                  ? "text-white"
-                                                  : "text-slate-900"
+                                                        "text-slate-700",
+                                                      )
+                                                    ? isDark
+                                                      ? "text-slate-200"
+                                                      : "text-slate-700"
+                                                    : isDark
+                                                      ? "text-white"
+                                                      : "text-slate-900",
                                               )}
                                             >
                                               ${expectedInfo.amount.toFixed(2)}
@@ -10379,7 +10370,7 @@ export default function ContestDetailClient({
                                                 "text-xs uppercase tracking-wide",
                                                 isDark
                                                   ? "text-white"
-                                                  : "text-slate-800"
+                                                  : "text-slate-800",
                                               )}
                                             >
                                               {expectedInfo.label}
@@ -10395,32 +10386,32 @@ export default function ContestDetailClient({
                                                 className={cn(
                                                   "text-lg font-bold",
                                                   grantedInfo.className.includes(
-                                                    "text-red-600"
+                                                    "text-red-600",
                                                   )
                                                     ? isDark
                                                       ? "text-red-400"
                                                       : "text-red-600"
                                                     : grantedInfo.className.includes(
-                                                        "text-blue-600"
-                                                      )
-                                                    ? isDark
-                                                      ? "text-blue-400"
-                                                      : "text-blue-600"
-                                                    : grantedInfo.className.includes(
-                                                        "text-amber-600"
-                                                      )
-                                                    ? isDark
-                                                      ? "text-amber-400"
-                                                      : "text-amber-600"
-                                                    : grantedInfo.className.includes(
-                                                        "text-slate-500"
-                                                      )
-                                                    ? isDark
-                                                      ? "text-slate-400"
-                                                      : "text-slate-500"
-                                                    : isDark
-                                                    ? "text-white"
-                                                    : "text-slate-900"
+                                                          "text-blue-600",
+                                                        )
+                                                      ? isDark
+                                                        ? "text-blue-400"
+                                                        : "text-blue-600"
+                                                      : grantedInfo.className.includes(
+                                                            "text-amber-600",
+                                                          )
+                                                        ? isDark
+                                                          ? "text-amber-400"
+                                                          : "text-amber-600"
+                                                        : grantedInfo.className.includes(
+                                                              "text-slate-500",
+                                                            )
+                                                          ? isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                          : isDark
+                                                            ? "text-white"
+                                                            : "text-slate-900",
                                                 )}
                                               >
                                                 ${grantedInfo.amount.toFixed(2)}
@@ -10430,7 +10421,7 @@ export default function ContestDetailClient({
                                                   "text-xs uppercase tracking-wide",
                                                   isDark
                                                     ? "text-slate-400"
-                                                    : "text-slate-500"
+                                                    : "text-slate-500",
                                                 )}
                                               >
                                                 {grantedInfo.label}
@@ -10442,32 +10433,32 @@ export default function ContestDetailClient({
                                                 className={cn(
                                                   "text-sm font-semibold",
                                                   grantedInfo.className.includes(
-                                                    "text-red-600"
+                                                    "text-red-600",
                                                   )
                                                     ? isDark
                                                       ? "text-red-400"
                                                       : "text-red-600"
                                                     : grantedInfo.className.includes(
-                                                        "text-blue-600"
-                                                      )
-                                                    ? isDark
-                                                      ? "text-blue-400"
-                                                      : "text-blue-600"
-                                                    : grantedInfo.className.includes(
-                                                        "text-amber-600"
-                                                      )
-                                                    ? isDark
-                                                      ? "text-amber-400"
-                                                      : "text-amber-600"
-                                                    : grantedInfo.className.includes(
-                                                        "text-slate-500"
-                                                      )
-                                                    ? isDark
-                                                      ? "text-slate-400"
-                                                      : "text-slate-500"
-                                                    : isDark
-                                                    ? "text-white"
-                                                    : "text-slate-900"
+                                                          "text-blue-600",
+                                                        )
+                                                      ? isDark
+                                                        ? "text-blue-400"
+                                                        : "text-blue-600"
+                                                      : grantedInfo.className.includes(
+                                                            "text-amber-600",
+                                                          )
+                                                        ? isDark
+                                                          ? "text-amber-400"
+                                                          : "text-amber-600"
+                                                        : grantedInfo.className.includes(
+                                                              "text-slate-500",
+                                                            )
+                                                          ? isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                          : isDark
+                                                            ? "text-white"
+                                                            : "text-slate-900",
                                                 )}
                                               >
                                                 {grantedInfo.label}
@@ -10484,7 +10475,7 @@ export default function ContestDetailClient({
                                         variant="outline"
                                         className={cn(
                                           "text-xs inline-flex items-center gap-1 px-3 py-1 font-medium",
-                                          submissionStatus.className
+                                          submissionStatus.className,
                                         )}
                                       >
                                         {submissionStatus.icon}{" "}
@@ -10495,20 +10486,20 @@ export default function ContestDetailClient({
                                   <TableCell
                                     className={cn(
                                       "text-center text-xs",
-                                      isDark ? "text-white" : "text-slate-700"
+                                      isDark ? "text-white" : "text-slate-700",
                                     )}
                                   >
                                     <div className="flex flex-col">
                                       <span>
                                         {formatLocalDateTime(
                                           submission.created_at,
-                                          { dateStyle: "short" }
+                                          { dateStyle: "short" },
                                         )}
                                       </span>
                                       <span className="text-xs">
                                         {formatLocalDateTime(
                                           submission.created_at,
-                                          { timeStyle: "short" }
+                                          { timeStyle: "short" },
                                         )}
                                       </span>
                                     </div>
@@ -10534,7 +10525,7 @@ export default function ContestDetailClient({
                                       <DropdownMenuContent
                                         className={cn(
                                           "border",
-                                          isDark ? "bg-black" : "bg-white"
+                                          isDark ? "bg-black" : "bg-white",
                                         )}
                                         align="end"
                                       >
@@ -10551,7 +10542,7 @@ export default function ContestDetailClient({
                                                 onClick={() =>
                                                   handleModerateTwitterTweet(
                                                     submission.id,
-                                                    "approve"
+                                                    "approve",
                                                   )
                                                 }
                                               >
@@ -10563,8 +10554,8 @@ export default function ContestDetailClient({
                                               <DropdownMenuItem
                                                 disabled={isLoading}
                                                 onClick={() => {
-                                                  setPendingRejectionSubmission(
-                                                    submission.id
+                                                  setPendingRejectionSubmissionIds(
+                                                    [submission.id],
                                                   );
                                                   setRejectionModalOpen(true);
                                                 }}
@@ -10585,7 +10576,7 @@ export default function ContestDetailClient({
                                                   {
                                                     id: submission.id,
                                                     type: "tweet",
-                                                  }
+                                                  },
                                                 );
                                                 setManualPointsModalOpen(true);
                                               }}
@@ -10627,7 +10618,7 @@ export default function ContestDetailClient({
                                                   onClick={() =>
                                                     handleUpdateSubmissionStatus(
                                                       submission.id,
-                                                      "verified"
+                                                      "verified",
                                                     )
                                                   }
                                                 >
@@ -10656,7 +10647,7 @@ export default function ContestDetailClient({
                                                   disabled={isLoading}
                                                   onClick={() =>
                                                     handleRejectSubmission(
-                                                      submission.id
+                                                      submission.id,
                                                     )
                                                   }
                                                   className="text-red-600"
@@ -10687,7 +10678,7 @@ export default function ContestDetailClient({
                                               onClick={() =>
                                                 handleUpdateSubmissionStatus(
                                                   submission.id,
-                                                  "pending"
+                                                  "pending",
                                                 )
                                               }
                                             >
@@ -10707,7 +10698,7 @@ export default function ContestDetailClient({
                                                 onClick={() =>
                                                   handleUpdateSubmissionStatus(
                                                     submission.id,
-                                                    "paid"
+                                                    "paid",
                                                   )
                                                 }
                                               >
@@ -10717,7 +10708,7 @@ export default function ContestDetailClient({
                                                 disabled={isLoading}
                                                 onClick={() =>
                                                   handleMarkAsPaid(
-                                                    submission.id
+                                                    submission.id,
                                                   )
                                                 }
                                               >
@@ -10787,7 +10778,7 @@ export default function ContestDetailClient({
                                     value={participantFilter}
                                     onValueChange={(v) => {
                                       setParticipantFilter(
-                                        v as "all" | "rejected" | "available"
+                                        v as "all" | "rejected" | "available",
                                       );
                                       setCreatorWisePage(1);
                                     }}
@@ -10804,7 +10795,7 @@ export default function ContestDetailClient({
                                             "ml-2 px-1.5 py-0.5 text-xs h-5",
                                             isDark
                                               ? "text-white bg-[#FFFFFF36]"
-                                              : "text-[#7F39EC] bg-purple-200"
+                                              : "text-[#7F39EC] bg-purple-200",
                                           )}
                                         >
                                           {sortedCreatorGroups?.length || 0}
@@ -10821,13 +10812,13 @@ export default function ContestDetailClient({
                                             "ml-2 px-1.5 py-0.5 text-xs h-5",
                                             isDark
                                               ? "text-white bg-[#FFFFFF36]"
-                                              : "text-red-600 bg-red-200"
+                                              : "text-red-600 bg-red-200",
                                           )}
                                         >
                                           {sortedCreatorGroups?.filter(
                                             (g: any) =>
                                               (g.creator_moderation_status ||
-                                                "pending") === "rejected"
+                                                "pending") === "rejected",
                                           ).length || 0}
                                         </Badge>
                                       </TabsTrigger>
@@ -10842,13 +10833,13 @@ export default function ContestDetailClient({
                                             "ml-2 px-1.5 py-0.5 text-xs h-5",
                                             isDark
                                               ? "text-white bg-[#FFFFFF36]"
-                                              : "text-green-600 bg-green-200"
+                                              : "text-green-600 bg-green-200",
                                           )}
                                         >
                                           {sortedCreatorGroups?.filter(
                                             (g: any) =>
                                               (g.creator_moderation_status ||
-                                                "pending") !== "rejected"
+                                                "pending") !== "rejected",
                                           ).length || 0}
                                         </Badge>
                                       </TabsTrigger>
@@ -10863,7 +10854,7 @@ export default function ContestDetailClient({
                                     "border-b",
                                     isDark
                                       ? "bg-[#391A6A] border-gray-600"
-                                      : "bg-slate-100 hover:bg-slate-100 border-slate-200"
+                                      : "bg-slate-100 hover:bg-slate-100 border-slate-200",
                                   )}
                                 >
                                   <TableHead className="w-12">#</TableHead>
@@ -11138,7 +11129,7 @@ export default function ContestDetailClient({
                                                         "text-xs italic truncate max-w-[150px] text-center",
                                                         isDark
                                                           ? "text-red-400"
-                                                          : "text-red-600"
+                                                          : "text-red-600",
                                                       )}
                                                       title={
                                                         group.creator_rejection_reason
@@ -11149,7 +11140,7 @@ export default function ContestDetailClient({
                                                         .length > 20
                                                         ? group.creator_rejection_reason.substring(
                                                             0,
-                                                            20
+                                                            20,
                                                           ) + "..."
                                                         : group.creator_rejection_reason}
                                                     </span>
@@ -11214,7 +11205,7 @@ export default function ContestDetailClient({
                                                       "font-bold text-sm",
                                                       isDark
                                                         ? "text-white"
-                                                        : "text-slate-900"
+                                                        : "text-slate-900",
                                                     )}
                                                   >
                                                     {formatMetricValue(
@@ -11222,7 +11213,7 @@ export default function ContestDetailClient({
                                                         .base_points || 0) +
                                                         (group.metrics
                                                           .manual_points_adjustment ||
-                                                          0)
+                                                          0),
                                                     )}
                                                   </span>
                                                   <span
@@ -11230,7 +11221,7 @@ export default function ContestDetailClient({
                                                       "text-xs",
                                                       isDark
                                                         ? "text-slate-400"
-                                                        : "text-slate-500"
+                                                        : "text-slate-500",
                                                     )}
                                                   >
                                                     total
@@ -11245,12 +11236,12 @@ export default function ContestDetailClient({
                                                       "font-bold text-sm",
                                                       isDark
                                                         ? "text-white"
-                                                        : "text-slate-900"
+                                                        : "text-slate-900",
                                                     )}
                                                   >
                                                     {formatMetricValue(
                                                       group.metrics
-                                                        .base_points || 0
+                                                        .base_points || 0,
                                                     )}
                                                   </span>
                                                   <span
@@ -11258,7 +11249,7 @@ export default function ContestDetailClient({
                                                       "text-xs",
                                                       isDark
                                                         ? "text-slate-400"
-                                                        : "text-slate-500"
+                                                        : "text-slate-500",
                                                     )}
                                                   >
                                                     base
@@ -11280,18 +11271,18 @@ export default function ContestDetailClient({
                                                           tweetManualPoints > 0
                                                             ? "text-green-600"
                                                             : tweetManualPoints <
-                                                              0
-                                                            ? "text-red-600"
-                                                            : isDark
-                                                            ? "text-white"
-                                                            : "text-slate-900"
+                                                                0
+                                                              ? "text-red-600"
+                                                              : isDark
+                                                                ? "text-white"
+                                                                : "text-slate-900",
                                                         )}
                                                       >
                                                         {tweetManualPoints > 0
                                                           ? "+"
                                                           : ""}
                                                         {formatMetricValue(
-                                                          tweetManualPoints
+                                                          tweetManualPoints,
                                                         )}
                                                       </span>
                                                       <span
@@ -11299,7 +11290,7 @@ export default function ContestDetailClient({
                                                           "text-xs",
                                                           isDark
                                                             ? "text-slate-400"
-                                                            : "text-slate-500"
+                                                            : "text-slate-500",
                                                         )}
                                                       >
                                                         manual
@@ -11310,28 +11301,29 @@ export default function ContestDetailClient({
                                               })()}
                                               <TableCell className="text-center">
                                                 {formatMetricValue(
-                                                  group.metrics.likes || 0
+                                                  group.metrics.likes || 0,
                                                 )}
                                               </TableCell>
                                               <TableCell className="text-center">
                                                 {formatMetricValue(
-                                                  group.metrics.comments || 0
+                                                  group.metrics.comments || 0,
                                                 )}
                                               </TableCell>
                                               <TableCell className="text-center">
                                                 {formatMetricValue(
-                                                  group.metrics.retweets || 0
+                                                  group.metrics.retweets || 0,
                                                 )}
                                               </TableCell>
                                               <TableCell className="text-center">
                                                 {formatMetricValue(
                                                   group.metrics.quote_reposts ||
-                                                    0
+                                                    0,
                                                 )}
                                               </TableCell>
                                               <TableCell className="text-center">
                                                 {formatMetricValue(
-                                                  group.metrics.impressions || 0
+                                                  group.metrics.impressions ||
+                                                    0,
                                                 )}
                                               </TableCell>
                                             </>
@@ -11356,24 +11348,24 @@ export default function ContestDetailClient({
                                                       <Share2 className="h-3 w-3 text-purple-500" />
                                                       {formatMetricValue(
                                                         group.metrics.shares ||
-                                                          0
+                                                          0,
                                                       )}
                                                     </div>
                                                   </TableCell>
                                                   <TableCell className="text-center font-mono text-sm">
                                                     {formatMetricValue(
-                                                      group.metrics.saves || 0
+                                                      group.metrics.saves || 0,
                                                     )}
                                                   </TableCell>
                                                   <TableCell className="text-center font-mono text-sm">
                                                     {formatMetricValue(
-                                                      group.metrics.reach || 0
+                                                      group.metrics.reach || 0,
                                                     )}
                                                   </TableCell>
                                                   <TableCell className="text-center font-mono text-sm">
                                                     {formatMetricValue(
                                                       group.metrics
-                                                        .interactions || 0
+                                                        .interactions || 0,
                                                     )}
                                                   </TableCell>
                                                   <TableCell className="text-center font-mono text-sm">
@@ -11389,9 +11381,9 @@ export default function ContestDetailClient({
                                                                 (group.metrics
                                                                   .avg_watch_time_ms ||
                                                                   0) /
-                                                                  group.totalCount
+                                                                  group.totalCount,
                                                               )
-                                                            : 0
+                                                            : 0,
                                                         )}
                                                       </span>
                                                       <span
@@ -11399,7 +11391,7 @@ export default function ContestDetailClient({
                                                           "text-xs",
                                                           isDark
                                                             ? "text-slate-400"
-                                                            : "text-slate-500"
+                                                            : "text-slate-500",
                                                         )}
                                                       >
                                                         avg
@@ -11412,7 +11404,7 @@ export default function ContestDetailClient({
                                                         {formatWatchTime(
                                                           group.metrics
                                                             .total_watch_time_ms ||
-                                                            0
+                                                            0,
                                                         )}
                                                       </span>
                                                       <span
@@ -11420,7 +11412,7 @@ export default function ContestDetailClient({
                                                           "text-xs",
                                                           isDark
                                                             ? "text-slate-400"
-                                                            : "text-slate-500"
+                                                            : "text-slate-500",
                                                         )}
                                                       >
                                                         total
@@ -11440,15 +11432,15 @@ export default function ContestDetailClient({
                                               <TableCell className="text-center font-medium">
                                                 <div className="flex items-center justify-center gap-1">
                                                   {formatMoney(
-                                                    group.earnings.expected
+                                                    group.earnings.expected,
                                                   )}
                                                   {group.isCapped && (
                                                     <span
                                                       className="text-amber-600 cursor-help"
                                                       title={`Capped at ${formatMoney(
-                                                        currentContest.max_earnings_per_creator
+                                                        currentContest.max_earnings_per_creator,
                                                       )}. Original: ${formatMoney(
-                                                        group.earningsBeforeCap
+                                                        group.earningsBeforeCap,
                                                       )}`}
                                                     >
                                                       ⚠️
@@ -11458,7 +11450,7 @@ export default function ContestDetailClient({
                                               </TableCell>
                                               <TableCell className="text-center font-medium text-green-600">
                                                 {formatMoney(
-                                                  group.earnings.granted
+                                                  group.earnings.granted,
                                                 )}
                                               </TableCell>
                                             </>
@@ -11479,12 +11471,12 @@ export default function ContestDetailClient({
                                             <>
                                               <TableCell className="text-center font-medium">
                                                 {formatMoney(
-                                                  bonusExpectedForDisplay
+                                                  bonusExpectedForDisplay,
                                                 )}
                                               </TableCell>
                                               <TableCell className="text-center font-medium text-green-600">
                                                 {formatMoney(
-                                                  group.bonus.granted
+                                                  group.bonus.granted,
                                                 )}
                                               </TableCell>
                                             </>
@@ -11511,12 +11503,12 @@ export default function ContestDetailClient({
                                                           0
                                                           ? "text-green-600"
                                                           : group.metrics
-                                                              .creator_manual_points_adjustment <
-                                                            0
-                                                          ? "text-red-600"
-                                                          : isDark
-                                                          ? "text-white"
-                                                          : "text-slate-900"
+                                                                .creator_manual_points_adjustment <
+                                                              0
+                                                            ? "text-red-600"
+                                                            : isDark
+                                                              ? "text-white"
+                                                              : "text-slate-900",
                                                       )}
                                                     >
                                                       {group.metrics
@@ -11527,7 +11519,7 @@ export default function ContestDetailClient({
                                                       {formatMetricValue(
                                                         group.metrics
                                                           .creator_manual_points_adjustment ||
-                                                          0
+                                                          0,
                                                       )}
                                                     </span>
                                                   </div>
@@ -11541,7 +11533,7 @@ export default function ContestDetailClient({
                                                           "text-xs italic truncate",
                                                           isDark
                                                             ? "text-slate-300"
-                                                            : "text-slate-700"
+                                                            : "text-slate-700",
                                                         )}
                                                         title={
                                                           group.metrics
@@ -11553,7 +11545,7 @@ export default function ContestDetailClient({
                                                           .length > 30
                                                           ? group.metrics.manual_points_reason.substring(
                                                               0,
-                                                              30
+                                                              30,
                                                             ) + "..."
                                                           : group.metrics
                                                               .manual_points_reason}
@@ -11565,7 +11557,7 @@ export default function ContestDetailClient({
                                                         "text-xs",
                                                         isDark
                                                           ? "text-slate-500"
-                                                          : "text-slate-400"
+                                                          : "text-slate-400",
                                                       )}
                                                     >
                                                       —
@@ -11584,7 +11576,7 @@ export default function ContestDetailClient({
                                                       "text-xs italic truncate",
                                                       isDark
                                                         ? "text-red-400"
-                                                        : "text-red-600"
+                                                        : "text-red-600",
                                                     )}
                                                     title={
                                                       group.creator_rejection_reason
@@ -11595,7 +11587,7 @@ export default function ContestDetailClient({
                                                       .length > 30
                                                       ? group.creator_rejection_reason.substring(
                                                           0,
-                                                          30
+                                                          30,
                                                         ) + "..."
                                                       : group.creator_rejection_reason}
                                                   </span>
@@ -11606,7 +11598,7 @@ export default function ContestDetailClient({
                                                     "text-xs",
                                                     isDark
                                                       ? "text-slate-500"
-                                                      : "text-slate-400"
+                                                      : "text-slate-400",
                                                   )}
                                                 >
                                                   —
@@ -11616,7 +11608,7 @@ export default function ContestDetailClient({
                                           )}
                                           <TableCell className="text-center text-sm">
                                             {formatLocalDateTime(
-                                              group.firstSubmittedAt
+                                              group.firstSubmittedAt,
                                             )}
                                           </TableCell>
                                           <TableCell className="text-center">
@@ -11629,11 +11621,11 @@ export default function ContestDetailClient({
                                                     "border",
                                                     isDark
                                                       ? "bg-[#170337] border-gray-600 text-white"
-                                                      : "border-gray-400 bg-white text-gray-800"
+                                                      : "border-gray-400 bg-white text-gray-800",
                                                   )}
                                                   onClick={() =>
                                                     setSelectedCreatorForModal(
-                                                      group.creator.id
+                                                      group.creator.id,
                                                     )
                                                   }
                                                 >
@@ -11674,7 +11666,7 @@ export default function ContestDetailClient({
                                                                         .id,
                                                                     action:
                                                                       "approve",
-                                                                  }
+                                                                  },
                                                                 );
                                                               } else {
                                                                 // Direct approval for non-paid creators
@@ -11699,9 +11691,9 @@ export default function ContestDetailClient({
                                                                                   .id,
                                                                               action:
                                                                                 "approve",
-                                                                            }
+                                                                            },
                                                                           ),
-                                                                        }
+                                                                        },
                                                                       );
                                                                     if (
                                                                       response.ok
@@ -11709,7 +11701,7 @@ export default function ContestDetailClient({
                                                                       markCreatorSubmissionsVerifiedLocally(
                                                                         group
                                                                           .creator
-                                                                          .id
+                                                                          .id,
                                                                       );
                                                                       window.location.reload();
                                                                     } else {
@@ -11717,16 +11709,16 @@ export default function ContestDetailClient({
                                                                         await response.json();
                                                                       alert(
                                                                         error.error ||
-                                                                          "Failed to approve creator"
+                                                                          "Failed to approve creator",
                                                                       );
                                                                     }
                                                                   } catch (error) {
                                                                     console.error(
                                                                       "Error approving creator:",
-                                                                      error
+                                                                      error,
                                                                     );
                                                                     alert(
-                                                                      "Failed to approve creator"
+                                                                      "Failed to approve creator",
                                                                     );
                                                                   }
                                                                 })();
@@ -11756,10 +11748,10 @@ export default function ContestDetailClient({
                                                                 creatorId:
                                                                   group.creator
                                                                     .id,
-                                                              }
+                                                              },
                                                             );
                                                             setManualPointsModalOpen(
-                                                              true
+                                                              true,
                                                             );
                                                           }}
                                                         >
@@ -11781,13 +11773,12 @@ export default function ContestDetailClient({
                                                                         .id,
                                                                     action:
                                                                       "reject",
-                                                                    needRejectionReason:
-                                                                      true,
+                                                                    needRejectionReason: true,
                                                                     creatorUsername:
                                                                       group
                                                                         .creator
                                                                         .username,
-                                                                  }
+                                                                  },
                                                                 );
                                                               } else {
                                                                 // Direct rejection for non-paid creators
@@ -11805,10 +11796,10 @@ export default function ContestDetailClient({
                                                                       group
                                                                         .creator
                                                                         .username,
-                                                                  }
+                                                                  },
                                                                 );
                                                                 setTwitterRejectionModalOpen(
-                                                                  true
+                                                                  true,
                                                                 );
                                                               }
                                                             }}
@@ -11840,7 +11831,7 @@ export default function ContestDetailClient({
                                                                         .creator
                                                                         .id]:
                                                                         true,
-                                                                    })
+                                                                    }),
                                                                   );
                                                                   try {
                                                                     const response =
@@ -11860,9 +11851,9 @@ export default function ContestDetailClient({
                                                                                 group
                                                                                   .creator
                                                                                   .id,
-                                                                            }
+                                                                            },
                                                                           ),
-                                                                        }
+                                                                        },
                                                                       );
                                                                     if (
                                                                       !response.ok
@@ -11871,7 +11862,7 @@ export default function ContestDetailClient({
                                                                         await response.json();
                                                                       throw new Error(
                                                                         error.error ||
-                                                                          "Failed to process payment"
+                                                                          "Failed to process payment",
                                                                       );
                                                                     }
                                                                     toast({
@@ -11886,12 +11877,12 @@ export default function ContestDetailClient({
                                                                       () => {
                                                                         window.location.reload();
                                                                       },
-                                                                      1000
+                                                                      1000,
                                                                     );
                                                                   } catch (error: any) {
                                                                     console.error(
                                                                       "Error paying Twitter creator:",
-                                                                      error
+                                                                      error,
                                                                     );
                                                                     toast({
                                                                       title:
@@ -11905,14 +11896,14 @@ export default function ContestDetailClient({
                                                                   } finally {
                                                                     setIsLoadingSubmission(
                                                                       (
-                                                                        prev
+                                                                        prev,
                                                                       ) => ({
                                                                         ...prev,
                                                                         [group
                                                                           .creator
                                                                           .id]:
                                                                           false,
-                                                                      })
+                                                                      }),
                                                                     );
                                                                   }
                                                                 }}
@@ -11932,10 +11923,10 @@ export default function ContestDetailClient({
                                                                   setPendingTwitterPaymentCreator(
                                                                     group
                                                                       .creator
-                                                                      .id
+                                                                      .id,
                                                                   );
                                                                   setPaymentModalOpen(
-                                                                    true
+                                                                    true,
                                                                   );
                                                                 }}
                                                                 disabled={
@@ -11979,21 +11970,21 @@ export default function ContestDetailClient({
                                                                         )
                                                                           .filter(
                                                                             (
-                                                                              s: any
+                                                                              s: any,
                                                                             ) =>
-                                                                              s.is_twitter_tweet
+                                                                              s.is_twitter_tweet,
                                                                           )
                                                                           .map(
                                                                             (
-                                                                              s: any
+                                                                              s: any,
                                                                             ) =>
-                                                                              s.id
+                                                                              s.id,
                                                                           );
                                                                       handleCreatorMarkBothPaid(
                                                                         group
                                                                           .creator
                                                                           .id,
-                                                                        tweetIds
+                                                                        tweetIds,
                                                                       );
                                                                     }}
                                                                   >
@@ -12013,7 +12004,7 @@ export default function ContestDetailClient({
                                           </TableCell>
                                         </TableRow>
                                       );
-                                    }
+                                    },
                                   )
                                 )}
                               </TableBody>
@@ -12050,7 +12041,7 @@ export default function ContestDetailClient({
               <Card
                 className={cn(
                   "shadow-sm border-0",
-                  isDark ? "bg-[#170337]" : "bg-purple-50"
+                  isDark ? "bg-[#170337]" : "bg-purple-50",
                 )}
               >
                 <CardContent className="py-16 flex flex-col items-center justify-center text-center">
@@ -12059,7 +12050,7 @@ export default function ContestDetailClient({
                       "p-4 rounded-full mb-6",
                       isDark
                         ? "bg-[#FFFFFF36] text-white"
-                        : "bg-purple-200 text-purple-500"
+                        : "bg-purple-200 text-purple-500",
                     )}
                   >
                     <FileText className="h-12 w-12 " />
@@ -12069,7 +12060,7 @@ export default function ContestDetailClient({
                       "text-xl font-semibold mb-2",
                       isDark
                         ? "text-white"
-                        : "text-slate-900 dark:text-slate-100"
+                        : "text-slate-900 dark:text-slate-100",
                     )}
                   >
                     No Submissions Yet
@@ -12079,7 +12070,7 @@ export default function ContestDetailClient({
                       " max-w-md",
                       isDark
                         ? "text-white"
-                        : "text-slate-600 dark:text-slate-400"
+                        : "text-slate-600 dark:text-slate-400",
                     )}
                   >
                     When creators submit entries for this contest, they will
@@ -12115,7 +12106,7 @@ export default function ContestDetailClient({
             <div
               className={cn(
                 "rounded-xl shadow-md p-2",
-                isDark ? "bg-[#180438]" : "bg-white"
+                isDark ? "bg-[#180438]" : "bg-white",
               )}
             >
               <CardHeader>
@@ -12138,7 +12129,7 @@ export default function ContestDetailClient({
                             "flex items-center gap-2",
                             isDark
                               ? "border-slate-700 text-slate-300 hover:bg-slate-800"
-                              : "border-slate-300 text-slate-700 hover:bg-slate-50"
+                              : "border-slate-300 text-slate-700 hover:bg-slate-50",
                           )}
                           title={
                             refreshBtn.disabledReason ||
@@ -12148,7 +12139,7 @@ export default function ContestDetailClient({
                           <RefreshCw
                             className={cn(
                               "h-4 w-4",
-                              isRefreshingMetrics && "animate-spin"
+                              isRefreshingMetrics && "animate-spin",
                             )}
                           />
                           {analyticsRefreshLabel}
@@ -12172,7 +12163,7 @@ export default function ContestDetailClient({
                           "text-sm",
                           isDark
                             ? "text-white border border-gray-500"
-                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
                         All ({currentSubmissions?.length || 0})
@@ -12183,12 +12174,12 @@ export default function ContestDetailClient({
                           "text-sm",
                           isDark
                             ? "text-white border border-gray-500"
-                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
                         Verified (
                         {currentSubmissions?.filter(
-                          (s) => s.status === "verified"
+                          (s) => s.status === "verified",
                         ).length || 0}
                         )
                       </TabsTrigger>
@@ -12198,7 +12189,7 @@ export default function ContestDetailClient({
                           "text-sm",
                           isDark
                             ? "text-white border border-gray-500"
-                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
                         Paid (
@@ -12212,12 +12203,12 @@ export default function ContestDetailClient({
                           "text-sm",
                           isDark
                             ? "text-white border border-gray-500"
-                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
                         Pending (
                         {currentSubmissions?.filter(
-                          (s) => s.status === "pending"
+                          (s) => s.status === "pending",
                         ).length || 0}
                         )
                       </TabsTrigger>
@@ -12227,12 +12218,12 @@ export default function ContestDetailClient({
                           "text-sm",
                           isDark
                             ? "text-white border border-gray-500"
-                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
                         Rejected (
                         {currentSubmissions?.filter(
-                          (s) => s.status === "rejected"
+                          (s) => s.status === "rejected",
                         ).length || 0}
                         )
                       </TabsTrigger>
@@ -12242,12 +12233,12 @@ export default function ContestDetailClient({
                           "text-sm",
                           isDark
                             ? "text-white border border-gray-500"
-                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
                         Verified/Paid (
                         {currentSubmissions?.filter(
-                          (s) => s.status === "verified" || s.status === "paid"
+                          (s) => s.status === "verified" || s.status === "paid",
                         ).length || 0}
                         )
                       </TabsTrigger>
@@ -12338,7 +12329,7 @@ export default function ContestDetailClient({
                               leaderboardPointsTotal += entryPoints;
                               hasLeaderboardPoints = true;
                             }
-                          }
+                          },
                         );
 
                         if (hasLeaderboardPoints) {
@@ -12394,7 +12385,7 @@ export default function ContestDetailClient({
                             (targetMetrics.quote_reposts
                               ? parseInt(
                                   String(targetMetrics.quote_reposts),
-                                  10
+                                  10,
                                 )
                               : null);
 
@@ -12406,7 +12397,7 @@ export default function ContestDetailClient({
                                   <h3
                                     className={cn(
                                       "text-lg font-semibold mb-4 flex items-center gap-2",
-                                      isDark ? "text-white" : "text-slate-900"
+                                      isDark ? "text-white" : "text-slate-900",
                                     )}
                                   >
                                     <Share2 className="h-5 w-5 text-sky-500" />
@@ -12417,7 +12408,7 @@ export default function ContestDetailClient({
                                       "rounded-xl p-6 border",
                                       isDark
                                         ? "bg-slate-900/40 border-slate-700"
-                                        : "bg-slate-50 border-slate-200"
+                                        : "bg-slate-50 border-slate-200",
                                     )}
                                   >
                                     <a
@@ -12428,7 +12419,7 @@ export default function ContestDetailClient({
                                         "inline-flex items-center gap-2 text-sm font-medium break-all hover:underline",
                                         isDark
                                           ? "text-sky-300 hover:text-sky-200"
-                                          : "text-sky-600 hover:text-sky-700"
+                                          : "text-sky-600 hover:text-sky-700",
                                       )}
                                     >
                                       {targetTweetUrl}
@@ -12454,7 +12445,9 @@ export default function ContestDetailClient({
                                     <h3
                                       className={cn(
                                         "text-lg font-semibold mb-4",
-                                        isDark ? "text-white" : "text-slate-900"
+                                        isDark
+                                          ? "text-white"
+                                          : "text-slate-900",
                                       )}
                                     >
                                       Target Metrics
@@ -12467,7 +12460,7 @@ export default function ContestDetailClient({
                                               "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                               isDark
                                                 ? "bg-[#170337]"
-                                                : "bg-white border border-slate-200"
+                                                : "bg-white border border-slate-200",
                                             )}
                                           >
                                             <CardContent className="p-6 flex justify-between items-center">
@@ -12476,7 +12469,7 @@ export default function ContestDetailClient({
                                                   "flex-1 space-y-2",
                                                   isDark
                                                     ? "text-white"
-                                                    : "text-slate-800"
+                                                    : "text-slate-800",
                                                 )}
                                               >
                                                 <p
@@ -12484,7 +12477,7 @@ export default function ContestDetailClient({
                                                     "text-sm font-semibold uppercase tracking-wide",
                                                     isDark
                                                       ? "text-slate-200"
-                                                      : "text-slate-600"
+                                                      : "text-slate-600",
                                                   )}
                                                 >
                                                   Target Likes
@@ -12494,7 +12487,7 @@ export default function ContestDetailClient({
                                                     "text-2xl font-black",
                                                     isDark
                                                       ? "text-white"
-                                                      : "text-slate-800"
+                                                      : "text-slate-800",
                                                   )}
                                                 >
                                                   {targetLikes.toLocaleString()}
@@ -12513,7 +12506,7 @@ export default function ContestDetailClient({
                                               "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                               isDark
                                                 ? "bg-[#170337]"
-                                                : "bg-white border border-slate-200"
+                                                : "bg-white border border-slate-200",
                                             )}
                                           >
                                             <CardContent className="p-6 flex justify-between items-center">
@@ -12522,7 +12515,7 @@ export default function ContestDetailClient({
                                                   "flex-1 space-y-2",
                                                   isDark
                                                     ? "text-white"
-                                                    : "text-slate-800"
+                                                    : "text-slate-800",
                                                 )}
                                               >
                                                 <p
@@ -12530,7 +12523,7 @@ export default function ContestDetailClient({
                                                     "text-sm font-semibold uppercase tracking-wide",
                                                     isDark
                                                       ? "text-slate-200"
-                                                      : "text-slate-600"
+                                                      : "text-slate-600",
                                                   )}
                                                 >
                                                   Target Comments
@@ -12540,7 +12533,7 @@ export default function ContestDetailClient({
                                                     "text-2xl font-black",
                                                     isDark
                                                       ? "text-white"
-                                                      : "text-slate-800"
+                                                      : "text-slate-800",
                                                   )}
                                                 >
                                                   {targetComments.toLocaleString()}
@@ -12559,7 +12552,7 @@ export default function ContestDetailClient({
                                               "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                               isDark
                                                 ? "bg-[#170337]"
-                                                : "bg-white border border-slate-200"
+                                                : "bg-white border border-slate-200",
                                             )}
                                           >
                                             <CardContent className="p-6 flex justify-between items-center">
@@ -12568,7 +12561,7 @@ export default function ContestDetailClient({
                                                   "flex-1 space-y-2",
                                                   isDark
                                                     ? "text-white"
-                                                    : "text-slate-800"
+                                                    : "text-slate-800",
                                                 )}
                                               >
                                                 <p
@@ -12576,7 +12569,7 @@ export default function ContestDetailClient({
                                                     "text-sm font-semibold uppercase tracking-wide",
                                                     isDark
                                                       ? "text-slate-200"
-                                                      : "text-slate-600"
+                                                      : "text-slate-600",
                                                   )}
                                                 >
                                                   Target Retweets
@@ -12586,7 +12579,7 @@ export default function ContestDetailClient({
                                                     "text-2xl font-black",
                                                     isDark
                                                       ? "text-white"
-                                                      : "text-slate-800"
+                                                      : "text-slate-800",
                                                   )}
                                                 >
                                                   {targetRetweets.toLocaleString()}
@@ -12605,7 +12598,7 @@ export default function ContestDetailClient({
                                               "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                               isDark
                                                 ? "bg-[#170337]"
-                                                : "bg-white border border-slate-200"
+                                                : "bg-white border border-slate-200",
                                             )}
                                           >
                                             <CardContent className="p-6 flex justify-between items-center">
@@ -12614,7 +12607,7 @@ export default function ContestDetailClient({
                                                   "flex-1 space-y-2",
                                                   isDark
                                                     ? "text-white"
-                                                    : "text-slate-800"
+                                                    : "text-slate-800",
                                                 )}
                                               >
                                                 <p
@@ -12622,7 +12615,7 @@ export default function ContestDetailClient({
                                                     "text-sm font-semibold uppercase tracking-wide",
                                                     isDark
                                                       ? "text-slate-200"
-                                                      : "text-slate-600"
+                                                      : "text-slate-600",
                                                   )}
                                                 >
                                                   Target Quote Reposts
@@ -12632,7 +12625,7 @@ export default function ContestDetailClient({
                                                     "text-2xl font-black",
                                                     isDark
                                                       ? "text-white"
-                                                      : "text-slate-800"
+                                                      : "text-slate-800",
                                                   )}
                                                 >
                                                   {targetQuoteReposts.toLocaleString()}
@@ -12671,7 +12664,9 @@ export default function ContestDetailClient({
                                     <h3
                                       className={cn(
                                         "text-lg font-semibold mb-4",
-                                        isDark ? "text-white" : "text-slate-900"
+                                        isDark
+                                          ? "text-white"
+                                          : "text-slate-900",
                                       )}
                                     >
                                       Current Progress
@@ -12691,7 +12686,7 @@ export default function ContestDetailClient({
                                             target !== null && target > 0
                                               ? Math.min(
                                                   100,
-                                                  (current / target) * 100
+                                                  (current / target) * 100,
                                                 )
                                               : 0;
 
@@ -12701,7 +12696,7 @@ export default function ContestDetailClient({
                                                 "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                                 isDark
                                                   ? "bg-[#170337]"
-                                                  : "bg-white border border-slate-200"
+                                                  : "bg-white border border-slate-200",
                                               )}
                                             >
                                               <CardContent className="p-6">
@@ -12711,7 +12706,7 @@ export default function ContestDetailClient({
                                                       "flex-1 space-y-1",
                                                       isDark
                                                         ? "text-white"
-                                                        : "text-slate-800"
+                                                        : "text-slate-800",
                                                     )}
                                                   >
                                                     <p
@@ -12719,7 +12714,7 @@ export default function ContestDetailClient({
                                                         "text-xs font-semibold uppercase tracking-wide",
                                                         isDark
                                                           ? "text-slate-200"
-                                                          : "text-slate-600"
+                                                          : "text-slate-600",
                                                       )}
                                                     >
                                                       Current Likes
@@ -12729,7 +12724,7 @@ export default function ContestDetailClient({
                                                         "text-2xl font-black",
                                                         isDark
                                                           ? "text-white"
-                                                          : "text-slate-800"
+                                                          : "text-slate-800",
                                                       )}
                                                     >
                                                       {current.toLocaleString()}
@@ -12740,7 +12735,7 @@ export default function ContestDetailClient({
                                                           "text-xs",
                                                           isDark
                                                             ? "text-slate-400"
-                                                            : "text-slate-500"
+                                                            : "text-slate-500",
                                                         )}
                                                       >
                                                         of{" "}
@@ -12754,7 +12749,7 @@ export default function ContestDetailClient({
                                                       "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                       isReached
                                                         ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                        : "bg-gradient-to-br from-pink-500 to-rose-600"
+                                                        : "bg-gradient-to-br from-pink-500 to-rose-600",
                                                     )}
                                                   >
                                                     {isReached ? (
@@ -12772,7 +12767,7 @@ export default function ContestDetailClient({
                                                           "h-2 rounded-full overflow-hidden",
                                                           isDark
                                                             ? "bg-slate-700"
-                                                            : "bg-slate-200"
+                                                            : "bg-slate-200",
                                                         )}
                                                       >
                                                         <div
@@ -12780,7 +12775,7 @@ export default function ContestDetailClient({
                                                             "h-full transition-all duration-500",
                                                             isReached
                                                               ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                              : "bg-gradient-to-r from-pink-500 to-rose-600"
+                                                              : "bg-gradient-to-r from-pink-500 to-rose-600",
                                                           )}
                                                           style={{
                                                             width: `${progress}%`,
@@ -12792,7 +12787,7 @@ export default function ContestDetailClient({
                                                           "text-xs mt-1 text-center",
                                                           isDark
                                                             ? "text-slate-400"
-                                                            : "text-slate-500"
+                                                            : "text-slate-500",
                                                         )}
                                                       >
                                                         {progress.toFixed(0)}%
@@ -12818,7 +12813,7 @@ export default function ContestDetailClient({
                                             target !== null && target > 0
                                               ? Math.min(
                                                   100,
-                                                  (current / target) * 100
+                                                  (current / target) * 100,
                                                 )
                                               : 0;
 
@@ -12828,7 +12823,7 @@ export default function ContestDetailClient({
                                                 "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                                 isDark
                                                   ? "bg-[#170337]"
-                                                  : "bg-white border border-slate-200"
+                                                  : "bg-white border border-slate-200",
                                               )}
                                             >
                                               <CardContent className="p-6">
@@ -12838,7 +12833,7 @@ export default function ContestDetailClient({
                                                       "flex-1 space-y-1",
                                                       isDark
                                                         ? "text-white"
-                                                        : "text-slate-800"
+                                                        : "text-slate-800",
                                                     )}
                                                   >
                                                     <p
@@ -12846,7 +12841,7 @@ export default function ContestDetailClient({
                                                         "text-xs font-semibold uppercase tracking-wide",
                                                         isDark
                                                           ? "text-slate-200"
-                                                          : "text-slate-600"
+                                                          : "text-slate-600",
                                                       )}
                                                     >
                                                       Current Comments
@@ -12856,7 +12851,7 @@ export default function ContestDetailClient({
                                                         "text-2xl font-black",
                                                         isDark
                                                           ? "text-white"
-                                                          : "text-slate-800"
+                                                          : "text-slate-800",
                                                       )}
                                                     >
                                                       {current.toLocaleString()}
@@ -12867,7 +12862,7 @@ export default function ContestDetailClient({
                                                           "text-xs",
                                                           isDark
                                                             ? "text-slate-400"
-                                                            : "text-slate-500"
+                                                            : "text-slate-500",
                                                         )}
                                                       >
                                                         of{" "}
@@ -12881,7 +12876,7 @@ export default function ContestDetailClient({
                                                       "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                       isReached
                                                         ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                        : "bg-gradient-to-br from-orange-500 to-amber-600"
+                                                        : "bg-gradient-to-br from-orange-500 to-amber-600",
                                                     )}
                                                   >
                                                     {isReached ? (
@@ -12899,7 +12894,7 @@ export default function ContestDetailClient({
                                                           "h-2 rounded-full overflow-hidden",
                                                           isDark
                                                             ? "bg-slate-700"
-                                                            : "bg-slate-200"
+                                                            : "bg-slate-200",
                                                         )}
                                                       >
                                                         <div
@@ -12907,7 +12902,7 @@ export default function ContestDetailClient({
                                                             "h-full transition-all duration-500",
                                                             isReached
                                                               ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                              : "bg-gradient-to-r from-orange-500 to-amber-600"
+                                                              : "bg-gradient-to-r from-orange-500 to-amber-600",
                                                           )}
                                                           style={{
                                                             width: `${progress}%`,
@@ -12919,7 +12914,7 @@ export default function ContestDetailClient({
                                                           "text-xs mt-1 text-center",
                                                           isDark
                                                             ? "text-slate-400"
-                                                            : "text-slate-500"
+                                                            : "text-slate-500",
                                                         )}
                                                       >
                                                         {progress.toFixed(0)}%
@@ -12945,7 +12940,7 @@ export default function ContestDetailClient({
                                             target !== null && target > 0
                                               ? Math.min(
                                                   100,
-                                                  (current / target) * 100
+                                                  (current / target) * 100,
                                                 )
                                               : 0;
 
@@ -12955,7 +12950,7 @@ export default function ContestDetailClient({
                                                 "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                                 isDark
                                                   ? "bg-[#170337]"
-                                                  : "bg-white border border-slate-200"
+                                                  : "bg-white border border-slate-200",
                                               )}
                                             >
                                               <CardContent className="p-6">
@@ -12965,7 +12960,7 @@ export default function ContestDetailClient({
                                                       "flex-1 space-y-1",
                                                       isDark
                                                         ? "text-white"
-                                                        : "text-slate-800"
+                                                        : "text-slate-800",
                                                     )}
                                                   >
                                                     <p
@@ -12973,7 +12968,7 @@ export default function ContestDetailClient({
                                                         "text-xs font-semibold uppercase tracking-wide",
                                                         isDark
                                                           ? "text-slate-200"
-                                                          : "text-slate-600"
+                                                          : "text-slate-600",
                                                       )}
                                                     >
                                                       Current Retweets
@@ -12983,7 +12978,7 @@ export default function ContestDetailClient({
                                                         "text-2xl font-black",
                                                         isDark
                                                           ? "text-white"
-                                                          : "text-slate-800"
+                                                          : "text-slate-800",
                                                       )}
                                                     >
                                                       {current.toLocaleString()}
@@ -12994,7 +12989,7 @@ export default function ContestDetailClient({
                                                           "text-xs",
                                                           isDark
                                                             ? "text-slate-400"
-                                                            : "text-slate-500"
+                                                            : "text-slate-500",
                                                         )}
                                                       >
                                                         of{" "}
@@ -13008,7 +13003,7 @@ export default function ContestDetailClient({
                                                       "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                       isReached
                                                         ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                        : "bg-gradient-to-br from-cyan-500 to-teal-600"
+                                                        : "bg-gradient-to-br from-cyan-500 to-teal-600",
                                                     )}
                                                   >
                                                     {isReached ? (
@@ -13026,7 +13021,7 @@ export default function ContestDetailClient({
                                                           "h-2 rounded-full overflow-hidden",
                                                           isDark
                                                             ? "bg-slate-700"
-                                                            : "bg-slate-200"
+                                                            : "bg-slate-200",
                                                         )}
                                                       >
                                                         <div
@@ -13034,7 +13029,7 @@ export default function ContestDetailClient({
                                                             "h-full transition-all duration-500",
                                                             isReached
                                                               ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                              : "bg-gradient-to-r from-cyan-500 to-teal-600"
+                                                              : "bg-gradient-to-r from-cyan-500 to-teal-600",
                                                           )}
                                                           style={{
                                                             width: `${progress}%`,
@@ -13046,7 +13041,7 @@ export default function ContestDetailClient({
                                                           "text-xs mt-1 text-center",
                                                           isDark
                                                             ? "text-slate-400"
-                                                            : "text-slate-500"
+                                                            : "text-slate-500",
                                                         )}
                                                       >
                                                         {progress.toFixed(0)}%
@@ -13072,7 +13067,7 @@ export default function ContestDetailClient({
                                             target !== null && target > 0
                                               ? Math.min(
                                                   100,
-                                                  (current / target) * 100
+                                                  (current / target) * 100,
                                                 )
                                               : 0;
 
@@ -13082,7 +13077,7 @@ export default function ContestDetailClient({
                                                 "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                                 isDark
                                                   ? "bg-[#170337]"
-                                                  : "bg-white border border-slate-200"
+                                                  : "bg-white border border-slate-200",
                                               )}
                                             >
                                               <CardContent className="p-6">
@@ -13092,7 +13087,7 @@ export default function ContestDetailClient({
                                                       "flex-1 space-y-1",
                                                       isDark
                                                         ? "text-white"
-                                                        : "text-slate-800"
+                                                        : "text-slate-800",
                                                     )}
                                                   >
                                                     <p
@@ -13100,7 +13095,7 @@ export default function ContestDetailClient({
                                                         "text-xs font-semibold uppercase tracking-wide",
                                                         isDark
                                                           ? "text-slate-200"
-                                                          : "text-slate-600"
+                                                          : "text-slate-600",
                                                       )}
                                                     >
                                                       Current Quote Reposts
@@ -13110,7 +13105,7 @@ export default function ContestDetailClient({
                                                         "text-2xl font-black",
                                                         isDark
                                                           ? "text-white"
-                                                          : "text-slate-800"
+                                                          : "text-slate-800",
                                                       )}
                                                     >
                                                       {current.toLocaleString()}
@@ -13121,7 +13116,7 @@ export default function ContestDetailClient({
                                                           "text-xs",
                                                           isDark
                                                             ? "text-slate-400"
-                                                            : "text-slate-500"
+                                                            : "text-slate-500",
                                                         )}
                                                       >
                                                         of{" "}
@@ -13135,7 +13130,7 @@ export default function ContestDetailClient({
                                                       "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                       isReached
                                                         ? "bg-gradient-to-br from-green-500 to-emerald-600"
-                                                        : "bg-gradient-to-br from-indigo-500 to-violet-600"
+                                                        : "bg-gradient-to-br from-indigo-500 to-violet-600",
                                                     )}
                                                   >
                                                     {isReached ? (
@@ -13153,7 +13148,7 @@ export default function ContestDetailClient({
                                                           "h-2 rounded-full overflow-hidden",
                                                           isDark
                                                             ? "bg-slate-700"
-                                                            : "bg-slate-200"
+                                                            : "bg-slate-200",
                                                         )}
                                                       >
                                                         <div
@@ -13161,7 +13156,7 @@ export default function ContestDetailClient({
                                                             "h-full transition-all duration-500",
                                                             isReached
                                                               ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                                                              : "bg-gradient-to-r from-indigo-500 to-violet-600"
+                                                              : "bg-gradient-to-r from-indigo-500 to-violet-600",
                                                           )}
                                                           style={{
                                                             width: `${progress}%`,
@@ -13173,7 +13168,7 @@ export default function ContestDetailClient({
                                                           "text-xs mt-1 text-center",
                                                           isDark
                                                             ? "text-slate-400"
-                                                            : "text-slate-500"
+                                                            : "text-slate-500",
                                                         )}
                                                       >
                                                         {progress.toFixed(0)}%
@@ -13192,7 +13187,7 @@ export default function ContestDetailClient({
                                             "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
                                             isDark
                                               ? "bg-[#170337]"
-                                              : "bg-white border border-slate-200"
+                                              : "bg-white border border-slate-200",
                                           )}
                                         >
                                           <CardContent className="p-6 flex justify-between items-center">
@@ -13201,7 +13196,7 @@ export default function ContestDetailClient({
                                                 "flex-1 space-y-2",
                                                 isDark
                                                   ? "text-white"
-                                                  : "text-slate-800"
+                                                  : "text-slate-800",
                                               )}
                                             >
                                               <p
@@ -13209,7 +13204,7 @@ export default function ContestDetailClient({
                                                   "text-sm font-semibold uppercase tracking-wide",
                                                   isDark
                                                     ? "text-slate-200"
-                                                    : "text-slate-600"
+                                                    : "text-slate-600",
                                                 )}
                                               >
                                                 Current Views
@@ -13219,7 +13214,7 @@ export default function ContestDetailClient({
                                                   "text-2xl font-black",
                                                   isDark
                                                     ? "text-white"
-                                                    : "text-slate-800"
+                                                    : "text-slate-800",
                                                 )}
                                               >
                                                 {(
@@ -13246,8 +13241,8 @@ export default function ContestDetailClient({
                                               ? "bg-green-900/30 border-green-700"
                                               : "bg-green-50 border-green-200"
                                             : isDark
-                                            ? "bg-yellow-900/30 border-yellow-700"
-                                            : "bg-yellow-50 border-yellow-200"
+                                              ? "bg-yellow-900/30 border-yellow-700"
+                                              : "bg-yellow-50 border-yellow-200",
                                         )}
                                       >
                                         {twitterMetrics.targets_reached ? (
@@ -13256,7 +13251,7 @@ export default function ContestDetailClient({
                                               "h-6 w-6 flex-shrink-0",
                                               isDark
                                                 ? "text-green-400"
-                                                : "text-green-600"
+                                                : "text-green-600",
                                             )}
                                           />
                                         ) : (
@@ -13265,7 +13260,7 @@ export default function ContestDetailClient({
                                               "h-6 w-6 flex-shrink-0",
                                               isDark
                                                 ? "text-yellow-400"
-                                                : "text-yellow-600"
+                                                : "text-yellow-600",
                                             )}
                                           />
                                         )}
@@ -13278,8 +13273,8 @@ export default function ContestDetailClient({
                                                   ? "text-green-300"
                                                   : "text-green-800"
                                                 : isDark
-                                                ? "text-yellow-300"
-                                                : "text-yellow-800"
+                                                  ? "text-yellow-300"
+                                                  : "text-yellow-800",
                                             )}
                                           >
                                             {twitterMetrics.targets_reached
@@ -13294,8 +13289,8 @@ export default function ContestDetailClient({
                                                   ? "text-green-400"
                                                   : "text-green-700"
                                                 : isDark
-                                                ? "text-yellow-400"
-                                                : "text-yellow-700"
+                                                  ? "text-yellow-400"
+                                                  : "text-yellow-700",
                                             )}
                                           >
                                             {twitterMetrics.targets_reached
@@ -13317,7 +13312,7 @@ export default function ContestDetailClient({
                           <h3
                             className={cn(
                               "text-lg font-semibold mb-4",
-                              isDark ? "text-white" : "text-slate-900"
+                              isDark ? "text-white" : "text-slate-900",
                             )}
                           >
                             Campaign Metrics
@@ -13329,14 +13324,14 @@ export default function ContestDetailClient({
                                 label: string,
                                 value: string | number,
                                 iconBgClass: string,
-                                barGradientClass: string
+                                barGradientClass: string,
                               ) => (
                                 <div
                                   className={cn(
                                     "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                                     isDark
                                       ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
-                                      : "bg-gradient-to-br from-white to-blue-50 border border-blue-100"
+                                      : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
                                   )}
                                 >
                                   <div className="p-6 relative z-10">
@@ -13344,7 +13339,7 @@ export default function ContestDetailClient({
                                       <div
                                         className={cn(
                                           "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                                          iconBgClass
+                                          iconBgClass,
                                         )}
                                       >
                                         {icon}
@@ -13355,7 +13350,7 @@ export default function ContestDetailClient({
                                             "text-sm font-medium uppercase tracking-wide",
                                             isDark
                                               ? "text-white/90 drop-shadow-sm"
-                                              : "text-gray-500"
+                                              : "text-gray-500",
                                           )}
                                         >
                                           {label}
@@ -13365,7 +13360,7 @@ export default function ContestDetailClient({
                                             "text-2xl font-bold mt-1",
                                             isDark
                                               ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
-                                              : "text-gray-900"
+                                              : "text-gray-900",
                                           )}
                                         >
                                           {typeof value === "number"
@@ -13377,7 +13372,7 @@ export default function ContestDetailClient({
                                     <div
                                       className={cn(
                                         "h-1 w-full rounded-full",
-                                        barGradientClass
+                                        barGradientClass,
                                       )}
                                     ></div>
                                   </div>
@@ -13395,7 +13390,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-br from-blue-500 to-blue-600 text-white",
                                     isDark
                                       ? "bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400 shadow-lg shadow-blue-400/70 animate-pulse"
-                                      : "bg-gradient-to-r from-blue-200 to-blue-300"
+                                      : "bg-gradient-to-r from-blue-200 to-blue-300",
                                   )}
                                   {renderMetricCard(
                                     <ThumbsUp className="h-6 w-6 text-white" />,
@@ -13406,7 +13401,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-br from-pink-500 to-pink-600 text-white",
                                     isDark
                                       ? "bg-gradient-to-r from-pink-400 via-rose-400 to-red-400 shadow-lg shadow-pink-400/70 animate-pulse"
-                                      : "bg-gradient-to-r from-pink-200 to-pink-300"
+                                      : "bg-gradient-to-r from-pink-200 to-pink-300",
                                   )}
                                   {renderMetricCard(
                                     <MessageCircle className="h-6 w-6 text-white" />,
@@ -13417,7 +13412,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-br from-orange-500 to-orange-600 text-white",
                                     isDark
                                       ? "bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-400 shadow-lg shadow-orange-400/70 animate-pulse"
-                                      : "bg-gradient-to-r from-orange-200 to-orange-300"
+                                      : "bg-gradient-to-r from-orange-200 to-orange-300",
                                   )}
                                   {renderMetricCard(
                                     <Share2 className="h-6 w-6 text-white" />,
@@ -13428,7 +13423,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-br from-cyan-500 to-cyan-600 text-white",
                                     isDark
                                       ? "bg-gradient-to-r from-cyan-400 via-teal-400 to-green-400 shadow-lg shadow-cyan-400/70 animate-pulse"
-                                      : "bg-gradient-to-r from-cyan-200 to-cyan-300"
+                                      : "bg-gradient-to-r from-cyan-200 to-cyan-300",
                                   )}
                                   {renderMetricCard(
                                     <RefreshCw className="h-6 w-6 text-white" />,
@@ -13439,7 +13434,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white",
                                     isDark
                                       ? "bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 shadow-lg shadow-indigo-400/70 animate-pulse"
-                                      : "bg-gradient-to-r from-indigo-200 to-indigo-300"
+                                      : "bg-gradient-to-r from-indigo-200 to-indigo-300",
                                   )}
                                   {renderMetricCard(
                                     <Eye className="h-6 w-6 text-white" />,
@@ -13450,7 +13445,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-br from-green-500 to-green-600 text-white",
                                     isDark
                                       ? "bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400 shadow-lg shadow-green-400/70 animate-pulse"
-                                      : "bg-gradient-to-r from-green-200 to-green-300"
+                                      : "bg-gradient-to-r from-green-200 to-green-300",
                                   )}
                                   {renderMetricCard(
                                     <TrendingUp className="h-6 w-6 text-white" />,
@@ -13461,7 +13456,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white",
                                     isDark
                                       ? "bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 shadow-lg shadow-yellow-400/70 animate-pulse"
-                                      : "bg-gradient-to-r from-yellow-200 to-yellow-300"
+                                      : "bg-gradient-to-r from-yellow-200 to-yellow-300",
                                   )}
                                 </>
                               );
@@ -13488,14 +13483,14 @@ export default function ContestDetailClient({
                       "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
                       isDark
                         ? "bg-[#170337] border border-[#D1B7F9]"
-                        : "bg-white"
+                        : "bg-white",
                     )}
                   >
                     <CardContent className="p-4 flex justify-between">
                       <div
                         className={cn(
                           "flex-1 space-y-3",
-                          isDark ? "text-white" : "text-black"
+                          isDark ? "text-white" : "text-black",
                         )}
                       >
                         <p className="text-lg font-medium">Total Submissions</p>
@@ -13509,7 +13504,7 @@ export default function ContestDetailClient({
                           "w-10 h-10 flex items-center justify-center rounded-full ",
                           isDark
                             ? "bg-[#FFFFFF42] text-white"
-                            : "bg-purple-100 text-[#4A00BE]"
+                            : "bg-purple-100 text-[#4A00BE]",
                         )}
                       >
                         <Users className="h-5 w-5 " />
@@ -13522,14 +13517,14 @@ export default function ContestDetailClient({
                       "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
                       isDark
                         ? "bg-[#170337] border border-[#D1B7F9]"
-                        : "bg-white"
+                        : "bg-white",
                     )}
                   >
                     <CardContent className="p-4 flex justify-between">
                       <div
                         className={cn(
                           "flex-1 space-y-3",
-                          isDark ? "text-white" : "text-black"
+                          isDark ? "text-white" : "text-black",
                         )}
                       >
                         <p className="text-lg font-medium">Approved Content</p>
@@ -13537,7 +13532,7 @@ export default function ContestDetailClient({
                           {" "}
                           {currentSubmissions?.filter(
                             (s) =>
-                              s.status === "verified" || s.status === "paid"
+                              s.status === "verified" || s.status === "paid",
                           ).length || 0}
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
@@ -13547,7 +13542,7 @@ export default function ContestDetailClient({
                           "w-10 h-10 flex items-center justify-center rounded-full",
                           isDark
                             ? "bg-[#FFFFFF42] text-white"
-                            : "bg-purple-100 text-[#4A00BE]"
+                            : "bg-purple-100 text-[#4A00BE]",
                         )}
                       >
                         <Trophy className="h-4 w-4" />
@@ -13571,14 +13566,14 @@ export default function ContestDetailClient({
                       "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
                       isDark
                         ? "bg-[#170337] border border-[#D1B7F9]"
-                        : "bg-white"
+                        : "bg-white",
                     )}
                   >
                     <CardContent className="p-4 flex justify-between">
                       <div
                         className={cn(
                           "flex-1 space-y-3",
-                          isDark ? "text-white" : "text-black"
+                          isDark ? "text-white" : "text-black",
                         )}
                       >
                         <p className="text-lg font-medium">Contest Duration</p>
@@ -13593,7 +13588,7 @@ export default function ContestDetailClient({
                           "w-10 h-10 flex items-center justify-center rounded-full",
                           isDark
                             ? "bg-[#FFFFFF42] text-white"
-                            : "bg-purple-100 text-[#4A00BE]"
+                            : "bg-purple-100 text-[#4A00BE]",
                         )}
                       >
                         <Calendar className="h-4 w-4" />
@@ -13624,7 +13619,7 @@ export default function ContestDetailClient({
                           "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                           isDark
                             ? "bg-[#170337] border border-[#D1B7F9]"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                       >
                         <div className="flex items-center justify-between">
@@ -13632,7 +13627,7 @@ export default function ContestDetailClient({
                             <p
                               className={cn(
                                 "text-sm font-medium",
-                                isDark ? "text-white" : "text-gray-600"
+                                isDark ? "text-white" : "text-gray-600",
                               )}
                             >
                               Total Views
@@ -13640,7 +13635,7 @@ export default function ContestDetailClient({
                             <p
                               className={cn(
                                 "text-2xl font-bold",
-                                isDark ? "text-white" : "text-gray-900"
+                                isDark ? "text-white" : "text-gray-900",
                               )}
                             >
                               {filteredAnalyticsSubmissions
@@ -13653,7 +13648,7 @@ export default function ContestDetailClient({
                               "w-10 h-10 flex items-center justify-center rounded-full",
                               isDark
                                 ? "bg-blue-900/50 text-blue-300"
-                                : "bg-blue-100 text-blue-600"
+                                : "bg-blue-100 text-blue-600",
                             )}
                           >
                             <Eye className="h-5 w-5" />
@@ -13667,7 +13662,7 @@ export default function ContestDetailClient({
                           "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                           isDark
                             ? "bg-[#170337] border border-[#D1B7F9]"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                       >
                         <div className="flex items-center justify-between">
@@ -13675,7 +13670,7 @@ export default function ContestDetailClient({
                             <p
                               className={cn(
                                 "text-sm font-medium",
-                                isDark ? "text-white" : "text-gray-600"
+                                isDark ? "text-white" : "text-gray-600",
                               )}
                             >
                               Avg Views
@@ -13683,15 +13678,15 @@ export default function ContestDetailClient({
                             <p
                               className={cn(
                                 "text-2xl font-bold",
-                                isDark ? "text-white" : "text-gray-900"
+                                isDark ? "text-white" : "text-gray-900",
                               )}
                             >
                               {filteredAnalyticsSubmissions?.length > 0
                                 ? Math.round(
                                     filteredAnalyticsSubmissions.reduce(
                                       (sum, s) => sum + (s.views || 0),
-                                      0
-                                    ) / filteredAnalyticsSubmissions.length
+                                      0,
+                                    ) / filteredAnalyticsSubmissions.length,
                                   ).toLocaleString()
                                 : 0}
                             </p>
@@ -13701,7 +13696,7 @@ export default function ContestDetailClient({
                               "w-10 h-10 flex items-center justify-center rounded-full",
                               isDark
                                 ? "bg-green-900/50 text-green-400"
-                                : "bg-green-100 text-green-600"
+                                : "bg-green-100 text-green-600",
                             )}
                           >
                             <BarChart3 className="h-5 w-5" />
@@ -13715,7 +13710,7 @@ export default function ContestDetailClient({
                           "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                           isDark
                             ? "bg-[#170337] border border-[#D1B7F9]"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                       >
                         <div className="flex items-center justify-between">
@@ -13723,7 +13718,7 @@ export default function ContestDetailClient({
                             <p
                               className={cn(
                                 "text-sm font-medium",
-                                isDark ? "text-white" : "text-gray-600"
+                                isDark ? "text-white" : "text-gray-600",
                               )}
                             >
                               Highest Views
@@ -13731,14 +13726,14 @@ export default function ContestDetailClient({
                             <p
                               className={cn(
                                 "text-2xl font-bold",
-                                isDark ? "text-white" : "text-gray-900"
+                                isDark ? "text-white" : "text-gray-900",
                               )}
                             >
                               {filteredAnalyticsSubmissions?.length > 0
                                 ? Math.max(
                                     ...filteredAnalyticsSubmissions.map(
-                                      (s) => s.views || 0
-                                    )
+                                      (s) => s.views || 0,
+                                    ),
                                   ).toLocaleString()
                                 : 0}
                             </p>
@@ -13748,7 +13743,7 @@ export default function ContestDetailClient({
                               "w-10 h-10 flex items-center justify-center rounded-full",
                               isDark
                                 ? "bg-yellow-900/50 text-yellow-400"
-                                : "bg-yellow-100 text-yellow-600"
+                                : "bg-yellow-100 text-yellow-600",
                             )}
                           >
                             <TrendingUp className="h-5 w-5" />
@@ -13762,7 +13757,7 @@ export default function ContestDetailClient({
                           "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                           isDark
                             ? "bg-[#170337] border border-[#D1B7F9]"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                       >
                         <div className="flex items-center justify-between">
@@ -13770,25 +13765,26 @@ export default function ContestDetailClient({
                             <p
                               className={cn(
                                 "text-sm font-medium",
-                                isDark ? "text-white" : "text-gray-600"
+                                isDark ? "text-white" : "text-gray-600",
                               )}
                             >
                               {activeAnalyticsTab === "verified"
                                 ? "Verified Views"
                                 : activeAnalyticsTab === "paid"
-                                ? "Paid Views"
-                                : activeAnalyticsTab === "pending"
-                                ? "Pending Views"
-                                : activeAnalyticsTab === "rejected"
-                                ? "Rejected Views"
-                                : activeAnalyticsTab === "verified_or_paid"
-                                ? "Verified/Paid Views"
-                                : "Filtered Views"}
+                                  ? "Paid Views"
+                                  : activeAnalyticsTab === "pending"
+                                    ? "Pending Views"
+                                    : activeAnalyticsTab === "rejected"
+                                      ? "Rejected Views"
+                                      : activeAnalyticsTab ===
+                                          "verified_or_paid"
+                                        ? "Verified/Paid Views"
+                                        : "Filtered Views"}
                             </p>
                             <p
                               className={cn(
                                 "text-2xl font-bold",
-                                isDark ? "text-white" : "text-gray-900"
+                                isDark ? "text-white" : "text-gray-900",
                               )}
                             >
                               {filteredAnalyticsSubmissions
@@ -13801,7 +13797,7 @@ export default function ContestDetailClient({
                               "w-10 h-10 flex items-center justify-center rounded-full",
                               isDark
                                 ? "bg-purple-900/50 text-purple-300"
-                                : "bg-purple-100 text-purple-600"
+                                : "bg-purple-100 text-purple-600",
                             )}
                           >
                             <CheckCircle className="h-5 w-5" />
@@ -13824,7 +13820,7 @@ export default function ContestDetailClient({
                               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                               isDark
                                 ? "bg-[#170337] border border-[#D1B7F9]"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           >
                             <div className="flex items-center justify-between">
@@ -13832,7 +13828,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-sm font-medium",
-                                    isDark ? "text-white" : "text-gray-600"
+                                    isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
                                   Total Points
@@ -13840,7 +13836,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {(() => {
@@ -13853,13 +13849,13 @@ export default function ContestDetailClient({
                                       filteredAnalyticsSubmissions || []
                                     ).filter(
                                       (s) =>
-                                        (s as any).is_twitter_tweet === true
+                                        (s as any).is_twitter_tweet === true,
                                     );
 
                                     const baseTotal = twitterSubs.reduce(
                                       (sum, s) =>
                                         sum + (s.other_stats?.base_points || 0),
-                                      0
+                                      0,
                                     );
 
                                     const tweetManualTotal = twitterSubs.reduce(
@@ -13867,7 +13863,7 @@ export default function ContestDetailClient({
                                         sum +
                                         ((s as any).manual_points_adjustment ||
                                           0),
-                                      0
+                                      0,
                                     );
 
                                     const creatorIds = new Set<string>();
@@ -13877,12 +13873,12 @@ export default function ContestDetailClient({
                                     });
 
                                     const creatorManualTotal = Array.from(
-                                      creatorIds
+                                      creatorIds,
                                     ).reduce(
                                       (sum, creatorId) =>
                                         sum +
                                         getCreatorManualAdjustment(creatorId),
-                                      0
+                                      0,
                                     );
 
                                     const totalPoints =
@@ -13896,7 +13892,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-xs text-gray-500 mt-1",
-                                    isDark ? "text-white" : "text-gray-500"
+                                    isDark ? "text-white" : "text-gray-500",
                                   )}
                                 >
                                   Base + Manual Adjustments
@@ -13907,7 +13903,7 @@ export default function ContestDetailClient({
                                   "w-10 h-10 flex items-center justify-center rounded-full",
                                   isDark
                                     ? "bg-purple-900/50 text-purple-300"
-                                    : "bg-purple-100 text-purple-600"
+                                    : "bg-purple-100 text-purple-600",
                                 )}
                               >
                                 <Trophy className="h-5 w-5" />
@@ -13921,7 +13917,7 @@ export default function ContestDetailClient({
                               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                               isDark
                                 ? "bg-[#170337] border border-[#D1B7F9]"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           >
                             <div className="flex items-center justify-between">
@@ -13929,7 +13925,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-sm font-medium",
-                                    isDark ? "text-white" : "text-gray-600"
+                                    isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
                                   Base Points
@@ -13937,7 +13933,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {filteredAnalyticsSubmissions
@@ -13957,7 +13953,7 @@ export default function ContestDetailClient({
                                   "w-10 h-10 flex items-center justify-center rounded-full",
                                   isDark
                                     ? "bg-blue-900/50 text-blue-300"
-                                    : "bg-blue-100 text-blue-600"
+                                    : "bg-blue-100 text-blue-600",
                                 )}
                               >
                                 <Star className="h-5 w-5" />
@@ -13971,7 +13967,7 @@ export default function ContestDetailClient({
                               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                               isDark
                                 ? "bg-[#170337] border border-[#D1B7F9]"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           >
                             <div className="flex items-center justify-between">
@@ -13979,7 +13975,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-sm font-medium",
-                                    isDark ? "text-white" : "text-gray-600"
+                                    isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
                                   Manual Adjustments
@@ -13987,7 +13983,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {(() => {
@@ -13998,7 +13994,7 @@ export default function ContestDetailClient({
                                       filteredAnalyticsSubmissions || []
                                     ).filter(
                                       (s) =>
-                                        (s as any).is_twitter_tweet === true
+                                        (s as any).is_twitter_tweet === true,
                                     );
 
                                     const creatorIds = new Set<string>();
@@ -14008,13 +14004,13 @@ export default function ContestDetailClient({
                                     });
 
                                     const creatorManualTotal = Array.from(
-                                      creatorIds
+                                      creatorIds,
                                     ).reduce(
                                       (sum, creatorId) =>
                                         sum +
                                         (creatorModerationData?.[creatorId]
                                           ?.manual_points_adjustment || 0),
-                                      0
+                                      0,
                                     );
 
                                     const tweetManualTotal = twitterSubs.reduce(
@@ -14022,7 +14018,7 @@ export default function ContestDetailClient({
                                         sum +
                                         ((s as any).manual_points_adjustment ||
                                           0),
-                                      0
+                                      0,
                                     );
 
                                     const totalManual =
@@ -14034,7 +14030,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-xs text-gray-500 mt-1",
-                                    isDark ? "text-white" : "text-gray-500"
+                                    isDark ? "text-white" : "text-gray-500",
                                   )}
                                 >
                                   Creator-wise + Tweet-level
@@ -14045,7 +14041,7 @@ export default function ContestDetailClient({
                                   "w-10 h-10 flex items-center justify-center rounded-full",
                                   isDark
                                     ? "bg-green-900/50 text-green-400"
-                                    : "bg-green-100 text-green-600"
+                                    : "bg-green-100 text-green-600",
                                 )}
                               >
                                 <Edit className="h-5 w-5" />
@@ -14064,13 +14060,13 @@ export default function ContestDetailClient({
                           "flex items-center justify-between cursor-pointer p-4 rounded-lg transition-colors",
                           isDark
                             ? "border border-[#D1B7F9]"
-                            : "bg-gray-50 hover:bg-gray-100"
+                            : "bg-gray-50 hover:bg-gray-100",
                         )}
                       >
                         <h3
                           className={cn(
                             "font-medium",
-                            isDark ? "text-white" : "text-gray-800"
+                            isDark ? "text-white" : "text-gray-800",
                           )}
                         >
                           ROI & Benefit Analysis
@@ -14085,7 +14081,7 @@ export default function ContestDetailClient({
                               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                               isDark
                                 ? "bg-[#170337] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           >
                             <div className="flex items-center justify-between">
@@ -14093,7 +14089,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-sm font-medium",
-                                    isDark ? "text-white" : "text-gray-600"
+                                    isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
                                   Total Investment
@@ -14101,7 +14097,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {(() => {
@@ -14123,7 +14119,7 @@ export default function ContestDetailClient({
                                           ?.filter((s) => s.status === "paid")
                                           .reduce(
                                             (sum, s) => sum + (s.earnings || 0),
-                                            0
+                                            0,
                                           ) || 0;
                                       return formatMoney(totalPaid);
                                     }
@@ -14133,7 +14129,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-xs text-gray-500 mt-1",
-                                    isDark ? "text-white" : "text-gray-500"
+                                    isDark ? "text-white" : "text-gray-500",
                                   )}
                                 >
                                   {currentContest.contest_type === "leaderboard"
@@ -14146,7 +14142,7 @@ export default function ContestDetailClient({
                                   "w-10 h-10 flex items-center justify-center rounded-full",
                                   isDark
                                     ? "bg-red-900/50 text-red-300"
-                                    : "bg-red-100 text-red-600"
+                                    : "bg-red-100 text-red-600",
                                 )}
                               >
                                 <DollarSign className="h-5 w-5" />
@@ -14160,7 +14156,7 @@ export default function ContestDetailClient({
                               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                               isDark
                                 ? "bg-[#170337] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           >
                             <div className="flex items-center justify-between">
@@ -14168,7 +14164,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-sm font-medium",
-                                    isDark ? "text-white" : "text-gray-600"
+                                    isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
                                   Views Generated
@@ -14176,35 +14172,36 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {filteredAnalyticsSubmissions
                                     ?.reduce(
                                       (sum, s) => sum + (s.views || 0),
-                                      0
+                                      0,
                                     )
                                     .toLocaleString() || 0}
                                 </p>
                                 <p
                                   className={cn(
                                     "text-xs text-gray-500 mt-1",
-                                    isDark ? "text-white" : "text-gray-500"
+                                    isDark ? "text-white" : "text-gray-500",
                                   )}
                                 >
                                   {activeAnalyticsTab === "all"
                                     ? "All Submissions"
                                     : activeAnalyticsTab === "verified"
-                                    ? "Verified Only"
-                                    : activeAnalyticsTab === "paid"
-                                    ? "Paid Only"
-                                    : activeAnalyticsTab === "pending"
-                                    ? "Pending Only"
-                                    : activeAnalyticsTab === "rejected"
-                                    ? "Rejected Only"
-                                    : activeAnalyticsTab === "verified_or_paid"
-                                    ? "Verified/Paid"
-                                    : "Filtered"}
+                                      ? "Verified Only"
+                                      : activeAnalyticsTab === "paid"
+                                        ? "Paid Only"
+                                        : activeAnalyticsTab === "pending"
+                                          ? "Pending Only"
+                                          : activeAnalyticsTab === "rejected"
+                                            ? "Rejected Only"
+                                            : activeAnalyticsTab ===
+                                                "verified_or_paid"
+                                              ? "Verified/Paid"
+                                              : "Filtered"}
                                 </p>
                               </div>
                               <div
@@ -14212,7 +14209,7 @@ export default function ContestDetailClient({
                                   "w-10 h-10 flex items-center justify-center rounded-full",
                                   isDark
                                     ? "bg-blue-900/50 text-blue-300"
-                                    : "bg-blue-100 text-blue-600"
+                                    : "bg-blue-100 text-blue-600",
                                 )}
                               >
                                 <Eye className="h-5 w-5" />
@@ -14226,7 +14223,7 @@ export default function ContestDetailClient({
                               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                               isDark
                                 ? "bg-[#170337] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           >
                             <div className="flex items-center justify-between">
@@ -14234,7 +14231,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-sm font-medium",
-                                    isDark ? "text-white" : "text-gray-600"
+                                    isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
                                   Cost Per View
@@ -14242,14 +14239,14 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {(() => {
                                     const totalViews =
                                       filteredAnalyticsSubmissions?.reduce(
                                         (sum, s) => sum + (s.views || 0),
-                                        0
+                                        0,
                                       ) || 0;
                                     if (totalViews === 0) return "$0.00";
 
@@ -14270,7 +14267,7 @@ export default function ContestDetailClient({
                                           ?.filter((s) => s.status === "paid")
                                           .reduce(
                                             (sum, s) => sum + (s.earnings || 0),
-                                            0
+                                            0,
                                           ) || 0;
                                     }
 
@@ -14284,7 +14281,7 @@ export default function ContestDetailClient({
                                 <p
                                   className={cn(
                                     "text-xs text-gray-500 mt-1",
-                                    isDark ? "text-white" : "text-gray-500"
+                                    isDark ? "text-white" : "text-gray-500",
                                   )}
                                 >
                                   {currentContest.contest_type === "leaderboard"
@@ -14297,7 +14294,7 @@ export default function ContestDetailClient({
                                   "w-10 h-10 flex items-center justify-center rounded-full",
                                   isDark
                                     ? "bg-green-900/50 text-green-400"
-                                    : "bg-green-100 text-green-600"
+                                    : "bg-green-100 text-green-600",
                                 )}
                               >
                                 <BarChart3 className="h-5 w-5" />
@@ -14315,7 +14312,7 @@ export default function ContestDetailClient({
                                 "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                                 isDark
                                   ? "bg-[#170337] border border-gray-600"
-                                  : "bg-white"
+                                  : "bg-white",
                               )}
                             >
                               <div className="flex items-center justify-between">
@@ -14323,7 +14320,7 @@ export default function ContestDetailClient({
                                   <p
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-gray-600"
+                                      isDark ? "text-white" : "text-gray-600",
                                     )}
                                   >
                                     CPM Rate
@@ -14331,18 +14328,18 @@ export default function ContestDetailClient({
                                   <p
                                     className={cn(
                                       "text-2xl font-bold",
-                                      isDark ? "text-white" : "text-gray-900"
+                                      isDark ? "text-white" : "text-gray-900",
                                     )}
                                   >
                                     $
                                     {currentContest.contest_based_details?.cpm_contest?.cpm_rate_usd?.toFixed(
-                                      2
+                                      2,
                                     ) || "0.00"}
                                   </p>
                                   <p
                                     className={cn(
                                       "text-xs text-gray-500 mt-1",
-                                      isDark ? "text-white" : "text-gray-500"
+                                      isDark ? "text-white" : "text-gray-500",
                                     )}
                                   >
                                     Per 1,000 views
@@ -14353,7 +14350,7 @@ export default function ContestDetailClient({
                                     "w-10 h-10 flex items-center justify-center rounded-full",
                                     isDark
                                       ? "bg-purple-900/50 text-purple-300"
-                                      : "bg-purple-100 text-purple-600"
+                                      : "bg-purple-100 text-purple-600",
                                   )}
                                 >
                                   <TrendingUp className="h-5 w-5" />
@@ -14367,7 +14364,7 @@ export default function ContestDetailClient({
                                 "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
                                 isDark
                                   ? "bg-[#170337] border border-gray-600"
-                                  : "bg-white"
+                                  : "bg-white",
                               )}
                             >
                               <div className="flex items-center justify-between">
@@ -14375,7 +14372,7 @@ export default function ContestDetailClient({
                                   <p
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-gray-600"
+                                      isDark ? "text-white" : "text-gray-600",
                                     )}
                                   >
                                     Effective CPM
@@ -14383,21 +14380,21 @@ export default function ContestDetailClient({
                                   <p
                                     className={cn(
                                       "text-2xl font-bold",
-                                      isDark ? "text-white" : "text-gray-900"
+                                      isDark ? "text-white" : "text-gray-900",
                                     )}
                                   >
                                     {(() => {
                                       const totalViews =
                                         filteredAnalyticsSubmissions?.reduce(
                                           (sum, s) => sum + (s.views || 0),
-                                          0
+                                          0,
                                         ) || 0;
                                       const totalPaid =
                                         filteredAnalyticsSubmissions
                                           ?.filter((s) => s.status === "paid")
                                           .reduce(
                                             (sum, s) => sum + (s.earnings || 0),
-                                            0
+                                            0,
                                           ) || 0;
 
                                       if (totalViews === 0) return "$0.00";
@@ -14411,7 +14408,7 @@ export default function ContestDetailClient({
                                   <p
                                     className={cn(
                                       "text-xs text-gray-500 mt-1",
-                                      isDark ? "text-white" : "text-gray-500"
+                                      isDark ? "text-white" : "text-gray-500",
                                     )}
                                   >
                                     Actual rate achieved
@@ -14422,7 +14419,7 @@ export default function ContestDetailClient({
                                     "w-10 h-10 flex items-center justify-center rounded-full",
                                     isDark
                                       ? "bg-orange-900/50 text-orange-300"
-                                      : "bg-orange-100 text-orange-600"
+                                      : "bg-orange-100 text-orange-600",
                                   )}
                                 >
                                   <BarChart3 className="h-5 w-5" />
@@ -14438,13 +14435,13 @@ export default function ContestDetailClient({
                             "rounded-xl p-6 border",
                             isDark
                               ? "bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-white/20 backdrop-blur-2xl"
-                              : "bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200"
+                              : "bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200",
                           )}
                         >
                           <h4
                             className={cn(
                               "font-semibold text-lg mb-3",
-                              isDark ? "text-white" : "text-gray-800"
+                              isDark ? "text-white" : "text-gray-800",
                             )}
                           >
                             Performance Summary
@@ -14454,7 +14451,7 @@ export default function ContestDetailClient({
                               <p
                                 className={cn(
                                   "text-sm mb-1",
-                                  isDark ? "text-white/70" : "text-gray-600"
+                                  isDark ? "text-white/70" : "text-gray-600",
                                 )}
                               >
                                 Investment Efficiency
@@ -14462,14 +14459,14 @@ export default function ContestDetailClient({
                               <p
                                 className={cn(
                                   "text-lg font-semibold",
-                                  isDark ? "text-white" : "text-gray-800"
+                                  isDark ? "text-white" : "text-gray-800",
                                 )}
                               >
                                 {(() => {
                                   const totalViews =
                                     filteredAnalyticsSubmissions?.reduce(
                                       (sum, s) => sum + (s.views || 0),
-                                      0
+                                      0,
                                     ) || 0;
                                   let totalCost = 0;
                                   if (
@@ -14487,7 +14484,7 @@ export default function ContestDetailClient({
                                         ?.filter((s) => s.status === "paid")
                                         .reduce(
                                           (sum, s) => sum + (s.earnings || 0),
-                                          0
+                                          0,
                                         ) || 0;
                                   }
 
@@ -14497,7 +14494,7 @@ export default function ContestDetailClient({
                                   const efficiency =
                                     totalViews / (totalCostDollars / 100); // Views per $100 spent
                                   return `${efficiency.toFixed(
-                                    0
+                                    0,
                                   )} views per $100`;
                                 })()}
                               </p>
@@ -14506,7 +14503,7 @@ export default function ContestDetailClient({
                               <p
                                 className={cn(
                                   "text-sm mb-1",
-                                  isDark ? "text-white/70" : "text-gray-600"
+                                  isDark ? "text-white/70" : "text-gray-600",
                                 )}
                               >
                                 Contest Type
@@ -14514,7 +14511,7 @@ export default function ContestDetailClient({
                               <p
                                 className={cn(
                                   "text-lg font-semibold capitalize",
-                                  isDark ? "text-white" : "text-gray-800"
+                                  isDark ? "text-white" : "text-gray-800",
                                 )}
                               >
                                 {currentContest.contest_type} Contest
@@ -14531,7 +14528,7 @@ export default function ContestDetailClient({
                     <h3
                       className={cn(
                         "font-medium mb-4",
-                        isDark ? "text-white" : "text-gray-900"
+                        isDark ? "text-white" : "text-gray-900",
                       )}
                     >
                       Views Distribution
@@ -14541,7 +14538,7 @@ export default function ContestDetailClient({
                         "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-6",
                         isDark
                           ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
-                          : "bg-white"
+                          : "bg-white",
                       )}
                     >
                       {filteredAnalyticsSubmissions?.length > 0 ? (
@@ -14553,8 +14550,8 @@ export default function ContestDetailClient({
                             .map((submission, index) => {
                               const maxViews = Math.max(
                                 ...filteredAnalyticsSubmissions.map(
-                                  (s) => s.views || 0
-                                )
+                                  (s) => s.views || 0,
+                                ),
                               );
                               const views = submission.views || 0;
                               const percentage =
@@ -14568,7 +14565,9 @@ export default function ContestDetailClient({
                                   <div
                                     className={cn(
                                       "w-8 text-sm font-medium",
-                                      isDark ? "text-white/70" : "text-gray-600"
+                                      isDark
+                                        ? "text-white/70"
+                                        : "text-gray-600",
                                     )}
                                   >
                                     #{index + 1}
@@ -14579,7 +14578,7 @@ export default function ContestDetailClient({
                                         className={cn(
                                           isDark
                                             ? "text-white/80"
-                                            : "text-gray-600"
+                                            : "text-gray-600",
                                         )}
                                       >
                                         {submission.creator_username ||
@@ -14591,7 +14590,7 @@ export default function ContestDetailClient({
                                           "font-medium",
                                           isDark
                                             ? "text-white"
-                                            : "text-gray-900"
+                                            : "text-gray-900",
                                         )}
                                       >
                                         {views.toLocaleString()} views
@@ -14600,7 +14599,7 @@ export default function ContestDetailClient({
                                     <div
                                       className={cn(
                                         "w-full rounded-full h-2",
-                                        isDark ? "bg-white/20" : "bg-gray-200"
+                                        isDark ? "bg-white/20" : "bg-gray-200",
                                       )}
                                     >
                                       <div
@@ -14608,7 +14607,7 @@ export default function ContestDetailClient({
                                           "h-2 rounded-full transition-all duration-300",
                                           isDark
                                             ? "bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 shadow-lg shadow-purple-400/50"
-                                            : "bg-gradient-to-r from-blue-500 to-purple-600"
+                                            : "bg-gradient-to-r from-blue-500 to-purple-600",
                                         )}
                                         style={{ width: `${percentage}%` }}
                                       />
@@ -14622,7 +14621,7 @@ export default function ContestDetailClient({
                         <div className="h-40 flex items-center justify-center">
                           <p
                             className={cn(
-                              isDark ? "text-white/60" : "text-gray-500"
+                              isDark ? "text-white/60" : "text-gray-500",
                             )}
                           >
                             No submissions to display
@@ -14643,11 +14642,12 @@ export default function ContestDetailClient({
         isOpen={rejectionModalOpen}
         onClose={() => {
           setRejectionModalOpen(false);
-          setPendingRejectionSubmission(null);
+          setPendingRejectionSubmissionIds([]);
         }}
         onConfirm={handleRejectionConfirm}
         isLoading={
-          isLoadingSubmission[pendingRejectionSubmission || ""] || false
+          pendingRejectionSubmissionIds.length > 0 &&
+          pendingRejectionSubmissionIds.some((id) => isLoadingSubmission[id])
         }
       />
 
@@ -14698,12 +14698,12 @@ export default function ContestDetailClient({
               if (pendingManualPointsSubmission.type === "leaderboard") {
                 const creatorGroup = (groupSubmissionsByCreator as any[])?.find(
                   (g) =>
-                    g.creator?.id === pendingManualPointsSubmission.creatorId
+                    g.creator?.id === pendingManualPointsSubmission.creatorId,
                 );
                 const submission =
                   creatorGroup?.submissions?.[0] ||
                   currentSubmissions.find(
-                    (s) => s.id === pendingManualPointsSubmission.id
+                    (s) => s.id === pendingManualPointsSubmission.id,
                   );
                 const basePoints = creatorGroup?.metrics?.base_points || 0;
                 const tweetManualPoints =
@@ -14724,7 +14724,7 @@ export default function ContestDetailClient({
               }
 
               const submission = currentSubmissions.find(
-                (s) => s.id === pendingManualPointsSubmission.id
+                (s) => s.id === pendingManualPointsSubmission.id,
               );
               if (!submission) {
                 return {
@@ -14808,7 +14808,7 @@ export default function ContestDetailClient({
                 "w-full text-md rounded-full",
                 isDark
                   ? "bg-[#7F39EC] py-3"
-                  : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+                  : " bg-[#D9C0FF61] py-4 text-[#7F39EC] ",
               )}
             >
               Confirm Reversal
@@ -14819,7 +14819,7 @@ export default function ContestDetailClient({
                 "w-full text-md rounded-full",
                 isDark
                   ? "py-3 border border-[#FF5353] text-[#FF5353]"
-                  : "bg-[#FF323224] text-[#E50000] py-4"
+                  : "bg-[#FF323224] text-[#E50000] py-4",
               )}
             >
               Cancel
@@ -14854,7 +14854,7 @@ export default function ContestDetailClient({
                 "w-full text-md rounded-full",
                 isDark
                   ? "bg-[#7F39EC] py-3"
-                  : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+                  : " bg-[#D9C0FF61] py-4 text-[#7F39EC] ",
               )}
             >
               Confirm Reversal
@@ -14865,7 +14865,7 @@ export default function ContestDetailClient({
                 "w-full text-md rounded-full",
                 isDark
                   ? "py-3 border border-[#FF5353] text-[#FF5353]"
-                  : "bg-[#FF323224] text-[#E50000] py-4"
+                  : "bg-[#FF323224] text-[#E50000] py-4",
               )}
             >
               Cancel
@@ -14881,12 +14881,12 @@ export default function ContestDetailClient({
           onClose={() => setSelectedCreatorForModal(null)}
           creator={
             (groupSubmissionsByCreator as any[]).find(
-              (g: any) => g.creator.id === selectedCreatorForModal
+              (g: any) => g.creator.id === selectedCreatorForModal,
             )?.creator || {}
           }
           submissions={
             (currentSubmissions || []).filter(
-              (s: any) => s.creator_id === selectedCreatorForModal
+              (s: any) => s.creator_id === selectedCreatorForModal,
             ) as React.ComponentProps<
               typeof CreatorSubmissionsModal
             >["submissions"]
@@ -14903,9 +14903,8 @@ export default function ContestDetailClient({
             setSelectedCreatorForModal(null);
           }}
           onReject={(ids: string[]) => {
-            // Handle bulk reject - open rejection modal for first, others will need individual handling
             if (ids.length > 0) {
-              setPendingRejectionSubmission(ids[0]);
+              setPendingRejectionSubmissionIds(ids);
               setRejectionModalOpen(true);
             }
           }}
@@ -14919,20 +14918,20 @@ export default function ContestDetailClient({
           onPayment={async (
             submissionId: string,
             type: "standard" | "bonus" | "both",
-            options?: { skipReload?: boolean }
+            options?: { skipReload?: boolean },
           ) => {
             const action =
               type === "bonus"
                 ? "mark_bonus_paid"
                 : type === "both"
-                ? "mark_both_paid"
-                : "paid";
+                  ? "mark_both_paid"
+                  : "paid";
             await handleUpdateSubmissionStatus(
               submissionId,
               action,
               undefined,
               undefined,
-              options
+              options,
             );
           }}
           onCustomPayment={(submissionId: string) => {

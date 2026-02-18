@@ -168,7 +168,7 @@ export default function OverviewAnalytics({
             <CardTitle
               className={cn(
                 "text-sm font-medium",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               Total Contests
@@ -176,7 +176,7 @@ export default function OverviewAnalytics({
             <BarChart3
               className={cn(
                 "h-4 w-4",
-                isDark ? "text-gray-400" : "text-muted-foreground"
+                isDark ? "text-gray-400" : "text-muted-foreground",
               )}
             />
           </CardHeader>
@@ -184,7 +184,7 @@ export default function OverviewAnalytics({
             <div
               className={cn(
                 "text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {overview.totalContests}
@@ -192,12 +192,12 @@ export default function OverviewAnalytics({
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               {getTrendIcon(
                 currentMonthData.contests,
-                previousMonthData.contests
+                previousMonthData.contests,
               )}
               <span
                 className={getTrendColor(
                   currentMonthData.contests,
-                  previousMonthData.contests
+                  previousMonthData.contests,
                 )}
               >
                 {currentMonthData.contests} this month
@@ -213,7 +213,7 @@ export default function OverviewAnalytics({
             <CardTitle
               className={cn(
                 "text-sm font-medium",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               Total Submissions
@@ -221,7 +221,7 @@ export default function OverviewAnalytics({
             <Users
               className={cn(
                 "h-4 w-4",
-                isDark ? "text-gray-400" : "text-muted-foreground"
+                isDark ? "text-gray-400" : "text-muted-foreground",
               )}
             />
           </CardHeader>
@@ -229,7 +229,7 @@ export default function OverviewAnalytics({
             <div
               className={cn(
                 "text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {overview.totalSubmissions.toLocaleString()}
@@ -237,12 +237,12 @@ export default function OverviewAnalytics({
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               {getTrendIcon(
                 currentMonthData.submissions,
-                previousMonthData.submissions
+                previousMonthData.submissions,
               )}
               <span
                 className={getTrendColor(
                   currentMonthData.submissions,
-                  previousMonthData.submissions
+                  previousMonthData.submissions,
                 )}
               >
                 {currentMonthData.submissions} this month
@@ -258,7 +258,7 @@ export default function OverviewAnalytics({
             <CardTitle
               className={cn(
                 "text-sm font-medium",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               Total Views
@@ -266,7 +266,7 @@ export default function OverviewAnalytics({
             <Eye
               className={cn(
                 "h-4 w-4",
-                isDark ? "text-gray-400" : "text-muted-foreground"
+                isDark ? "text-gray-400" : "text-muted-foreground",
               )}
             />
           </CardHeader>
@@ -274,7 +274,7 @@ export default function OverviewAnalytics({
             <div
               className={cn(
                 "text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {overview.totalViews.toLocaleString()}
@@ -284,7 +284,7 @@ export default function OverviewAnalytics({
               <span
                 className={getTrendColor(
                   currentMonthData.views,
-                  previousMonthData.views
+                  previousMonthData.views,
                 )}
               >
                 {currentMonthData.views.toLocaleString()} this month
@@ -300,7 +300,7 @@ export default function OverviewAnalytics({
             <CardTitle
               className={cn(
                 "text-sm font-medium",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               Total Spent
@@ -308,7 +308,7 @@ export default function OverviewAnalytics({
             <DollarSign
               className={cn(
                 "h-4 w-4",
-                isDark ? "text-gray-400" : "text-muted-foreground"
+                isDark ? "text-gray-400" : "text-muted-foreground",
               )}
             />
           </CardHeader>
@@ -316,7 +316,7 @@ export default function OverviewAnalytics({
             <div
               className={cn(
                 "text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {formatCurrencyFromCents(overview.totalSpent)}
@@ -326,7 +326,7 @@ export default function OverviewAnalytics({
               <span
                 className={getTrendColor(
                   currentMonthData.spent,
-                  previousMonthData.spent
+                  previousMonthData.spent,
                 )}
               >
                 {formatCurrencyFromCents(currentMonthData.spent)} this month
@@ -345,7 +345,7 @@ export default function OverviewAnalytics({
             <CardTitle
               className={cn(
                 "text-sm font-medium",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               Average Cost Per View
@@ -355,11 +355,11 @@ export default function OverviewAnalytics({
             <div
               className={cn(
                 "text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {formatCurrencyFromCents(
-                Math.round(overview.avgCostPerView * 100)
+                Math.round(overview.avgCostPerView * 100),
               )}
             </div>
             <p className="text-xs text-muted-foreground">Lower is better</p>
@@ -373,7 +373,7 @@ export default function OverviewAnalytics({
             <CardTitle
               className={cn(
                 "text-sm font-medium",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               Average Cost Per Submission
@@ -383,11 +383,11 @@ export default function OverviewAnalytics({
             <div
               className={cn(
                 "text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {formatCurrencyFromCents(
-                Math.round(overview.avgCostPerSubmission * 100)
+                Math.round(overview.avgCostPerSubmission * 100),
               )}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -403,7 +403,7 @@ export default function OverviewAnalytics({
             <CardTitle
               className={cn(
                 "text-sm font-medium",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               Average Submissions Per Contest
@@ -413,7 +413,7 @@ export default function OverviewAnalytics({
             <div
               className={cn(
                 "text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               {overview.avgSubmissionsPerContest.toFixed(1)}
@@ -443,7 +443,7 @@ export default function OverviewAnalytics({
                 <h3
                   className={cn(
                     "font-semibold text-lg",
-                    isDark ? "text-white" : "text-gray-900"
+                    isDark ? "text-white" : "text-gray-900",
                   )}
                 >
                   {overview.topContest.title}
@@ -461,7 +461,7 @@ export default function OverviewAnalytics({
                   isDark
                     ? "bg-green-900/50 text-green-200 border-green-700"
                     : "bg-green-50 text-green-700 border-green-200",
-                  "self-start sm:self-auto"
+                  "self-start sm:self-auto",
                 )}
               >
                 Best Performer
@@ -494,7 +494,7 @@ export default function OverviewAnalytics({
                     <div
                       className={cn(
                         "w-8 h-8 rounded-full flex items-center justify-center",
-                        isDark ? "bg-[#FFFFFF36]" : "bg-gray-100"
+                        isDark ? "bg-[#FFFFFF36]" : "bg-gray-100",
                       )}
                     >
                       <span className="text-xs font-semibold capitalize">
@@ -505,7 +505,7 @@ export default function OverviewAnalytics({
                       <p
                         className={cn(
                           "font-medium capitalize",
-                          isDark ? "text-white" : "text-gray-900"
+                          isDark ? "text-white" : "text-gray-900",
                         )}
                       >
                         {platform}
@@ -520,7 +520,7 @@ export default function OverviewAnalytics({
                     <p
                       className={cn(
                         "font-semibold",
-                        isDark ? "text-white" : "text-gray-900"
+                        isDark ? "text-white" : "text-gray-900",
                       )}
                     >
                       {stats.views.toLocaleString()}
@@ -554,7 +554,7 @@ export default function OverviewAnalytics({
                     <p
                       className={cn(
                         "font-medium capitalize",
-                        isDark ? "text-white" : "text-gray-900"
+                        isDark ? "text-white" : "text-gray-900",
                       )}
                     >
                       {type.replace("_", " ")}
@@ -567,7 +567,7 @@ export default function OverviewAnalytics({
                     <p
                       className={cn(
                         "font-semibold",
-                        isDark ? "text-white" : "text-gray-900"
+                        isDark ? "text-white" : "text-gray-900",
                       )}
                     >
                       {formatCurrencyFromCents(stats.spent)}
@@ -601,7 +601,7 @@ export default function OverviewAnalytics({
                 {
                   month: "short",
                   year: "numeric",
-                }
+                },
               );
 
               return (
@@ -609,14 +609,14 @@ export default function OverviewAnalytics({
                   key={month}
                   className={cn(
                     "flex flex-col gap-3 md:flex-row md:items-center md:justify-between p-3 rounded-lg",
-                    isDark ? "bg-gray-800" : "bg-gray-50"
+                    isDark ? "bg-gray-800" : "bg-gray-50",
                   )}
                 >
                   <div>
                     <p
                       className={cn(
                         "font-medium",
-                        isDark ? "text-white" : "text-gray-900"
+                        isDark ? "text-white" : "text-gray-900",
                       )}
                     >
                       {monthName}
@@ -627,7 +627,7 @@ export default function OverviewAnalytics({
                       <p
                         className={cn(
                           "font-semibold",
-                          isDark ? "text-white" : "text-gray-900"
+                          isDark ? "text-white" : "text-gray-900",
                         )}
                       >
                         {monthData.contests}
@@ -638,7 +638,7 @@ export default function OverviewAnalytics({
                       <p
                         className={cn(
                           "font-semibold",
-                          isDark ? "text-white" : "text-gray-900"
+                          isDark ? "text-white" : "text-gray-900",
                         )}
                       >
                         {monthData.submissions}
@@ -649,7 +649,7 @@ export default function OverviewAnalytics({
                       <p
                         className={cn(
                           "font-semibold",
-                          isDark ? "text-white" : "text-gray-900"
+                          isDark ? "text-white" : "text-gray-900",
                         )}
                       >
                         {monthData.views.toLocaleString()}
@@ -660,7 +660,7 @@ export default function OverviewAnalytics({
                       <p
                         className={cn(
                           "font-semibold",
-                          isDark ? "text-white" : "text-gray-900"
+                          isDark ? "text-white" : "text-gray-900",
                         )}
                       >
                         {formatCurrencyFromCents(monthData.spent)}

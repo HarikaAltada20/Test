@@ -24,7 +24,20 @@ import {
   AlertCircle,
   FileText,
   X,
+  ChevronDown,
+  Video,
+  Image as ImageIcon,
+  Youtube,
+  Instagram,
+  Twitter,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import ContestAnalytics from "./ContestAnalytics";
 import CreatorAnalytics from "./CreatorAnalytics";
@@ -33,8 +46,10 @@ import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
 import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
 import { useIsMobile } from "@/hooks/use-mobile";
+import ContestTypeFilter from "@/components/admin/ContestTypeFilter";
 
 interface UnifiedAnalyticsProps {
   userId: string;
@@ -47,6 +62,8 @@ interface MetricTile {
   enabled: boolean;
   category: "contests" | "submissions" | "engagement" | "financial";
 }
+
+type ContestTypeFilterType = "all" | "leaderboard" | "cpm";
 
 const defaultMetricTiles: MetricTile[] = [
   // Contest Metrics
@@ -191,6 +208,25 @@ const defaultMetricTiles: MetricTile[] = [
   },
 ];
 
+const ANALYTICS_TILES_STORAGE_KEY = "go-viral:analytics-metric-tiles";
+
+function getInitialMetricTiles(): MetricTile[] {
+  if (typeof window === "undefined") return defaultMetricTiles;
+  try {
+    const raw = localStorage.getItem(ANALYTICS_TILES_STORAGE_KEY);
+    if (!raw) return defaultMetricTiles;
+    const saved = JSON.parse(raw) as { id: string; enabled: boolean }[];
+    if (!Array.isArray(saved)) return defaultMetricTiles;
+    const byId = new Map(saved.map((s) => [s.id, s.enabled]));
+    return defaultMetricTiles.map((tile) => ({
+      ...tile,
+      enabled: byId.has(tile.id) ? byId.get(tile.id)! : tile.enabled,
+    }));
+  } catch {
+    return defaultMetricTiles;
+  }
+}
+
 const submissionStatusOptions = [
   { id: "all", label: "All Submissions", icon: Users },
   { id: "verified", label: "Verified", icon: CheckCircle },
@@ -211,16 +247,44 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
       { id: "contests", label: "Contests" },
       { id: "creators", label: "Creators" },
     ],
-    [isMobile]
+    [isMobile],
   );
 
   const { activeTab, setActiveTab } = useTabState(computedTabs, {
     defaultTab: "overview",
   });
   const [activeFilter, setActiveFilter] = useState("all");
-  const [metricTiles, setMetricTiles] =
-    useState<MetricTile[]>(defaultMetricTiles);
+  const [metricTiles, setMetricTiles] = useState<MetricTile[]>(
+    getInitialMetricTiles,
+  );
   const [showTileSettings, setShowTileSettings] = useState(false);
+
+  // Persist metric tile selection to localStorage when it changes
+  useEffect(() => {
+    try {
+      const toSave = metricTiles.map((t) => ({ id: t.id, enabled: t.enabled }));
+      localStorage.setItem(ANALYTICS_TILES_STORAGE_KEY, JSON.stringify(toSave));
+    } catch {
+      // ignore quota or parse errors
+    }
+  }, [metricTiles]);
+  // Content type: Video (checkboxes: YouTube, Instagram) | Text/Image (checkbox: Twitter)
+  const [contentType, setContentType] = useState<"video" | "text_image">(
+    "video",
+  );
+  const [videoYoutube, setVideoYoutube] = useState(true);
+  const [videoInstagram, setVideoInstagram] = useState(true);
+  const [twitterAnalytics, setTwitterAnalytics] = useState(false);
+  const [contestTypeFilter, setContestTypeFilter] =
+    useState<ContestTypeFilterType>("all");
+  const videoPlatform: "all" | "youtube" | "instagram" =
+    videoYoutube && videoInstagram
+      ? "all"
+      : videoYoutube
+        ? "youtube"
+        : videoInstagram
+          ? "instagram"
+          : "all";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
@@ -228,15 +292,37 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
 
   useEffect(() => {
     fetchAnalyticsData();
-  }, [userId, activeFilter]);
+  }, [
+    userId,
+    activeFilter,
+    contentType,
+    videoPlatform,
+    videoYoutube,
+    videoInstagram,
+    twitterAnalytics,
+    contestTypeFilter,
+  ]);
+
+  const buildAnalyticsParams = () => {
+    const params = new URLSearchParams();
+    if (activeFilter && activeFilter !== "all")
+      params.set("status", activeFilter);
+    // When both video and Twitter are selected, API needs contentType=video + twitter=true
+    const hasVideo = videoYoutube || videoInstagram;
+    params.set("contentType", hasVideo ? "video" : "text_image");
+    params.set("videoPlatform", videoPlatform);
+    params.set("twitter", twitterAnalytics ? "true" : "false");
+    if (contestTypeFilter && contestTypeFilter !== "all") {
+      params.set("type", contestTypeFilter);
+    }
+    return params.toString();
+  };
 
   const fetchAnalyticsData = async () => {
     try {
       setLoading(true);
-      const url =
-        activeFilter !== "all"
-          ? `/api/analytics/overview?status=${activeFilter}`
-          : "/api/analytics/overview";
+      const qs = buildAnalyticsParams();
+      const url = `/api/analytics/overview${qs ? `?${qs}` : ""}`;
 
       const response = await fetch(url);
 
@@ -269,24 +355,51 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
   };
 
   const getMetricValue = (metricId: string) => {
-    if (!analyticsData) return 0;
+    if (!analyticsData?.overview) return 0;
+    const o = analyticsData.overview;
 
     switch (metricId) {
       case "total_contests":
-        return analyticsData.overview.totalContests;
+        return o.totalContests ?? 0;
+      case "published_contests":
+        return o.publishedContests ?? 0;
+      case "draft_contests":
+        return o.draftContests ?? 0;
+      case "active_contests":
+        return o.activeContests ?? 0;
+      case "upcoming_contests":
+        return o.upcomingContests ?? 0;
+      case "ended_contests":
+        return o.endedContests ?? 0;
+      case "pending_approval":
+        return o.pendingApprovalContests ?? 0;
+      case "approved_contests":
+        return o.approvedContests ?? 0;
       case "total_submissions":
-        return analyticsData.overview.totalSubmissions;
+        return o.totalSubmissions ?? 0;
+      case "verified_submissions":
+        return o.verifiedSubmissions ?? 0;
+      case "paid_submissions":
+        return o.paidSubmissions ?? 0;
+      case "pending_submissions":
+        return o.pendingSubmissions ?? 0;
+      case "rejected_submissions":
+        return o.rejectedSubmissions ?? 0;
       case "total_views":
-        return analyticsData.overview.totalViews;
+        return o.totalViews ?? 0;
+      case "total_likes":
+        return o.totalLikes ?? 0;
+      case "total_comments":
+        return o.totalComments ?? 0;
       case "total_spent":
-        return formatCurrencyFromCents(analyticsData.overview.totalSpent);
+        return formatCurrencyFromCents(o.totalSpent ?? 0);
       case "avg_cost_per_view":
         return formatCurrencyFromCents(
-          Math.round(analyticsData.overview.avgCostPerView * 100)
+          Math.round((o.avgCostPerView ?? 0) * 100),
         );
       case "avg_cost_per_submission":
         return formatCurrencyFromCents(
-          Math.round(analyticsData.overview.avgCostPerSubmission * 100)
+          Math.round((o.avgCostPerSubmission ?? 0) * 100),
         );
       default:
         return 0;
@@ -296,8 +409,8 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
   const toggleMetricTile = (metricId: string) => {
     setMetricTiles((tiles) =>
       tiles.map((tile) =>
-        tile.id === metricId ? { ...tile, enabled: !tile.enabled } : tile
-      )
+        tile.id === metricId ? { ...tile, enabled: !tile.enabled } : tile,
+      ),
     );
   };
 
@@ -333,34 +446,285 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
       {/* Unified Filter */}
       <div
         className={cn(
-          "rounded-lg p-4 shadow-sm border ",
+          "rounded-lg p-4 shadow-sm border",
           isDark
             ? "bg-[#170337] border-[#170337] text-white"
-            : "bg-white  border border-gray-200"
+            : "bg-white border border-gray-200",
         )}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
           <h3
             className={cn(
               "text-lg font-semibold",
-              isDark ? "text-white" : "text-gray-900"
+              isDark ? "text-white" : "text-gray-900",
             )}
           >
             Filter by Submission Status
           </h3>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowTileSettings(!showTileSettings)}
-            className={`flex items-center gap-2 ${
-              isDark
-                ? "bg-[#170337] text-white border-gray-600"
-                : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400"
-            }`}
-          >
-            <Settings className="w-4 h-4" />
-            Customize Tiles
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "flex items-center gap-2 min-w-[160px] justify-between",
+                    isDark
+                      ? "bg-[#170337] text-white border-gray-600"
+                      : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400",
+                  )}
+                >
+                  {(videoYoutube || videoInstagram) && twitterAnalytics ? (
+                    <>
+                      <Video className="w-4 h-4 shrink-0" />
+                      <span className="truncate">
+                        {[
+                          videoYoutube && "YouTube",
+                          videoInstagram && "Instagram",
+                        ]
+                          .filter(Boolean)
+                          .join(", ")}
+                        {" + Twitter"}
+                      </span>
+                    </>
+                  ) : videoYoutube || videoInstagram ? (
+                    <>
+                      <Video className="w-4 h-4 shrink-0" />
+                      <span className="truncate">
+                        Video
+                        <span className="text-muted-foreground font-normal">
+                          {" "}
+                          (
+                          {[
+                            videoYoutube && "YouTube",
+                            videoInstagram && "Instagram",
+                          ]
+                            .filter(Boolean)
+                            .join(", ")}
+                          )
+                        </span>
+                      </span>
+                    </>
+                  ) : twitterAnalytics ? (
+                    <>
+                      <ImageIcon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">
+                        Text/Image
+                        <span className="text-muted-foreground font-normal">
+                          {" "}
+                          (Twitter)
+                        </span>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="truncate text-muted-foreground">
+                        Select platforms
+                      </span>
+                    </>
+                  )}
+                  <ChevronDown className="w-4 h-4 shrink-0 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className={cn(
+                  "min-w-[220px]",
+                  isDark ? "bg-[#06021D] border-gray-800" : "bg-white",
+                )}
+              >
+                <DropdownMenuItem
+                  onSelect={(e) => e.preventDefault()}
+                  className={cn(
+                    "flex items-center gap-2 cursor-pointer font-semibold",
+                    isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+                  )}
+                  onClick={() => {
+                    if (videoYoutube || videoInstagram) {
+                      if (!twitterAnalytics) {
+                        toast({
+                          title: "At least one platform required",
+                          description:
+                            "Please keep at least one platform selected (e.g. Twitter) before unchecking Video.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      setVideoYoutube(false);
+                      setVideoInstagram(false);
+                    } else {
+                      setContentType("video");
+                      setVideoYoutube(true);
+                      setVideoInstagram(true);
+                    }
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={videoYoutube || videoInstagram}
+                    readOnly
+                    className="h-4 w-4 rounded border-gray-400"
+                  />
+                  <Video className="w-4 h-4" />
+                  Video
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(e) => e.preventDefault()}
+                  className={cn(
+                    "flex items-center gap-2 cursor-pointer pl-8",
+                    isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+                  )}
+                  onClick={() => {
+                    if (videoYoutube) {
+                      if (videoInstagram || twitterAnalytics) {
+                        setVideoYoutube(false);
+                      } else {
+                        toast({
+                          title: "At least one platform required",
+                          description:
+                            "Please keep at least one platform selected before unchecking.",
+                          variant: "destructive",
+                        });
+                      }
+                    } else {
+                      setVideoYoutube(true);
+                      setContentType("video");
+                    }
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={videoYoutube}
+                    readOnly
+                    className="h-4 w-4 rounded border-gray-400"
+                  />
+                  <Youtube className="w-4 h-4 mr-2" />
+                  YouTube
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(e) => e.preventDefault()}
+                  className={cn(
+                    "flex items-center gap-2 cursor-pointer pl-8",
+                    isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+                  )}
+                  onClick={() => {
+                    if (videoInstagram) {
+                      if (videoYoutube || twitterAnalytics) {
+                        setVideoInstagram(false);
+                      } else {
+                        toast({
+                          title: "At least one platform required",
+                          description:
+                            "Please keep at least one platform selected before unchecking.",
+                          variant: "destructive",
+                        });
+                      }
+                    } else {
+                      setVideoInstagram(true);
+                      setContentType("video");
+                    }
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={videoInstagram}
+                    readOnly
+                    className="h-4 w-4 rounded border-gray-400"
+                  />
+                  <Instagram className="w-4 h-4 mr-2" />
+                  Instagram
+                </DropdownMenuItem>
+                <DropdownMenuSeparator
+                  className={isDark ? "bg-gray-700" : "bg-gray-200"}
+                />
+                <DropdownMenuItem
+                  onSelect={(e) => e.preventDefault()}
+                  className={cn(
+                    "flex items-center gap-2 cursor-pointer font-semibold",
+                    isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+                  )}
+                  onClick={() => {
+                    if (twitterAnalytics) {
+                      if (videoYoutube || videoInstagram) {
+                        setTwitterAnalytics(false);
+                      } else {
+                        toast({
+                          title: "At least one platform required",
+                          description:
+                            "Please keep at least one platform selected (e.g. YouTube or Instagram) before unchecking Text/Image.",
+                          variant: "destructive",
+                        });
+                      }
+                    } else {
+                      setContentType("text_image");
+                      setTwitterAnalytics(true);
+                    }
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={twitterAnalytics}
+                    readOnly
+                    className="h-4 w-4 rounded border-gray-400"
+                  />
+                  <ImageIcon className="w-4 h-4" />
+                  Text/Image
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(e) => e.preventDefault()}
+                  className={cn(
+                    "flex items-center gap-2 cursor-pointer pl-8",
+                    isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+                  )}
+                  onClick={() => {
+                    if (twitterAnalytics) {
+                      if (videoYoutube || videoInstagram) {
+                        setTwitterAnalytics(false);
+                      } else {
+                        toast({
+                          title: "At least one platform required",
+                          description:
+                            "Please keep at least one platform selected (e.g. YouTube or Instagram) before unchecking.",
+                          variant: "destructive",
+                        });
+                      }
+                    } else {
+                      setTwitterAnalytics(true);
+                      setContentType("text_image");
+                    }
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={twitterAnalytics}
+                    readOnly
+                    className="h-4 w-4 rounded border-gray-400"
+                  />
+                  <Twitter className="w-4 h-4 mr-2" />
+                  Twitter
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <ContestTypeFilter
+              value={contestTypeFilter}
+              onChange={(value) =>
+                setContestTypeFilter(value as ContestTypeFilterType)
+              }
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTileSettings(!showTileSettings)}
+              className={`flex items-center gap-2 ${
+                isDark
+                  ? "bg-[#170337] text-white border-gray-600"
+                  : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400"
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              Customize Tiles
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -376,8 +740,8 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   activeFilter === option.id
                     ? "bg-purple-600 hover:bg-purple-700 text-white"
                     : isDark
-                    ? "bg-[#170337] hover:bg-[#2A0B5A] text-white border-gray-600"
-                    : "bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
+                      ? "bg-[#170337] hover:bg-[#2A0B5A] text-white border-gray-600"
+                      : "bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -399,14 +763,14 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
               key={tile.id}
               className={cn(
                 "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black",
               )}
             >
               <div className="flex flex-row items-center justify-between space-y-0 px-6 pt-2">
                 <h1
                   className={cn(
                     "text-lg font-medium",
-                    isDark ? "text-white" : "text-gray-900"
+                    isDark ? "text-white" : "text-gray-900",
                   )}
                 >
                   {tile.label}
@@ -416,7 +780,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                     "w-10 h-10 flex items-center justify-center rounded-full",
                     isDark
                       ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                      : "bg-[#D8C3FF] text-[#4A00BE]",
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -426,7 +790,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 <div
                   className={cn(
                     "text-2xl font-bold mb-2",
-                    isDark ? "text-white" : "text-gray-900"
+                    isDark ? "text-white" : "text-gray-900",
                   )}
                 >
                   {value}
@@ -434,14 +798,14 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 <p
                   className={cn(
                     "text-sm mt-2",
-                    isDark ? "text-white" : "text-gray-600"
+                    isDark ? "text-white" : "text-gray-600",
                   )}
                 >
                   {activeFilter === "all"
                     ? "All submissions"
                     : `Filtered by ${
                         submissionStatusOptions.find(
-                          (opt) => opt.id === activeFilter
+                          (opt) => opt.id === activeFilter,
                         )?.label
                       }`}
                 </p>
@@ -456,20 +820,20 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
         <div
           className={cn(
             "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
-            isDark ? "bg-[#100A33]" : "bg-black"
+            isDark ? "bg-[#100A33]" : "bg-black",
           )}
         >
           <div
             className={cn(
               "rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto",
-              isDark ? "bg-[#06021D] border border-gray-800" : "bg-white"
+              isDark ? "bg-[#06021D] border border-gray-800" : "bg-white",
             )}
           >
             <div className="flex items-center justify-between mb-6">
               <h2
                 className={cn(
                   "text-xl font-semibold",
-                  isDark ? "text-white" : "text-gray-900"
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
                 Customize Analytics Tiles
@@ -480,7 +844,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   "cursor-pointer",
                   isDark
                     ? "text-white hover:text-gray-300"
-                    : "text-gray-600 hover:text-gray-800"
+                    : "text-gray-600 hover:text-gray-800",
                 )}
               >
                 <X className="w-4 h-4" />
@@ -493,7 +857,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   <h3
                     className={cn(
                       "text-lg font-medium capitalize mb-3",
-                      isDark ? "text-white" : "text-gray-900"
+                      isDark ? "text-white" : "text-gray-900",
                     )}
                   >
                     {category} Metrics
@@ -511,8 +875,8 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                                 ? "bg-purple-900/30 border-purple-600/50 text-white"
                                 : "bg-purple-50 border-purple-200 text-gray-900"
                               : isDark
-                              ? "bg-[#06021D] border-gray-600 text-white"
-                              : "border-gray-300 hover:bg-gray-100 text-gray-700"
+                                ? "bg-[#06021D] border-gray-600 text-white"
+                                : "border-gray-300 hover:bg-gray-100 text-gray-700",
                           )}
                           onClick={() => toggleMetricTile(tile.id)}
                         >
@@ -525,8 +889,8 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                                     ? "text-purple-300"
                                     : "text-purple-600"
                                   : isDark
-                                  ? "text-gray-400"
-                                  : "text-gray-500"
+                                    ? "text-gray-400"
+                                    : "text-gray-500",
                               )}
                             />
                             <span
@@ -537,8 +901,8 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                                     ? "text-white"
                                     : "text-gray-900"
                                   : isDark
-                                  ? "text-gray-300"
-                                  : "text-gray-700"
+                                    ? "text-gray-300"
+                                    : "text-gray-700",
                               )}
                             >
                               {tile.label}
@@ -575,14 +939,14 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   "border shadow-smv flex-col sm:flex-row",
                   isDark
                     ? "bg-gradient-to-br from-purple-800/40 to-blue-900/40 border-purple-700/30"
-                    : "bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200"
+                    : "bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200",
                 )}
               >
                 <CardHeader>
                   <CardTitle
                     className={cn(
                       "text-lg",
-                      isDark ? "text-white" : "text-gray-900"
+                      isDark ? "text-white" : "text-gray-900",
                     )}
                   >
                     Top Performing Contest
@@ -594,7 +958,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                       <h3
                         className={cn(
                           "font-semibold text-lg",
-                          isDark ? "text-white" : "text-gray-900"
+                          isDark ? "text-white" : "text-gray-900",
                         )}
                       >
                         {analyticsData.overview.topContest.title}
@@ -602,7 +966,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                       <div
                         className={cn(
                           "flex gap-4 mt-2 text-sm",
-                          isDark ? "text-gray-300" : "text-gray-700"
+                          isDark ? "text-gray-300" : "text-gray-700",
                         )}
                       >
                         <span>
@@ -621,7 +985,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                         "shadow-sm self-start sm:self-auto",
                         isDark
                           ? "bg-gradient-to-r from-purple-800/40 to-blue-800/40 text-purple-200 border-purple-600/50"
-                          : "bg-gradient-to-r from-purple-100 to-blue-100 text-purple-800 border-purple-300"
+                          : "bg-gradient-to-r from-purple-100 to-blue-100 text-purple-800 border-purple-300",
                       )}
                     >
                       Best Performer
@@ -636,14 +1000,14 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
               <Card
                 className={cn(
                   "shadow-sm",
-                  isDark ? "bg-[#170337] border-[#170337]" : "bg-white"
+                  isDark ? "bg-[#170337] border-[#170337]" : "bg-white",
                 )}
               >
                 <CardHeader>
                   <CardTitle
                     className={cn(
                       "text-lg",
-                      isDark ? "text-white" : "text-gray-900"
+                      isDark ? "text-white" : "text-gray-900",
                     )}
                   >
                     Platform Performance
@@ -661,7 +1025,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                             <div
                               className={cn(
                                 "w-8 h-8 rounded-full flex items-center justify-center",
-                                isDark ? "bg-[#FFFFFF36]" : "bg-gray-100"
+                                isDark ? "bg-[#FFFFFF36]" : "bg-gray-100",
                               )}
                             >
                               <span className="text-xs font-semibold capitalize">
@@ -672,7 +1036,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                               <p
                                 className={cn(
                                   "font-medium capitalize",
-                                  isDark ? "text-white" : "text-gray-900"
+                                  isDark ? "text-white" : "text-gray-900",
                                 )}
                               >
                                 {platform}
@@ -680,10 +1044,11 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                               <p
                                 className={cn(
                                   "text-sm",
-                                  isDark ? "text-gray-400" : "text-gray-500"
+                                  isDark ? "text-gray-400" : "text-gray-500",
                                 )}
                               >
-                                {stats.contests} contests • {stats.submissions}{" "}
+                                {stats.contests} contests •{" "}
+                                {stats.submissions?.toLocaleString() ?? 0}{" "}
                                 submissions
                               </p>
                             </div>
@@ -692,22 +1057,22 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                             <p
                               className={cn(
                                 "font-semibold",
-                                isDark ? "text-white" : "text-gray-900"
+                                isDark ? "text-white" : "text-gray-900",
                               )}
                             >
-                              {stats.views.toLocaleString()}
+                              {(stats.views ?? 0).toLocaleString()}
                             </p>
                             <p
                               className={cn(
                                 "text-sm",
-                                isDark ? "text-gray-400" : "text-gray-500"
+                                isDark ? "text-gray-400" : "text-gray-500",
                               )}
                             >
                               views
                             </p>
                           </div>
                         </div>
-                      )
+                      ),
                     )}
                   </div>
                 </CardContent>
@@ -716,14 +1081,14 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
               <Card
                 className={cn(
                   "shadow-sm",
-                  isDark ? "bg-[#170337] border-[#170337]" : "bg-white"
+                  isDark ? "bg-[#170337] border-[#170337]" : "bg-white",
                 )}
               >
                 <CardHeader>
                   <CardTitle
                     className={cn(
                       "text-lg",
-                      isDark ? "text-white" : "text-gray-900"
+                      isDark ? "text-white" : "text-gray-900",
                     )}
                   >
                     Contest Type Performance
@@ -741,7 +1106,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                             <p
                               className={cn(
                                 "font-medium capitalize",
-                                isDark ? "text-white" : "text-gray-900"
+                                isDark ? "text-white" : "text-gray-900",
                               )}
                             >
                               {type.replace("_", " ")}
@@ -749,7 +1114,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                             <p
                               className={cn(
                                 "text-sm",
-                                isDark ? "text-gray-400" : "text-gray-500"
+                                isDark ? "text-gray-400" : "text-gray-500",
                               )}
                             >
                               {stats.count} contests • {stats.submissions}{" "}
@@ -760,7 +1125,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                             <p
                               className={cn(
                                 "font-semibold",
-                                isDark ? "text-white" : "text-gray-900"
+                                isDark ? "text-white" : "text-gray-900",
                               )}
                             >
                               {formatCurrencyFromCents(stats.spent)}
@@ -768,14 +1133,14 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                             <p
                               className={cn(
                                 "text-sm",
-                                isDark ? "text-gray-400" : "text-gray-500"
+                                isDark ? "text-gray-400" : "text-gray-500",
                               )}
                             >
                               spent
                             </p>
                           </div>
                         </div>
-                      )
+                      ),
                     )}
                   </div>
                 </CardContent>
@@ -785,15 +1150,39 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
         </TabPanel>
 
         <TabPanel value="detailed" activeTab={activeTab}>
-          <BrandDetailedAnalytics userId={userId} />
+          <BrandDetailedAnalytics
+            userId={userId}
+            contentType={videoYoutube || videoInstagram ? "video" : contentType}
+            videoPlatform={videoPlatform}
+            twitterAnalytics={twitterAnalytics}
+            contestTypeFilter={contestTypeFilter}
+            onContestTypeFilterChange={(value) =>
+              setContestTypeFilter(value as ContestTypeFilterType)
+            }
+            activeFilter={activeFilter}
+          />
         </TabPanel>
 
         <TabPanel value="contests" activeTab={activeTab}>
-          <ContestAnalytics userId={userId} activeFilter={activeFilter} />
+          <ContestAnalytics
+            userId={userId}
+            activeFilter={activeFilter}
+            contentType={videoYoutube || videoInstagram ? "video" : contentType}
+            videoPlatform={videoPlatform}
+            twitterAnalytics={twitterAnalytics}
+            contestTypeFilter={contestTypeFilter}
+          />
         </TabPanel>
 
         <TabPanel value="creators" activeTab={activeTab}>
-          <CreatorAnalytics userId={userId} activeFilter={activeFilter} />
+          <CreatorAnalytics
+            userId={userId}
+            activeFilter={activeFilter}
+            contentType={videoYoutube || videoInstagram ? "video" : contentType}
+            videoPlatform={videoPlatform}
+            twitterAnalytics={twitterAnalytics}
+            contestTypeFilter={contestTypeFilter}
+          />
         </TabPanel>
       </TabContent>
     </div>

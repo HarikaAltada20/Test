@@ -4,7 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -15,6 +17,17 @@ export async function GET(request: NextRequest) {
     const creatorId = searchParams.get("creatorId");
     const limit = parseInt(searchParams.get("limit") || "20");
     const offset = parseInt(searchParams.get("offset") || "0");
+    const contestTypeFilter = (searchParams.get("type") ?? "all")
+      .trim()
+      .toLowerCase();
+    const contentType = (searchParams.get("contentType") ?? "video")
+      .trim()
+      .toLowerCase() as "video" | "text_image";
+    const videoPlatform = (searchParams.get("videoPlatform") ?? "all")
+      .trim()
+      .toLowerCase() as "video" | "all" | "youtube" | "instagram";
+    const twitterParam = searchParams.get("twitter");
+    const twitterAnalytics = twitterParam === "true" || twitterParam === "1";
 
     // Get user type
     const { data: userData } = await supabase
@@ -31,7 +44,8 @@ export async function GET(request: NextRequest) {
       // Get detailed analytics for a specific creator
       const { data: creator } = await supabase
         .from("users")
-        .select(`
+        .select(
+          `
           id,
           username,
           email,
@@ -45,18 +59,37 @@ export async function GET(request: NextRequest) {
             youtube_account,
             instagram_account
           )
-        `)
+        `,
+        )
         .eq("id", creatorId)
         .single();
 
       if (!creator) {
-        return NextResponse.json({ error: "Creator not found" }, { status: 404 });
+        return NextResponse.json(
+          { error: "Creator not found" },
+          { status: 404 },
+        );
+      }
+
+      // Get contest IDs for this advertiser (optionally by contest type)
+      let contestIdsForFilter: string[] | null = null;
+      if (contestTypeFilter && contestTypeFilter !== "all") {
+        const { data: typeContests } = await supabase
+          .from("contests")
+          .select("id")
+          .eq("advertiser_id", user.id)
+          .eq("contest_type", contestTypeFilter);
+        contestIdsForFilter = (typeContests || []).map((c: { id: string }) => c.id);
+        if (contestIdsForFilter.length === 0) {
+          contestIdsForFilter = [];
+        }
       }
 
       // Get creator's submissions for this advertiser's contests
       let submissionsQuery = supabase
         .from("submissions")
-        .select(`
+        .select(
+          `
           id,
           views,
           created_at,
@@ -71,66 +104,107 @@ export async function GET(request: NextRequest) {
             contest_type,
             contest_based_details
           )
-        `)
+        `,
+        )
         .eq("creator_id", creatorId)
         .eq("contests.advertiser_id", user.id);
+
+      if (contestIdsForFilter && contestIdsForFilter.length > 0) {
+        submissionsQuery = submissionsQuery.in("contest_id", contestIdsForFilter);
+      } else if (contestTypeFilter && contestTypeFilter !== "all") {
+        // No contests of this type — return empty
+        submissionsQuery = submissionsQuery.in("contest_id", []);
+      }
 
       // Apply status filter if provided
       if (submissionStatus && submissionStatus !== "all") {
         if (submissionStatus === "verifiedPaid") {
-          submissionsQuery = submissionsQuery.in("status", ["verified", "paid"]);
+          submissionsQuery = submissionsQuery.in("status", [
+            "verified",
+            "paid",
+          ]);
         } else {
           submissionsQuery = submissionsQuery.eq("status", submissionStatus);
         }
       }
 
-      const { data: submissions } = await submissionsQuery.order("created_at", { ascending: false });
+      const { data: submissions } = await submissionsQuery.order("created_at", {
+        ascending: false,
+      });
 
       if (!submissions) {
-        return NextResponse.json({ error: "Failed to fetch submissions" }, { status: 500 });
+        return NextResponse.json(
+          { error: "Failed to fetch submissions" },
+          { status: 500 },
+        );
       }
 
       // Calculate creator-specific metrics for this advertiser
       const totalSubmissions = submissions.length;
-      const totalViews = submissions.reduce((sum, sub) => sum + (sub.views || 0), 0);
-      const totalEarnings = submissions.reduce((sum, sub) => sum + (sub.earnings || 0), 0);
-      const avgViewsPerSubmission = totalSubmissions > 0 ? totalViews / totalSubmissions : 0;
+      const totalViews = submissions.reduce(
+        (sum, sub) => sum + (sub.views || 0),
+        0,
+      );
+      const totalEarnings = submissions.reduce(
+        (sum, sub) => sum + (sub.earnings || 0),
+        0,
+      );
+      const avgViewsPerSubmission =
+        totalSubmissions > 0 ? totalViews / totalSubmissions : 0;
 
       // Platform breakdown
-      const platformStats = submissions.reduce((acc, sub) => {
-        const platform = sub.platform || "unknown";
-        if (!acc[platform]) {
-          acc[platform] = { submissions: 0, views: 0, earnings: 0 };
-        }
-        acc[platform].submissions++;
-        acc[platform].views += sub.views || 0;
-        acc[platform].earnings += sub.earnings || 0;
-        return acc;
-      }, {} as Record<string, { submissions: number; views: number; earnings: number }>);
+      const platformStats = submissions.reduce(
+        (acc, sub) => {
+          const platform = sub.platform || "unknown";
+          if (!acc[platform]) {
+            acc[platform] = { submissions: 0, views: 0, earnings: 0 };
+          }
+          acc[platform].submissions++;
+          acc[platform].views += sub.views || 0;
+          acc[platform].earnings += sub.earnings || 0;
+          return acc;
+        },
+        {} as Record<
+          string,
+          { submissions: number; views: number; earnings: number }
+        >,
+      );
 
       // Contest type breakdown
-      const contestTypeStats = submissions.reduce((acc, sub) => {
-        const contestType = (sub.contests as any).contest_type || "unknown";
-        if (!acc[contestType]) {
-          acc[contestType] = { submissions: 0, views: 0, earnings: 0 };
-        }
-        acc[contestType].submissions++;
-        acc[contestType].views += sub.views || 0;
-        acc[contestType].earnings += sub.earnings || 0;
-        return acc;
-      }, {} as Record<string, { submissions: number; views: number; earnings: number }>);
+      const contestTypeStats = submissions.reduce(
+        (acc, sub) => {
+          const contestType = (sub.contests as any).contest_type || "unknown";
+          if (!acc[contestType]) {
+            acc[contestType] = { submissions: 0, views: 0, earnings: 0 };
+          }
+          acc[contestType].submissions++;
+          acc[contestType].views += sub.views || 0;
+          acc[contestType].earnings += sub.earnings || 0;
+          return acc;
+        },
+        {} as Record<
+          string,
+          { submissions: number; views: number; earnings: number }
+        >,
+      );
 
       // Performance timeline (monthly)
-      const performanceTimeline = submissions.reduce((acc, sub) => {
-        const month = new Date(sub.created_at).toISOString().slice(0, 7); // YYYY-MM format
-        if (!acc[month]) {
-          acc[month] = { submissions: 0, views: 0, earnings: 0 };
-        }
-        acc[month].submissions++;
-        acc[month].views += sub.views || 0;
-        acc[month].earnings += sub.earnings || 0;
-        return acc;
-      }, {} as Record<string, { submissions: number; views: number; earnings: number }>);
+      const performanceTimeline = submissions.reduce(
+        (acc, sub) => {
+          const month = new Date(sub.created_at).toISOString().slice(0, 7); // YYYY-MM format
+          if (!acc[month]) {
+            acc[month] = { submissions: 0, views: 0, earnings: 0 };
+          }
+          acc[month].submissions++;
+          acc[month].views += sub.views || 0;
+          acc[month].earnings += sub.earnings || 0;
+          return acc;
+        },
+        {} as Record<
+          string,
+          { submissions: number; views: number; earnings: number }
+        >,
+      );
 
       // Top performing submissions
       const topSubmissions = submissions
@@ -144,19 +218,76 @@ export async function GET(request: NextRequest) {
             totalSubmissions,
             totalViews,
             totalEarnings,
-            avgViewsPerSubmission: Math.round(avgViewsPerSubmission * 100) / 100
+            avgViewsPerSubmission:
+              Math.round(avgViewsPerSubmission * 100) / 100,
           },
           platformStats,
           contestTypeStats,
           performanceTimeline,
-          topSubmissions
-        }
+          topSubmissions,
+        },
       });
     } else {
-      // Get leaderboard of creators
+      const statusNorm = submissionStatus?.trim().toLowerCase() || null;
+
+      // Get this advertiser's contests to find Twitter contest IDs and contest_type for preferences
+      const { data: advertiserContests } = await supabase
+        .from("contests")
+        .select("id, platform, contest_based_details, contest_type")
+        .eq("advertiser_id", user.id);
+      const normalizePlatform = (c: any) => {
+        const p = (c?.platform ?? "").toString().trim().toLowerCase();
+        if (p === "x" || p === "twitter") return "twitter";
+        const d = c?.contest_based_details as
+          | { twitter_campaign?: unknown }
+          | undefined;
+        if (d?.twitter_campaign != null) return "twitter";
+        return p || "unknown";
+      };
+      const allowedPlatforms = ((): string[] => {
+        const videoPlatforms =
+          contentType === "video"
+            ? videoPlatform === "youtube"
+              ? ["youtube"]
+              : videoPlatform === "instagram"
+                ? ["instagram"]
+                : ["youtube", "instagram"]
+            : [];
+        const twitterPlatform = twitterAnalytics ? ["twitter"] : [];
+        if (videoPlatforms.length > 0 && twitterPlatform.length > 0) {
+          return [...videoPlatforms, ...twitterPlatform];
+        }
+        if (contentType === "text_image") return twitterPlatform;
+        if (videoPlatforms.length > 0) return videoPlatforms;
+        return ["youtube", "instagram", "twitter"];
+      })();
+      let contestsFiltered = (advertiserContests || []).filter((c: any) =>
+        allowedPlatforms.includes(normalizePlatform(c)),
+      );
+      if (contestTypeFilter && contestTypeFilter !== "all") {
+        contestsFiltered = contestsFiltered.filter(
+          (c: any) => (c.contest_type || "").toLowerCase() === contestTypeFilter,
+        );
+      }
+      const videoContestIds = contestsFiltered
+        .filter((c: any) => normalizePlatform(c) !== "twitter")
+        .map((c: any) => c.id);
+      const twitterContestIds = contestsFiltered
+        .filter((c: any) => normalizePlatform(c) === "twitter")
+        .map((c: any) => c.id);
+      const twitterContestIdToType: Record<string, string> = {};
+      contestsFiltered
+        .filter((c: any) => normalizePlatform(c) === "twitter")
+        .forEach((c: any) => {
+          twitterContestIdToType[c.id] = c.contest_type || "unknown";
+        });
+      let twitterContestTypeCounts: Record<string, number> = {};
+
+      // Get leaderboard of creators (submissions table) - only for video contests when in scope
       let submissionsQuery = supabase
         .from("submissions")
-        .select(`
+        .select(
+          `
           id,
           views,
           created_at,
@@ -182,124 +313,411 @@ export async function GET(request: NextRequest) {
             title,
             contest_type
           )
-        `)
+        `,
+        )
         .eq("contests.advertiser_id", user.id);
 
-      // Apply status filter if provided
-      if (submissionStatus && submissionStatus !== "all") {
-        if (submissionStatus === "verifiedPaid") {
-          submissionsQuery = submissionsQuery.in("status", ["verified", "paid"]);
+      if (videoContestIds.length > 0) {
+        submissionsQuery = submissionsQuery.in("contest_id", videoContestIds);
+      }
+      if (statusNorm && statusNorm !== "all") {
+        if (statusNorm === "verifiedpaid") {
+          submissionsQuery = submissionsQuery.in("status", [
+            "verified",
+            "paid",
+          ]);
         } else {
-          submissionsQuery = submissionsQuery.eq("status", submissionStatus);
+          submissionsQuery = submissionsQuery.eq("status", statusNorm);
         }
       }
 
-      const { data: submissions } = await submissionsQuery.order("created_at", { ascending: false });
+      const { data: submissionsRaw } = await submissionsQuery.order("created_at", {
+        ascending: false,
+      });
+      const submissions =
+        videoContestIds.length > 0 ? submissionsRaw ?? [] : [];
 
       if (!submissions) {
-        return NextResponse.json({ error: "Failed to fetch submissions" }, { status: 500 });
+        return NextResponse.json(
+          { error: "Failed to fetch submissions" },
+          { status: 500 },
+        );
       }
 
-      // Group by creator and calculate metrics
-      const creatorStats = submissions.reduce((acc, sub) => {
-        const creatorId = sub.creator_id;
-        if (!acc[creatorId]) {
-          acc[creatorId] = {
-            creator: sub.creator,
-            totalSubmissions: 0,
-            totalViews: 0,
-            totalEarnings: 0,
-            platforms: new Set(),
+      // Twitter: aggregate by creator from twitter_campaign_tweets and leaderboard
+      const twitterByCreator: Record<
+        string,
+        {
+          totalSubmissions: number;
+          totalViews: number;
+          totalEarnings: number;
+          firstSubmission: Date | null;
+          lastSubmission: Date | null;
+        }
+      > = {};
+      if (twitterContestIds.length > 0) {
+        let tweetsQuery = supabase
+          .from("twitter_campaign_tweets")
+          .select("creator_id, contest_id, impressions, tweet_created_at")
+          .in("contest_id", twitterContestIds);
+        if (statusNorm && statusNorm !== "all") {
+          if (statusNorm === "verifiedpaid") {
+            tweetsQuery = tweetsQuery.in("moderation_status", [
+              "verified",
+              "paid",
+            ]);
+          } else {
+            tweetsQuery = tweetsQuery.eq("moderation_status", statusNorm);
+          }
+        }
+        const { data: tweets } = await tweetsQuery;
+        (tweets || []).forEach((row: any) => {
+          const cid = row.creator_id;
+          const contestId = row.contest_id;
+          if (contestId) {
+            const typ = twitterContestIdToType[contestId] || "unknown";
+            twitterContestTypeCounts[typ] =
+              (twitterContestTypeCounts[typ] || 0) + 1;
+          }
+          if (!cid) return;
+          if (!twitterByCreator[cid]) {
+            twitterByCreator[cid] = {
+              totalSubmissions: 0,
+              totalViews: 0,
+              totalEarnings: 0,
+              firstSubmission: null,
+              lastSubmission: null,
+            };
+          }
+          twitterByCreator[cid].totalSubmissions += 1;
+          twitterByCreator[cid].totalViews += Number(row.impressions) || 0;
+          const d = row.tweet_created_at
+            ? new Date(row.tweet_created_at)
+            : null;
+          if (d) {
+            if (
+              !twitterByCreator[cid].firstSubmission ||
+              d < twitterByCreator[cid].firstSubmission!
+            ) {
+              twitterByCreator[cid].firstSubmission = d;
+            }
+            if (
+              !twitterByCreator[cid].lastSubmission ||
+              d > twitterByCreator[cid].lastSubmission!
+            ) {
+              twitterByCreator[cid].lastSubmission = d;
+            }
+          }
+        });
+        let lbQuery = supabase
+          .from("twitter_campaign_leaderboard")
+          .select("creator_id, earnings")
+          .in("contest_id", twitterContestIds);
+        if (statusNorm && statusNorm !== "all") {
+          if (statusNorm === "verifiedpaid") {
+            lbQuery = lbQuery.in("moderation_status", ["verified", "paid"]);
+          } else {
+            lbQuery = lbQuery.eq("moderation_status", statusNorm);
+          }
+        }
+        const { data: leaderboard } = await lbQuery;
+        (leaderboard || []).forEach((row: any) => {
+          const cid = row.creator_id;
+          if (!cid) return;
+          if (!twitterByCreator[cid]) {
+            twitterByCreator[cid] = {
+              totalSubmissions: 0,
+              totalViews: 0,
+              totalEarnings: 0,
+              firstSubmission: null,
+              lastSubmission: null,
+            };
+          }
+          twitterByCreator[cid].totalEarnings += Number(row.earnings) || 0;
+        });
+      }
+
+      // Group by creator and calculate metrics (from submissions table)
+      const creatorStats = submissions.reduce(
+        (acc, sub) => {
+          const creatorId = sub.creator_id;
+          if (!acc[creatorId]) {
+            acc[creatorId] = {
+              creator: sub.creator,
+              totalSubmissions: 0,
+              totalViews: 0,
+              totalEarnings: 0,
+              viewsYoutubeInstagram: 0,
+              viewsTwitter: 0,
+              submissionsYoutubeInstagram: 0,
+              submissionsYoutube: 0,
+              submissionsInstagram: 0,
+              submissionsTwitter: 0,
+              platforms: new Set(),
+              contestTypes: new Set(),
+              firstSubmission: null,
+              lastSubmission: null,
+            };
+          }
+
+          acc[creatorId].totalSubmissions++;
+          acc[creatorId].submissionsYoutubeInstagram =
+            (acc[creatorId].submissionsYoutubeInstagram || 0) + 1;
+          const plat = (sub.platform || "").toString().toLowerCase();
+          if (plat === "youtube")
+            acc[creatorId].submissionsYoutube =
+              (acc[creatorId].submissionsYoutube || 0) + 1;
+          if (plat === "instagram")
+            acc[creatorId].submissionsInstagram =
+              (acc[creatorId].submissionsInstagram || 0) + 1;
+          const v = sub.views || 0;
+          acc[creatorId].totalViews += v;
+          acc[creatorId].viewsYoutubeInstagram += v;
+          acc[creatorId].totalEarnings += sub.earnings || 0;
+          if (sub.platform) acc[creatorId].platforms.add(sub.platform);
+          if ((sub.contests as any).contest_type)
+            acc[creatorId].contestTypes.add((sub.contests as any).contest_type);
+
+          const submissionDate = new Date(sub.created_at);
+          if (
+            !acc[creatorId].firstSubmission ||
+            submissionDate < acc[creatorId].firstSubmission
+          ) {
+            acc[creatorId].firstSubmission = submissionDate;
+          }
+          if (
+            !acc[creatorId].lastSubmission ||
+            submissionDate > acc[creatorId].lastSubmission
+          ) {
+            acc[creatorId].lastSubmission = submissionDate;
+          }
+
+          return acc;
+        },
+        {} as Record<string, any>,
+      );
+
+      // Merge Twitter data into creatorStats
+      const twitterOnlyCreatorIds: string[] = [];
+      for (const [creatorId, tw] of Object.entries(twitterByCreator)) {
+        if (creatorStats[creatorId]) {
+          creatorStats[creatorId].totalSubmissions += tw.totalSubmissions;
+          creatorStats[creatorId].submissionsTwitter =
+            (creatorStats[creatorId].submissionsTwitter || 0) +
+            tw.totalSubmissions;
+          creatorStats[creatorId].totalViews += tw.totalViews;
+          creatorStats[creatorId].viewsTwitter =
+            (creatorStats[creatorId].viewsTwitter || 0) + tw.totalViews;
+          creatorStats[creatorId].totalEarnings += tw.totalEarnings;
+          creatorStats[creatorId].platforms.add("twitter");
+          if (
+            tw.firstSubmission &&
+            (!creatorStats[creatorId].firstSubmission ||
+              tw.firstSubmission < creatorStats[creatorId].firstSubmission)
+          ) {
+            creatorStats[creatorId].firstSubmission = tw.firstSubmission;
+          }
+          if (
+            tw.lastSubmission &&
+            (!creatorStats[creatorId].lastSubmission ||
+              tw.lastSubmission > creatorStats[creatorId].lastSubmission)
+          ) {
+            creatorStats[creatorId].lastSubmission = tw.lastSubmission;
+          }
+        } else {
+          twitterOnlyCreatorIds.push(creatorId);
+          creatorStats[creatorId] = {
+            creator: null,
+            totalSubmissions: tw.totalSubmissions,
+            totalViews: tw.totalViews,
+            totalEarnings: tw.totalEarnings,
+            viewsYoutubeInstagram: 0,
+            viewsTwitter: tw.totalViews,
+            submissionsYoutubeInstagram: 0,
+            submissionsYoutube: 0,
+            submissionsInstagram: 0,
+            submissionsTwitter: tw.totalSubmissions,
+            platforms: new Set(["twitter"]),
             contestTypes: new Set(),
-            firstSubmission: null,
-            lastSubmission: null
+            firstSubmission: tw.firstSubmission,
+            lastSubmission: tw.lastSubmission,
           };
         }
+      }
+      if (twitterOnlyCreatorIds.length > 0) {
+        const { data: twitterCreators } = await supabase
+          .from("users")
+          .select(
+            `
+            id,
+            username,
+            creator_profiles (
+              bio,
+              total_views,
+              total_contests_participated,
+              total_contests_won,
+              youtube_account,
+              instagram_account
+            )
+          `,
+          )
+          .in("id", twitterOnlyCreatorIds);
+        (twitterCreators || []).forEach((u: any) => {
+          if (creatorStats[u.id]) {
+            creatorStats[u.id].creator = {
+              ...u,
+              creator_profiles: u.creator_profiles,
+            };
+          }
+        });
+      }
 
-        acc[creatorId].totalSubmissions++;
-        acc[creatorId].totalViews += sub.views || 0;
-        acc[creatorId].totalEarnings += sub.earnings || 0;
-        if (sub.platform) acc[creatorId].platforms.add(sub.platform);
-        if ((sub.contests as any).contest_type) acc[creatorId].contestTypes.add((sub.contests as any).contest_type);
-
-        const submissionDate = new Date(sub.created_at);
-        if (!acc[creatorId].firstSubmission || submissionDate < acc[creatorId].firstSubmission) {
-          acc[creatorId].firstSubmission = submissionDate;
-        }
-        if (!acc[creatorId].lastSubmission || submissionDate > acc[creatorId].lastSubmission) {
-          acc[creatorId].lastSubmission = submissionDate;
-        }
-
-        return acc;
-      }, {} as Record<string, any>);
-
-      // Convert to array and calculate additional metrics
-      const creatorsLeaderboard = Object.values(creatorStats).map((creator: any) => ({
-        ...creator,
-        platforms: Array.from(creator.platforms),
-        contestTypes: Array.from(creator.contestTypes),
-        avgViewsPerSubmission: creator.totalSubmissions > 0 ? creator.totalViews / creator.totalSubmissions : 0,
-        avgEarningsPerSubmission: creator.totalSubmissions > 0 ? creator.totalEarnings / creator.totalSubmissions : 0,
-        daysActive: creator.lastSubmission && creator.firstSubmission ? 
-          Math.ceil((creator.lastSubmission - creator.firstSubmission) / (1000 * 60 * 60 * 24)) : 0
-      }));
+      // Convert to array and calculate additional metrics (filter out entries with no creator if needed)
+      const creatorsLeaderboard = Object.values(creatorStats)
+        .filter((c: any) => c.creator != null)
+        .map((creator: any) => {
+          const subYtIg = creator.submissionsYoutubeInstagram ?? 0;
+          const subTw = creator.submissionsTwitter ?? 0;
+          const subYt = creator.submissionsYoutube ?? 0;
+          const subIg = creator.submissionsInstagram ?? 0;
+          const vYtIg = creator.viewsYoutubeInstagram ?? 0;
+          const vTw = creator.viewsTwitter ?? 0;
+          return {
+            ...creator,
+            viewsYoutubeInstagram: vYtIg,
+            viewsTwitter: vTw,
+            submissionsYoutubeInstagram: subYtIg,
+            submissionsYoutube: subYt,
+            submissionsInstagram: subIg,
+            submissionsTwitter: subTw,
+            platforms: Array.from(creator.platforms),
+            contestTypes: Array.from(creator.contestTypes),
+            avgViewsPerSubmission:
+              creator.totalSubmissions > 0
+                ? creator.totalViews / creator.totalSubmissions
+                : 0,
+            avgViewsPerSubmissionYoutubeInstagram:
+              subYtIg > 0 ? vYtIg / subYtIg : 0,
+            avgViewsPerSubmissionTwitter: subTw > 0 ? vTw / subTw : 0,
+            avgEarningsPerSubmission:
+              creator.totalSubmissions > 0
+                ? creator.totalEarnings / creator.totalSubmissions
+                : 0,
+            daysActive:
+              creator.lastSubmission && creator.firstSubmission
+                ? Math.ceil(
+                    (creator.lastSubmission - creator.firstSubmission) /
+                      (1000 * 60 * 60 * 24),
+                  )
+                : 0,
+          };
+        });
 
       // Sort by different criteria
       const topByViews = [...creatorsLeaderboard]
         .sort((a, b) => b.totalViews - a.totalViews)
         .slice(0, limit);
-      
+
+      const topByViewsYoutubeInstagram = [...creatorsLeaderboard]
+        .filter((c) => (c.submissionsYoutubeInstagram ?? 0) > 0)
+        .sort(
+          (a, b) =>
+            (b.viewsYoutubeInstagram ?? 0) - (a.viewsYoutubeInstagram ?? 0),
+        )
+        .slice(0, limit);
+
+      const topByViewsTwitter = [...creatorsLeaderboard]
+        .filter((c) => (c.submissionsTwitter ?? 0) > 0)
+        .sort((a, b) => (b.viewsTwitter ?? 0) - (a.viewsTwitter ?? 0))
+        .slice(0, limit);
+
       const topBySubmissions = [...creatorsLeaderboard]
         .sort((a, b) => b.totalSubmissions - a.totalSubmissions)
         .slice(0, limit);
-      
+
       const topByEarnings = [...creatorsLeaderboard]
         .sort((a, b) => b.totalEarnings - a.totalEarnings)
         .slice(0, limit);
 
-      // Calculate summary statistics
+      // Calculate summary statistics (include Twitter)
       const totalUniqueCreators = creatorsLeaderboard.length;
-      const totalSubmissions = submissions.length;
-      const totalViews = submissions.reduce((sum, sub) => sum + (sub.views || 0), 0);
-      const totalEarnings = submissions.reduce((sum, sub) => sum + (sub.earnings || 0), 0);
+      const twitterTotals = Object.values(twitterByCreator).reduce(
+        (acc, tw) => ({
+          submissions: acc.submissions + tw.totalSubmissions,
+          views: acc.views + tw.totalViews,
+          earnings: acc.earnings + tw.totalEarnings,
+        }),
+        { submissions: 0, views: 0, earnings: 0 },
+      );
+      const totalSubmissions = submissions.length + twitterTotals.submissions;
+      const totalViews =
+        submissions.reduce((sum, sub) => sum + (sub.views || 0), 0) +
+        twitterTotals.views;
+      const totalEarnings =
+        submissions.reduce((sum, sub) => sum + (sub.earnings || 0), 0) +
+        twitterTotals.earnings;
 
-      // Platform demographics
-      const platformDemographics = submissions.reduce((acc, sub) => {
-        const platform = sub.platform || "unknown";
-        acc[platform] = (acc[platform] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+      // Platform demographics (include Twitter submission count)
+      const platformDemographics = submissions.reduce(
+        (acc, sub) => {
+          const platform = sub.platform || "unknown";
+          acc[platform] = (acc[platform] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+      if (twitterTotals.submissions > 0) {
+        platformDemographics["twitter"] =
+          (platformDemographics["twitter"] || 0) + twitterTotals.submissions;
+      }
 
-      // Contest type preferences
-      const contestTypePreferences = submissions.reduce((acc, sub) => {
-        const contestType = (sub.contests as any).contest_type || "unknown";
-        acc[contestType] = (acc[contestType] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+      // Contest type preferences (video from submissions, Twitter from tweets)
+      const contestTypePreferences = submissions.reduce(
+        (acc, sub) => {
+          const contestType = (sub.contests as any).contest_type || "unknown";
+          acc[contestType] = (acc[contestType] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+      Object.entries(twitterContestTypeCounts).forEach(([typ, count]) => {
+        contestTypePreferences[typ] =
+          (contestTypePreferences[typ] || 0) + count;
+      });
 
       return NextResponse.json({
         leaderboards: {
           topByViews,
+          topByViewsYoutubeInstagram,
+          topByViewsTwitter,
           topBySubmissions,
-          topByEarnings
+          topByEarnings,
         },
         summary: {
           totalUniqueCreators,
           totalSubmissions,
           totalViews,
           totalEarnings,
-          avgSubmissionsPerCreator: totalUniqueCreators > 0 ? totalSubmissions / totalUniqueCreators : 0,
-          avgViewsPerCreator: totalUniqueCreators > 0 ? totalViews / totalUniqueCreators : 0,
-          avgEarningsPerCreator: totalUniqueCreators > 0 ? totalEarnings / totalUniqueCreators : 0
+          avgSubmissionsPerCreator:
+            totalUniqueCreators > 0
+              ? totalSubmissions / totalUniqueCreators
+              : 0,
+          avgViewsPerCreator:
+            totalUniqueCreators > 0 ? totalViews / totalUniqueCreators : 0,
+          avgEarningsPerCreator:
+            totalUniqueCreators > 0 ? totalEarnings / totalUniqueCreators : 0,
         },
         demographics: {
           platformDemographics,
-          contestTypePreferences
-        }
+          contestTypePreferences,
+        },
       });
     }
   } catch (error) {
     console.error("Analytics creators error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

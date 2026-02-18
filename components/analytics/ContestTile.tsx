@@ -45,6 +45,10 @@ interface ContestTileProps {
           saved?: number;
           reach?: number;
           views?: number;
+          replies?: number;
+          retweets?: number;
+          quote_reposts?: number;
+          impressions?: number;
         };
       };
       status: string;
@@ -88,6 +92,13 @@ const PlatformIcon = ({
             </linearGradient>
           </defs>
           <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+        </svg>
+      );
+    case "twitter":
+    case "x":
+      return (
+        <svg className={iconClass} viewBox="0 0 24 24" fill="#1DA1F2">
+          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
         </svg>
       );
     default:
@@ -138,6 +149,9 @@ const getPlatformColor = (platform: string, isDark: boolean = false) => {
         return "bg-red-900/30 text-red-300 border-red-700";
       case "instagram":
         return "bg-gradient-to-r from-purple-900/30 to-pink-900/30 text-purple-300 border-purple-700";
+      case "twitter":
+      case "x":
+        return "bg-blue-900/30 text-blue-300 border-blue-700";
       default:
         return "bg-gray-800/30 text-gray-300 border-gray-600";
     }
@@ -148,6 +162,9 @@ const getPlatformColor = (platform: string, isDark: boolean = false) => {
       return "bg-red-50 text-red-700 border-red-200";
     case "instagram":
       return "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 border-purple-200";
+    case "twitter":
+    case "x":
+      return "bg-blue-50 text-blue-700 border-blue-200";
     default:
       return "bg-gray-100 text-gray-600 border-gray-200";
   }
@@ -221,7 +238,7 @@ export default function ContestTile({
             "rounded-xl border h-40 sm:h-48 lg:h-56 w-full",
             isInitiallyDark
               ? "bg-[#06021D] border-gray-600"
-              : "bg-gray-100 border-gray-200"
+              : "bg-gray-100 border-gray-200",
           )}
         ></div>
       </div>
@@ -259,6 +276,31 @@ export default function ContestTile({
   const totalReach = filteredSubmissions.reduce((sum, sub) => {
     return sum + (sub.other_stats?.[platform]?.reach || 0);
   }, 0);
+
+  const totalReplies = filteredSubmissions.reduce((sum, sub) => {
+    return sum + (sub.other_stats?.[platform]?.replies || 0);
+  }, 0);
+
+  const totalRetweets = filteredSubmissions.reduce((sum, sub) => {
+    return sum + (sub.other_stats?.[platform]?.retweets || 0);
+  }, 0);
+
+  const totalQuoteReposts = filteredSubmissions.reduce((sum, sub) => {
+    return sum + (sub.other_stats?.[platform]?.quote_reposts || 0);
+  }, 0);
+
+  const twitterMetrics = (
+    contest as {
+      twitter_metrics?: {
+        likes: number;
+        replies: number;
+        retweets: number;
+        quote_reposts: number;
+        impressions: number;
+      };
+    }
+  ).twitter_metrics;
+  const isTwitter = platform === "twitter" || platform === "x";
 
   // Calculate total spent
   let totalSpent = 0;
@@ -318,6 +360,43 @@ export default function ContestTile({
           value: totalComments.toLocaleString(),
         },
       ];
+    } else if (
+      isTwitter &&
+      (twitterMetrics ||
+        totalLikes > 0 ||
+        totalReplies > 0 ||
+        totalRetweets > 0 ||
+        totalQuoteReposts > 0)
+    ) {
+      const likes = twitterMetrics?.likes ?? totalLikes;
+      const replies = twitterMetrics?.replies ?? totalReplies;
+      const retweets = twitterMetrics?.retweets ?? totalRetweets;
+      const quoteReposts = twitterMetrics?.quote_reposts ?? totalQuoteReposts;
+      const impressions = twitterMetrics?.impressions ?? totalViews;
+      return [
+        {
+          icon: Users,
+          label: "Submissions",
+          value: contest.live_submission_count || 0,
+        },
+        {
+          icon: Eye,
+          label: "Impressions",
+          value: impressions.toLocaleString(),
+        },
+        { icon: Heart, label: "Likes", value: likes.toLocaleString() },
+        {
+          icon: MessageCircle,
+          label: "Replies",
+          value: replies.toLocaleString(),
+        },
+        { icon: Share, label: "Retweets", value: retweets.toLocaleString() },
+        {
+          icon: TrendingUp,
+          label: "Quote Reposts",
+          value: quoteReposts.toLocaleString(),
+        },
+      ];
     } else {
       return [
         {
@@ -348,7 +427,7 @@ export default function ContestTile({
             }`
           : `bg-white ${
               isHovered ? "shadow-lg border-purple-300" : "border-gray-400"
-            }`
+            }`,
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -389,7 +468,7 @@ export default function ContestTile({
                       "text-base sm:text-lg lg:text-xl font-bold flex items-center gap-2 flex-wrap",
                       isDark
                         ? "text-white"
-                        : "text-gray-900 group-hover:text-purple-700 transition-colors"
+                        : "text-gray-900 group-hover:text-purple-700 transition-colors",
                     )}
                   >
                     <span className="break-words">{contest.title}</span>
@@ -400,7 +479,7 @@ export default function ContestTile({
                     className={cn(
                       "text-xs sm:text-sm px-2 sm:px-3 py-1",
                       getStatusColor(status, isDark),
-                      "font-medium shrink-0"
+                      "font-medium shrink-0",
                     )}
                   >
                     {status}
@@ -408,7 +487,7 @@ export default function ContestTile({
                   <span
                     className={cn(
                       "text-xs sm:text-sm px-2 sm:px-3 py-1 rounded-full border shrink-0",
-                      getPlatformColor(contest.platform, isDark)
+                      getPlatformColor(contest.platform, isDark),
                     )}
                   >
                     {contest.platform?.toUpperCase()}
@@ -419,7 +498,7 @@ export default function ContestTile({
                         "text-xs sm:text-sm px-2 sm:px-3 py-1 rounded-full border shrink-0",
                         isDark
                           ? "text-purple-300 bg-purple-900/30 border-purple-700"
-                          : "text-gray-600 bg-purple-50 border-purple-200"
+                          : "text-gray-600 bg-purple-50 border-purple-200",
                       )}
                     >
                       ⏰{" "}
@@ -434,7 +513,7 @@ export default function ContestTile({
                 <div
                   className={cn(
                     "text-xl sm:text-2xl font-bold mb-1",
-                    isDark ? "text-purple-400" : "text-purple-600"
+                    isDark ? "text-purple-400" : "text-purple-600",
                   )}
                 >
                   {formatCurrencyFromCents(totalSpent)}
@@ -442,7 +521,7 @@ export default function ContestTile({
                 <div
                   className={cn(
                     "text-xs font-medium",
-                    isDark ? "text-gray-400" : "text-gray-500"
+                    isDark ? "text-gray-400" : "text-gray-500",
                   )}
                 >
                   Total Payout
@@ -450,23 +529,18 @@ export default function ContestTile({
               </div>
             </div>
 
-            {/* Platform-specific Metrics */}
-            <div
-              className={cn(
-                "grid gap-2 sm:gap-3 mb-3 sm:mb-4",
-                platform === "instagram"
-                  ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7"
-                  : "grid-cols-2 sm:grid-cols-2 md:grid-cols-4"
-              )}
-            >
+            {/* Platform-specific Metrics - single row */}
+            <div className="flex flex-nowrap gap-2 sm:gap-3 mb-3 sm:mb-4 overflow-x-auto pb-1">
               {platformMetrics.map((metric, index) => {
                 const Icon = metric.icon;
                 return (
                   <div
                     key={index}
                     className={cn(
-                      "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 sm:p-3 flex flex-col items-center text-center",
-                      isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+                      "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 sm:p-3 flex flex-col items-center text-center flex-1 min-w-[4.5rem] sm:min-w-[5rem]",
+                      isDark
+                        ? "bg-[#170337] text-white"
+                        : "bg-white text-black",
                     )}
                   >
                     <div
@@ -474,7 +548,7 @@ export default function ContestTile({
                         "w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded-full mb-1 sm:mb-2",
                         isDark
                           ? "bg-[#FFFFFF36] text-white"
-                          : "bg-[#D8C3FF] text-[#4A00BE]"
+                          : "bg-[#D8C3FF] text-[#4A00BE]",
                       )}
                     >
                       <Icon className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -482,7 +556,7 @@ export default function ContestTile({
                     <span
                       className={cn(
                         "text-[10px] sm:text-[12px] font-medium mb-1",
-                        isDark ? "text-gray-300" : "text-gray-700"
+                        isDark ? "text-gray-300" : "text-gray-700",
                       )}
                     >
                       {metric.label}
@@ -490,7 +564,7 @@ export default function ContestTile({
                     <div
                       className={cn(
                         "text-sm sm:text-base lg:text-lg font-bold",
-                        isDark ? "text-white" : "text-gray-900"
+                        isDark ? "text-white" : "text-gray-900",
                       )}
                     >
                       {metric.value}
@@ -504,14 +578,14 @@ export default function ContestTile({
             <div
               className={cn(
                 "flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 lg:gap-6 text-xs sm:text-sm",
-                isDark ? "text-gray-300" : "text-gray-600"
+                isDark ? "text-gray-300" : "text-gray-600",
               )}
             >
               <div className="flex items-center gap-2 flex-wrap">
                 <Calendar
                   className={cn(
                     "w-3 h-3 sm:w-4 sm:h-4 shrink-0",
-                    isDark ? "text-purple-400" : "text-purple-600"
+                    isDark ? "text-purple-400" : "text-purple-600",
                   )}
                 />
                 <span className="font-medium">Launch:</span>
@@ -523,7 +597,7 @@ export default function ContestTile({
                 <Clock
                   className={cn(
                     "w-3 h-3 sm:w-4 sm:h-4 shrink-0",
-                    isDark ? "text-purple-400" : "text-purple-600"
+                    isDark ? "text-purple-400" : "text-purple-600",
                   )}
                 />
                 <span className="font-medium">End:</span>
@@ -543,7 +617,7 @@ export default function ContestTile({
                 "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all duration-300 w-full sm:w-auto",
                 isDark
                   ? "text-purple-400 border-purple-300"
-                  : "text-purple-600 border-purple-300 hover:bg-purple-50 hover:border-purple-400"
+                  : "text-purple-600 border-purple-300 hover:bg-purple-50 hover:border-purple-400",
               )}
             >
               <span className="hidden sm:inline">View Details →</span>

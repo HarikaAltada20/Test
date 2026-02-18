@@ -5851,12 +5851,15 @@ export function ContestClientPage({
                                             displayEntry.user_platform_username
                                           : displayEntry.user_platform_username
                                       }
+                                        referrerPolicy="no-referrer"
+                                      loading="lazy"
                                     />
                                     <AvatarFallback
                                       className={cn(
                                         "bg-primary/20",
                                         isDark ? "text-white" : "text-gray-900",
                                       )}
+                                    
                                     >
                                       {(contest?.platform === "twitter"
                                         ? ((displayEntry as any)
@@ -6643,6 +6646,8 @@ export function ContestClientPage({
                                                             alt={
                                                               submission.user_platform_username
                                                             }
+                                                              referrerPolicy="no-referrer"
+                                      loading="lazy"
                                                           />
                                                           <AvatarFallback
                                                             className={cn(
@@ -6651,6 +6656,7 @@ export function ContestClientPage({
                                                                 ? "text-primary-foreground"
                                                                 : "text-primary",
                                                             )}
+                                              
                                                           >
                                                             {submission.user_platform_username?.[0]?.toUpperCase() ||
                                                               "U"}
@@ -7265,8 +7271,11 @@ export function ContestClientPage({
                                                 alt={
                                                   video.user_platform_username
                                                 }
+                                                  referrerPolicy="no-referrer"
+                                      loading="lazy"
                                               />
-                                              <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
+                                              <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base"
+                                              >
                                                 {video.user_platform_username?.[0]?.toUpperCase() ||
                                                   "U"}
                                               </AvatarFallback>
@@ -7789,6 +7798,8 @@ export function ContestClientPage({
                                           (creatorGroup as any).user_platform_username ??
                                           creatorGroup.creator_username
                                         }
+                                          referrerPolicy="no-referrer"
+                                      loading="lazy"
                                       />
                                       <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
                                         {((creatorGroup as any).user_platform_username ??
@@ -8241,6 +8252,8 @@ export function ContestClientPage({
                                             entry.user_platform_username
                                           : entry.user_platform_username
                                       }
+                                        referrerPolicy="no-referrer"
+                                      loading="lazy"
                                     />
                                     <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
                                       {(contest?.platform === "twitter"
