@@ -15,6 +15,7 @@ import {
   Share,
   Youtube,
   Instagram,
+  Twitter,
   DollarSign,
   Calendar,
 } from "lucide-react";
@@ -25,6 +26,10 @@ import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
 interface CreatorAnalyticsProps {
   userId: string;
   activeFilter?: string;
+  contentType?: "video" | "text_image";
+  videoPlatform?: "video" | "all" | "youtube" | "instagram";
+  twitterAnalytics?: boolean;
+  contestTypeFilter?: "all" | "leaderboard" | "cpm";
 }
 
 interface CreatorData {
@@ -44,12 +49,22 @@ interface CreatorData {
       totalSubmissions: number;
       totalViews: number;
       totalEarnings: number;
+      viewsYoutubeInstagram?: number;
+      viewsTwitter?: number;
+      submissionsYoutubeInstagram?: number;
+      submissionsYoutube?: number;
+      submissionsInstagram?: number;
+      submissionsTwitter?: number;
       avgViewsPerSubmission: number;
+      avgViewsPerSubmissionYoutubeInstagram?: number;
+      avgViewsPerSubmissionTwitter?: number;
       platforms: string[];
       firstSubmission: Date;
       lastSubmission: Date;
       daysActive: number;
     }>;
+    topByViewsYoutubeInstagram?: any[];
+    topByViewsTwitter?: any[];
     topBySubmissions: any[];
     topByEarnings: any[];
   };
@@ -76,6 +91,9 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
       return <Youtube className={iconClass} />;
     case "instagram":
       return <Instagram className={iconClass} />;
+    case "twitter":
+    case "x":
+      return <Twitter className={iconClass} />;
     default:
       return <div className={`${iconClass} bg-gray-400 rounded`}></div>;
   }
@@ -84,6 +102,10 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
 export default function CreatorAnalytics({
   userId,
   activeFilter = "all",
+  contentType = "video",
+  videoPlatform = "all",
+  twitterAnalytics = false,
+  contestTypeFilter = "all",
 }: CreatorAnalyticsProps) {
   const [data, setData] = useState<CreatorData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,15 +115,28 @@ export default function CreatorAnalytics({
 
   useEffect(() => {
     fetchCreatorData();
-  }, [userId, activeFilter]);
+  }, [
+    userId,
+    activeFilter,
+    contentType,
+    videoPlatform,
+    twitterAnalytics,
+    contestTypeFilter,
+  ]);
 
   const fetchCreatorData = async () => {
     try {
       setLoading(true);
-      const url =
-        activeFilter !== "all"
-          ? `/api/analytics/creators?status=${activeFilter}`
-          : "/api/analytics/creators";
+      const params = new URLSearchParams();
+      if (activeFilter !== "all") params.set("status", activeFilter);
+      params.set("contentType", contentType);
+      params.set("videoPlatform", videoPlatform);
+      params.set("twitter", twitterAnalytics ? "true" : "false");
+      if (contestTypeFilter && contestTypeFilter !== "all") {
+        params.set("type", contestTypeFilter);
+      }
+      const qs = params.toString();
+      const url = `/api/analytics/creators${qs ? `?${qs}` : ""}`;
 
       const response = await fetch(url);
 
@@ -151,6 +186,8 @@ export default function CreatorAnalytics({
         return leaderboards.topBySubmissions;
       case "earnings":
         return leaderboards.topByEarnings;
+      case "views":
+        return leaderboards.topByViews;
       default:
         return leaderboards.topByViews;
     }
@@ -162,6 +199,8 @@ export default function CreatorAnalytics({
         return "Most Active Creators";
       case "earnings":
         return "Top Earners";
+      case "views":
+        return "Top Performers by Views";
       default:
         return "Top Performers by Views";
     }
@@ -173,6 +212,8 @@ export default function CreatorAnalytics({
         return creator.totalSubmissions;
       case "earnings":
         return formatCurrencyFromCents(creator.totalEarnings);
+      case "views":
+        return creator.totalViews.toLocaleString();
       default:
         return creator.totalViews.toLocaleString();
     }
@@ -185,14 +226,14 @@ export default function CreatorAnalytics({
         <div
           className={cn(
             "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3",
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black",
           )}
         >
           <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
             <h1
               className={cn(
                 "text-md font-medium",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               Total Creators
@@ -202,7 +243,7 @@ export default function CreatorAnalytics({
                 "w-10 h-10 flex items-center justify-center rounded-full",
                 isDark
                   ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  : "bg-[#D8C3FF] text-[#4A00BE]",
               )}
             >
               <Users className="h-5 w-5" />
@@ -215,7 +256,7 @@ export default function CreatorAnalytics({
             <p
               className={cn(
                 "text-sm mt-2",
-                isDark ? "text-gray-300" : "text-gray-600"
+                isDark ? "text-gray-300" : "text-gray-600",
               )}
             >
               Unique creators engaged
@@ -226,7 +267,7 @@ export default function CreatorAnalytics({
         <div
           className={cn(
             "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3",
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black",
           )}
         >
           <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
@@ -236,7 +277,7 @@ export default function CreatorAnalytics({
                 "w-10 h-10 flex items-center justify-center rounded-full",
                 isDark
                   ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  : "bg-[#D8C3FF] text-[#4A00BE]",
               )}
             >
               <MessageCircle className="h-5 w-5" />
@@ -249,7 +290,7 @@ export default function CreatorAnalytics({
             <p
               className={cn(
                 "text-sm mt-2",
-                isDark ? "text-gray-300" : "text-gray-600"
+                isDark ? "text-gray-300" : "text-gray-600",
               )}
             >
               {summary.avgSubmissionsPerCreator.toFixed(1)} per creator
@@ -260,7 +301,7 @@ export default function CreatorAnalytics({
         <div
           className={cn(
             "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3",
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black",
           )}
         >
           <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
@@ -270,7 +311,7 @@ export default function CreatorAnalytics({
                 "w-10 h-10 flex items-center justify-center rounded-full",
                 isDark
                   ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  : "bg-[#D8C3FF] text-[#4A00BE]",
               )}
             >
               <Eye className="h-5 w-5" />
@@ -283,7 +324,7 @@ export default function CreatorAnalytics({
             <p
               className={cn(
                 "text-sm mt-2",
-                isDark ? "text-gray-300" : "text-gray-600"
+                isDark ? "text-gray-300" : "text-gray-600",
               )}
             >
               {summary.avgViewsPerCreator.toLocaleString()} per creator
@@ -294,7 +335,7 @@ export default function CreatorAnalytics({
         <div
           className={cn(
             "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3",
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black",
           )}
         >
           <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
@@ -304,7 +345,7 @@ export default function CreatorAnalytics({
                 "w-10 h-10 flex items-center justify-center rounded-full",
                 isDark
                   ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  : "bg-[#D8C3FF] text-[#4A00BE]",
               )}
             >
               <DollarSign className="h-5 w-5" />
@@ -317,11 +358,11 @@ export default function CreatorAnalytics({
             <p
               className={cn(
                 "text-sm mt-2",
-                isDark ? "text-gray-300" : "text-gray-600"
+                isDark ? "text-gray-300" : "text-gray-600",
               )}
             >
               {formatCurrencyFromCents(
-                Math.round(summary.avgEarningsPerCreator * 100)
+                Math.round(summary.avgEarningsPerCreator * 100),
               )}{" "}
               per creator
             </p>
@@ -335,7 +376,7 @@ export default function CreatorAnalytics({
           className={cn(
             isDark
               ? "bg-[#170337] border-[#170337] text-white"
-              : "bg-white text-black"
+              : "bg-white text-black",
           )}
         >
           <CardHeader>
@@ -369,7 +410,7 @@ export default function CreatorAnalytics({
                       </div>
                     </div>
                   );
-                }
+                },
               )}
             </div>
           </CardContent>
@@ -379,7 +420,7 @@ export default function CreatorAnalytics({
           className={cn(
             isDark
               ? "bg-[#170337] border-[#170337] text-white"
-              : "bg-white text-black"
+              : "bg-white text-black",
           )}
         >
           <CardHeader>
@@ -410,7 +451,7 @@ export default function CreatorAnalytics({
                       </div>
                     </div>
                   );
-                }
+                },
               )}
             </div>
           </CardContent>
@@ -422,117 +463,184 @@ export default function CreatorAnalytics({
         className={cn(
           isDark
             ? "bg-[#170337] border-[#170337] text-white"
-            : "bg-white text-black"
+            : "bg-white text-black",
         )}
       >
         <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-lg">{getLeaderboardTitle()}</CardTitle>
-            <div
-              className={cn(
-                "flex gap-2 flex-wrap sm:flex-nowrap sm:justify-end",
-                isDark ? "text-purple-300" : "text-purple-700"
-              )}
-            >
-              <Button
-                variant={activeTab === "views" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setActiveTab("views")}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="text-lg">{getLeaderboardTitle()}</CardTitle>
+              <div
                 className={cn(
-                  "border",
-                  activeTab === "views"
-                    ? isDark
-                      ? "border-purple-400 bg-purple-600/20"
-                      : "border-purple-500 bg-purple-100 text-purple-700"
-                    : isDark
-                    ? "border-purple-300 bg-[#170337]"
-                    : "border-purple-500/50"
+                  "flex gap-2 flex-wrap sm:flex-nowrap sm:justify-end",
+                  isDark ? "text-purple-300" : "text-purple-700",
                 )}
               >
-                Views
-              </Button>
-              <Button
-                variant={activeTab === "submissions" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setActiveTab("submissions")}
-                className={cn(
-                  "border",
-                  activeTab === "submissions"
-                    ? isDark
-                      ? "border-purple-400 bg-purple-600/20 "
-                      : "border-purple-500 bg-purple-100 text-purple-700"
-                    : isDark
-                    ? "border-purple-300 bg-[#170337]"
-                    : "border-purple-500/50"
-                )}
-              >
-                Submissions
-              </Button>
-              <Button
-                variant={activeTab === "earnings" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setActiveTab("earnings")}
-                className={cn(
-                  "border",
-                  activeTab === "earnings"
-                    ? isDark
-                      ? "border-purple-400 bg-purple-600/20"
-                      : "border-purple-500 bg-purple-100 text-purple-700"
-                    : isDark
-                    ? "border-purple-300 bg-[#170337]"
-                    : "border-purple-500/50"
-                )}
-              >
-                Earnings
-              </Button>
+                <Button
+                  variant={activeTab === "views" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setActiveTab("views")}
+                  className={cn(
+                    "border",
+                    activeTab === "views"
+                      ? isDark
+                        ? "border-purple-400 bg-purple-600/20"
+                        : "border-purple-500 bg-purple-100 text-purple-700"
+                      : isDark
+                        ? "border-purple-300 bg-[#170337]"
+                        : "border-purple-500/50",
+                  )}
+                >
+                  Views
+                </Button>
+                <Button
+                  variant={activeTab === "submissions" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setActiveTab("submissions")}
+                  className={cn(
+                    "border",
+                    activeTab === "submissions"
+                      ? isDark
+                        ? "border-purple-400 bg-purple-600/20 "
+                        : "border-purple-500 bg-purple-100 text-purple-700"
+                      : isDark
+                        ? "border-purple-300 bg-[#170337]"
+                        : "border-purple-500/50",
+                  )}
+                >
+                  Submissions
+                </Button>
+                <Button
+                  variant={activeTab === "earnings" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setActiveTab("earnings")}
+                  className={cn(
+                    "border",
+                    activeTab === "earnings"
+                      ? isDark
+                        ? "border-purple-400 bg-purple-600/20"
+                        : "border-purple-500 bg-purple-100 text-purple-700"
+                      : isDark
+                        ? "border-purple-300 bg-[#170337]"
+                        : "border-purple-500/50",
+                  )}
+                >
+                  Earnings
+                </Button>
+              </div>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {getCurrentLeaderboard()
-              .slice(0, 10)
-              .map((creator: any, index: number) => (
-                <div
-                  key={creator.creator.id}
-                  className={cn(
-                    "flex flex-row items-center justify-between gap-2 p-2 sm:p-4 rounded-lg",
-                    isDark
-                      ? "bg-[#170337] border border-gray-600"
-                      : "bg-gray-50"
-                  )}
-                >
-                  <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-                    <div className="w-6 h-6 sm:w-8 sm:h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs sm:text-sm font-semibold text-purple-600">
-                        {index + 1}
-                      </span>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-sm sm:text-base truncate">
-                        @{creator.creator.username}
-                      </h3>
-                      <div className="flex items-center gap-1 sm:gap-2 mt-0.5 sm:mt-1">
-                        {creator.platforms.map((platform: string) => (
-                          <PlatformIcon key={platform} platform={platform} />
-                        ))}
-                        <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
-                          {creator.totalSubmissions} submissions
+            {getCurrentLeaderboard().length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No creators
+              </p>
+            ) : (
+              getCurrentLeaderboard()
+                .slice(0, 10)
+                .map((creator: any, index: number) => (
+                  <div
+                    key={creator.creator.id}
+                    className={cn(
+                      "flex flex-row items-center justify-between gap-2 p-2 sm:p-4 rounded-lg",
+                      isDark
+                        ? "bg-[#170337] border border-gray-600"
+                        : "bg-gray-50",
+                    )}
+                  >
+                    <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+                      <div className="w-6 h-6 sm:w-8 sm:h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs sm:text-sm font-semibold text-purple-600">
+                          {index + 1}
                         </span>
                       </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-sm sm:text-base truncate">
+                          @{creator.creator.username}
+                        </h3>
+                        <div className="flex items-center gap-1 sm:gap-2 mt-0.5 sm:mt-1 flex-wrap">
+                          {(creator.submissionsYoutubeInstagram ?? 0) > 0 ||
+                          (creator.submissionsTwitter ?? 0) > 0 ? (
+                            <>
+                              {(creator.submissionsYoutubeInstagram ?? 0) > 0 && (
+                                <span className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
+                                  {(creator.submissionsYoutube ?? 0) > 0 && (
+                                    <Youtube
+                                      className={cn(
+                                        "w-3 h-3 sm:w-5 sm:h-5",
+                                        isDark ? "text-white" : "text-black",
+                                      )}
+                                    />
+                                  )}
+                                  {(creator.submissionsInstagram ?? 0) > 0 && (
+                                    <Instagram
+                                      className={cn(
+                                        "w-3 h-3 sm:w-5 sm:h-5",
+                                        isDark ? "text-white" : "text-black",
+                                      )}
+                                    />
+                                  )}
+                                  <span className="whitespace-nowrap">
+                                    {creator.submissionsYoutubeInstagram}{" "}
+                                    submissions
+                                  </span>
+                                </span>
+                              )}
+                              {(creator.submissionsTwitter ?? 0) > 0 && (
+                                <>
+                                  {(creator.submissionsYoutubeInstagram ?? 0) > 0 && (
+                                    <span className="text-muted-foreground/60">·</span>
+                                  )}
+                                  <span className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
+                                    <Twitter
+                                      className={cn(
+                                        "w-3 h-3 sm:w-5 sm:h-5",
+                                        isDark ? "text-white" : "text-black",
+                                      )}
+                                    />
+                                    <span className="whitespace-nowrap">
+                                      {creator.submissionsTwitter} submissions
+                                    </span>
+                                  </span>
+                                </>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {creator.platforms?.map((platform: string) => (
+                                <PlatformIcon
+                                  key={platform}
+                                  platform={platform}
+                                />
+                              ))}
+                              <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+                                {creator.totalSubmissions} submissions
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-sm sm:text-lg font-bold whitespace-nowrap">
+                        {getLeaderboardMetric(creator)}
+                      </div>
+                      {activeTab === "views" ? (
+                        <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+                          {`${creator.avgViewsPerSubmission.toFixed(0)} avg views/submission`}
+                        </div>
+                      ) : (
+                        <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+                          {creator.avgViewsPerSubmission.toFixed(0)} avg
+                          views/submission
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className="text-sm sm:text-lg font-bold whitespace-nowrap">
-                      {getLeaderboardMetric(creator)}
-                    </div>
-                    <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
-                      {creator.avgViewsPerSubmission.toFixed(0)} avg
-                      views/submission
-                    </div>
-                  </div>
-                </div>
-              ))}
+                ))
+            )}
           </div>
         </CardContent>
       </Card>
@@ -543,7 +651,7 @@ export default function CreatorAnalytics({
           className={cn(
             isDark
               ? "bg-[#170337] border-[#170337] text-white"
-              : "bg-white text-black"
+              : "bg-white text-black",
           )}
         >
           <CardHeader>
@@ -558,7 +666,7 @@ export default function CreatorAnalytics({
                 "flex flex-col gap-4 md:flex-row md:items-center md:justify-between p-4 sm:p-6 rounded-lg",
                 isDark
                   ? "bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-white/20 backdrop-blur-2xl"
-                  : "bg-gradient-to-r from-purple-50 to-blue-50"
+                  : "bg-gradient-to-r from-purple-50 to-blue-50",
               )}
             >
               <div className="flex items-center gap-3 sm:gap-4">
@@ -585,7 +693,7 @@ export default function CreatorAnalytics({
                     <span className="flex items-center gap-1">
                       <DollarSign className="w-4 h-4" />
                       {formatCurrencyFromCents(
-                        leaderboards.topByViews[0].totalEarnings
+                        leaderboards.topByViews[0].totalEarnings,
                       )}{" "}
                       earned
                     </span>
