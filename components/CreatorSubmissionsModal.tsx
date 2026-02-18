@@ -116,7 +116,6 @@ export function CreatorSubmissionsModal({
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(
     new Set()
   );
-  const [selectAll, setSelectAll] = useState(false);
   const [statusFilter, setStatusFilter] = useState<
     "all" | "verified_or_paid" | "pending" | "verified" | "rejected" | "paid"
   >("all");
@@ -157,13 +156,16 @@ export function CreatorSubmissionsModal({
     return () => observer.disconnect();
   }, []);
 
-  const handleSelectAll = () => {
-    if (selectAll) {
+  const handleSelectAll = (currentFiltered: Submission[]) => {
+    const filteredIds = currentFiltered.map((s) => s.id);
+    const allFilteredSelected =
+      filteredIds.length > 0 &&
+      filteredIds.every((id) => selectedSubmissions.has(id));
+    if (allFilteredSelected) {
       setSelectedSubmissions(new Set());
     } else {
-      setSelectedSubmissions(new Set(submissions.map((s) => s.id)));
+      setSelectedSubmissions(new Set(filteredIds));
     }
-    setSelectAll(!selectAll);
   };
 
   const handleDownloadReel = async (submissionId: string) => {
@@ -250,7 +252,6 @@ export function CreatorSubmissionsModal({
       newSet.delete(submissionId);
     }
     setSelectedSubmissions(newSet);
-    setSelectAll(newSet.size === submissions.length);
   };
 
   const handleBulkAction = (action: "verify" | "reject" | "pending") => {
@@ -263,7 +264,6 @@ export function CreatorSubmissionsModal({
       onSetPending(selectedIds);
     }
     setSelectedSubmissions(new Set());
-    setSelectAll(false);
   };
 
   const handleBulkPayment = async (
@@ -392,7 +392,6 @@ export function CreatorSubmissionsModal({
 
     // Clear selection
     setSelectedSubmissions(new Set());
-    setSelectAll(false);
   };
 
   const getStatusBadge = (status: string, paid: boolean) => {
@@ -1009,10 +1008,7 @@ export function CreatorSubmissionsModal({
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => {
-                    setSelectedSubmissions(new Set());
-                    setSelectAll(false);
-                  }}
+                  onClick={() => setSelectedSubmissions(new Set())}
                   className={cn(
                     "text-sm",
                     isDark ? "text-white" : "text-gray-600"
@@ -1160,9 +1156,16 @@ export function CreatorSubmissionsModal({
                     )}
                   >
                     <Checkbox
-                      checked={selectAll}
-                      onCheckedChange={handleSelectAll}
-                      aria-label="Select all submissions"
+                      checked={
+                        filteredSubmissions.length > 0 &&
+                        filteredSubmissions.every((s) =>
+                          selectedSubmissions.has(s.id)
+                        )
+                      }
+                      onCheckedChange={() =>
+                        handleSelectAll(filteredSubmissions)
+                      }
+                      aria-label="Select all submissions in current tab"
                     />
                   </TableHead>
                   <TableHead
