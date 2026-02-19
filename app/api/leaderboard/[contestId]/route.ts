@@ -84,8 +84,9 @@ async function getTotalCreatorCount(
 }
 
 /**
- * Fetch leaderboard aggregated by creator. Scalable: fetches submissions in chunks,
- * aggregates in a Map (one entry per creator), stops when the requested page can be filled.
+ * Fetch leaderboard aggregated by creator. Fetches all submissions in chunks,
+ * aggregates by creator (total_views, etc.), then sorts by total_views descending
+ * (highest to lowest) so the opportunities/creator-wise view shows ranking by views.
  * Submissions per creator are not embedded; client uses expand API to load them.
  */
 async function getLeaderboardGroupedByCreator(
@@ -105,7 +106,7 @@ async function getLeaderboardGroupedByCreator(
     .order("views", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: true });
 
-  // Fetch submission chunks until we have enough creators to form the requested page
+  // Fetch all submission chunks so we have correct total_views per creator, then sort by total_views
   while (true) {
     const { data: chunk, error: subError } = await baseQuery.range(
       globalOffset,
@@ -142,17 +143,15 @@ async function getLeaderboardGroupedByCreator(
       }
     });
 
-    const sorted = Array.from(byCreator.values()).sort(
-      (a, b) => a.best_rank - b.best_rank
-    );
-    if (sorted.length >= from + limit) break;
     if (chunk.length < CREATOR_WISE_CHUNK_SIZE) break;
     globalOffset += chunk.length;
   }
 
-  const sortedCreators = Array.from(byCreator.values()).sort(
-    (a, b) => a.best_rank - b.best_rank
-  );
+  // Rank creators by total views (highest to lowest); tiebreak by best_rank (best single submission)
+  const sortedCreators = Array.from(byCreator.values()).sort((a, b) => {
+    if (b.total_views !== a.total_views) return b.total_views - a.total_views;
+    return a.best_rank - b.best_rank;
+  });
   const totalEntries = await getTotalCreatorCount(supabase, contestId);
   const totalPages = totalEntries ? Math.ceil(totalEntries / limit) : 0;
   const pageCreators = sortedCreators.slice(from, from + limit);
