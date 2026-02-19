@@ -21,10 +21,41 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import ContestTypeFilter from "@/components/admin/ContestTypeFilter";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { Button } from "@/components/ui/button";
 import { useEffect, useLayoutEffect, useState } from "react";
+import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { CalendarIcon, Check } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  endOfMonth,
+  endOfYear,
+  format,
+  startOfMonth,
+  startOfYear,
+  subDays,
+  subMonths,
+} from "date-fns";
 
 interface AdminDashboardClientProps {
   totalContests: number;
@@ -63,6 +94,44 @@ interface AdminDashboardClientProps {
   projectedWithCommission: number;
   totalMoneyInDraftNotPaid: number;
   contestTypeFilter: string;
+  userGrowth: {
+    byDay: {
+      label: string;
+      all: number;
+      creators: number;
+      brands: number;
+      admins: number;
+    }[];
+    byWeek: {
+      label: string;
+      all: number;
+      creators: number;
+      brands: number;
+      admins: number;
+    }[];
+    byMonth: {
+      label: string;
+      all: number;
+      creators: number;
+      brands: number;
+      admins: number;
+    }[];
+    byYear: {
+      label: string;
+      all: number;
+      creators: number;
+      brands: number;
+      admins: number;
+    }[];
+    byDayFull: {
+      date: string;
+      label: string;
+      all: number;
+      creators: number;
+      brands: number;
+      admins: number;
+    }[];
+  };
 }
 
 const readIsDarkFromDom = () => {
@@ -108,9 +177,145 @@ export default function AdminDashboardClient({
   projectedWithCommission,
   totalMoneyInDraftNotPaid,
   contestTypeFilter,
+  userGrowth,
 }: AdminDashboardClientProps) {
   // Get theme from parent layout
   const [isDark, setIsDark] = useState<boolean | null>(null);
+  const [growthMode, setGrowthMode] = useState<"daily" | "cumulative">("daily");
+  const [userTypeFilter, setUserTypeFilter] = useState<
+    "all" | "creators" | "brands" | "admins"
+  >("all");
+
+  const now = new Date();
+  const defaultRangeEnd = new Date(now);
+  defaultRangeEnd.setHours(23, 59, 59, 999);
+  const defaultRangeStart = subDays(now, 30);
+  defaultRangeStart.setHours(0, 0, 0, 0);
+  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
+    from: defaultRangeStart,
+    to: defaultRangeEnd,
+  });
+  const [dateRangePresetLabel, setDateRangePresetLabel] =
+    useState<string>("Last 30 Days");
+  const [calendarRange, setCalendarRange] = useState<
+    { from?: Date; to?: Date } | undefined
+  >(undefined);
+  const [dateRangeOpen, setDateRangeOpen] = useState(false);
+  const [rangeTimezone, setRangeTimezone] = useState<"utc" | "local">("local");
+  const [startTimeInput, setStartTimeInput] = useState<string | null>(null);
+  const [endTimeInput, setEndTimeInput] = useState<string | null>(null);
+
+  const KOLKATA_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+
+  function getDateStrInTz(date: Date, tz: "utc" | "local"): string {
+    if (tz === "utc") {
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+      const d = String(date.getUTCDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+    const kolkata = new Date(date.getTime() + KOLKATA_OFFSET_MS);
+    const y = kolkata.getUTCFullYear();
+    const m = String(kolkata.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(kolkata.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function getTimeStrInTz(date: Date, tz: "utc" | "local"): string {
+    if (tz === "utc") {
+      const h = date.getUTCHours();
+      const m = date.getUTCMinutes();
+      const ampm = h >= 12 ? "PM" : "AM";
+      const h12 = h % 12 || 12;
+      return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+    }
+    const kolkata = new Date(date.getTime() + KOLKATA_OFFSET_MS);
+    const h = kolkata.getUTCHours();
+    const m = kolkata.getUTCMinutes();
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 || 12;
+    return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+  }
+
+  function parseTime12To24(timeStr: string): { h: number; m: number } | null {
+    const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!match) return null;
+    let h = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    const ampm = match[3].toUpperCase();
+    if (ampm === "PM" && h !== 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+    return { h, m };
+  }
+
+  function setTimeInTz(
+    existing: Date,
+    dateStr: string,
+    timeStr: string,
+    tz: "utc" | "local",
+  ): Date | null {
+    const parsed = parseTime12To24(timeStr);
+    if (!parsed) return null;
+    const [y, mo, d] = dateStr.split("-").map(Number);
+    if (!y || !mo || !d) return null;
+    if (tz === "utc") {
+      return new Date(Date.UTC(y, mo - 1, d, parsed.h, parsed.m, 0, 0));
+    }
+    const localKolkata = new Date(
+      Date.UTC(y, mo - 1, d, parsed.h, parsed.m, 0, 0),
+    );
+    return new Date(localKolkata.getTime() - KOLKATA_OFFSET_MS);
+  }
+
+  type GrowthPoint = {
+    label: string;
+    all: number;
+    creators: number;
+    brands: number;
+    admins: number;
+  };
+
+  const toCumulative = (data: GrowthPoint[]): GrowthPoint[] => {
+    let sumAll = 0;
+    let sumCreators = 0;
+    let sumBrands = 0;
+    let sumAdmins = 0;
+    return data.map((d) => {
+      sumAll += d.all;
+      sumCreators += d.creators;
+      sumBrands += d.brands;
+      sumAdmins += d.admins;
+      return {
+        label: d.label,
+        all: sumAll,
+        creators: sumCreators,
+        brands: sumBrands,
+        admins: sumAdmins,
+      };
+    });
+  };
+
+  function getUTCDateStr(date: Date): string {
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(date.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  const fromStr = getUTCDateStr(dateRange.from);
+  const toStr = getUTCDateStr(dateRange.to);
+  const filteredByDayFull = userGrowth.byDayFull.filter(
+    (p) => p.date >= fromStr && p.date <= toStr,
+  );
+
+  const isLast12MonthsPreset = dateRangePresetLabel === "Last 12 Months";
+
+  const rawChartData: GrowthPoint[] = isLast12MonthsPreset
+    ? userGrowth.byMonth.slice(-12)
+    : (filteredByDayFull as GrowthPoint[]);
+  const chartData =
+    growthMode === "cumulative" ? toCumulative(rawChartData) : rawChartData;
 
   // Resolve theme before first paint to avoid flash between modes
   useLayoutEffect(() => {
@@ -144,7 +349,7 @@ export default function AdminDashboardClient({
   }
 
   return (
-    <div className="space-y-8 pb-8">
+    <div className="space-y-8 pb-8 w-full min-w-0 overflow-visible">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -381,6 +586,620 @@ export default function AdminDashboardClient({
               Brands
             </p>
           </CardContent>
+        </div>
+      </div>
+
+      {/* Users Growth Chart */}
+      <div className="mt-8 space-y-4 w-full min-w-0 overflow-visible">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h2
+            className={`text-xl font-bold shrink-0 ${
+              isDark ? "text-white" : "text-gray-900"
+            }`}
+          >
+            {growthMode === "daily" ? "Daily signup growth" : "Users growth"}
+          </h2>
+          <div className="flex flex-wrap items-center gap-3 min-w-0 flex-shrink">
+            {/* Column 1: Date range picker */}
+            <div className="flex items-center shrink-0">
+              <Popover open={dateRangeOpen} onOpenChange={setDateRangeOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={`min-w-[180px] max-w-[220px] justify-start text-left font-normal shrink-0 ${
+                      isDark
+                        ? "border-white/20 bg-white/5 hover:bg-white/10"
+                        : ""
+                    }`}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRangePresetLabel}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className={`w-auto p-0 ${isDark ? "border-white/20 bg-[#170337]" : ""}`}
+                  align="end"
+                >
+                  <div className="flex flex-col sm:flex-row max-h-[420px] overflow-y-auto">
+                    <div className="flex flex-col gap-1 p-3 border-b sm:border-b-0 sm:border-r sm:h-full sm:min-h-[580px]">
+                      <p
+                        className={`text-sm font-medium ${
+                          isDark ? "text-gray-300" : "text-muted-foreground"
+                        }`}
+                      >
+                        Presets
+                      </p>
+                      {[
+                        {
+                          label: "Last 7 Days",
+                          get: () => ({
+                            from: subDays(now, 6),
+                            to: now,
+                          }),
+                        },
+                        {
+                          label: "Last 30 Days",
+                          get: () => ({
+                            from: subDays(now, 29),
+                            to: now,
+                          }),
+                        },
+                        {
+                          label: "Last 3 Months",
+                          get: () => ({
+                            from: subMonths(now, 3),
+                            to: now,
+                          }),
+                        },
+                        {
+                          label: "Last 12 Months",
+                          get: () => ({
+                            from: subMonths(now, 12),
+                            to: now,
+                          }),
+                        },
+                      ].map(({ label, get }) => (
+                        <Button
+                          key={label}
+                          variant="ghost"
+                          size="sm"
+                          className={`justify-start font-normal ${
+                            dateRangePresetLabel === label
+                              ? isDark
+                                ? "bg-white/10 text-white"
+                                : "bg-accent"
+                              : isDark
+                                ? "text-gray-300 hover:bg-white/10"
+                                : ""
+                          }`}
+                          onClick={() => {
+                            const { from, to } = get();
+                            setDateRange({ from, to });
+                            setDateRangePresetLabel(label);
+                            setDateRangeOpen(false);
+                          }}
+                        >
+                          {label}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="p-3">
+                      <p
+                        className={`text-sm font-medium mb-2 ${
+                          isDark ? "text-gray-300" : "text-muted-foreground"
+                        }`}
+                      >
+                        Custom range
+                      </p>
+                      <Calendar
+                        mode="range"
+                        defaultMonth={dateRange.from}
+                        selected={
+                          calendarRange?.from != null
+                            ? {
+                                from: calendarRange.from,
+                                to: calendarRange.to ?? calendarRange.from,
+                              }
+                            : { from: dateRange.from, to: dateRange.to }
+                        }
+                        onSelect={(range) => {
+                          setCalendarRange(
+                            range
+                              ? {
+                                  from: range.from,
+                                  to: range.to,
+                                }
+                              : undefined,
+                          );
+                          if (range?.from && range?.to) {
+                            setDateRange({
+                              from: range.from,
+                              to: range.to,
+                            });
+                            setDateRangePresetLabel(
+                              `${range.from.toLocaleDateString()} – ${range.to.toLocaleDateString()}`,
+                            );
+                          }
+                        }}
+                        numberOfMonths={1}
+                        disabled={(date) =>
+                          date > now || date < subDays(now, 730)
+                        }
+                        className={
+                          isDark ? "rounded-md border-0 bg-transparent" : ""
+                        }
+                      />
+                      <div
+                        className={`space-y-3 border-t pt-3 mt-3 ${
+                          isDark ? "border-white/10" : "border-border"
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <Label
+                            className={`text-xs font-medium ${
+                              isDark ? "text-gray-400" : "text-muted-foreground"
+                            }`}
+                          >
+                            Start
+                          </Label>
+                          <div className="flex gap-2">
+                            <Input
+                              type="date"
+                              value={getDateStrInTz(
+                                dateRange.from,
+                                rangeTimezone,
+                              )}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (!v) return;
+                                const timeStr = getTimeStrInTz(
+                                  dateRange.from,
+                                  rangeTimezone,
+                                );
+                                const newFrom = setTimeInTz(
+                                  dateRange.from,
+                                  v,
+                                  timeStr,
+                                  rangeTimezone,
+                                );
+                                if (newFrom) {
+                                  setDateRange((prev) => ({
+                                    ...prev,
+                                    from: newFrom,
+                                  }));
+                                  setCalendarRange((prev) =>
+                                    prev
+                                      ? {
+                                          from: newFrom,
+                                          to: prev.to ?? newFrom,
+                                        }
+                                      : { from: newFrom, to: dateRange.to },
+                                  );
+                                }
+                              }}
+                              className={`h-9 text-sm ${
+                                isDark
+                                  ? "border-white/20 bg-white/5 text-white"
+                                  : ""
+                              }`}
+                            />
+                            <Input
+                              type="text"
+                              placeholder="02:30 PM"
+                              value={
+                                startTimeInput ??
+                                getTimeStrInTz(dateRange.from, rangeTimezone)
+                              }
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setStartTimeInput(v || null);
+                                const dateStr = getDateStrInTz(
+                                  dateRange.from,
+                                  rangeTimezone,
+                                );
+                                const newFrom = setTimeInTz(
+                                  dateRange.from,
+                                  dateStr,
+                                  v,
+                                  rangeTimezone,
+                                );
+                                if (newFrom) {
+                                  setDateRange((prev) => ({
+                                    ...prev,
+                                    from: newFrom,
+                                  }));
+                                  if (parseTime12To24(v))
+                                    setStartTimeInput(null);
+                                }
+                              }}
+                              onBlur={() => setStartTimeInput(null)}
+                              className={`h-9 text-sm w-[100px] ${
+                                isDark
+                                  ? "border-white/20 bg-white/5 text-white"
+                                  : ""
+                              }`}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label
+                            className={`text-xs font-medium ${
+                              isDark ? "text-gray-400" : "text-muted-foreground"
+                            }`}
+                          >
+                            End
+                          </Label>
+                          <div className="flex gap-2">
+                            <Input
+                              type="date"
+                              value={getDateStrInTz(
+                                dateRange.to,
+                                rangeTimezone,
+                              )}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (!v) return;
+                                const timeStr = getTimeStrInTz(
+                                  dateRange.to,
+                                  rangeTimezone,
+                                );
+                                const newTo = setTimeInTz(
+                                  dateRange.to,
+                                  v,
+                                  timeStr,
+                                  rangeTimezone,
+                                );
+                                if (newTo) {
+                                  setDateRange((prev) => ({
+                                    ...prev,
+                                    to: newTo,
+                                  }));
+                                  setCalendarRange((prev) =>
+                                    prev
+                                      ? {
+                                          from: prev.from ?? dateRange.from,
+                                          to: newTo,
+                                        }
+                                      : { from: dateRange.from, to: newTo },
+                                  );
+                                }
+                              }}
+                              className={`h-9 text-sm ${
+                                isDark
+                                  ? "border-white/20 bg-white/5 text-white"
+                                  : ""
+                              }`}
+                            />
+                            <Input
+                              type="text"
+                              placeholder="03:29 PM"
+                              value={
+                                endTimeInput ??
+                                getTimeStrInTz(dateRange.to, rangeTimezone)
+                              }
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setEndTimeInput(v || null);
+                                const dateStr = getDateStrInTz(
+                                  dateRange.to,
+                                  rangeTimezone,
+                                );
+                                const newTo = setTimeInTz(
+                                  dateRange.to,
+                                  dateStr,
+                                  v,
+                                  rangeTimezone,
+                                );
+                                if (newTo) {
+                                  setDateRange((prev) => ({
+                                    ...prev,
+                                    to: newTo,
+                                  }));
+                                  if (parseTime12To24(v)) setEndTimeInput(null);
+                                }
+                              }}
+                              onBlur={() => setEndTimeInput(null)}
+                              className={`h-9 text-sm w-[100px] ${
+                                isDark
+                                  ? "border-white/20 bg-white/5 text-white"
+                                  : ""
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        className={`space-y-2 border-t pt-3 mt-3 ${
+                          isDark ? "border-white/10" : "border-border"
+                        }`}
+                      >
+                        <Label
+                          className={`text-xs font-medium ${
+                            isDark ? "text-gray-400" : "text-muted-foreground"
+                          }`}
+                        >
+                          Timezone
+                        </Label>
+                        <Select
+                          value={rangeTimezone}
+                          onValueChange={(v: "utc" | "local") => {
+                            setRangeTimezone(v);
+                            setStartTimeInput(null);
+                            setEndTimeInput(null);
+                          }}
+                        >
+                          <SelectTrigger
+                            className={`h-9 text-sm ${
+                              isDark
+                                ? "border-white/20 bg-white/5 text-white"
+                                : ""
+                            }`}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent
+                            className={
+                              isDark ? "border-white/20 bg-[#170337]" : ""
+                            }
+                          >
+                            <SelectItem value="utc">UTC</SelectItem>
+                            <SelectItem value="local">
+                              Local (Asia/Calcutta)
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex gap-2 p-2 border-t mt-3">
+                        <Button
+                          size="sm"
+                          className="w-full"
+                          onClick={() => {
+                            setDateRangePresetLabel(
+                              `${format(dateRange.from, "MMM d, yyyy")} – ${format(dateRange.to, "MMM d, yyyy")}`,
+                            );
+                            setDateRangeOpen(false);
+                            setCalendarRange(undefined);
+                          }}
+                        >
+                          <Check className="mr-1 h-4 w-4" />
+                          Apply
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+            {/* Column 2: User type */}
+            <div className="flex items-center shrink-0">
+              <Select
+                value={userTypeFilter}
+                onValueChange={(v: "all" | "creators" | "brands" | "admins") =>
+                  setUserTypeFilter(v)
+                }
+              >
+                <SelectTrigger
+                  className={`min-w-[140px] h-9 text-sm ${
+                    isDark ? "border-white/20 bg-white/5 text-white" : ""
+                  }`}
+                >
+                  <SelectValue placeholder="User type" />
+                </SelectTrigger>
+                <SelectContent
+                  className={isDark ? "border-white/20 bg-[#170337]" : ""}
+                >
+                  <SelectItem value="all">All Users</SelectItem>
+                  <SelectItem value="creators">Creators</SelectItem>
+                  <SelectItem value="brands">Advertisers</SelectItem>
+                  <SelectItem value="admins">Admins</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Column 3: Daily signups vs Cumulative growth */}
+            <div className="flex items-center shrink-0">
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                {(
+                  [
+                    {
+                      value: "daily" as const,
+                      label: "Daily signup growth",
+                    },
+                    {
+                      value: "cumulative" as const,
+                      label: "Users growth",
+                    },
+                  ] as const
+                ).map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setGrowthMode(value)}
+                    className={`px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                      growthMode === value
+                        ? isDark
+                          ? "bg-[#4A00BE] text-white"
+                          : "bg-primary text-primary-foreground"
+                        : isDark
+                          ? "text-gray-300 hover:bg-white/10"
+                          : "text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4 w-full min-w-0 overflow-visible ${
+            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+          }`}
+        >
+          <ChartContainer
+            config={{
+              all: {
+                label: "All Users",
+                color: isDark ? "#A78BFA" : "#7C3AED",
+              },
+              creators: {
+                label: "Creators",
+                color: isDark ? "#34D399" : "#059669",
+              },
+              brands: {
+                label: "Advertisers",
+                color: isDark ? "#FBBF24" : "#D97706",
+              },
+              admins: {
+                label: "Admins",
+                color: isDark ? "#F87171" : "#DC2626",
+              },
+            }}
+            className="h-[320px] w-full min-w-0"
+          >
+            <LineChart
+              data={chartData}
+              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 3"
+                className={isDark ? "stroke-white/10" : "stroke-border"}
+              />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 11, fill: isDark ? "#9CA3AF" : "#6B7280" }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: isDark ? "#9CA3AF" : "#6B7280" }}
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
+              />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Line
+                type="monotone"
+                dataKey="all"
+                stroke="var(--color-all)"
+                strokeWidth={2}
+                dot={userTypeFilter === "all" ? { r: 2 } : false}
+                strokeOpacity={userTypeFilter === "all" ? 1 : 0}
+                hide={userTypeFilter !== "all"}
+                name="All Users"
+              />
+              <Line
+                type="monotone"
+                dataKey="creators"
+                stroke="var(--color-creators)"
+                strokeWidth={2}
+                dot={
+                  userTypeFilter === "all" || userTypeFilter === "creators"
+                    ? { r: 2 }
+                    : false
+                }
+                strokeOpacity={
+                  userTypeFilter === "all" || userTypeFilter === "creators"
+                    ? 1
+                    : 0
+                }
+                hide={userTypeFilter !== "all" && userTypeFilter !== "creators"}
+                name="Creators"
+              />
+              <Line
+                type="monotone"
+                dataKey="brands"
+                stroke="var(--color-brands)"
+                strokeWidth={2}
+                dot={
+                  userTypeFilter === "all" || userTypeFilter === "brands"
+                    ? { r: 2 }
+                    : false
+                }
+                strokeOpacity={
+                  userTypeFilter === "all" || userTypeFilter === "brands"
+                    ? 1
+                    : 0
+                }
+                hide={userTypeFilter !== "all" && userTypeFilter !== "brands"}
+                name="Advertisers"
+              />
+              <Line
+                type="monotone"
+                dataKey="admins"
+                stroke="var(--color-admins)"
+                strokeWidth={2}
+                dot={
+                  userTypeFilter === "all" || userTypeFilter === "admins"
+                    ? { r: 2 }
+                    : false
+                }
+                strokeOpacity={
+                  userTypeFilter === "all" || userTypeFilter === "admins"
+                    ? 1
+                    : 0
+                }
+                hide={userTypeFilter !== "all" && userTypeFilter !== "admins"}
+                name="Admins"
+              />
+            </LineChart>
+          </ChartContainer>
+          <div className="flex flex-wrap gap-6 mt-4 justify-center text-sm">
+            {userTypeFilter === "all" && (
+              <span
+                className={`flex items-center gap-1.5 ${
+                  isDark ? "text-gray-300" : "text-muted-foreground"
+                }`}
+              >
+                <span
+                  className="w-3 h-3 rounded-full shrink-0"
+                  style={{
+                    backgroundColor: isDark ? "#A78BFA" : "#7C3AED",
+                  }}
+                />
+                All Users
+              </span>
+            )}
+            {(userTypeFilter === "all" || userTypeFilter === "creators") && (
+              <span
+                className={`flex items-center gap-1.5 ${
+                  isDark ? "text-gray-300" : "text-muted-foreground"
+                }`}
+              >
+                <span
+                  className="w-3 h-3 rounded-full shrink-0"
+                  style={{ backgroundColor: isDark ? "#34D399" : "#059669" }}
+                />
+                Creators
+              </span>
+            )}
+            {(userTypeFilter === "all" || userTypeFilter === "brands") && (
+              <span
+                className={`flex items-center gap-1.5 ${
+                  isDark ? "text-gray-300" : "text-muted-foreground"
+                }`}
+              >
+                <span
+                  className="w-3 h-3 rounded-full shrink-0"
+                  style={{ backgroundColor: isDark ? "#FBBF24" : "#D97706" }}
+                />
+                Advertisers
+              </span>
+            )}
+            {(userTypeFilter === "all" || userTypeFilter === "admins") && (
+              <span
+                className={`flex items-center gap-1.5 ${
+                  isDark ? "text-gray-300" : "text-muted-foreground"
+                }`}
+              >
+                <span
+                  className="w-3 h-3 rounded-full shrink-0"
+                  style={{ backgroundColor: isDark ? "#F87171" : "#DC2626" }}
+                />
+                Admins
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -882,6 +1701,7 @@ export default function AdminDashboardClient({
           </CardContent>
         </div>
       </div>
+
 
       {/* Submissions Metrics */}
       <div className="mt-8 mb-4">

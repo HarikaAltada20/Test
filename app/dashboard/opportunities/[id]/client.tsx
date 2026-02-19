@@ -542,9 +542,10 @@ export function ContestClientPage({
       }
     });
 
+    // Rank by highest total_views first (then best_rank as tiebreak) to match opportunities creator-wise view
     return Array.from(grouped.values()).sort((a, b) => {
-      if (a.best_rank !== b.best_rank) return a.best_rank - b.best_rank;
-      return b.total_views - a.total_views;
+      if (b.total_views !== a.total_views) return b.total_views - a.total_views;
+      return a.best_rank - b.best_rank;
     });
   }, [
     leaderboard,
