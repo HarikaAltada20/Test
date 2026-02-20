@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { getGeoDataForIp, buildGeoDataColumn } from "@/lib/geo-ip";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -164,7 +165,7 @@ export async function GET(request: NextRequest) {
         };
       }
       const uaInfo = parseUserAgent(userAgent);
-      // Fetch current login_history
+      const geo_data = await getGeoDataForIp(ip);
       let history = userProfile?.login_history || [];
       history.unshift({
         ip_address: ip,
@@ -172,9 +173,14 @@ export async function GET(request: NextRequest) {
         ...uaInfo,
       });
       if (history.length > 10) history = history.slice(0, 10);
+      const geoDataColumn = buildGeoDataColumn(ip, geo_data);
       await supabase
         .from("users")
-        .update({ login_history: history })
+        .update({
+          login_history: history,
+          ...(geoDataColumn && { geo_data: geoDataColumn }),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", user.id);
 
       // Determine where to redirect based on profile completeness and user type
