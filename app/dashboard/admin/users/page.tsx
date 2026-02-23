@@ -3821,7 +3821,9 @@ export default function AdminUsersPage() {
 
                                       // Construct YouTube channel URL (@handle or /channel/ID)
                                       let youtubeUrl = "";
-                                      const handle = account?.channel_custom_url?.replace(/^@/, "").trim();
+                                      const handle = account?.channel_custom_url
+                                        ?.replace(/^@/, "")
+                                        .trim();
                                       if (handle) {
                                         youtubeUrl = `https://www.youtube.com/@${handle}`;
                                       } else if (account?.channel_id) {

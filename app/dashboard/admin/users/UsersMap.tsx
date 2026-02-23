@@ -26,9 +26,11 @@ type UserMarker = {
   twitter?: SocialLink | null;
 };
 
+
+
 function getLocationKey(m: UserMarker): string {
-  const parts = [m.city, m.state, m.country].filter(Boolean) as string[];
-  return parts.length ? parts.join(", ") : "Unknown location";
+  const parts=[m.city,m.state,m.country].filter(Boolean) as string[];
+  return parts.length ? parts.join(", ") : "unknown location";
 }
 
 type LocationCounts = {
@@ -36,11 +38,12 @@ type LocationCounts = {
   lon: number;
   label: string;
   users: number;
+  admins: number;
   brands: number;
   creators: number;
 };
 
-/** Aggregate markers by city/state/country with counts by type (users, brands, creators) */
+/** Aggregate markers by city/state/country with counts by type (users, admins, brands, creators) */
 function aggregateByLocation(markers: UserMarker[]): LocationCounts[] {
   const byKey = new Map<
     string,
@@ -49,21 +52,24 @@ function aggregateByLocation(markers: UserMarker[]): LocationCounts[] {
       lonSum: number;
       count: number;
       label: string;
+      admins: number;
       brands: number;
       creators: number;
     }
   >();
   for (const m of markers) {
-    const parts = [m.city, m.state, m.country].filter(Boolean) as string[];
-    const label = parts.length ? parts.join(", ") : "Unknown location";
-    const key = label;
+    const key = getLocationKey(m);
+    const label = key;
     const existing = byKey.get(key);
-    const isBrand = (m.user_type || "").toLowerCase() === "advertiser";
-    const isCreator = (m.user_type || "").toLowerCase() === "creator";
+    const ut = (m.user_type || "").toLowerCase();
+    const isAdmin = ut === "admin";
+    const isBrand = ut === "advertiser";
+    const isCreator = ut === "creator";
     if (existing) {
       existing.latSum += m.lat;
       existing.lonSum += m.lon;
       existing.count += 1;
+      if (isAdmin) existing.admins += 1;
       if (isBrand) existing.brands += 1;
       if (isCreator) existing.creators += 1;
     } else {
@@ -72,6 +78,7 @@ function aggregateByLocation(markers: UserMarker[]): LocationCounts[] {
         lonSum: m.lon,
         count: 1,
         label,
+        admins: isAdmin ? 1 : 0,
         brands: isBrand ? 1 : 0,
         creators: isCreator ? 1 : 0,
       });
@@ -82,6 +89,7 @@ function aggregateByLocation(markers: UserMarker[]): LocationCounts[] {
     lon: v.lonSum / v.count,
     label: v.label,
     users: v.count,
+    admins: v.admins,
     brands: v.brands,
     creators: v.creators,
   }));
@@ -168,6 +176,7 @@ export function UsersMap({
         const parts: string[] = [];
         if (tab === "all") {
           if (loc.users > 0) parts.push(`Users: ${loc.users}`);
+          if (loc.admins > 0) parts.push(`Admins: ${loc.admins}`);
           if (loc.brands > 0) parts.push(`Advertisers: ${loc.brands}`);
           if (loc.creators > 0) parts.push(`Creators: ${loc.creators}`);
         } else if (tab === "advertisers") {
@@ -364,9 +373,11 @@ export function UsersMap({
                     <div className="flex shrink-0 flex-col items-end">
                       <span
                         className={
-                          (u.user_type || "").toLowerCase() === "advertiser"
-                            ? "rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium capitalize text-violet-700"
-                            : "rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium capitalize text-emerald-700"
+                          (u.user_type || "").toLowerCase() === "admin"
+                            ? "rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium capitalize text-amber-700"
+                            : (u.user_type || "").toLowerCase() === "advertiser"
+                              ? "rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium capitalize text-violet-700"
+                              : "rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium capitalize text-emerald-700"
                         }
                       >
                         {u.user_type || "—"}

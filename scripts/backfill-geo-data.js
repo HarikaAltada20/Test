@@ -1,11 +1,8 @@
 /**
  * Backfill geo_data column only. Fetches country, city, state, lat, lon from IP via API.
  * Does not update registration_info — only geo_data column and updated_at.
- * from each user's IP via Geo-IP API. SQL cannot do this — run this script for ~1022 users.
  *
  * Usage: node scripts/backfill-geo-data.js
- * Ensure .env or .env.local has NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
- * Takes ~25 min for 1022 users (rate limit 45 req/min).
  */
 
 require("dotenv").config({ path: ".env.local" });

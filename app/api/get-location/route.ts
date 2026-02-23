@@ -60,10 +60,6 @@ export async function GET(request: NextRequest) {
             existingCountry,
             "ip:",
             existingIp,
-            "has geo_data:",
-            !!existingGeo,
-            "userId:",
-            authUser.id,
           );
 
           // Already have valid country (from geo_data or legacy field) — no API call
