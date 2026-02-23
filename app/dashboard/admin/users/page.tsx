@@ -118,7 +118,6 @@ type User = {
   affiliate_earnings?: number | null;
   other_earnings?: number | null;
   // Registration metadata captured during signup (JSONB in DB)
-  // We specifically use registration_info.country for the Country column
   registration_info?: Record<string, any> | null;
   // Geo data (lat/lon) - stored as flat { lat, lon, country, ... } or nested { geo_data: { lat, lon, ... } }
   geo_data?:
@@ -149,6 +148,18 @@ function getGeoCoords(user: User): { lat: number; lon: number } | null {
   if (typeof lat !== "number" || typeof lon !== "number") return null;
   if (lat === 0 && lon === 0) return null;
   return { lat, lon };
+}
+
+function getGeoField(
+  user: User,
+  field: "country" | "state" | "city",
+): string | null {
+  const g = user.geo_data as any;
+  if (!g) return null;
+  const value = g[field] ?? g.geo_data?.[field];
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
 }
 
 function SubcategoriesCell({
@@ -301,8 +312,9 @@ const allColumns = {
     { id: "total_lifetime_coins", label: "Total Lifetime Coins" },
     { id: "affiliate_earnings", label: "Affiliate Earnings" },
     { id: "other_earnings", label: "Other Earnings" },
-    // Country from users.registration_info.country
     { id: "country", label: "Country" },
+    { id: "state", label: "State" },
+    { id: "city", label: "City" },
     { id: "created_at", label: "Created At" },
     { id: "updated_at", label: "Updated At" },
   ],
@@ -536,6 +548,9 @@ export default function AdminUsersPage() {
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [stickyHeader, setStickyHeader] = useState(true);
   const [viewMode, setViewMode] = useState<"table" | "map">("table");
+  const [mapGroupBy, setMapGroupBy] = useState<
+    "region" | "state" | "country" | "city"
+  >("country");
 
   // Timezone preference state with localStorage persistence
   const [timezone, setTimezone] = useState<"UTC" | "local">(() => {
@@ -650,32 +665,7 @@ export default function AdminUsersPage() {
       case "user_type":
         return row.user_type;
       case "country": {
-        if (activeTab === "creators") {
-          if (row.creator_profiles) {
-            const profiles = Array.isArray(row.creator_profiles)
-              ? row.creator_profiles
-              : [row.creator_profiles];
-            return profiles[0]?.country || null;
-          }
-          return null;
-        }
-
-        // Default behaviour for "all" / "advertisers" tabs:
-        // Prefer country from registration_info (set at registration/IP enrichment)
-        const regCountry =
-          row.registration_info &&
-          (row.registration_info as Record<string, any>)?.country;
-        if (typeof regCountry === "string" && regCountry.trim()) {
-          return regCountry;
-        }
-        // Fallback to creator profile country when available
-        if (row.creator_profiles) {
-          const profiles = Array.isArray(row.creator_profiles)
-            ? row.creator_profiles
-            : [row.creator_profiles];
-          return profiles[0]?.country || null;
-        }
-        return null;
+        return getGeoField(row, "country");
       }
       case "referral_code":
         return row.referral_code;
@@ -827,21 +817,9 @@ export default function AdminUsersPage() {
         }
         return null;
       case "state":
-        if (row.creator_profiles) {
-          const profiles = Array.isArray(row.creator_profiles)
-            ? row.creator_profiles
-            : [row.creator_profiles];
-          return profiles[0]?.state;
-        }
-        return null;
+        return getGeoField(row, "state");
       case "city":
-        if (row.creator_profiles) {
-          const profiles = Array.isArray(row.creator_profiles)
-            ? row.creator_profiles
-            : [row.creator_profiles];
-          return profiles[0]?.city;
-        }
-        return null;
+        return getGeoField(row, "city");
       case "youtube_account":
         if (row.creator_profiles) {
           const profiles = Array.isArray(row.creator_profiles)
@@ -1059,25 +1037,12 @@ export default function AdminUsersPage() {
               const getCountryMeta = (
                 user: User,
               ): { hasCountry: boolean; value: string } => {
-                const regCountry =
-                  user.registration_info &&
-                  (user.registration_info as Record<string, any>)?.country;
-                if (typeof regCountry === "string" && regCountry.trim()) {
+                const geoCountry = getGeoField(user, "country");
+                if (geoCountry) {
                   return {
                     hasCountry: true,
-                    value: regCountry.toLowerCase(),
+                    value: geoCountry.toLowerCase(),
                   };
-                }
-                // Fallback to creator profile country
-                const creatorProfiles = user.creator_profiles
-                  ? Array.isArray(user.creator_profiles)
-                    ? user.creator_profiles
-                    : [user.creator_profiles]
-                  : [];
-                const profileCountry =
-                  creatorProfiles[0]?.country?.toLowerCase() || "";
-                if (profileCountry.trim()) {
-                  return { hasCountry: true, value: profileCountry };
                 }
                 return { hasCountry: false, value: "" };
               };
@@ -1094,6 +1059,35 @@ export default function AdminUsersPage() {
               // If both have (or both don't have) a country, sort alphabetically
               if (!aMeta.hasCountry && !bMeta.hasCountry) {
                 return 0; // both missing -> consider equal
+              }
+
+              const cmp = aMeta.value.localeCompare(bMeta.value);
+              if (cmp === 0) return 0;
+              return sortOrder === "asc" ? cmp : -cmp;
+            }
+            case "state":
+            case "city": {
+              const field = sortColumn as "state" | "city";
+              const getGeoMeta = (
+                user: User,
+              ): { hasValue: boolean; value: string } => {
+                const geoValue = getGeoField(user, field);
+                if (geoValue) {
+                  return { hasValue: true, value: geoValue.toLowerCase() };
+                }
+                return { hasValue: false, value: "" };
+              };
+
+              const aMeta = getGeoMeta(a);
+              const bMeta = getGeoMeta(b);
+
+              // Keep users with a location value before empty values for both asc/desc.
+              if (aMeta.hasValue !== bMeta.hasValue) {
+                return aMeta.hasValue ? -1 : 1;
+              }
+
+              if (!aMeta.hasValue && !bMeta.hasValue) {
+                return 0;
               }
 
               const cmp = aMeta.value.localeCompare(bMeta.value);
@@ -1688,16 +1682,16 @@ export default function AdminUsersPage() {
               bValue = bProfile?.gender?.toLowerCase() || "";
               break;
             case "country":
-              aValue = aProfile?.country?.toLowerCase() || "";
-              bValue = bProfile?.country?.toLowerCase() || "";
+              aValue = getGeoField(a, "country")?.toLowerCase() || "";
+              bValue = getGeoField(b, "country")?.toLowerCase() || "";
               break;
             case "state":
-              aValue = aProfile?.state?.toLowerCase() || "";
-              bValue = bProfile?.state?.toLowerCase() || "";
+              aValue = getGeoField(a, "state")?.toLowerCase() || "";
+              bValue = getGeoField(b, "state")?.toLowerCase() || "";
               break;
             case "city":
-              aValue = aProfile?.city?.toLowerCase() || "";
-              bValue = bProfile?.city?.toLowerCase() || "";
+              aValue = getGeoField(a, "city")?.toLowerCase() || "";
+              bValue = getGeoField(b, "city")?.toLowerCase() || "";
               break;
             case "address":
               aValue = aProfile?.address?.toLowerCase() || "";
@@ -3528,6 +3522,12 @@ export default function AdminUsersPage() {
                               label="Country"
                             />
                           )}
+                          {isColumnVisible("state") && (
+                            <SortableHeader columnId="state" label="State" />
+                          )}
+                          {isColumnVisible("city") && (
+                            <SortableHeader columnId="city" label="City" />
+                          )}
                           {isColumnVisible("created_at") && (
                             <SortableHeader
                               columnId="created_at"
@@ -4080,17 +4080,17 @@ export default function AdminUsersPage() {
                               )}
                               {isColumnVisible("country") && (
                                 <TableCell className="whitespace-nowrap border-r">
-                                  {creatorProfile?.country || "-"}
+                                  {getGeoField(r, "country") || "-"}
                                 </TableCell>
                               )}
                               {isColumnVisible("state") && (
                                 <TableCell className="whitespace-nowrap border-r">
-                                  {creatorProfile?.state || "-"}
+                                  {getGeoField(r, "state") || "-"}
                                 </TableCell>
                               )}
                               {isColumnVisible("city") && (
                                 <TableCell className="whitespace-nowrap border-r">
-                                  {creatorProfile?.city || "-"}
+                                  {getGeoField(r, "city") || "-"}
                                 </TableCell>
                               )}
                               {isColumnVisible("address") && (
@@ -4329,28 +4329,17 @@ export default function AdminUsersPage() {
                               )}
                               {isColumnVisible("country") && (
                                 <TableCell className="whitespace-nowrap border-r">
-                                  {(() => {
-                                    const regCountry =
-                                      r.registration_info &&
-                                      (
-                                        r.registration_info as Record<
-                                          string,
-                                          any
-                                        >
-                                      )?.country;
-                                    if (
-                                      typeof regCountry === "string" &&
-                                      regCountry.trim()
-                                    ) {
-                                      return regCountry;
-                                    }
-                                    const creatorProfile = Array.isArray(
-                                      r.creator_profiles,
-                                    )
-                                      ? r.creator_profiles[0]
-                                      : r.creator_profiles || null;
-                                    return creatorProfile?.country || "-";
-                                  })()}
+                                  {getGeoField(r, "country") || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("state") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {getGeoField(r, "state") || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("city") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {getGeoField(r, "city") || "-"}
                                 </TableCell>
                               )}
                               {isColumnVisible("created_at") && (
@@ -4399,11 +4388,79 @@ export default function AdminUsersPage() {
           )}
         >
           <CardContent className="px-6">
+            {/* Map view tabs: All Regions | All States | All Countries | All Cities */}
+            <div className="mb-3 flex flex-wrap gap-1 rounded-lg p-1">
+              <Button
+                variant={mapGroupBy === "region" ? "secondary" : "ghost"}
+                size="sm"
+                className={cn(
+                  "flex-1 min-w-0 rounded-md",
+                  mapGroupBy !== "region" &&
+                    isDark &&
+                    "text-slate-300 hover:bg-white/10 hover:text-white",
+                  mapGroupBy !== "region" &&
+                    !isDark &&
+                    "text-gray-600 hover:bg-gray-100",
+                )}
+                onClick={() => setMapGroupBy("region")}
+              >
+                All Regions
+              </Button>
+              <Button
+                variant={mapGroupBy === "state" ? "secondary" : "ghost"}
+                size="sm"
+                className={cn(
+                  "flex-1 min-w-0 rounded-md",
+                  mapGroupBy !== "state" &&
+                    isDark &&
+                    "text-slate-300 hover:bg-white/10 hover:text-white",
+                  mapGroupBy !== "state" &&
+                    !isDark &&
+                    "text-gray-600 hover:bg-gray-100",
+                )}
+                onClick={() => setMapGroupBy("state")}
+              >
+                All States
+              </Button>
+              <Button
+                variant={mapGroupBy === "country" ? "secondary" : "ghost"}
+                size="sm"
+                className={cn(
+                  "flex-1 min-w-0 rounded-md",
+                  mapGroupBy !== "country" &&
+                    isDark &&
+                    "text-slate-300 hover:bg-white/10 hover:text-white",
+                  mapGroupBy !== "country" &&
+                    !isDark &&
+                    "text-gray-600 hover:bg-gray-100",
+                )}
+                onClick={() => setMapGroupBy("country")}
+              >
+                All Countries
+              </Button>
+              <Button
+                variant={mapGroupBy === "city" ? "secondary" : "ghost"}
+                size="sm"
+                className={cn(
+                  "flex-1 min-w-0 rounded-md",
+                  mapGroupBy !== "city" &&
+                    isDark &&
+                    "text-slate-300 hover:bg-white/10 hover:text-white",
+                  mapGroupBy !== "city" &&
+                    !isDark &&
+                    "text-gray-600 hover:bg-gray-100",
+                )}
+                onClick={() => setMapGroupBy("city")}
+              >
+                All Cities
+              </Button>
+            </div>
             <UsersMap
               markers={mapMarkers}
               activeTab={activeTab}
               totalInTab={tabFiltered.length}
               isDark={isDark}
+              groupBy={mapGroupBy}
             />
           </CardContent>
         </Card>
