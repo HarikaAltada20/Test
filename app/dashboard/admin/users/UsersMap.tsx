@@ -16,6 +16,35 @@ import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
 
 type SocialLink = { label: string; url: string | null };
 
+const STATE_GEOJSON_URL =
+  "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_1_states_provinces.geojson";
+const WORLD_GEOJSON_URL =
+  "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson";
+const GEOJSON_CACHE = new Map<string, any>();
+const GEOJSON_INFLIGHT = new Map<string, Promise<any>>();
+
+async function loadGeoJsonCached(url: string): Promise<any> {
+  if (GEOJSON_CACHE.has(url)) return GEOJSON_CACHE.get(url);
+  const inflight = GEOJSON_INFLIGHT.get(url);
+  if (inflight) return inflight;
+  const p = fetch(url)
+    .then((res) => {
+      if (!res.ok) throw new Error(`Failed to load geojson: ${url}`);
+      return res.json();
+    })
+    .then((json) => {
+      GEOJSON_CACHE.set(url, json);
+      GEOJSON_INFLIGHT.delete(url);
+      return json;
+    })
+    .catch((err) => {
+      GEOJSON_INFLIGHT.delete(url);
+      throw err;
+    });
+  GEOJSON_INFLIGHT.set(url, p);
+  return p;
+}
+
 type UserMarker = {
   lat: number;
   lon: number;
@@ -554,7 +583,8 @@ export function UsersMap({
     useState<string>("all");
   const [demographicStateFilter, setDemographicStateFilter] =
     useState<string>("all");
-  const [demographicCityFilter, setDemographicCityFilter] = useState<string>("all");
+  const [demographicCityFilter, setDemographicCityFilter] =
+    useState<string>("all");
   const setDetailLocationRef = useRef(setDetailLocation);
   setDetailLocationRef.current = setDetailLocation;
 
@@ -562,6 +592,12 @@ export function UsersMap({
   useEffect(() => {
     if (groupBy === "city" && mapMode === "choropleth") setMapMode("pins");
   }, [groupBy, mapMode]);
+
+  // Warm heavy geojson files so choropleth opens faster.
+  useEffect(() => {
+    void loadGeoJsonCached(STATE_GEOJSON_URL);
+    void loadGeoJsonCached(WORLD_GEOJSON_URL);
+  }, []);
 
   useEffect(() => {
     if (mapMode === "demographic") setDetailLocation(null);
@@ -613,7 +649,9 @@ export function UsersMap({
         : (m.country || "").trim() === demographicCountryFilter,
     );
     return Array.from(
-      new Set(base.map((m) => (m.state || "").trim()).filter((v) => v.length > 0)),
+      new Set(
+        base.map((m) => (m.state || "").trim()).filter((v) => v.length > 0),
+      ),
     ).sort((a, b) => a.localeCompare(b));
   }, [markers, demographicCountryFilter]);
 
@@ -632,7 +670,9 @@ export function UsersMap({
       return true;
     });
     return Array.from(
-      new Set(base.map((m) => (m.city || "").trim()).filter((v) => v.length > 0)),
+      new Set(
+        base.map((m) => (m.city || "").trim()).filter((v) => v.length > 0),
+      ),
     ).sort((a, b) => a.localeCompare(b));
   }, [markers, demographicCountryFilter, demographicStateFilter]);
 
@@ -725,7 +765,8 @@ export function UsersMap({
   }, [filteredDemographicMarkers, groupBy]);
 
   const sortedDemographicRows = useMemo(() => {
-    if (!demographicSort.column || !demographicSort.order) return demographicRows;
+    if (!demographicSort.column || !demographicSort.order)
+      return demographicRows;
     const rows = [...demographicRows];
     const { column, order } = demographicSort;
     rows.sort((a, b) =>
@@ -799,21 +840,29 @@ export function UsersMap({
       L.control.zoom({ position: "bottomright" }).addTo(leafletMap);
 
       if (mode === "choropleth" && groupByVal !== "city") {
-        // AnyChart-style linear blue scale: light gray -> light blue -> blue -> dark blue
+        // Finer choropleth ranges like reference legend (0, 1-10, 10-30, ... 1000+)
         const CHOROPLETH_COLORS = [
-          "#f2f2f2", // 0 users
-          "#94c6f5", // 1–100
-          "#42a5f5", // 101–300
-          "#1976d2", // 301–500
-          "#1565c0", // 501–1000
-          "#233580", // 1000+
+          "#f2f2f2", // 0
+          "#bfe6fb", // 1-10
+          "#9bd9f8", // 10-30
+          "#74c9f2", // 30-50
+          "#4ab4ea", // 50-100
+          "#2ea0dd", // 100-200
+          "#1e89cf", // 200-300
+          "#166fb5", // 300-500
+          "#0f5a98", // 500-1000
+          "#0b1220", // 1000+
         ];
         const CHOROPLETH_BUCKETS = [
           { min: 0, max: 0, label: "0" },
-          { min: 1, max: 100, label: "1 - 100" },
-          { min: 101, max: 300, label: "101 - 300" },
-          { min: 301, max: 500, label: "301 - 500" },
-          { min: 501, max: 1000, label: "501 - 1000" },
+          { min: 1, max: 10, label: "1 - 10" },
+          { min: 11, max: 30, label: "10 - 30" },
+          { min: 31, max: 50, label: "30 - 50" },
+          { min: 51, max: 100, label: "50 - 100" },
+          { min: 101, max: 200, label: "100 - 200" },
+          { min: 201, max: 300, label: "200 - 300" },
+          { min: 301, max: 500, label: "300 - 500" },
+          { min: 501, max: 1000, label: "500 - 1000" },
           { min: 1001, max: Infinity, label: "1000+" },
         ];
         const getBucketIndex = (total: number) => {
@@ -872,11 +921,8 @@ export function UsersMap({
 
         // State-level choropleth (admin 1 states/provinces)
         if (groupByVal === "state") {
-          const stateGeoUrl =
-            "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_1_states_provinces.geojson";
           try {
-            const res = await fetch(stateGeoUrl);
-            const geojson = await res.json();
+            const geojson = await loadGeoJsonCached(STATE_GEOJSON_URL);
             const stateCountsNorm = new Map<string, Counts>();
             for (const [k, v] of stateCounts) {
               stateCountsNorm.set(normalizeKey(k), v);
@@ -979,11 +1025,8 @@ export function UsersMap({
 
         // Country-level choropleth (for groupBy country; city uses pins only)
         if (groupByVal === "country") {
-          const geoJsonUrl =
-            "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson";
           try {
-            const res = await fetch(geoJsonUrl);
-            const geojson = await res.json();
+            const geojson = await loadGeoJsonCached(WORLD_GEOJSON_URL);
             const getCount = (geoName: string) => {
               if (!geoName) return null;
               const n = String(geoName).trim();
@@ -1074,11 +1117,8 @@ export function UsersMap({
 
         // Region-level: color countries by their region's total count
         if (groupByVal === "region") {
-          const geoJsonUrl =
-            "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson";
           try {
-            const res = await fetch(geoJsonUrl);
-            const geojson = await res.json();
+            const geojson = await loadGeoJsonCached(WORLD_GEOJSON_URL);
             const getRegionCountByCountry = (
               geoName: string,
               continent?: string | null,
@@ -1527,7 +1567,7 @@ export function UsersMap({
                     setDemographicCityFilter("all");
                   }}
                   className={cn(
-                    "h-8 rounded-md border px-2 text-xs",
+                    "h-10 rounded-md border px-2 text-sm",
                     isDark
                       ? "border-white/10 bg-slate-800 text-slate-100"
                       : "border-gray-300 bg-white text-gray-900",
@@ -1550,7 +1590,7 @@ export function UsersMap({
                     }}
                     disabled={!canSelectStateFilter}
                     className={cn(
-                      "h-8 rounded-md border px-2 text-xs",
+                      "h-10 rounded-md border px-2 text-sm",
                       !canSelectStateFilter && "cursor-not-allowed opacity-60",
                       isDark
                         ? "border-white/10 bg-slate-800 text-slate-100"
@@ -1576,7 +1616,7 @@ export function UsersMap({
                     onChange={(e) => setDemographicCityFilter(e.target.value)}
                     disabled={!canSelectCityFilter}
                     className={cn(
-                      "h-8 rounded-md border px-2 text-xs",
+                      "h-10 rounded-md border px-2 text-sm",
                       !canSelectCityFilter && "cursor-not-allowed opacity-60",
                       isDark
                         ? "border-white/10 bg-slate-800 text-slate-100"
@@ -1584,7 +1624,9 @@ export function UsersMap({
                     )}
                   >
                     <option value="all">
-                      {canSelectCityFilter ? "All Cities" : "Select State First"}
+                      {canSelectCityFilter
+                        ? "All Cities"
+                        : "Select State First"}
                     </option>
                     {demographicCityOptions.map((city) => (
                       <option key={city} value={city}>
@@ -1612,21 +1654,31 @@ export function UsersMap({
                       <span>Total</span>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                          >
                             <ChevronDown className="h-3.5 w-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             onClick={() =>
-                              setDemographicSort({ column: "total", order: "asc" })
+                              setDemographicSort({
+                                column: "total",
+                                order: "asc",
+                              })
                             }
                           >
                             Sort Ascending
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() =>
-                              setDemographicSort({ column: "total", order: "desc" })
+                              setDemographicSort({
+                                column: "total",
+                                order: "desc",
+                              })
                             }
                           >
                             Sort Descending
@@ -1647,21 +1699,31 @@ export function UsersMap({
                       <span>Advertisers</span>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                          >
                             <ChevronDown className="h-3.5 w-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             onClick={() =>
-                              setDemographicSort({ column: "brands", order: "asc" })
+                              setDemographicSort({
+                                column: "brands",
+                                order: "asc",
+                              })
                             }
                           >
                             Sort Ascending
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() =>
-                              setDemographicSort({ column: "brands", order: "desc" })
+                              setDemographicSort({
+                                column: "brands",
+                                order: "desc",
+                              })
                             }
                           >
                             Sort Descending
@@ -1682,14 +1744,21 @@ export function UsersMap({
                       <span>Creators</span>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                          >
                             <ChevronDown className="h-3.5 w-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             onClick={() =>
-                              setDemographicSort({ column: "creators", order: "asc" })
+                              setDemographicSort({
+                                column: "creators",
+                                order: "asc",
+                              })
                             }
                           >
                             Sort Ascending
@@ -1720,21 +1789,31 @@ export function UsersMap({
                       <span>Admins</span>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                          >
                             <ChevronDown className="h-3.5 w-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             onClick={() =>
-                              setDemographicSort({ column: "admins", order: "asc" })
+                              setDemographicSort({
+                                column: "admins",
+                                order: "asc",
+                              })
                             }
                           >
                             Sort Ascending
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() =>
-                              setDemographicSort({ column: "admins", order: "desc" })
+                              setDemographicSort({
+                                column: "admins",
+                                order: "desc",
+                              })
                             }
                           >
                             Sort Descending
