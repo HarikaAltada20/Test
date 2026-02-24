@@ -98,16 +98,16 @@ export function DashboardSidebar({
       description: "How it works",
     },
     {
-      name: "Dashboard",
-      href: "/dashboard",
-      icon: LayoutDashboard,
-      description: "Overview & analytics",
-    },
-    {
       name: "Contests",
       href: "/dashboard/contests",
       icon: Trophy,
       description: "Manage your contests",
+    },
+    {
+      name: "Dashboard",
+      href: "/dashboard",
+      icon: LayoutDashboard,
+      description: "Overview & analytics",
     },
     {
       name: "Analytics",
@@ -203,6 +203,12 @@ export function DashboardSidebar({
       description: "How it works",
     },
     {
+      name: "Opportunities",
+      href: "/dashboard/opportunities",
+      icon: Trophy,
+      description: "Available contests",
+    },
+    {
       name: "Dashboard",
       href: "/dashboard",
       icon: LayoutDashboard,
@@ -214,12 +220,7 @@ export function DashboardSidebar({
       icon: Video,
       description: "Content submissions",
     },
-    {
-      name: "Opportunities",
-      href: "/dashboard/opportunities",
-      icon: Trophy,
-      description: "Available contests",
-    },
+   
     {
       name: "Leaderboard",
       href: "/dashboard/leaderboard",

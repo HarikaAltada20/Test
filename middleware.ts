@@ -15,7 +15,24 @@ export async function middleware(request: NextRequest) {
   // Auth route protection - redirect logged-in users away from auth pages
   if (pathname.startsWith('/auth/')) {
     if (user) {
-      const redirectUrl = new URL('/dashboard', request.url)
+      const { data: userData } = await supabase
+        .from('users')
+        .select('user_type, username')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      let redirectPath = '/choose-username'
+      if (userData?.username) {
+        if (userData.user_type === 'admin') {
+          redirectPath = '/dashboard/admin'
+        } else if (userData.user_type === 'advertiser') {
+          redirectPath = '/dashboard/contests'
+        } else {
+          redirectPath = '/dashboard/opportunities'
+        }
+      }
+
+      const redirectUrl = new URL(redirectPath, request.url)
       return NextResponse.redirect(redirectUrl)
     }
   }
@@ -34,10 +51,20 @@ export async function middleware(request: NextRequest) {
         if (userData?.user_type) {
           const userType = userData.user_type
           
-           // Auto-redirect admin users from /dashboard to /dashboard/admin
-           if (userType === "admin" && pathname === "/dashboard") {
-            const redirectUrl = new URL("/dashboard/admin", request.url);
-            return NextResponse.redirect(redirectUrl);
+          // Redirect /dashboard root to each role's primary workspace.
+          if (pathname === '/dashboard') {
+            if (userType === 'admin') {
+              const redirectUrl = new URL('/dashboard/admin', request.url)
+              return NextResponse.redirect(redirectUrl)
+            }
+            if (userType === 'advertiser') {
+              const redirectUrl = new URL('/dashboard/contests', request.url)
+              return NextResponse.redirect(redirectUrl)
+            }
+            if (userType === 'creator') {
+              const redirectUrl = new URL('/dashboard/opportunities', request.url)
+              return NextResponse.redirect(redirectUrl)
+            }
           }
           // Define route patterns for different user types
           const brandOnlyRoutes = [
