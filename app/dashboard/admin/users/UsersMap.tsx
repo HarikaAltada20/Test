@@ -617,6 +617,16 @@ export function UsersMap({
       : activeTab === "advertisers"
         ? "Advertisers"
         : "Creators";
+  const showAdvertisersColumn = activeTab !== "creators";
+  const showCreatorsColumn = activeTab !== "advertisers";
+  const showAdminsColumn = activeTab === "all";
+  const showTotalColumn = activeTab === "all";
+  const demographicTableColSpan =
+    1 +
+    (showTotalColumn ? 1 : 0) +
+    (showAdvertisersColumn ? 1 : 0) +
+    (showCreatorsColumn ? 1 : 0) +
+    (showAdminsColumn ? 1 : 0);
 
   const withLocationCount = markers.length;
   const detailUsers = detailLocation
@@ -1649,193 +1659,205 @@ export function UsersMap({
                   <th className="px-3 py-2 text-left font-semibold capitalize">
                     {groupBy === "city" ? "City" : groupBy}
                   </th>
-                  <th className="px-3 py-2 text-center font-semibold">
-                    <div className="inline-flex items-center gap-1">
-                      <span>Total</span>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                          >
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setDemographicSort({
-                                column: "total",
-                                order: "asc",
-                              })
-                            }
-                          >
-                            Sort Ascending
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setDemographicSort({
-                                column: "total",
-                                order: "desc",
-                              })
-                            }
-                          >
-                            Sort Descending
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setDemographicSort({ column: null, order: null })
-                            }
-                          >
-                            Clear Sort
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </th>
-                  <th className="px-3 py-2 text-center font-semibold">
-                    <div className="inline-flex items-center gap-1">
-                      <span>Advertisers</span>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                          >
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setDemographicSort({
-                                column: "brands",
-                                order: "asc",
-                              })
-                            }
-                          >
-                            Sort Ascending
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setDemographicSort({
-                                column: "brands",
-                                order: "desc",
-                              })
-                            }
-                          >
-                            Sort Descending
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setDemographicSort({ column: null, order: null })
-                            }
-                          >
-                            Clear Sort
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </th>
-                  <th className="px-3 py-2 text-center font-semibold">
-                    <div className="inline-flex items-center gap-1">
-                      <span>Creators</span>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                          >
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setDemographicSort({
-                                column: "creators",
-                                order: "asc",
-                              })
-                            }
-                          >
-                            Sort Ascending
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setDemographicSort({
-                                column: "creators",
-                                order: "desc",
-                              })
-                            }
-                          >
-                            Sort Descending
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setDemographicSort({ column: null, order: null })
-                            }
-                          >
-                            Clear Sort
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </th>
-                  <th className="px-3 py-2 text-center font-semibold">
-                    <div className="inline-flex items-center gap-1">
-                      <span>Admins</span>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                          >
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setDemographicSort({
-                                column: "admins",
-                                order: "asc",
-                              })
-                            }
-                          >
-                            Sort Ascending
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setDemographicSort({
-                                column: "admins",
-                                order: "desc",
-                              })
-                            }
-                          >
-                            Sort Descending
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setDemographicSort({ column: null, order: null })
-                            }
-                          >
-                            Clear Sort
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </th>
+                  {showTotalColumn ? (
+                    <th className="px-3 py-2 text-center font-semibold">
+                      <div className="inline-flex items-center gap-1">
+                        <span>Total</span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                            >
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setDemographicSort({
+                                  column: "total",
+                                  order: "asc",
+                                })
+                              }
+                            >
+                              Sort Ascending
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setDemographicSort({
+                                  column: "total",
+                                  order: "desc",
+                                })
+                              }
+                            >
+                              Sort Descending
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setDemographicSort({ column: null, order: null })
+                              }
+                            >
+                              Clear Sort
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </th>
+                  ) : null}
+                  {showAdvertisersColumn ? (
+                    <th className="px-3 py-2 text-center font-semibold">
+                      <div className="inline-flex items-center gap-1">
+                        <span>Advertisers</span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                            >
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setDemographicSort({
+                                  column: "brands",
+                                  order: "asc",
+                                })
+                              }
+                            >
+                              Sort Ascending
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setDemographicSort({
+                                  column: "brands",
+                                  order: "desc",
+                                })
+                              }
+                            >
+                              Sort Descending
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setDemographicSort({ column: null, order: null })
+                              }
+                            >
+                              Clear Sort
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </th>
+                  ) : null}
+                  {showCreatorsColumn ? (
+                    <>
+                      <th className="px-3 py-2 text-center font-semibold">
+                        <div className="inline-flex items-center gap-1">
+                          <span>Creators</span>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                              >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setDemographicSort({
+                                    column: "creators",
+                                    order: "asc",
+                                  })
+                                }
+                              >
+                                Sort Ascending
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setDemographicSort({
+                                    column: "creators",
+                                    order: "desc",
+                                  })
+                                }
+                              >
+                                Sort Descending
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setDemographicSort({ column: null, order: null })
+                                }
+                              >
+                                Clear Sort
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </th>
+                    </>
+                  ) : null}
+                  {showAdminsColumn ? (
+                    <>
+                      <th className="px-3 py-2 text-center font-semibold">
+                        <div className="inline-flex items-center gap-1">
+                          <span>Admins</span>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                              >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setDemographicSort({
+                                    column: "admins",
+                                    order: "asc",
+                                  })
+                                }
+                              >
+                                Sort Ascending
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setDemographicSort({
+                                    column: "admins",
+                                    order: "desc",
+                                  })
+                                }
+                              >
+                                Sort Descending
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setDemographicSort({ column: null, order: null })
+                                }
+                              >
+                                Clear Sort
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </th>
+                    </>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
                 {sortedDemographicRows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={demographicTableColSpan}
                       className={cn(
                         "px-3 py-8 text-center",
                         isDark ? "text-slate-400" : "text-gray-500",
@@ -1856,10 +1878,22 @@ export function UsersMap({
                       )}
                     >
                       <td className="px-3 py-2">{r.label}</td>
-                      <td className="px-3 py-2 text-center">{r.total}</td>
-                      <td className="px-3 py-2 text-center">{r.brands}</td>
-                      <td className="px-3 py-2 text-center">{r.creators}</td>
-                      <td className="px-3 py-2 text-center">{r.admins}</td>
+                      {showTotalColumn ? (
+                        <td className="px-3 py-2 text-center">{r.total}</td>
+                      ) : null}
+                      {showAdvertisersColumn ? (
+                        <td className="px-3 py-2 text-center">{r.brands}</td>
+                      ) : null}
+                      {showCreatorsColumn ? (
+                        <>
+                          <td className="px-3 py-2 text-center">{r.creators}</td>
+                        </>
+                      ) : null}
+                      {showAdminsColumn ? (
+                        <>
+                          <td className="px-3 py-2 text-center">{r.admins}</td>
+                        </>
+                      ) : null}
                     </tr>
                   ))
                 )}
