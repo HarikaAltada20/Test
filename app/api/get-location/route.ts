@@ -4,15 +4,14 @@ import countries from "i18n-iso-countries";
 import {
   getGeoDataForIp,
   getCountryFromRegistrationInfo,
-  buildGeoDataColumn,
-  type GeoData,
 } from "@/lib/geo-ip";
 
 countries.registerLocale(require("i18n-iso-countries/langs/en.json"));
 
 /**
- * Get country from IP; uses registration_info.geo_data when present (single source of truth).
- * Saves geo_data + country to users.registration_info when missing.
+ * Get country from IP for display/use in UI flows.
+ * IMPORTANT: This route is read-only and does NOT update users.geo_data.
+ * Geo persistence happens in login flow (/api/login-ip) and auth callback.
  */
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -21,9 +20,8 @@ export async function GET(request: NextRequest) {
     let ip = null;
     let apiUsed = "none";
 
-    // If user is authenticated, check registration_info FIRST before making any API calls
-    // Registration info stores IP at time of registration - we should NOT update it
-    // Only patch country if missing, using the stored IP
+    // If user is authenticated, check registration_info FIRST before making any API calls.
+    // This route should not mutate DB (especially from opportunities page).
     try {
       const {
         data: { user: authUser },
@@ -51,10 +49,6 @@ export async function GET(request: NextRequest) {
           const existingCountry = getCountryFromRegistrationInfo(
             existingRegistrationInfo,
           );
-          const existingGeo = existingRegistrationInfo?.geo_data as
-            | GeoData
-            | undefined;
-
           console.log(
             "[get-location] registration_info: country:",
             existingCountry,
@@ -94,40 +88,11 @@ export async function GET(request: NextRequest) {
               apiUsed = "geo-ip";
               country = geo.country;
               ip = existingIp;
-              const {
-                geo_data: _removed,
-                ip: _ipRemoved,
-                ...rest
-              } = existingRegistrationInfo || {};
-              const registration_info = {
-                ...rest,
-                ip_address: existingIp,
-                country: geo.country,
-              };
-              const geoDataColumn = buildGeoDataColumn(existingIp, geo);
-              const { error: updateError } = await supabase
-                .from("users")
-                .update({
-                  updated_at: new Date().toISOString(),
-                  registration_info,
-                  ...(geoDataColumn && { geo_data: geoDataColumn }),
-                })
-                  .eq("id", authUser.id);
-                if (updateError) {
-                  console.error(
-                  "[get-location] Error patching user:",
-                  updateError,
-                  );
-                } else {
-                  console.log(
-                  "[get-location] Patched geo_data column (geo not stored in registration_info)",
-                );
-              }
             } else {
               ip = existingIp;
-                console.warn(
+              console.warn(
                 "[get-location] Could not get geo from IP. Registration info will NOT be updated.",
-                );
+              );
             }
           }
           // Edge case: No IP and no country in registration_info
