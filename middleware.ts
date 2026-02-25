@@ -51,18 +51,11 @@ export async function middleware(request: NextRequest) {
         if (userData?.user_type) {
           const userType = userData.user_type
           
-          // Redirect /dashboard root to each role's primary workspace.
+          // Keep /dashboard root accessible for non-admin users.
+          // Only admins are redirected to the admin dashboard.
           if (pathname === '/dashboard') {
             if (userType === 'admin') {
               const redirectUrl = new URL('/dashboard/admin', request.url)
-              return NextResponse.redirect(redirectUrl)
-            }
-            if (userType === 'advertiser') {
-              const redirectUrl = new URL('/dashboard/contests', request.url)
-              return NextResponse.redirect(redirectUrl)
-            }
-            if (userType === 'creator') {
-              const redirectUrl = new URL('/dashboard/opportunities', request.url)
               return NextResponse.redirect(redirectUrl)
             }
           }
