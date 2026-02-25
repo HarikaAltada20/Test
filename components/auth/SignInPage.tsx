@@ -89,12 +89,13 @@ export default function SignInPage() {
         console.warn("Failed to record login IP:", err);
       }
 
-      // Fetch user profile from users table to get proper display name
+      // Fetch user profile from users table to get proper display name and role-based redirect
       let displayName = "User";
+      let postLoginPath = "/dashboard";
       try {
         const { data: userProfile } = await supabase
           .from("users")
-          .select("full_name, username")
+          .select("full_name, username, user_type")
           .eq("id", data.user.id)
           .single();
 
@@ -104,6 +105,14 @@ export default function SignInPage() {
             userProfile.username ||
             data.user?.user_metadata?.full_name ||
             "User";
+
+          if (userProfile.user_type === "advertiser") {
+            postLoginPath = "/dashboard/contests";
+          } else if (userProfile.user_type === "creator") {
+            postLoginPath = "/dashboard/opportunities";
+          } else if (userProfile.user_type === "admin") {
+            postLoginPath = "/dashboard/admin";
+          }
         } else {
           // Fallback to user_metadata if profile not found
           displayName = data.user?.user_metadata?.full_name || "User";
@@ -120,8 +129,8 @@ export default function SignInPage() {
         duration: TOAST_DURATION_SHORT,
       });
 
-      // Navigate to requested page or dashboard and refresh to update layout with new auth state
-      router.push(safeNext || "/dashboard");
+      // Navigate to requested page (if provided) or role-based dashboard
+      router.push(safeNext || postLoginPath);
       router.refresh();
     } catch (err: any) {
       console.error("Email sign-in error:", err);

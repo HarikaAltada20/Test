@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
   const error = searchParams.get("error");
 
   if (error) {
@@ -59,7 +58,7 @@ export async function GET(request: NextRequest) {
       let userProfile = existingProfile;
 
       // Handle Google OAuth logic:
-      // - If profile exists: Sign in existing user → dashboard
+      // - If profile exists: Sign in existing user
       // - If no profile: Create new account → choose-username for setup
       if (!userProfile) {
         console.log(
@@ -104,9 +103,7 @@ export async function GET(request: NextRequest) {
           "Google OAuth: New user profile created, redirecting to choose-username"
         );
       } else {
-        console.log(
-          "Google OAuth: Existing user found, will redirect to dashboard"
-        );
+        console.log("Google OAuth: Existing user found, determining redirect");
       }
 
       // After userProfile is set (either found or created), update login_history
@@ -178,24 +175,16 @@ export async function GET(request: NextRequest) {
         .eq("id", user.id);
 
       // Determine where to redirect based on profile completeness and user type
-      let redirectPath = "/dashboard";
+      let redirectPath = "/choose-username";
 
-      if (!userProfile || !userProfile.username) {
-        redirectPath = "/choose-username";
-      } else if (userProfile.user_type === "admin") {
-        redirectPath = "/dashboard/admin";
-      }
-
-      // If user has a complete profile and requested a specific page, send them there (safe paths only)
-      const requestedNext = searchParams.get("next");
-      if (
-        requestedNext &&
-        requestedNext.startsWith("/") &&
-        !requestedNext.startsWith("//") &&
-        (requestedNext.startsWith("/dashboard") || requestedNext.startsWith("/choose-username")) &&
-        redirectPath === "/dashboard"
-      ) {
-        redirectPath = requestedNext;
+      if (userProfile?.username) {
+        if (userProfile.user_type === "admin") {
+          redirectPath = "/dashboard/admin";
+        } else if (userProfile.user_type === "advertiser") {
+          redirectPath = "/dashboard/contests";
+        } else {
+          redirectPath = "/dashboard/opportunities";
+        }
       }
 
       return NextResponse.redirect(`${origin}${redirectPath}`);

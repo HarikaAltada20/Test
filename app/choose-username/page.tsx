@@ -102,7 +102,7 @@ function parseUserAgent(ua: string) {
 export default function ChooseUsernamePage() {
   const [username, setUsername] = useState("");
   const [userType, setUserType] = useState<"creator" | "advertiser">(
-    getInitialUserType
+    getInitialUserType,
   );
   const [referralCode, setReferralCode] = useState("");
   const searchParams = useSearchParams();
@@ -113,7 +113,7 @@ export default function ChooseUsernamePage() {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [isCheckingUsername, setIsCheckingUsername] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(
-    null
+    null,
   );
 
   // Additional fields for email users
@@ -122,7 +122,7 @@ export default function ChooseUsernamePage() {
   const [firstNameError, setFirstNameError] = useState<string | null>(null);
   const [lastNameError, setLastNameError] = useState<string | null>(null);
   const [referralCodeError, setReferralCodeError] = useState<string | null>(
-    null
+    null,
   );
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -171,13 +171,13 @@ export default function ChooseUsernamePage() {
     if (sanitized.length > 0) {
       if (sanitized.length < 3) {
         setReferralCodeError(
-          "Referral code must be at least 3 characters long"
+          "Referral code must be at least 3 characters long",
         );
       } else if (sanitized.length > 20) {
         setReferralCodeError("Referral code must be 20 characters or less");
       } else if (!/^[a-zA-Z0-9_]+$/.test(sanitized)) {
         setReferralCodeError(
-          "Referral code can only contain letters, numbers, and underscores"
+          "Referral code can only contain letters, numbers, and underscores",
         );
       } else {
         setReferralCodeError(null);
@@ -234,7 +234,7 @@ export default function ChooseUsernamePage() {
       if (authError || !authUser) {
         console.error(
           "ChooseUsernamePage: Not authenticated or error fetching auth user",
-          authError
+          authError,
         );
         toast({
           variant: "destructive",
@@ -256,10 +256,10 @@ export default function ChooseUsernamePage() {
       if (profileFetchError && profileFetchError.code !== "PGRST116") {
         console.error(
           "ChooseUsernamePage: Error fetching user profile from DB:",
-          profileFetchError
+          profileFetchError,
         );
         setError(
-          "Could not load your profile. Please try again or contact support."
+          "Could not load your profile. Please try again or contact support.",
         );
         toast({
           variant: "destructive",
@@ -274,7 +274,7 @@ export default function ChooseUsernamePage() {
       if (!profileData) {
         console.log(
           "ChooseUsernamePage: No profile found for new user, will create after form completion:",
-          authUser.id
+          authUser.id,
         );
 
         // Check if this is a Google user or email user
@@ -397,7 +397,7 @@ export default function ChooseUsernamePage() {
     if (!/^[a-zA-Z0-9_]+$/.test(username)) {
       setUsernameAvailable(false);
       setError(
-        "Username can only contain letters, numbers, and underscores (_)."
+        "Username can only contain letters, numbers, and underscores (_).",
       );
       return;
     } else {
@@ -440,7 +440,7 @@ export default function ChooseUsernamePage() {
     }
     if (!/^[a-zA-Z0-9_]+$/.test(username)) {
       setError(
-        "Username can only contain letters, numbers, and underscores (_)."
+        "Username can only contain letters, numbers, and underscores (_).",
       );
       return;
     }
@@ -450,7 +450,7 @@ export default function ChooseUsernamePage() {
     }
     if (usernameAvailable === null && !isCheckingUsername) {
       setError(
-        "Please wait for username check to complete or try a different username."
+        "Please wait for username check to complete or try a different username.",
       );
       return;
     }
@@ -488,7 +488,7 @@ export default function ChooseUsernamePage() {
       }
       if (!/^[a-zA-Z0-9_]+$/.test(referralCode)) {
         setError(
-          "Referral code can only contain letters, numbers, and underscores"
+          "Referral code can only contain letters, numbers, and underscores",
         );
         return;
       }
@@ -544,7 +544,7 @@ export default function ChooseUsernamePage() {
         if (referrerError) {
           console.error("Error checking referral code:", referrerError);
           throw new Error(
-            "Could not verify referral code. Please try again later."
+            "Could not verify referral code. Please try again later.",
           );
         }
 
@@ -577,15 +577,40 @@ export default function ChooseUsernamePage() {
         }
       }
 
-      // Prepare registration_info
+      // registration_info: ip_address, country, timestamp, UA only (no ip, no geo_data — geo in geo_data column)
       const userAgent =
         typeof window !== "undefined" ? navigator.userAgent : "";
+      let geo_data: {
+        country: string;
+        country_code: string;
+        state: string;
+        city: string;
+        lat: number;
+        lon: number;
+        processed_at: string;
+      } | null = null;
+      try {
+        const geoRes = await fetch(
+          `/api/geo-from-ip?ip=${encodeURIComponent(clientIp ?? "")}`,
+        );
+        if (geoRes.ok) {
+          const { geo_data: g } = await geoRes.json();
+          geo_data = g ?? null;
+        }
+      } catch (e) {
+        console.warn("Geo lookup for registration failed:", e);
+      }
       const registration_info = {
-        ip_address: clientIp || null, // Ensure null instead of undefined
+        ip_address: clientIp ?? null,
+        country: geo_data?.country ?? null,
         timestamp: new Date().toISOString(),
         ...parseUserAgent(userAgent),
       };
-      // Prepare complete profile data
+      // users.geo_data column only (not in registration_info)
+      const geoDataColumn =
+        geo_data && (clientIp ?? null)
+          ? { ip: clientIp ?? "", geo_data }
+          : null;
       const profileData: any = {
         id: userData.id,
         email: userData.email,
@@ -595,6 +620,7 @@ export default function ChooseUsernamePage() {
         is_active: true,
         email_confirmed_at: new Date().toISOString(),
         registration_info,
+        geo_data: geoDataColumn,
         affiliate_earnings: 0, // Initialize to 0
         other_earnings: 0, // Initialize to 0
       };
@@ -640,7 +666,7 @@ export default function ChooseUsernamePage() {
       if (profileError) {
         console.error("Profile creation/update error:", profileError);
         throw new Error(
-          profileError.message || "Failed to create your profile."
+          profileError.message || "Failed to create your profile.",
         );
       }
 
@@ -672,7 +698,7 @@ export default function ChooseUsernamePage() {
       if (specificProfileError) {
         console.error(
           "Error creating specific profile table entry:",
-          specificProfileError
+          specificProfileError,
         );
         // Don't throw here - main profile creation succeeded, specific profile is secondary
       }
@@ -684,7 +710,7 @@ export default function ChooseUsernamePage() {
         if (finalReferralCode) {
           console.log(
             "Attempting to process referral for code:",
-            finalReferralCode
+            finalReferralCode,
           );
           // Fetch the referrer user by their referral code (which is their username)
           const { data: referrerUser, error: fetchReferrerError } =
@@ -699,7 +725,7 @@ export default function ChooseUsernamePage() {
             console.warn(
               "Referrer user not found or error fetching for code:",
               finalReferralCode,
-              fetchReferrerError
+              fetchReferrerError,
             );
             toast({
               variant: "default",
@@ -716,12 +742,12 @@ export default function ChooseUsernamePage() {
                 new_user_id: userData.id,
                 p_user_type: userType, // Use the current form value
                 p_user_name: username, // The username just set
-              }
+              },
             );
             if (welcomeError) {
               console.error(
                 "Error granting welcome bonus after invalid referral:",
-                welcomeError
+                welcomeError,
               );
               toast({
                 variant: "destructive",
@@ -733,7 +759,7 @@ export default function ChooseUsernamePage() {
           } else {
             // Referrer found, proceed with the new process_referral_signup RPC call
             console.log(
-              `Referrer ${referrerUser.id} found for code ${finalReferralCode}. Calling process_referral_signup for user ${userData.id}`
+              `Referrer ${referrerUser.id} found for code ${finalReferralCode}. Calling process_referral_signup for user ${userData.id}`,
             );
             const { error: rpcError } = await supabase.rpc(
               "process_referral_signup",
@@ -743,13 +769,13 @@ export default function ChooseUsernamePage() {
                 p_referrer_id: referrerUser.id,
                 p_referred_user_type: userType, // Use the current form value
                 p_referred_user_name: username, // The username just set
-              }
+              },
             );
 
             if (rpcError) {
               console.error(
                 "Error calling process_referral_signup RPC. Full error object:",
-                JSON.stringify(rpcError, null, 2)
+                JSON.stringify(rpcError, null, 2),
               );
               console.error("RPC Error Code:", rpcError.code);
               console.error("RPC Error Message:", rpcError.message);
@@ -778,7 +804,7 @@ export default function ChooseUsernamePage() {
         } else {
           // No referral code used, just grant welcome bonus
           console.log(
-            `No referral code for user ${userData.id}. Granting welcome bonus.`
+            `No referral code for user ${userData.id}. Granting welcome bonus.`,
           );
           const { error: rpcError } = await supabase.rpc(
             "grant_welcome_bonus",
@@ -786,7 +812,7 @@ export default function ChooseUsernamePage() {
               new_user_id: userData.id,
               p_user_type: userType, // Use the current form value
               p_user_name: username, // The username just set
-            }
+            },
           );
           if (rpcError) {
             console.error("Error calling grant_welcome_bonus RPC:", rpcError);
@@ -801,14 +827,14 @@ export default function ChooseUsernamePage() {
             // or you can add one if desired.
             console.log(
               "Welcome bonus granted for non-referred user:",
-              userData.id
+              userData.id,
             );
           }
         }
       } catch (bonusProcessingError: any) {
         console.error(
           "Exception during bonus/referral processing:",
-          bonusProcessingError
+          bonusProcessingError,
         );
         toast({
           variant: "destructive",
@@ -1013,9 +1039,9 @@ export default function ChooseUsernamePage() {
                     {userData?.isGoogleUser
                       ? "Almost there! Complete your gaming profile to unlock all features."
                       : userData?.needsUserTypeSelection ||
-                        userData?.needsReferralCodeInput
-                      ? "Final setup - choose your identity and claim your unique username."
-                      : "Claim your unique username and join the Game Of Creators arena."}
+                          userData?.needsReferralCodeInput
+                        ? "Final setup - choose your identity and claim your unique username."
+                        : "Claim your unique username and join the Game Of Creators arena."}
                   </p>
                 </div>
 
@@ -1029,7 +1055,7 @@ export default function ChooseUsernamePage() {
                           <span className="ml-2 text-xs text-slate-400">
                             {getCharacterCountDisplay(
                               firstName.length,
-                              NAME_CONSTRAINTS.FIRST_NAME_MAX
+                              NAME_CONSTRAINTS.FIRST_NAME_MAX,
                             )}
                           </span>
                         </Label>
@@ -1048,7 +1074,7 @@ export default function ChooseUsernamePage() {
                           } ${
                             isApproachingLimit(
                               firstName.length,
-                              NAME_CONSTRAINTS.FIRST_NAME_MAX
+                              NAME_CONSTRAINTS.FIRST_NAME_MAX,
                             )
                               ? "border-yellow-500"
                               : ""
@@ -1070,7 +1096,7 @@ export default function ChooseUsernamePage() {
                           <span className="ml-2 text-xs text-slate-400">
                             {getCharacterCountDisplay(
                               lastName.length,
-                              NAME_CONSTRAINTS.LAST_NAME_MAX
+                              NAME_CONSTRAINTS.LAST_NAME_MAX,
                             )}
                           </span>
                         </Label>
@@ -1087,7 +1113,7 @@ export default function ChooseUsernamePage() {
                           } ${
                             isApproachingLimit(
                               lastName.length,
-                              NAME_CONSTRAINTS.LAST_NAME_MAX
+                              NAME_CONSTRAINTS.LAST_NAME_MAX,
                             )
                               ? "border-yellow-500"
                               : ""
@@ -1202,8 +1228,8 @@ export default function ChooseUsernamePage() {
                           usernameAvailable === true
                             ? "border-green-500"
                             : usernameAvailable === false
-                            ? "border-red-500"
-                            : "border-slate-700"
+                              ? "border-red-500"
+                              : "border-slate-700"
                         }`}
                         autoCapitalize="none"
                         autoCorrect="off"

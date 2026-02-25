@@ -376,37 +376,7 @@ export default function OpportunitiesPage({
       let userCountries: string[] = [];
       let currentUserCountry: string | null = null;
       let currentUserRegion: string | null = null;
-
-      try {
-        const { data: userProfile, error: profileError } = await supabase
-          .from("users")
-          .select("registration_info")
-          .eq("id", user.id)
-          .single();
-
-        if (!profileError && userProfile) {
-          let extractedCountry = null;
-          if (userProfile.registration_info) {
-            const registrationInfo = userProfile.registration_info as Record<
-              string,
-              any
-            >;
-            extractedCountry = registrationInfo.country || null;
-          }
-
-          if (extractedCountry) {
-            userCountries.push(extractedCountry);
-            if (!currentUserCountry) {
-              currentUserCountry = extractedCountry;
-              currentUserRegion = getRegionForCountry(extractedCountry);
-            }
-          }
-        } else if (profileError) {
-          console.error("Error fetching location from database:", profileError);
-        }
-      } catch (dbError) {
-        console.error("Error fetching location from database:", dbError);
-      }
+      let hasProfileCountry = false;
 
       try {
         const { data: creatorProfileData, error: creatorProfileError } =
@@ -417,13 +387,12 @@ export default function OpportunitiesPage({
             .single();
 
         if (!creatorProfileError && creatorProfileData?.country) {
+          hasProfileCountry = true;
           if (!userCountries.includes(creatorProfileData.country)) {
             userCountries.push(creatorProfileData.country);
           }
-          if (!currentUserCountry) {
-            currentUserCountry = creatorProfileData.country;
-            currentUserRegion = getRegionForCountry(creatorProfileData.country);
-          }
+          currentUserCountry = creatorProfileData.country;
+          currentUserRegion = getRegionForCountry(creatorProfileData.country);
         }
       } catch (creatorProfileError) {
         console.error(
@@ -432,7 +401,41 @@ export default function OpportunitiesPage({
         );
       }
 
+      try {
+        const { data: userProfile, error: profileError } = await supabase
+          .from("users")
+          .select("geo_data")
+          .eq("id", user.id)
+          .single();
+
+        if (!profileError && userProfile?.geo_data && !hasProfileCountry) {
+          const geoDataColumn = userProfile.geo_data as
+            | { geo_data?: { country?: string }; country?: string }
+            | null;
+          const extractedCountry =
+            geoDataColumn?.geo_data?.country || geoDataColumn?.country || null;
+
+          if (extractedCountry) {
+            if (!userCountries.includes(extractedCountry)) {
+              userCountries.push(extractedCountry);
+            }
+            if (!currentUserCountry) {
+              currentUserCountry = extractedCountry;
+              currentUserRegion = getRegionForCountry(extractedCountry);
+            }
+          }
+        } else if (profileError) {
+          console.error("Error fetching location from geo_data:", profileError);
+        }
+      } catch (dbError) {
+        console.error("Error fetching location from geo_data:", dbError);
+      }
+
       if (currentUserCountry) {
+        if (hasProfileCountry) {
+          // Strict priority: when profile country exists, do not mix geo fallback countries.
+          userCountries = [currentUserCountry];
+        }
         setUserCountry(currentUserCountry);
         setUserRegion(currentUserRegion);
         const locationData = {
@@ -445,6 +448,7 @@ export default function OpportunitiesPage({
       }
 
       if (
+        !hasProfileCountry &&
         userCountries.length === 0 &&
         cachedLocation &&
         isLocationCacheValid
@@ -463,38 +467,7 @@ export default function OpportunitiesPage({
         }
       }
 
-      try {
-        const locationResponse = await fetch("/api/get-location");
-        if (locationResponse.ok) {
-          const locationData = await locationResponse.json();
-          if (locationData.country) {
-            if (!userCountries.includes(locationData.country)) {
-              userCountries.push(locationData.country);
-            }
-            if (
-              !currentUserCountry ||
-              currentUserCountry !== locationData.country
-            ) {
-              currentUserCountry = locationData.country;
-              currentUserRegion = locationData.region;
-              setUserCountry(locationData.country);
-              setUserRegion(locationData.region);
-            }
-            const locationCacheData = {
-              country: locationData.country,
-              region: locationData.region,
-              countries: userCountries,
-            };
-            localStorage.setItem(
-              locationCacheKey,
-              JSON.stringify(locationCacheData),
-            );
-            localStorage.setItem(locationTimestampKey, Date.now().toString());
-          }
-        }
-      } catch (locationError) {
-        console.error("Error fetching user location:", locationError);
-      }
+      // If creator profile country is missing, fallback is users.geo_data.country.
 
       const { data: userData, error: userError } = await supabase
         .from("users")

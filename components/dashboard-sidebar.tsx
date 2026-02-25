@@ -59,7 +59,7 @@ export function DashboardSidebar({
         "/dashboard/admin/others",
       ];
       const shouldBeOpen = othersDropdownItems.some((href) =>
-        pathname.startsWith(href)
+        pathname.startsWith(href),
       );
       setIsOthersDropdownOpen(shouldBeOpen);
     }
@@ -98,16 +98,16 @@ export function DashboardSidebar({
       description: "How it works",
     },
     {
-      name: "Dashboard",
-      href: "/dashboard",
-      icon: LayoutDashboard,
-      description: "Overview & analytics",
-    },
-    {
       name: "Contests",
       href: "/dashboard/contests",
       icon: Trophy,
       description: "Manage your contests",
+    },
+    {
+      name: "Dashboard",
+      href: "/dashboard",
+      icon: LayoutDashboard,
+      description: "Overview & analytics",
     },
     {
       name: "Analytics",
@@ -203,6 +203,12 @@ export function DashboardSidebar({
       description: "How it works",
     },
     {
+      name: "Opportunities",
+      href: "/dashboard/opportunities",
+      icon: Trophy,
+      description: "Available contests",
+    },
+    {
       name: "Dashboard",
       href: "/dashboard",
       icon: LayoutDashboard,
@@ -214,12 +220,7 @@ export function DashboardSidebar({
       icon: Video,
       description: "Content submissions",
     },
-    {
-      name: "Opportunities",
-      href: "/dashboard/opportunities",
-      icon: Trophy,
-      description: "Available contests",
-    },
+
     {
       name: "Leaderboard",
       href: "/dashboard/leaderboard",
@@ -244,8 +245,8 @@ export function DashboardSidebar({
     userRole === "advertiser"
       ? advertiserLinks
       : userRole === "admin"
-      ? adminLinks
-      : creatorLinks;
+        ? adminLinks
+        : creatorLinks;
 
   // Ensure scroll container is properly sized and can scroll
   useEffect(() => {
@@ -293,7 +294,7 @@ export function DashboardSidebar({
           isMobile || showScrollbar
             ? "sidebar-scrollbar"
             : "sidebar-scrollbar-hidden",
-          "sm:hover:scrollbar-thumb-gray-400"
+          "sm:hover:scrollbar-thumb-gray-400",
         )}
         style={{
           minHeight: 0,
@@ -337,7 +338,7 @@ export function DashboardSidebar({
                         className={cn(
                           "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
                           "border border-transparent",
-                          collapsed ? "justify-center px-2 py-3" : "px-3 py-3"
+                          collapsed ? "justify-center px-2 py-3" : "px-3 py-3",
                         )}
                         style={{
                           backgroundColor: isActive ? activeBg : "transparent",
@@ -369,7 +370,7 @@ export function DashboardSidebar({
                         <div
                           className={cn(
                             "flex items-center justify-center rounded-lg transition-colors",
-                            collapsed ? "w-16 h-12" : "w-10 h-10"
+                            collapsed ? "w-16 h-12" : "w-10 h-10",
                           )}
                           style={{
                             color: isActive
@@ -414,7 +415,7 @@ export function DashboardSidebar({
                             <ChevronRight
                               className={cn(
                                 "h-4 w-4 transition-all duration-200",
-                                isActive && "translate-x-0.5"
+                                isActive && "translate-x-0.5",
                               )}
                               style={{
                                 color: isActive
@@ -443,14 +444,14 @@ export function DashboardSidebar({
                             "border border-transparent",
                             collapsed
                               ? "justify-center px-2 py-3"
-                              : "justify-start px-3 py-3"
+                              : "justify-start px-3 py-3",
                           )}
                           style={{
                             backgroundColor:
                               isOthersDropdownOpen ||
                               pathname === "/dashboard/admin/manual-entry" ||
                               pathname.startsWith(
-                                "/dashboard/admin/manual-entry"
+                                "/dashboard/admin/manual-entry",
                               ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others")
@@ -460,7 +461,7 @@ export function DashboardSidebar({
                               isOthersDropdownOpen ||
                               pathname === "/dashboard/admin/manual-entry" ||
                               pathname.startsWith(
-                                "/dashboard/admin/manual-entry"
+                                "/dashboard/admin/manual-entry",
                               ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others")
@@ -470,7 +471,7 @@ export function DashboardSidebar({
                               isOthersDropdownOpen ||
                               pathname === "/dashboard/admin/manual-entry" ||
                               pathname.startsWith(
-                                "/dashboard/admin/manual-entry"
+                                "/dashboard/admin/manual-entry",
                               ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others")
@@ -482,7 +483,7 @@ export function DashboardSidebar({
                               isOthersDropdownOpen ||
                               pathname === "/dashboard/admin/manual-entry" ||
                               pathname.startsWith(
-                                "/dashboard/admin/manual-entry"
+                                "/dashboard/admin/manual-entry",
                               ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others");
@@ -497,7 +498,7 @@ export function DashboardSidebar({
                               isOthersDropdownOpen ||
                               pathname === "/dashboard/admin/manual-entry" ||
                               pathname.startsWith(
-                                "/dashboard/admin/manual-entry"
+                                "/dashboard/admin/manual-entry",
                               ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others");
@@ -513,14 +514,14 @@ export function DashboardSidebar({
                           <div
                             className={cn(
                               "flex items-center justify-center rounded-lg transition-colors",
-                              collapsed ? "w-16 h-12" : "w-10 h-10"
+                              collapsed ? "w-16 h-12" : "w-10 h-10",
                             )}
                             style={{
                               color:
                                 isOthersDropdownOpen ||
                                 pathname === "/dashboard/admin/manual-entry" ||
                                 pathname.startsWith(
-                                  "/dashboard/admin/manual-entry"
+                                  "/dashboard/admin/manual-entry",
                                 ) ||
                                 pathname === "/dashboard/admin/others" ||
                                 pathname.startsWith("/dashboard/admin/others")
@@ -545,11 +546,11 @@ export function DashboardSidebar({
                                       pathname ===
                                         "/dashboard/admin/manual-entry" ||
                                       pathname.startsWith(
-                                        "/dashboard/admin/manual-entry"
+                                        "/dashboard/admin/manual-entry",
                                       ) ||
                                       pathname === "/dashboard/admin/others" ||
                                       pathname.startsWith(
-                                        "/dashboard/admin/others"
+                                        "/dashboard/admin/others",
                                       )
                                         ? isDark
                                           ? "#ffffff"
@@ -567,11 +568,11 @@ export function DashboardSidebar({
                                       pathname ===
                                         "/dashboard/admin/manual-entry" ||
                                       pathname.startsWith(
-                                        "/dashboard/admin/manual-entry"
+                                        "/dashboard/admin/manual-entry",
                                       ) ||
                                       pathname === "/dashboard/admin/others" ||
                                       pathname.startsWith(
-                                        "/dashboard/admin/others"
+                                        "/dashboard/admin/others",
                                       )
                                         ? isDark
                                           ? "rgba(255,255,255,0.8)"
@@ -603,7 +604,7 @@ export function DashboardSidebar({
                                   className={cn(
                                     "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
                                     "border border-transparent",
-                                    "px-3 py-2"
+                                    "px-3 py-2",
                                   )}
                                   style={{
                                     backgroundColor: isItemActive
@@ -703,7 +704,7 @@ export function DashboardSidebar({
                 "chat-card p-4 rounded-2xl shadow-lg",
                 isDark
                   ? "border border-purple-500 bg-[rgba(127,57,236,0.10)] shadow-purple-900/30"
-                  : "border border-purple-500 bg-purple-100 shadow-purple-200"
+                  : "border border-purple-500 bg-purple-100 shadow-purple-200",
               )}
             >
               {!collapsed ? (
@@ -711,7 +712,7 @@ export function DashboardSidebar({
                   <p
                     className={cn(
                       "text-md text-center font-medium",
-                      isDark ? "text-white" : "text-purple-800"
+                      isDark ? "text-white" : "text-purple-800",
                     )}
                   >
                     We're here to help
@@ -739,7 +740,7 @@ export function DashboardSidebar({
                         "block w-full rounded-xl text-white py-2 text-center transition",
                         isDark
                           ? "bg-purple-700 hover:bg-purple-600"
-                          : "bg-black hover:bg-gray-800"
+                          : "bg-black hover:bg-gray-800",
                       )}
                     >
                       Book a Call
@@ -754,7 +755,7 @@ export function DashboardSidebar({
                       "rounded-full text-white w-10 h-10 flex items-center justify-center",
                       isDark
                         ? "bg-purple-700 hover:bg-purple-600"
-                        : "bg-[#7F39EC] hover:bg-purple-700"
+                        : "bg-[#7F39EC] hover:bg-purple-700",
                     )}
                   >
                     <MessageCircle size={18} />
@@ -764,7 +765,7 @@ export function DashboardSidebar({
                     <div
                       className={cn(
                         "rounded-full w-10 h-10 flex items-center justify-center",
-                        isDark ? "bg-purple-700" : "bg-[#7F39EC]"
+                        isDark ? "bg-purple-700" : "bg-[#7F39EC]",
                       )}
                     >
                       <a
