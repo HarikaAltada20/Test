@@ -196,7 +196,7 @@ const contestStatusConfig = {
 
 const getBudgetTrackerValues = (
   totalBudget: number,
-  budgetSpent?: number | null
+  budgetSpent?: number | null,
 ) => {
   const spent = Math.max(0, budgetSpent ?? 0);
   const clampedSpent = Math.min(spent, totalBudget);
@@ -256,7 +256,7 @@ export function ContestListClient({
   // Default to 9 campaigns per page with options: 9, 15, 21, 30
   const [limit, setLimit] = useState<number>(9);
   const [internalViewMode, setInternalViewMode] = useState<"grid" | "list">(
-    "grid"
+    "grid",
   );
 
   // Use external viewMode if provided, otherwise use internal state
@@ -274,38 +274,44 @@ export function ContestListClient({
     try {
       // Add cache-busting timestamp to ensure fresh data
       const timestamp = Date.now();
-      console.log(`[ContestListClient] Fetching contests with timestamp: ${timestamp}`);
+      console.log(
+        `[ContestListClient] Fetching contests with timestamp: ${timestamp}`,
+      );
       const response = await fetch(`/api/contests/list?t=${timestamp}`, {
         cache: "no-store",
       });
       if (!response.ok) {
         console.warn(
           "[ContestListClient] Unable to refresh contests",
-          response.status
+          response.status,
         );
         return;
       }
       const payload = await response.json();
-      console.log("[ContestListClient] Received fresh contests data:", payload.contests?.length, "contests");
-      
+      console.log(
+        "[ContestListClient] Received fresh contests data:",
+        payload.contests?.length,
+        "contests",
+      );
+
       if (!Array.isArray(payload?.contests)) {
         return;
       }
       if (!isMountedRef.current) {
         return;
       }
-      
+
       // Log budget spent values for debugging
       // payload.contests.forEach((contest: any, index: number) => {
       //   if (contest.contest_type === "cpm") {
-      //     console.log(`[ContestListClient] CPM Contest ${index + 1} (${contest.id}): budget_spent =`, 
+      //     console.log(`[ContestListClient] CPM Contest ${index + 1} (${contest.id}): budget_spent =`,
       //       contest.contest_based_details?.cpm_contest?.budget_spent);
       //   } else if (contest.contest_type === "leaderboard") {
-      //     console.log(`[ContestListClient] Leaderboard Contest ${index + 1} (${contest.id}): budget_spent =`, 
+      //     console.log(`[ContestListClient] Leaderboard Contest ${index + 1} (${contest.id}): budget_spent =`,
       //       contest.contest_based_details?.leaderboard_contest?.budget_spent);
       //   }
       // });
-      
+
       // setContests(payload.contests);
     } catch (error) {
       console.error("[ContestListClient] Error refreshing contests:", error);
@@ -343,12 +349,14 @@ export function ContestListClient({
       try {
         // Clear server-side cache first
         console.log("[ContestListClient] Clearing server-side cache...");
-        const cacheResponse = await fetch("/api/contests/clear-cache", { method: "POST" });
+        const cacheResponse = await fetch("/api/contests/clear-cache", {
+          method: "POST",
+        });
         const cacheResult = await cacheResponse.json();
         console.log("[ContestListClient] Cache clear result:", cacheResult);
-        
+
         // Add a small delay to ensure cache clearing is fully processed
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (error) {
         console.error("[ContestListClient] Failed to clear cache:", error);
       }
@@ -364,69 +372,75 @@ export function ContestListClient({
   }, [fetchLatestContests, isAdminView]);
 
   // Helper function to get contests filtered by format
-  const getContestsByFormat = useCallback((contestsList: Contest[], format: string) => {
-    return contestsList.filter((contest) => {
-      const fmt = contest.contest_format?.toLowerCase() || "";
-      
-      if (format === "all") {
-        return true; // Show all contests
-      } else if (format === "text_image") {
-        // Treat missing/unknown format as text/image by default
-        return (
-          fmt === "text_image" ||
-          fmt === "text-image" ||
-          fmt === "text" ||
-          fmt === "image" ||
-          fmt === ""
-        );
-      } else if (format === "video") {
-        return fmt === "video";
-      }
-      return true;
-    });
-  }, []);
+  const getContestsByFormat = useCallback(
+    (contestsList: Contest[], format: string) => {
+      return contestsList.filter((contest) => {
+        const fmt = contest.contest_format?.toLowerCase() || "";
+
+        if (format === "all") {
+          return true; // Show all contests
+        } else if (format === "text_image") {
+          // Treat missing/unknown format as text/image by default
+          return (
+            fmt === "text_image" ||
+            fmt === "text-image" ||
+            fmt === "text" ||
+            fmt === "image" ||
+            fmt === ""
+          );
+        } else if (format === "video") {
+          return fmt === "video";
+        }
+        return true;
+      });
+    },
+    [],
+  );
 
   // Group contests by moderation status and contest lifecycle
   const contestsByStatus = useMemo(() => {
     // First filter contests by format
     const filteredContests = getContestsByFormat(contests, contestFormatFilter);
-    
+
     const groups = {
       all: filteredContests,
       draft: filteredContests.filter((c) => c.moderation_status === "draft"),
       pending_approval: filteredContests.filter(
-        (c) => c.moderation_status === "pending_approval"
+        (c) => c.moderation_status === "pending_approval",
       ),
       ready: filteredContests.filter((c) => c.moderation_status === "approved"),
       active: filteredContests.filter(
         (c) =>
           c.moderation_status === "published" &&
-          (c.status === "active" || c.status === "upcoming")
+          (c.status === "active" || c.status === "upcoming"),
       ),
       pending_verification: filteredContests.filter(
         (c) =>
           c.moderation_status === "published" &&
           c.status === "ended" &&
           c.post_contest_status !== "verification_complete" &&
-          c.post_contest_status !== "payouts_processed"
+          c.post_contest_status !== "payouts_processed",
       ),
       done: filteredContests.filter(
         (c) =>
           c.moderation_status === "published" &&
           c.status === "ended" &&
           (c.post_contest_status === "verification_complete" ||
-            c.post_contest_status === "payouts_processed")
+            c.post_contest_status === "payouts_processed"),
       ),
-      rejected: filteredContests.filter((c) => c.moderation_status === "rejected"),
+      rejected: filteredContests.filter(
+        (c) => c.moderation_status === "rejected",
+      ),
     };
     return groups;
   }, [contests, contestFormatFilter, getContestsByFormat]);
 
   const availablePlatforms = useMemo(() => {
     // Get contests for the current tab
-    const contestsForCurrentTab = contestsByStatus[selectedTab as keyof typeof contestsByStatus] || [];
+    const contestsForCurrentTab =
+      contestsByStatus[selectedTab as keyof typeof contestsByStatus] || [];
     const platforms = new Set(
-      contestsForCurrentTab.map((c) => c.platform).filter(Boolean) as string[]
+      contestsForCurrentTab.map((c) => c.platform).filter(Boolean) as string[],
     );
     return ["all", ...Array.from(platforms)];
   }, [contestsByStatus, selectedTab]);
@@ -525,7 +539,7 @@ export function ContestListClient({
     return () => {
       window.removeEventListener(
         "theme-change",
-        handleThemeChange as EventListener
+        handleThemeChange as EventListener,
       );
       clearInterval(intervalId);
     };
@@ -593,14 +607,14 @@ export function ContestListClient({
     // Apply platform filter
     if (platformFilter !== "all") {
       contestsToDisplay = contestsToDisplay.filter(
-        (contest) => contest.platform === platformFilter
+        (contest) => contest.platform === platformFilter,
       );
     }
 
     // Apply contest type filter
     if (contestTypeFilter !== "all") {
       contestsToDisplay = contestsToDisplay.filter(
-        (contest) => contest.contest_type === contestTypeFilter
+        (contest) => contest.contest_type === contestTypeFilter,
       );
     }
 
@@ -747,7 +761,7 @@ export function ContestListClient({
 
   const getContestStatusDisplay = (
     status: string | null,
-    postContestStatus: string | null = null
+    postContestStatus: string | null = null,
   ) => {
     if (!status)
       return {
@@ -809,7 +823,7 @@ export function ContestListClient({
             "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
             isDark
               ? "bg-[#06021D] border-slate-700"
-              : "bg-white border-slate-200"
+              : "bg-white border-slate-200",
           )}
           onClick={() => {
             const href = isAdminView
@@ -836,8 +850,8 @@ export function ContestListClient({
                   contest.status === "upcoming" && "bg-[#7F39EC] text-white",
                   contest.status === "ended" && "bg-[#7F39EC] text-white",
                   !["active", "upcoming", "ended"].includes(
-                    contest.status || ""
-                  ) && "bg-[#7F39EC] text-white"
+                    contest.status || "",
+                  ) && "bg-[#7F39EC] text-white",
                 )}
               >
                 {(() => {
@@ -849,7 +863,10 @@ export function ContestListClient({
                   }
                   if (contest.status === "ended") {
                     // Show "paid" for contests with completed verification
-                    if (contest.post_contest_status === "verification_complete" || contest.post_contest_status === "payouts_processed") {
+                    if (
+                      contest.post_contest_status === "verification_complete" ||
+                      contest.post_contest_status === "payouts_processed"
+                    ) {
                       return "paid";
                     }
                     // Show "completed" for ended contests
@@ -894,8 +911,8 @@ export function ContestListClient({
                               ? "bg-red-900/30 text-red-300 border-red-700/50"
                               : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
                             : campaignType === "raid"
-                            ? "bg-red-50 text-red-700 border-red-200"
-                            : "bg-cyan-50 text-cyan-700 border-cyan-200"
+                              ? "bg-red-50 text-red-700 border-red-200"
+                              : "bg-cyan-50 text-cyan-700 border-cyan-200",
                         )}
                       >
                         {campaignType.toUpperCase()}
@@ -913,7 +930,7 @@ export function ContestListClient({
                         "text-[12px]",
                         isDark
                           ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                          : "bg-purple-50 text-purple-700 border-purple-200"
+                          : "bg-purple-50 text-purple-700 border-purple-200",
                       )}
                     >
                       <CheckCheck className="h-3 w-3 mr-1" />
@@ -934,7 +951,7 @@ export function ContestListClient({
                     "text-[12px]",
                     isDark
                       ? "bg-green-900/30 text-green-300 border-green-700/50"
-                      : "bg-green-50 text-green-700 border-green-200"
+                      : "bg-green-50 text-green-700 border-green-200",
                   )}
                 >
                   <Gift className="h-3 w-3 mr-1" />
@@ -943,7 +960,7 @@ export function ContestListClient({
                       ?.flat_fee_bonus ||
                       contest.contest_based_details?.leaderboard_contest
                         ?.flat_fee_bonus ||
-                      0
+                      0,
                   )}
                   /submission
                 </Badge>
@@ -967,7 +984,7 @@ export function ContestListClient({
                         "text-[12px]",
                         isDark
                           ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
-                          : "bg-blue-50 text-blue-700 border-blue-200"
+                          : "bg-blue-50 text-blue-700 border-blue-200",
                       )}
                     >
                       <Tag className="h-3 w-3 mr-1" />
@@ -984,7 +1001,7 @@ export function ContestListClient({
                     "text-[12px]",
                     isDark
                       ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
-                      : "bg-amber-50 text-amber-700 border-amber-200"
+                      : "bg-amber-50 text-amber-700 border-amber-200",
                   )}
                 >
                   <Star className="h-3 w-3 mr-1" />
@@ -1098,11 +1115,11 @@ export function ContestListClient({
                     {contest.contest_type === "cpm"
                       ? "CPM Based"
                       : contest.contest_type === "leaderboard"
-                      ? "Leaderboard"
-                      : contest.contest_type
-                      ? contest.contest_type.charAt(0).toUpperCase() +
-                        contest.contest_type.slice(1)
-                      : "N/A"}
+                        ? "Leaderboard"
+                        : contest.contest_type
+                          ? contest.contest_type.charAt(0).toUpperCase() +
+                            contest.contest_type.slice(1)
+                          : "N/A"}
                   </span>
                 </span>
               </div>
@@ -1119,7 +1136,7 @@ export function ContestListClient({
                       <span className="font-medium">
                         {formatMoney(
                           contest.contest_based_details.cpm_contest
-                            .cpm_rate_usd * 100
+                            .cpm_rate_usd * 100,
                         )}{" "}
                         {contest.platform?.toLowerCase() === "twitter" ||
                         contest.platform?.toLowerCase() === "x"
@@ -1139,7 +1156,8 @@ export function ContestListClient({
                       Total Budget:{" "}
                       <span className="font-medium ">
                         {formatMoney(
-                          contest.contest_based_details.cpm_contest.total_budget
+                          contest.contest_based_details.cpm_contest
+                            .total_budget,
                         )}
                       </span>
                     </span>
@@ -1157,7 +1175,7 @@ export function ContestListClient({
                       <span className="font-medium">
                         {formatMoney(
                           contest.contest_based_details.leaderboard_contest
-                            .total_prize
+                            .total_prize,
                         )}
                       </span>
                     </span>
@@ -1175,7 +1193,7 @@ export function ContestListClient({
                       <span className="font-medium text-green-700 dark:text-green-300">
                         {formatMoney(
                           contest.contest_based_details.leaderboard_contest
-                            .total_budget
+                            .total_budget,
                         )}
                       </span>
                     </span>
@@ -1214,7 +1232,7 @@ export function ContestListClient({
                     <div
                       className={cn(
                         "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
-                        isDark ? "bg-[#FFFFFF42]" : "bg-slate-200"
+                        isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
                       )}
                       title={`Total Budget Spent: ${formatMoney(budgetSpent)}`}
                     >
@@ -1252,7 +1270,7 @@ export function ContestListClient({
                     .budget_spent || 0;
                 const tracker = getBudgetTrackerValues(
                   totalBudget,
-                  budgetSpent
+                  budgetSpent,
                 );
 
                 return (
@@ -1275,7 +1293,7 @@ export function ContestListClient({
                     <div
                       className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
                       title={`Flat Fee Bonus Budget Spent: ${formatMoney(
-                        tracker.spent
+                        tracker.spent,
                       )}`}
                     >
                       <div
@@ -1302,7 +1320,7 @@ export function ContestListClient({
                 "flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
                 isDark
                   ? "bg-[#7F39EC] text-white"
-                  : "bg-[#D9C0FF61] text-[#7F39EC]"
+                  : "bg-[#D9C0FF61] text-[#7F39EC]",
               )}
               onClick={(e) => {
                 e.stopPropagation();
@@ -1327,7 +1345,9 @@ export function ContestListClient({
         key={contest.id}
         className={cn(
           "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
-          isDark ? "bg-[#06021D] border-slate-700" : "bg-white border-slate-200"
+          isDark
+            ? "bg-[#06021D] border-slate-700"
+            : "bg-white border-slate-200",
         )}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest("button")) {
@@ -1406,7 +1426,7 @@ export function ContestListClient({
                 <div
                   className={cn(
                     "flex items-center gap-1",
-                    isDark ? "text-amber-400" : "text-amber-600"
+                    isDark ? "text-amber-400" : "text-amber-600",
                   )}
                 >
                   <AlertTriangle className="h-3 w-3" />
@@ -1452,11 +1472,11 @@ export function ContestListClient({
                     {contest.contest_type === "leaderboard"
                       ? `Prize: ${formatMoney(
                           contest.contest_based_details.leaderboard_contest
-                            ?.total_prize || 0
+                            ?.total_prize || 0,
                         )}`
                       : `Budget: ${formatMoney(
                           contest.contest_based_details.cpm_contest
-                            ?.total_budget || 0
+                            ?.total_budget || 0,
                         )}`}
                   </span>
                 </div>
@@ -1478,7 +1498,7 @@ export function ContestListClient({
                       "flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
                       isDark
                         ? "bg-[#7F39EC] text-white"
-                        : "bg-[#D9C0FF61] text-[#7F39EC]"
+                        : "bg-[#D9C0FF61] text-[#7F39EC]",
                     )}
                     onClick={async (e) => {
                       e.stopPropagation();
@@ -1487,7 +1507,7 @@ export function ContestListClient({
                           `/api/contests/${contest.id}/publish`,
                           {
                             method: "POST",
-                          }
+                          },
                         );
                         if (response.ok) {
                           window.location.reload();
@@ -1510,12 +1530,12 @@ export function ContestListClient({
                       "text-[13px]",
                       isDark
                         ? "text-purple-400 border-gray-700"
-                        : "text-purple-500"
+                        : "text-purple-500",
                     )}
                     onClick={(e) => {
                       e.stopPropagation();
                       router.push(
-                        `/dashboard/contests/${contest.id}/edit?dates=true`
+                        `/dashboard/contests/${contest.id}/edit?dates=true`,
                       );
                     }}
                   >
@@ -1530,7 +1550,7 @@ export function ContestListClient({
                     "flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
                     isDark
                       ? "bg-[#7F39EC] text-white"
-                      : "bg-[#D9C0FF61] text-[#7F39EC]"
+                      : "bg-[#D9C0FF61] text-[#7F39EC]",
                   )}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1587,7 +1607,7 @@ export function ContestListClient({
             "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer relative",
             isDark
               ? "bg-[#06021D] border-slate-700"
-              : "bg-white border-slate-200"
+              : "bg-white border-slate-200",
           )}
           onClick={() => {
             const href = isAdminView
@@ -1606,23 +1626,27 @@ export function ContestListClient({
                   "capitalize text-sm px-3 py-1 font-medium border",
                   contest.status === "active" && "bg-[#7F39EC] text-white",
                   contest.status === "upcoming" && "bg-[#7F39EC] text-white",
-                  contest.status === "ended" && "bg-[#7F39EC] text-white"
+                  contest.status === "ended" && "bg-[#7F39EC] text-white",
                 )}
               >
                 {contest.status === "active"
                   ? "Live"
                   : contest.status === "upcoming"
-                  ? "Upcoming"
-                  : contest.status === "ended"
-                  ? (() => {
-                      // Show "paid" for contests with completed verification
-                      if (contest.post_contest_status === "verification_complete" || contest.post_contest_status === "payouts_processed") {
-                        return "paid";
-                      }
-                      // Show "completed" for ended contests
-                      return "completed";
-                    })()
-                  : contest.status || "Unknown"}
+                    ? "Upcoming"
+                    : contest.status === "ended"
+                      ? (() => {
+                          // Show "paid" for contests with completed verification
+                          if (
+                            contest.post_contest_status ===
+                              "verification_complete" ||
+                            contest.post_contest_status === "payouts_processed"
+                          ) {
+                            return "paid";
+                          }
+                          // Show "completed" for ended contests
+                          return "completed";
+                        })()
+                      : contest.status || "Unknown"}
               </Badge>
             </div>
           )}
@@ -1678,8 +1702,8 @@ export function ContestListClient({
                                 ? "bg-red-900/30 text-red-300 border-red-700/50"
                                 : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
                               : campaignType === "raid"
-                              ? "bg-red-50 text-red-700 border-red-200"
-                              : "bg-cyan-50 text-cyan-700 border-cyan-200"
+                                ? "bg-red-50 text-red-700 border-red-200"
+                                : "bg-cyan-50 text-cyan-700 border-cyan-200",
                           )}
                         >
                           {campaignType.toUpperCase()}
@@ -1697,7 +1721,7 @@ export function ContestListClient({
                           "text-sm px-3 py-1 font-medium",
                           isDark
                             ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                            : "bg-purple-50 text-purple-700 border-purple-200"
+                            : "bg-purple-50 text-purple-700 border-purple-200",
                         )}
                       >
                         <CheckCheck className="h-3 w-3 mr-1" />
@@ -1728,7 +1752,7 @@ export function ContestListClient({
                           "text-sm px-3 py-1 font-medium",
                           isDark
                             ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
-                            : "bg-blue-50 text-blue-700 border-blue-200"
+                            : "bg-blue-50 text-blue-700 border-blue-200",
                         )}
                       >
                         <Tag className="h-3 w-3 mr-1" />
@@ -1748,7 +1772,7 @@ export function ContestListClient({
                       "text-sm px-3 py-1 font-medium",
                       isDark
                         ? "bg-green-900/30 text-green-300 border-green-700/50"
-                        : "bg-green-50 text-green-700 border-green-200"
+                        : "bg-green-50 text-green-700 border-green-200",
                     )}
                   >
                     <Gift className="h-3 w-3 mr-1" />
@@ -1757,7 +1781,7 @@ export function ContestListClient({
                         ?.flat_fee_bonus ||
                         contest.contest_based_details?.leaderboard_contest
                           ?.flat_fee_bonus ||
-                        0
+                        0,
                     )}
                     /submission
                   </Badge>
@@ -1770,7 +1794,7 @@ export function ContestListClient({
                       "text-sm px-3 py-1 font-medium",
                       isDark
                         ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
-                        : "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-amber-50 text-amber-700 border-amber-200",
                     )}
                   >
                     <Star className="h-3 w-3 mr-1" />
@@ -1908,11 +1932,11 @@ export function ContestListClient({
                       {contest.contest_type === "cpm"
                         ? "CPM Based"
                         : contest.contest_type === "leaderboard"
-                        ? "Leaderboard"
-                        : contest.contest_type
-                        ? contest.contest_type.charAt(0).toUpperCase() +
-                          contest.contest_type.slice(1)
-                        : "N/A"}
+                          ? "Leaderboard"
+                          : contest.contest_type
+                            ? contest.contest_type.charAt(0).toUpperCase() +
+                              contest.contest_type.slice(1)
+                            : "N/A"}
                     </span>
                   </span>
                 </div>
@@ -1934,7 +1958,7 @@ export function ContestListClient({
                         <span className="font-medium">
                           {formatMoney(
                             contest.contest_based_details.cpm_contest
-                              .cpm_rate_usd * 100
+                              .cpm_rate_usd * 100,
                           )}{" "}
                           {contest.platform?.toLowerCase() === "twitter" ||
                           contest.platform?.toLowerCase() === "x"
@@ -1961,7 +1985,7 @@ export function ContestListClient({
                         <span className="font-medium">
                           {formatMoney(
                             contest.contest_based_details.cpm_contest
-                              .total_budget
+                              .total_budget,
                           )}
                         </span>
                       </span>
@@ -1984,7 +2008,7 @@ export function ContestListClient({
                         <span className="font-medium">
                           {formatMoney(
                             contest.contest_based_details.leaderboard_contest
-                              .total_prize
+                              .total_prize,
                           )}
                         </span>
                       </span>
@@ -2023,7 +2047,7 @@ export function ContestListClient({
                       <div
                         className={cn(
                           "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
-                          isDark ? "bg-[#FFFFFF42]" : "bg-slate-200"
+                          isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
                         )}
                       >
                         <div
@@ -2060,7 +2084,7 @@ export function ContestListClient({
                       .budget_spent || 0;
                   const tracker = getBudgetTrackerValues(
                     totalBudget,
-                    budgetSpent
+                    budgetSpent,
                   );
 
                   return (
@@ -2109,7 +2133,7 @@ export function ContestListClient({
                 "flex items-center justify-center gap-2 px-4 py-3 rounded-full whitespace-nowrap",
                 isDark
                   ? "bg-[#7F39EC] text-white"
-                  : "bg-[#D9C0FF61] text-[#7F39EC]"
+                  : "bg-[#D9C0FF61] text-[#7F39EC]",
               )}
               onClick={(e) => {
                 e.stopPropagation();
@@ -2133,7 +2157,9 @@ export function ContestListClient({
         key={contest.id}
         className={cn(
           "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer relative",
-          isDark ? "bg-[#06021D] border-slate-700" : "bg-white border-slate-200"
+          isDark
+            ? "bg-[#06021D] border-slate-700"
+            : "bg-white border-slate-200",
         )}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest("button")) {
@@ -2212,7 +2238,7 @@ export function ContestListClient({
               <div
                 className={cn(
                   "flex items-center gap-1 text-base",
-                  isDark ? "text-amber-400" : "text-amber-600"
+                  isDark ? "text-amber-400" : "text-amber-600",
                 )}
               >
                 <AlertTriangle className="h-3 w-3" />
@@ -2258,11 +2284,11 @@ export function ContestListClient({
                   {contest.contest_type === "leaderboard"
                     ? `Prize: ${formatMoney(
                         contest.contest_based_details.leaderboard_contest
-                          ?.total_prize || 0
+                          ?.total_prize || 0,
                       )}`
                     : `Budget: ${formatMoney(
                         contest.contest_based_details.cpm_contest
-                          ?.total_budget || 0
+                          ?.total_budget || 0,
                       )}`}
                 </span>
               </div>
@@ -2283,7 +2309,7 @@ export function ContestListClient({
             contest.moderation_status === "approved" ||
               contest.moderation_status !== "published"
               ? "flex-row w-auto sm:w-auto"
-              : "flex-col w-32 sm:w-40"
+              : "flex-col w-32 sm:w-40",
           )}
         >
           {contest.moderation_status === "approved" ? (
@@ -2293,7 +2319,7 @@ export function ContestListClient({
                   "flex items-center justify-center gap-2 px-3 py-3 rounded-full text-sm font-medium whitespace-nowrap",
                   isDark
                     ? "bg-[#7F39EC] text-white"
-                    : "bg-[#D9C0FF61] text-[#7F39EC]"
+                    : "bg-[#D9C0FF61] text-[#7F39EC]",
                 )}
                 onClick={async (e) => {
                   e.stopPropagation();
@@ -2302,7 +2328,7 @@ export function ContestListClient({
                       `/api/contests/${contest.id}/publish`,
                       {
                         method: "POST",
-                      }
+                      },
                     );
                     if (response.ok) {
                       window.location.reload();
@@ -2323,12 +2349,14 @@ export function ContestListClient({
                 size="md"
                 className={cn(
                   "text-[13px] whitespace-nowrap",
-                  isDark ? "text-purple-400 border-gray-700" : "text-purple-500"
+                  isDark
+                    ? "text-purple-400 border-gray-700"
+                    : "text-purple-500",
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
                   router.push(
-                    `/dashboard/contests/${contest.id}/edit?dates=true`
+                    `/dashboard/contests/${contest.id}/edit?dates=true`,
                   );
                 }}
               >
@@ -2349,7 +2377,7 @@ export function ContestListClient({
                   "flex items-center justify-center gap-2 px-5 py-3 rounded-full text-sm font-medium whitespace-nowrap min-w-[140px]",
                   isDark
                     ? "bg-[#7F39EC] text-white"
-                    : "bg-[#D9C0FF61] text-[#7F39EC]"
+                    : "bg-[#D9C0FF61] text-[#7F39EC]",
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -2533,577 +2561,789 @@ export function ContestListClient({
   const hasNextPage = page < totalPages;
   const paginatedContests = displayContests.slice(
     (page - 1) * limit,
-    page * limit
+    page * limit,
   );
+  const hasCreatedContests = contests.length > 0;
 
   return (
     <div className="w-full no-theme-transition">
-      {/* Header with filters */}
-      <div className="flex flex-col gap-4 mb-3">
-        {/* Search and View Toggle Row */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          {/* Search Input */}
-          <div className="relative max-w-md w-full">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                aria-label="Clear search"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-            <Input
-              type="text"
-              placeholder="Search contests by title..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={cn(
-                "pl-10 border w-full",
-                searchQuery && "pr-10",
-                isDark
-                  ? "border-gray-500 bg-[#020817] text-white"
-                  : "border-gray-400 text-black"
-              )}
-            />
-          </div>
-          <div className="flex gap-2">
-            {/* Format Toggle: All / Text/Image contests vs Video contests */}
-            <div className="flex items-center gap-1 border border-gray-400 rounded-md p-1">
-              <button
-                type="button"
-                onClick={() => setContestFormatFilter("all")}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                  contestFormatFilter === "all"
-                    ? isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#7F39EC] text-white"
-                    : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+      {hasCreatedContests ? (
+        <>
+          {/* Header with filters */}
+          <div className="flex flex-col gap-4 mb-3">
+            {/* Search and View Toggle Row */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              {/* Search Input */}
+              <div className="relative max-w-md w-full">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 )}
-                title="All contests"
-              >
-                <LayoutGrid className="h-4 w-4" />
-                <span className="inline">All</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setContestFormatFilter("text_image")}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                  contestFormatFilter === "text_image"
-                    ? isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#7F39EC] text-white"
-                    : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                )}
-                title="Text/Image contests"
-              >
-                <FileText className="h-4 w-4" />
-                <span className="inline">Text/Image contests</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setContestFormatFilter("video")}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                  contestFormatFilter === "video"
-                    ? isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#7F39EC] text-white"
-                    : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                )}
-                title="Video contests"
-              >
-                <PlayCircle className="h-4 w-4" />
-                <span className="inline">Video contests</span>
-              </button>
+                <Input
+                  type="text"
+                  placeholder="Search contests by title..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={cn(
+                    "pl-10 border w-full",
+                    searchQuery && "pr-10",
+                    isDark
+                      ? "border-gray-500 bg-[#020817] text-white"
+                      : "border-gray-400 text-black",
+                  )}
+                />
+              </div>
+              <div className="flex gap-2">
+                {/* Format Toggle: All / Text/Image contests vs Video contests */}
+                <div className="flex items-center gap-1 border border-gray-400 rounded-md p-1">
+                  <button
+                    type="button"
+                    onClick={() => setContestFormatFilter("all")}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                      contestFormatFilter === "all"
+                        ? isDark
+                          ? "bg-[#7F39EC] text-white"
+                          : "bg-[#7F39EC] text-white"
+                        : isDark
+                          ? "text-gray-300 hover:text-white"
+                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
+                    )}
+                    title="All contests"
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                    <span className="inline">All</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setContestFormatFilter("text_image")}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                      contestFormatFilter === "text_image"
+                        ? isDark
+                          ? "bg-[#7F39EC] text-white"
+                          : "bg-[#7F39EC] text-white"
+                        : isDark
+                          ? "text-gray-300 hover:text-white"
+                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
+                    )}
+                    title="Text/Image contests"
+                  >
+                    <FileText className="h-4 w-4" />
+                    <span className="inline">Text/Image contests</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setContestFormatFilter("video")}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                      contestFormatFilter === "video"
+                        ? isDark
+                          ? "bg-[#7F39EC] text-white"
+                          : "bg-[#7F39EC] text-white"
+                        : isDark
+                          ? "text-gray-300 hover:text-white"
+                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
+                    )}
+                    title="Video contests"
+                  >
+                    <PlayCircle className="h-4 w-4" />
+                    <span className="inline">Video contests</span>
+                  </button>
+                </div>
+
+                {/* View Toggle Buttons */}
+                <div className="hidden min-[650px]:flex items-center gap-1 border border-gray-400 rounded-md p-1">
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                      viewMode === "grid"
+                        ? isDark
+                          ? "bg-[#7F39EC] text-white"
+                          : "bg-[#7F39EC] text-white"
+                        : isDark
+                          ? "text-gray-300 hover:text-white"
+                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
+                    )}
+                    title="Grid View"
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                    <span className="hidden sm:inline">Grid View</span>
+                  </button>
+                  <button
+                    onClick={() => setViewMode("list")}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                      viewMode === "list"
+                        ? isDark
+                          ? "bg-[#7F39EC] text-white"
+                          : "bg-[#7F39EC] text-white"
+                        : isDark
+                          ? "text-gray-300 hover:text-white"
+                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
+                    )}
+                    title="List View"
+                  >
+                    <List className="h-4 w-4" />
+                    <span className="hidden sm:inline">List View</span>
+                  </button>
+                </div>
+              </div>
             </div>
+            {/* Filters - Wraps to next row when overflow */}
+            <div className="flex flex-wrap items-center gap-2 w-full">
+              <Select
+                value={sortOption}
+                onValueChange={(value) =>
+                  setSortOption(value as SortOptionType)
+                }
+              >
+                <SelectTrigger className="w-full sm:w-[200px] min-w-[150px] border border-gray-400">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent isDark={isDark}>
+                  <SelectItem isDark={isDark} value="created_at_desc">
+                    Date Created: Latest
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="created_at_asc">
+                    Date Created: Earliest
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="start_date_asc">
+                    Launch Date: Closest
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="start_date_desc">
+                    Launch Date: Farthest
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="end_date_asc">
+                    End Date: Closest
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="end_date_desc">
+                    End Date: Farthest
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="value_desc">
+                    Prize/Budget: High to Low
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="value_asc">
+                    Prize/Budget: Low to High
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="cpm_rate_desc">
+                    CPM Rate: High to Low
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="cpm_rate_asc">
+                    CPM Rate: Low to High
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="submissions_desc">
+                    Submissions: High to Low
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="submissions_asc">
+                    Submissions: Low to High
+                  </SelectItem>
+                </SelectContent>
+              </Select>
 
-            {/* View Toggle Buttons */}
-            <div className="hidden min-[650px]:flex items-center gap-1 border border-gray-400 rounded-md p-1">
-              <button
-                onClick={() => setViewMode("grid")}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                  viewMode === "grid"
-                    ? isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#7F39EC] text-white"
-                    : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                )}
-                title="Grid View"
+              <Select value={platformFilter} onValueChange={setPlatformFilter}>
+                <SelectTrigger className="w-full sm:w-[150px] min-w-[120px] border border-gray-400">
+                  <SelectValue placeholder="Platform" />
+                </SelectTrigger>
+                <SelectContent isDark={isDark}>
+                  {availablePlatforms.map((p) => (
+                    <SelectItem isDark={isDark} key={p} value={p}>
+                      {p === "all" ? "All Platforms" : p}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Contest Status Filter */}
+              <Select
+                value={contestStatusFilter}
+                onValueChange={setContestStatusFilter}
               >
-                <LayoutGrid className="h-4 w-4" />
-                <span className="hidden sm:inline">Grid View</span>
-              </button>
-              <button
-                onClick={() => setViewMode("list")}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                  viewMode === "list"
-                    ? isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#7F39EC] text-white"
-                    : isDark
-                    ? "text-gray-300 hover:text-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                )}
-                title="List View"
+                <SelectTrigger className="w-full sm:w-[150px] min-w-[120px] border border-gray-400">
+                  <SelectValue placeholder="Contest Status" />
+                </SelectTrigger>
+                <SelectContent isDark={isDark}>
+                  <SelectItem isDark={isDark} value="all">
+                    All Status
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="live">
+                    Live
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="upcoming">
+                    Upcoming
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="ended">
+                    completed
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Contest Type Filter */}
+              <Select
+                value={contestTypeFilter}
+                onValueChange={setContestTypeFilter}
               >
-                <List className="h-4 w-4" />
-                <span className="hidden sm:inline">List View</span>
-              </button>
+                <SelectTrigger className="w-full sm:w-[150px] min-w-[120px] border border-gray-400">
+                  <SelectValue placeholder="Contest Type" />
+                </SelectTrigger>
+                <SelectContent isDark={isDark}>
+                  <SelectItem isDark={isDark} value="all">
+                    All Types
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="leaderboard">
+                    Leaderboard
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="cpm">
+                    CPM
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        </div>
-        {/* Filters - Wraps to next row when overflow */}
-        <div className="flex flex-wrap items-center gap-2 w-full">
-          <Select
-            value={sortOption}
-            onValueChange={(value) => setSortOption(value as SortOptionType)}
-          >
-            <SelectTrigger className="w-full sm:w-[200px] min-w-[150px] border border-gray-400">
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent isDark={isDark}>
-              <SelectItem isDark={isDark} value="created_at_desc">
-                Date Created: Latest
-              </SelectItem>
-              <SelectItem isDark={isDark} value="created_at_asc">
-                Date Created: Earliest
-              </SelectItem>
-              <SelectItem isDark={isDark} value="start_date_asc">
-                Launch Date: Closest
-              </SelectItem>
-              <SelectItem isDark={isDark} value="start_date_desc">
-                Launch Date: Farthest
-              </SelectItem>
-              <SelectItem isDark={isDark} value="end_date_asc">
-                End Date: Closest
-              </SelectItem>
-              <SelectItem isDark={isDark} value="end_date_desc">
-                End Date: Farthest
-              </SelectItem>
-              <SelectItem isDark={isDark} value="value_desc">
-                Prize/Budget: High to Low
-              </SelectItem>
-              <SelectItem isDark={isDark} value="value_asc">
-                Prize/Budget: Low to High
-              </SelectItem>
-              <SelectItem isDark={isDark} value="cpm_rate_desc">
-                CPM Rate: High to Low
-              </SelectItem>
-              <SelectItem isDark={isDark} value="cpm_rate_asc">
-                CPM Rate: Low to High
-              </SelectItem>
-              <SelectItem isDark={isDark} value="submissions_desc">
-                Submissions: High to Low
-              </SelectItem>
-              <SelectItem isDark={isDark} value="submissions_asc">
-                Submissions: Low to High
-              </SelectItem>
-            </SelectContent>
-          </Select>
 
-          <Select value={platformFilter} onValueChange={setPlatformFilter}>
-            <SelectTrigger className="w-full sm:w-[150px] min-w-[120px] border border-gray-400">
-              <SelectValue placeholder="Platform" />
-            </SelectTrigger>
-            <SelectContent isDark={isDark}>
-              {availablePlatforms.map((p) => (
-                <SelectItem isDark={isDark} key={p} value={p}>
-                  {p === "all" ? "All Platforms" : p}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Contest Status Filter */}
-          <Select
-            value={contestStatusFilter}
-            onValueChange={setContestStatusFilter}
+          {/* Enhanced Status Filter Tabs - More Responsive */}
+          <Tabs
+            value={selectedTab}
+            onValueChange={setSelectedTab}
+            className="w-full mb-8"
           >
-            <SelectTrigger className="w-full sm:w-[150px] min-w-[120px] border border-gray-400">
-              <SelectValue placeholder="Contest Status" />
-            </SelectTrigger>
-            <SelectContent isDark={isDark}>
-              <SelectItem isDark={isDark} value="all">
-                All Status
-              </SelectItem>
-              <SelectItem isDark={isDark} value="live">
-                Live
-              </SelectItem>
-              <SelectItem isDark={isDark} value="upcoming">
-                Upcoming
-              </SelectItem>
-              <SelectItem isDark={isDark} value="ended">
-                completed
-              </SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Contest Type Filter */}
-          <Select
-            value={contestTypeFilter}
-            onValueChange={setContestTypeFilter}
-          >
-            <SelectTrigger className="w-full sm:w-[150px] min-w-[120px] border border-gray-400">
-              <SelectValue placeholder="Contest Type" />
-            </SelectTrigger>
-            <SelectContent isDark={isDark}>
-              <SelectItem isDark={isDark} value="all">
-                All Types
-              </SelectItem>
-              <SelectItem isDark={isDark} value="leaderboard">
-                Leaderboard
-              </SelectItem>
-              <SelectItem isDark={isDark} value="cpm">
-                CPM
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Enhanced Status Filter Tabs - More Responsive */}
-      <Tabs
-        value={selectedTab}
-        onValueChange={setSelectedTab}
-        className="w-full mb-8"
-      >
-        <TabsList className="flex gap-6">
-          <TabsTrigger
-            value="all"
-            className={cn(
-              "border",
-              isDark
-                ? "border-gray-400 text-white"
-                : "border-gray-500 text-gray-800"
-            )}
-          >
-            All{" "}
-            <Badge
-              variant="secondary"
-              className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-            >
-              {contestsByStatus.all.length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger
-            value="draft"
-            className={cn(
-              "border",
-              isDark
-                ? "border-gray-400 text-white"
-                : "border-gray-500 text-gray-800"
-            )}
-          >
-            Draft{" "}
-            <Badge
-              variant="secondary"
-              className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-            >
-              {contestsByStatus.draft.length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger
-            className={cn(
-              "border",
-              isDark
-                ? "border-gray-400 text-white"
-                : "border-gray-500 text-gray-800"
-            )}
-            value="pending_approval"
-          >
-            Pending Approval{" "}
-            <Badge
-              variant="secondary"
-              className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-            >
-              {contestsByStatus.pending_approval.length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger
-            value="ready"
-            className={cn(
-              "border",
-              isDark
-                ? "border-gray-400 text-white"
-                : "border-gray-500 text-gray-800"
-            )}
-          >
-            Ready{" "}
-            <Badge
-              variant="secondary"
-              className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-            >
-              {contestsByStatus.ready.length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger
-            value="active"
-            className={cn(
-              "border",
-              isDark
-                ? "border-gray-400 text-white"
-                : "border-gray-500 text-gray-800"
-            )}
-          >
-            Active{" "}
-            <Badge
-              variant="secondary"
-              className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-            >
-              {contestsByStatus.active.length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger
-            className={cn(
-              "border",
-              isDark
-                ? "border-gray-400 text-white"
-                : "border-gray-500 text-gray-800"
-            )}
-            value="pending_verification"
-          >
-            Pending Verification{" "}
-            <Badge
-              variant="secondary"
-              className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-            >
-              {contestsByStatus.pending_verification.length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger
-            value="done"
-            className={cn(
-              "border",
-              isDark
-                ? "border-gray-400 text-white"
-                : "border-gray-500 text-gray-800"
-            )}
-          >
-            Done{" "}
-            <Badge
-              variant="secondary"
-              className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-            >
-              {contestsByStatus.done.length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger
-            value="rejected"
-            className={cn(
-              "border",
-              isDark
-                ? "border-gray-400 text-white"
-                : "border-gray-500 text-gray-800"
-            )}
-          >
-            Rejected{" "}
-            <Badge
-              variant="secondary"
-              className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-            >
-              {contestsByStatus.rejected.length}
-            </Badge>
-          </TabsTrigger>
-        </TabsList>
-        {Object.keys(contestsByStatus).map((tabValue) => (
-          <TabsContent key={tabValue} value={tabValue} className="mt-4">
-            <div>
-              {viewMode === "grid" ? (
-                <div
-                  className="grid gap-6"
-                  style={{
-                    gridTemplateColumns:
-                      "repeat(auto-fill, minmax(320px, 1fr))",
-                  }}
+            <TabsList className="flex gap-6">
+              <TabsTrigger
+                value="all"
+                className={cn(
+                  "border",
+                  isDark
+                    ? "border-gray-400 text-white"
+                    : "border-gray-500 text-gray-800",
+                )}
+              >
+                All{" "}
+                <Badge
+                  variant="secondary"
+                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
                 >
-                  {total > 0 ? (
-                    paginatedContests.map((contest) =>
-                      renderContestCard(contest)
-                    )
-                  ) : (
-                    <div className="col-span-full text-center py-12">
-                      <h3
-                        className="text-lg font-semibold"
-                        style={{
-                          color: isDark ? "white" : "black",
-                          transition: "none",
-                        }}
-                      >
-                        No Contests Found
-                      </h3>
-                      <p
-                        className="mt-2"
-                        style={{
-                          color: isDark ? "#94a3b8" : "#64748b",
-                          transition: "none",
-                        }}
-                      >
-                        {platformFilter !== "all" ||
-                        contestStatusFilter !== "all" ||
-                        contestTypeFilter !== "all"
-                          ? `No contests match the current filters for ${tabValue
-                              .split("_")
-                              .join(" ")} status.`
-                          : `No contests found for ${tabValue
-                              .split("_")
-                              .join(" ")} status.`}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  {total > 0 ? (
-                    paginatedContests.map((contest) =>
-                      renderContestListItem(contest)
-                    )
-                  ) : (
-                    <div className="text-center py-12">
-                      <h3
-                        className="text-lg font-semibold"
-                        style={{
-                          color: isDark ? "white" : "black",
-                          transition: "none",
-                        }}
-                      >
-                        No Contests Found
-                      </h3>
-                      <p
-                        className="mt-2"
-                        style={{
-                          color: isDark ? "#94a3b8" : "#64748b",
-                          transition: "none",
-                        }}
-                      >
-                        {platformFilter !== "all" ||
-                        contestStatusFilter !== "all" ||
-                        contestTypeFilter !== "all"
-                          ? `No contests match the current filters for ${tabValue
-                              .split("_")
-                              .join(" ")} status.`
-                          : `No contests found for ${tabValue
-                              .split("_")
-                              .join(" ")} status.`}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {total > 0 && (
-                <div className="mt-6 flex flex-col gap-2 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                  {contestsByStatus.all.length}
+                </Badge>
+              </TabsTrigger>
+              <TabsTrigger
+                value="draft"
+                className={cn(
+                  "border",
+                  isDark
+                    ? "border-gray-400 text-white"
+                    : "border-gray-500 text-gray-800",
+                )}
+              >
+                Draft{" "}
+                <Badge
+                  variant="secondary"
+                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
+                >
+                  {contestsByStatus.draft.length}
+                </Badge>
+              </TabsTrigger>
+              <TabsTrigger
+                className={cn(
+                  "border",
+                  isDark
+                    ? "border-gray-400 text-white"
+                    : "border-gray-500 text-gray-800",
+                )}
+                value="pending_approval"
+              >
+                Pending Approval{" "}
+                <Badge
+                  variant="secondary"
+                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
+                >
+                  {contestsByStatus.pending_approval.length}
+                </Badge>
+              </TabsTrigger>
+              <TabsTrigger
+                value="ready"
+                className={cn(
+                  "border",
+                  isDark
+                    ? "border-gray-400 text-white"
+                    : "border-gray-500 text-gray-800",
+                )}
+              >
+                Ready{" "}
+                <Badge
+                  variant="secondary"
+                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
+                >
+                  {contestsByStatus.ready.length}
+                </Badge>
+              </TabsTrigger>
+              <TabsTrigger
+                value="active"
+                className={cn(
+                  "border",
+                  isDark
+                    ? "border-gray-400 text-white"
+                    : "border-gray-500 text-gray-800",
+                )}
+              >
+                Active{" "}
+                <Badge
+                  variant="secondary"
+                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
+                >
+                  {contestsByStatus.active.length}
+                </Badge>
+              </TabsTrigger>
+              <TabsTrigger
+                className={cn(
+                  "border",
+                  isDark
+                    ? "border-gray-400 text-white"
+                    : "border-gray-500 text-gray-800",
+                )}
+                value="pending_verification"
+              >
+                Pending Verification{" "}
+                <Badge
+                  variant="secondary"
+                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
+                >
+                  {contestsByStatus.pending_verification.length}
+                </Badge>
+              </TabsTrigger>
+              <TabsTrigger
+                value="done"
+                className={cn(
+                  "border",
+                  isDark
+                    ? "border-gray-400 text-white"
+                    : "border-gray-500 text-gray-800",
+                )}
+              >
+                Done{" "}
+                <Badge
+                  variant="secondary"
+                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
+                >
+                  {contestsByStatus.done.length}
+                </Badge>
+              </TabsTrigger>
+              <TabsTrigger
+                value="rejected"
+                className={cn(
+                  "border",
+                  isDark
+                    ? "border-gray-400 text-white"
+                    : "border-gray-500 text-gray-800",
+                )}
+              >
+                Rejected{" "}
+                <Badge
+                  variant="secondary"
+                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
+                >
+                  {contestsByStatus.rejected.length}
+                </Badge>
+              </TabsTrigger>
+            </TabsList>
+            {Object.keys(contestsByStatus).map((tabValue) => (
+              <TabsContent key={tabValue} value={tabValue} className="mt-4">
+                <div>
+                  {viewMode === "grid" ? (
                     <div
-                      className="text-sm"
+                      className="grid gap-6"
                       style={{
-                        color: isDark ? "#cbd5e1" : "#4b5563",
-                        transition: "none",
+                        gridTemplateColumns:
+                          "repeat(auto-fill, minmax(320px, 1fr))",
                       }}
                     >
-                      {(() => {
-                        const startItem = (page - 1) * limit + 1;
-                        const endItem = Math.min(page * limit, total);
-                        return `Showing ${startItem}-${endItem} of ${total} contests`;
-                      })()}
+                      {total > 0 ? (
+                        paginatedContests.map((contest) =>
+                          renderContestCard(contest),
+                        )
+                      ) : (
+                        <div className="col-span-full text-center py-12">
+                          <h3
+                            className="text-lg font-semibold"
+                            style={{
+                              color: isDark ? "white" : "black",
+                              transition: "none",
+                            }}
+                          >
+                            No Contests Found
+                          </h3>
+                          <p
+                            className="mt-2"
+                            style={{
+                              color: isDark ? "#94a3b8" : "#64748b",
+                              transition: "none",
+                            }}
+                          >
+                            {platformFilter !== "all" ||
+                            contestStatusFilter !== "all" ||
+                            contestTypeFilter !== "all"
+                              ? `No contests match the current filters for ${tabValue
+                                  .split("_")
+                                  .join(" ")} status.`
+                              : `No contests found for ${tabValue
+                                  .split("_")
+                                  .join(" ")} status.`}
+                          </p>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="text-sm"
-                        style={{
-                          color: isDark ? "#cbd5e1" : "#4b5563",
-                          transition: "none",
-                        }}
-                      >
-                        Show:
-                      </span>
-                      <Select
-                        value={limit.toString()}
-                        onValueChange={(value) => {
-                          const newLimit = parseInt(value, 10);
-                          setLimit(newLimit);
-                          setPage(1);
-                        }}
-                      >
-                        <SelectTrigger
-                          className={cn(
-                            "w-20",
-                            isDark && "border border-gray-600"
-                          )}
+                  ) : (
+                    <div className="flex flex-col gap-4">
+                      {total > 0 ? (
+                        paginatedContests.map((contest) =>
+                          renderContestListItem(contest),
+                        )
+                      ) : (
+                        <div className="text-center py-12">
+                          <h3
+                            className="text-lg font-semibold"
+                            style={{
+                              color: isDark ? "white" : "black",
+                              transition: "none",
+                            }}
+                          >
+                            No Contests Found
+                          </h3>
+                          <p
+                            className="mt-2"
+                            style={{
+                              color: isDark ? "#94a3b8" : "#64748b",
+                              transition: "none",
+                            }}
+                          >
+                            {platformFilter !== "all" ||
+                            contestStatusFilter !== "all" ||
+                            contestTypeFilter !== "all"
+                              ? `No contests match the current filters for ${tabValue
+                                  .split("_")
+                                  .join(" ")} status.`
+                              : `No contests found for ${tabValue
+                                  .split("_")
+                                  .join(" ")} status.`}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {total > 0 && (
+                    <div className="mt-6 flex flex-col gap-2 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                        <div
+                          className="text-sm"
+                          style={{
+                            color: isDark ? "#cbd5e1" : "#4b5563",
+                            transition: "none",
+                          }}
                         >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent
-                          isDark={isDark}
-                          className={cn(
-                            isDark && "border-gray-600 bg-[#07031D] text-white"
-                          )}
-                        >
-                          {[9, 15, 21, 30].map((size) => (
-                            <SelectItem
-                              isDark={isDark}
-                              key={size}
-                              value={size.toString()}
+                          {(() => {
+                            const startItem = (page - 1) * limit + 1;
+                            const endItem = Math.min(page * limit, total);
+                            return `Showing ${startItem}-${endItem} of ${total} contests`;
+                          })()}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="text-sm"
+                            style={{
+                              color: isDark ? "#cbd5e1" : "#4b5563",
+                              transition: "none",
+                            }}
+                          >
+                            Show:
+                          </span>
+                          <Select
+                            value={limit.toString()}
+                            onValueChange={(value) => {
+                              const newLimit = parseInt(value, 10);
+                              setLimit(newLimit);
+                              setPage(1);
+                            }}
+                          >
+                            <SelectTrigger
                               className={cn(
-                                isDark &&
-                                  "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
+                                "w-20",
+                                isDark && "border border-gray-600",
                               )}
                             >
-                              {size}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <span
-                        className="text-sm"
-                        style={{
-                          color: isDark ? "#cbd5e1" : "#4b5563",
-                          transition: "none",
-                        }}
-                      >
-                        per page
-                      </span>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent
+                              isDark={isDark}
+                              className={cn(
+                                isDark &&
+                                  "border-gray-600 bg-[#07031D] text-white",
+                              )}
+                            >
+                              {[9, 15, 21, 30].map((size) => (
+                                <SelectItem
+                                  isDark={isDark}
+                                  key={size}
+                                  value={size.toString()}
+                                  className={cn(
+                                    isDark &&
+                                      "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700",
+                                  )}
+                                >
+                                  {size}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <span
+                            className="text-sm"
+                            style={{
+                              color: isDark ? "#cbd5e1" : "#4b5563",
+                              transition: "none",
+                            }}
+                          >
+                            per page
+                          </span>
+                        </div>
+                      </div>
+                      {totalPages > 1 && (
+                        <PaginationControls
+                          page={page}
+                          limit={limit}
+                          total={total}
+                          totalPages={totalPages}
+                          hasNextPage={hasNextPage}
+                          hasPreviousPage={hasPreviousPage}
+                          onPageChange={setPage}
+                          onLimitChange={setLimit}
+                          loading={false}
+                          isDark={isDark}
+                          showResultInfo={false}
+                          showPageSizeSelector={false}
+                          showEdgeButtons={false}
+                          showPrevNextButtons={true}
+                          pageSizeOptions={[9, 15, 21, 30]}
+                        />
+                      )}
                     </div>
-                  </div>
-                  {totalPages > 1 && (
-                    <PaginationControls
-                      page={page}
-                      limit={limit}
-                      total={total}
-                      totalPages={totalPages}
-                      hasNextPage={hasNextPage}
-                      hasPreviousPage={hasPreviousPage}
-                      onPageChange={setPage}
-                      onLimitChange={setLimit}
-                      loading={false}
-                      isDark={isDark}
-                      showResultInfo={false}
-                      showPageSizeSelector={false}
-                      showEdgeButtons={false}
-                      showPrevNextButtons={true}
-                      pageSizeOptions={[9, 15, 21, 30]}
-                    />
                   )}
                 </div>
-              )}
-            </div>
-          </TabsContent>
-        ))}
-      </Tabs>
+              </TabsContent>
+            ))}
+          </Tabs>
+        </>
+      ) : (
+        <div className="py-10">
+          {/* <div className="text-center mb-8">
+            <h3
+              className="text-lg font-semibold"
+              style={{ color: isDark ? "white" : "black", transition: "none" }}
+            >
+              No contests yet
+            </h3>
+            <p
+              className="mt-2"
+              style={{
+                color: isDark ? "#94a3b8" : "#64748b",
+                transition: "none",
+              }}
+            >
+              You haven&apos;t created any contests yet. Pick a contest type below
+              to understand what works best for your campaign goals.
+            </p>
+          </div> */}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="border border-gray-200 bg-white shadow-sm">
+              <div className="px-6 pt-6">
+                <img
+                  src="/images/leaderboard.avif"
+                  alt="Leaderboard contest preview"
+                  className="h-[390px] w-full rounded-md border border-gray-100 bg-white object-cover"
+                />
+              </div>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <CardTitle className="text-base text-gray-900">
+                      Leaderboard Contest
+                    </CardTitle>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-4 text-md leading-6 text-slate-700">
+                  <div>
+                    <p className="mt-2">
+                      A Leaderboard Contest is a performance-based campaign
+                      where creators compete to deliver the highest number of{" "}
+                      <strong>organic views</strong> for your brand&apos;s
+                      content. Creators are ranked on a live leaderboard, and
+                      top performers win prize money.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700">
+                        1
+                      </span>
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          Create Your Contest
+                        </p>
+                        <p className="mt-1 text-slate-600">
+                          Set your brief, start & end dates, total budget, and
+                          select the platform where creators should post.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700">
+                        2
+                      </span>
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                         
+                          Creators Participate
+                        </p>
+                        <p className="mt-1 text-slate-600">
+                        Creators produce content, post it on the selected platform(s), and submit links for tracking.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700">
+                        3
+                      </span>
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          Reward Top Performers
+                        </p>
+                        <p className="mt-1 text-slate-600">
+                          Once the contest ends, rankings are finalized and
+                          payouts are made to creators based on their
+                          leaderboard position.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    className="w-full bg-purple-600 text-white hover:bg-purple-700"
+                    onClick={() =>
+                      router.push(
+                        "/dashboard/contests/create?new=true&contestType=leaderboard",
+                      )
+                    }
+                  >
+                    Create Leaderboard Contest
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-gray-200 bg-white shadow-sm">
+              <div className="px-6 pt-6">
+                <img
+                  src="/images/cpm.avif"
+                  alt="CPM contest preview"
+                  className="h-[400px] w-full rounded-md border border-gray-100 object-cover"
+                />
+              </div>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <CardTitle className="text-base text-gray-900">
+                      CPM Contest
+                    </CardTitle>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-4 text-md leading-6 text-slate-800">
+                  <div className="rounded-lg">
+                    <p className="mt-2">
+                      A CPM (Cost Per Mille) Contest rewards creators based on{" "}
+                      <strong> per thousand views</strong>. Creators
+                      earn payouts directly based on the reach of their content.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-700">
+                        1
+                      </span>
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          Create Your Contest
+                        </p>
+                        <p className="mt-1 text-slate-600">
+                        Set your brief,
+                          start and end dates, total budget, platform(s) for
+                          posting, and the <strong>CPM rate</strong> (payment
+                          per 1,000 views).
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-700">
+                        2
+                      </span>
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          Creators Participate
+                        </p>
+                        <p className="mt-1 text-slate-600">
+                          Creators produce content, post it on the selected
+                          platform(s), and submit links for tracking.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-700">
+                        3
+                      </span>
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          Views Determine Payout
+                        </p>
+                        <p className="mt-1 text-slate-600">
+                          Payouts are calculated based on the number of views
+                          (per thousand views) each creator generates.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    className="w-full bg-purple-600 text-white hover:bg-purple-700"
+                    onClick={() =>
+                      router.push(
+                        "/dashboard/contests/create?new=true&contestType=cpm",
+                      )
+                    }
+                  >
+                    Create CPM Contest
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
