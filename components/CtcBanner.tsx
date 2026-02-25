@@ -1,13 +1,28 @@
 "use client";
 import { ArrowRight, Rocket, ShieldCheck, Zap, CheckCircle, Globe } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function CtcBanner() {
   const sectionRef = useRef<HTMLElement | null>(null);
   const [inView, setInView] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+  const supabase = createClient();
+  const [showAdvertiserModal, setShowAdvertiserModal] = useState(false);
+  const [showCreatorModal, setShowCreatorModal] = useState(false);
+  const [isCheckingAccount, setIsCheckingAccount] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Route flags
   const isBrands = pathname === "/brands";
@@ -50,6 +65,89 @@ export default function CtcBanner() {
       if (sectionRef.current) observer.unobserve(sectionRef.current);
     };
   }, []);
+
+  const handleMainCtaClick = async () => {
+    if (isHome) {
+      localStorage.removeItem("signupRole");
+      router.push("/auth/signup");
+      return;
+    }
+
+    setIsCheckingAccount(true);
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (!userError && user) {
+        const { data: userData } = await supabase
+          .from("users")
+          .select("user_type")
+          .eq("id", user.id)
+          .single();
+
+        if (isBrands && userData?.user_type === "creator") {
+          setShowCreatorModal(true);
+          return;
+        }
+
+        if (isCreators && userData?.user_type === "advertiser") {
+          setShowAdvertiserModal(true);
+          return;
+        }
+      }
+
+      localStorage.setItem("signupRole", isBrands ? "brand" : "creator");
+      router.push("/auth/signup");
+    } catch (error) {
+      console.error("Failed to verify account type before sign-up:", error);
+      localStorage.setItem("signupRole", isBrands ? "brand" : "creator");
+      router.push("/auth/signup");
+    } finally {
+      setIsCheckingAccount(false);
+    }
+  };
+
+  const handleSignOutAndContinueCreator = async () => {
+    setIsSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+      localStorage.setItem("signupRole", "creator");
+      setShowAdvertiserModal(false);
+      router.push("/auth/signup");
+      router.refresh();
+    } catch (error) {
+      console.error("Failed to sign out advertiser before creator sign-up:", error);
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
+  const handleContinueAsAdvertiser = () => {
+    setShowAdvertiserModal(false);
+    router.push("/dashboard/contests");
+  };
+
+  const handleSignOutAndContinueBrand = async () => {
+    setIsSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+      localStorage.setItem("signupRole", "brand");
+      setShowCreatorModal(false);
+      router.push("/auth/signup");
+      router.refresh();
+    } catch (error) {
+      console.error("Failed to sign out creator before brand sign-up:", error);
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
+  const handleContinueAsCreator = () => {
+    setShowCreatorModal(false);
+    router.push("/dashboard/opportunities");
+  };
 
   return (
     <section
@@ -129,37 +227,138 @@ export default function CtcBanner() {
 
       {/* CTA Button */}
       <div className="flex justify-center items-center mt-12">
-        
-         
-          <Link
-            href="/auth/signup"
-            // className="relative z-10 flex items-center gap-2"
-            onClick={() => {
-              // Store user role based on current page
-              if (isHome) {
-                // For home page, don't set a specific role - let user choose
-                localStorage.removeItem('signupRole');
-              } else if (isCreators) {
-                localStorage.setItem('signupRole', 'creator');
-              } else {
-                // For brands page
-                localStorage.setItem('signupRole', 'brand');
-              }
-            }}
-            className="relative z-10 flex items-center gap-2 rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2"
-            style={{ backgroundImage: theme.btnGradient }}
-          >
-             <div className="scan-line"></div>
-            <Rocket className="w-4 h-4" />
-            {isHome
-              ? "Join Game Of Creators"
-              : isCreators
-                ? "Start Earning"
-                : "Launch a Contest"}
-            <ArrowRight className="h-5 w-5" />
-          </Link>
-       
+        <button
+          type="button"
+          onClick={handleMainCtaClick}
+          disabled={isCheckingAccount}
+          className="relative z-10 rounded-3xl text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+          style={{ backgroundImage: theme.btnGradient }}
+        >
+          <div className="scan-line"></div>
+          <Rocket className="w-4 h-4" />
+          {isHome
+            ? "Join Game Of Creators"
+            : isCreators
+              ? "Start Earning"
+              : "Launch a Contest"}
+          <ArrowRight className="h-5 w-5" />
+        </button>
       </div>
+
+      <Dialog open={showAdvertiserModal} onOpenChange={setShowAdvertiserModal}>
+        <DialogContent className="bg-[#050816] border border-orange-500/30 text-white rounded-2xl shadow-2xl shadow-orange-900/40 sm:max-w-xl p-8">
+          <DialogHeader>
+          <DialogTitle
+              className="text-xl mb-2 lg:text-2xl leading-tight"
+
+            >
+              <span
+                className="font-semibold text-white drop-shadow-2xl"
+                style={{ fontFamily: "Montserrat, sans-serif" }}
+              >
+                 You are logged in as {" "}
+              </span>
+              <span
+                className="font-semibold text-white drop-shadow-2xl"
+                style={{ fontFamily: "Montserrat, sans-serif" }}
+              >
+                <span className="relative">
+                  <span
+                    className="bg-clip-text text-transparent"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
+                    }}
+                  >
+                    a brand
+                  </span>
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl "></div>
+                </span>
+              </span>
+            </DialogTitle>
+            <DialogDescription className="text-base md:text-lg text-slate-300 leading-relaxed">
+              To continue as a creator, please sign out from your brand account first, then log in or sign up as a creator account.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-2 flex-col gap-2 sm:flex-row sm:justify-center">
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5"
+              onClick={handleContinueAsAdvertiser}
+              disabled={isSigningOut}
+            >
+              Continue as Brand
+            </Button>
+            <Button
+              className="w-full sm:w-auto bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-base text-md text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5"
+              onClick={handleSignOutAndContinueCreator}
+              disabled={isSigningOut}
+            >
+              Sign out & Continue as Creator
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCreatorModal} onOpenChange={setShowCreatorModal}>
+        <DialogContent className="bg-[#050816] border border-violet-500/30 text-white rounded-2xl shadow-2xl shadow-violet-900/40 sm:max-w-xl p-8">
+          <DialogHeader>
+          <DialogTitle
+              className="text-xl mb-4 lg:text-2xl leading-tight"
+  
+             
+            >
+              <span
+                className="font-semibold text-white drop-shadow-2xl"
+                style={{ fontFamily: "Montserrat, sans-serif" }}
+              >
+                You are logged in as {" "}
+              </span>
+
+              <span
+                className="font-semibold text-white drop-shadow-2xl"
+                style={{ fontFamily: "Montserrat, sans-serif" }}
+              >
+                <span className="relative">
+                  <span
+                    style={{
+                      background:
+                        "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
+                      WebkitBackgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                      backgroundClip: "text",
+                      display: "inline",
+                    }}
+                  >
+                   a creator
+                  </span>
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl"></div>
+                </span>
+              </span>
+            </DialogTitle>
+            <DialogDescription className="text-base md:text-lg text-slate-300 leading-relaxed">
+              To continue as a brand, please sign out from your creator account first, then log in or sign up as a brand account.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-2 flex-col gap-4 sm:flex-row sm:justify-center">
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5"
+              onClick={handleContinueAsCreator}
+              disabled={isSigningOut}
+            >
+              Continue as Creator
+            </Button>
+            <Button
+              className="w-full sm:w-auto bg-gradient-to-r from-[#4C238B] to-[#7F39EC] text-base text-md text-white hover:from-[#4C238B]/90 hover:to-[#7F39EC]/90 px-6 py-5"
+              onClick={handleSignOutAndContinueBrand}
+              disabled={isSigningOut}
+            >
+              Sign out & Continue as Brand
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Feature Buttons for Home */}
       {isHome && (
