@@ -34,6 +34,15 @@ export interface Database {
             timestamp: string;
             user_agent?: string;
           }>;
+          geo_data?: {
+            country: string;
+            country_code: string;
+            state: string;
+            city: string;
+            lat: number;
+            lon: number;
+            processed_at: string;
+          } | null;
         };
         Insert: {
           id?: string;
@@ -59,6 +68,15 @@ export interface Database {
             timestamp: string;
             user_agent?: string;
           }>;
+          geo_data?: {
+            country: string;
+            country_code: string;
+            state: string;
+            city: string;
+            lat: number;
+            lon: number;
+            processed_at: string;
+          } | null;
         };
         Update: {
           id?: string;
@@ -84,6 +102,15 @@ export interface Database {
             timestamp: string;
             user_agent?: string;
           }>;
+          geo_data?: {
+            country: string;
+            country_code: string;
+            state: string;
+            city: string;
+            lat: number;
+            lon: number;
+            processed_at: string;
+          } | null;
         };
       };
       customers: {

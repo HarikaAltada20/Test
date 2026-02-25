@@ -26,6 +26,14 @@ import {
   Coins,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import CtcBanner from "@/components/CtcBanner";
@@ -163,6 +171,9 @@ export default function CreatorsClient({
   const [userType, setUserType] = useState<"creator" | "advertiser" | null>(
     null
   );
+  const [showAdvertiserModal, setShowAdvertiserModal] = useState(false);
+  const [isCheckingStartEarning, setIsCheckingStartEarning] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const router = useRouter();
 
   // Cache management for client-side fetching
@@ -345,6 +356,60 @@ export default function CreatorsClient({
     }
     // Default to opportunities for creators or logged out users
     return "/dashboard/opportunities";
+  };
+
+  const handleStartEarningClick = async () => {
+    setIsCheckingStartEarning(true);
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (!userError && user) {
+        const { data: userData } = await supabase
+          .from("users")
+          .select("user_type")
+          .eq("id", user.id)
+          .single();
+
+        if (userData?.user_type === "advertiser") {
+          setShowAdvertiserModal(true);
+          return;
+        }
+      }
+
+      localStorage.setItem("signupRole", "creator");
+      router.push("/auth/signup");
+    } catch (error) {
+      console.error("Failed to verify account type before creator sign-up:", error);
+      localStorage.setItem("signupRole", "creator");
+      router.push("/auth/signup");
+    } finally {
+      setIsCheckingStartEarning(false);
+    }
+  };
+
+  const handleSignOutAndContinueCreator = async () => {
+    setIsSigningOut(true);
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      localStorage.setItem("signupRole", "creator");
+      setShowAdvertiserModal(false);
+      router.push("/auth/signup");
+      router.refresh();
+    } catch (error) {
+      console.error("Failed to sign out advertiser before creator sign-up:", error);
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
+  const handleContinueAsAdvertiser = () => {
+    setShowAdvertiserModal(false);
+    router.push("/dashboard/contests");
   };
 
   // Helper function to get contests with live/upcoming priority, filling with ended if needed
@@ -744,17 +809,15 @@ export default function CreatorsClient({
 
             {/* Call-to-Action Buttons */}
             <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
-              <Link
-                href="/auth/signup"
-                onClick={() => {
-                  localStorage.setItem("signupRole", "creator");
-                }}
+              <Button
+                type="button"
+                onClick={handleStartEarningClick}
+                disabled={isCheckingStartEarning}
+                className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                <Button className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg">
-                  <Sparkles className="h-4 w-4" />
-                  <span>Start Earning →</span>
-                </Button>
-              </Link>
+                <Sparkles className="h-4 w-4" />
+                <span>Start Earning →</span>
+              </Button>
 
               <Button
                 variant="outline"
@@ -1158,16 +1221,14 @@ export default function CreatorsClient({
 
             {/* Start Earning Button */}
             <div className="text-center">
-              <Link
-                href="/auth/signup"
-                onClick={() => {
-                  localStorage.setItem("signupRole", "creator");
-                }}
+              <Button
+                type="button"
+                onClick={handleStartEarningClick}
+                disabled={isCheckingStartEarning}
+                className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                <Button className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg">
-                  Start earning
-                </Button>
-              </Link>
+                Start earning
+              </Button>
             </div>
           </div>
         </section>
@@ -1318,6 +1379,67 @@ export default function CreatorsClient({
 
         {/* Epic Final CTA */}
         <CtcBanner />
+
+        <Dialog open={showAdvertiserModal} onOpenChange={setShowAdvertiserModal}>
+          <DialogContent className="bg-[#050816] border border-orange-500/30 text-white rounded-2xl shadow-2xl shadow-orange-900/40 sm:max-w-xl p-8">
+            <DialogHeader>
+              {/* <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-r from-orange-500/30 to-amber-500/30 border border-orange-400/30">
+                <Sparkles className="h-6 w-6 text-orange-300" />
+              </div> */}
+                <DialogTitle
+              className="text-xl mb-2 lg:text-2xl leading-tight"
+
+            >
+              <span
+                className="font-semibold text-white drop-shadow-2xl"
+                style={{ fontFamily: "Montserrat, sans-serif" }}
+              >
+                 You are logged in as {" "}
+              </span>
+              <span
+                className="font-semibold text-white drop-shadow-2xl"
+                style={{ fontFamily: "Montserrat, sans-serif" }}
+              >
+                <span className="relative">
+                  <span
+                    className="bg-clip-text text-transparent"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
+                    }}
+                  >
+                    a brand
+                  </span>
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl "></div>
+                </span>
+              </span>
+            </DialogTitle>
+              {/* <DialogTitle className="text-2xl font-bold text-white">
+                You are logged in as a brand
+              </DialogTitle> */}
+              <DialogDescription className="text-base text-lg text-slate-300 leading-relaxed">
+                To continue as a creator, please sign out from your brand account first, then log in or sign up as a creator account.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-4 flex-col gap-4 sm:flex-row sm:justify-center">
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5"
+                onClick={handleContinueAsAdvertiser}
+                disabled={isSigningOut}
+              >
+                Continue as Brand
+              </Button>
+              <Button
+                className="w-full sm:w-auto bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-md text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5"
+                onClick={handleSignOutAndContinueCreator}
+                disabled={isSigningOut}
+              >
+                 Sign out & Continue as Creator
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         {/* <section className="py-20 md:py-32 relative">
           <div className="absolute inset-0 bg-gradient-to-r from-amber-900/30 via-orange-900/30 to-yellow-900/30 backdrop-blur-sm"></div>
 
