@@ -1,4 +1,5 @@
 "use client";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,8 @@ import {
   Plus,
   Trash2,
   Clock,
+  Map,
+  List,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -52,6 +55,11 @@ import {
   getSubscriptionPlanById,
 } from "@/lib/subscription-utils-client";
 import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
+
+const UsersMap = dynamic(
+  () => import("./UsersMap").then((m) => ({ default: m.UsersMap })),
+  { ssr: false },
+);
 
 type AdvertiserProfile = {
   id: string;
@@ -110,12 +118,49 @@ type User = {
   affiliate_earnings?: number | null;
   other_earnings?: number | null;
   // Registration metadata captured during signup (JSONB in DB)
-  // We specifically use registration_info.country for the Country column
   registration_info?: Record<string, any> | null;
+  // Geo data (lat/lon) - stored as flat { lat, lon, country, ... } or nested { geo_data: { lat, lon, ... } }
+  geo_data?:
+    | {
+        lat?: number;
+        lon?: number;
+        country?: string;
+        city?: string;
+        state?: string;
+        [k: string]: any;
+      }
+    | {
+        geo_data?: { lat?: number; lon?: number; [k: string]: any };
+        [k: string]: any;
+      }
+    | null;
   // Supabase may return this as an array or a single object depending on the relationship
   advertiser_profiles?: AdvertiserProfile[] | AdvertiserProfile | null;
   creator_profiles?: CreatorProfile[] | CreatorProfile | null;
 };
+
+/** Get lat/lon from user geo_data (supports flat or nested shape). */
+function getGeoCoords(user: User): { lat: number; lon: number } | null {
+  const g = user.geo_data as any;
+  if (!g) return null;
+  const lat = g.lat ?? g.geo_data?.lat;
+  const lon = g.lon ?? g.geo_data?.lon;
+  if (typeof lat !== "number" || typeof lon !== "number") return null;
+  if (lat === 0 && lon === 0) return null;
+  return { lat, lon };
+}
+
+function getGeoField(
+  user: User,
+  field: "country" | "state" | "city",
+): string | null {
+  const g = user.geo_data as any;
+  if (!g) return null;
+  const value = g[field] ?? g.geo_data?.[field];
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
 
 function SubcategoriesCell({
   subcategories,
@@ -246,8 +291,8 @@ const ALL_COUNTRIES: string[] = Array.from(
   new Set(
     Object.values(REGIONS_AND_COUNTRIES_DATA)
       .flat()
-      .map((c) => String(c))
-  )
+      .map((c) => String(c)),
+  ),
 ).sort((a, b) => a.localeCompare(b));
 
 // Column definitions for each tab
@@ -267,8 +312,9 @@ const allColumns = {
     { id: "total_lifetime_coins", label: "Total Lifetime Coins" },
     { id: "affiliate_earnings", label: "Affiliate Earnings" },
     { id: "other_earnings", label: "Other Earnings" },
-    // Country from users.registration_info.country
     { id: "country", label: "Country" },
+    { id: "state", label: "State" },
+    { id: "city", label: "City" },
     { id: "created_at", label: "Created At" },
     { id: "updated_at", label: "Updated At" },
   ],
@@ -359,7 +405,7 @@ export default function AdminUsersPage() {
     any | null
   >(null);
   const [selectedCategories, setSelectedCategories] = useState<any | null>(
-    null
+    null,
   );
   const [isSubcategoriesDialogOpen, setIsSubcategoriesDialogOpen] =
     useState(false);
@@ -425,7 +471,7 @@ export default function AdminUsersPage() {
   // Get current tab's sort values (reactive to sortState and activeTab changes)
   const sortColumn = useMemo(
     () => getSortState().column,
-    [sortState, activeTab]
+    [sortState, activeTab],
   );
   const sortOrder = useMemo(() => getSortState().order, [sortState, activeTab]);
 
@@ -443,7 +489,7 @@ export default function AdminUsersPage() {
       className={cn(
         "whitespace-nowrap border-r",
         isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
-        className
+        className,
       )}
     >
       <div className="flex items-center gap-2">
@@ -461,7 +507,7 @@ export default function AdminUsersPage() {
                 setSortOrder("asc");
               }}
               className={cn(
-                sortColumn === columnId && sortOrder === "asc" && "bg-accent"
+                sortColumn === columnId && sortOrder === "asc" && "bg-accent",
               )}
             >
               Sort by Ascending
@@ -472,7 +518,7 @@ export default function AdminUsersPage() {
                 setSortOrder("desc");
               }}
               className={cn(
-                sortColumn === columnId && sortOrder === "desc" && "bg-accent"
+                sortColumn === columnId && sortOrder === "desc" && "bg-accent",
               )}
             >
               Sort by Descending
@@ -501,6 +547,10 @@ export default function AdminUsersPage() {
   });
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [stickyHeader, setStickyHeader] = useState(true);
+  const [viewMode, setViewMode] = useState<"table" | "map">("table");
+  const [mapGroupBy, setMapGroupBy] = useState<
+    "region" | "state" | "country" | "city"
+  >("country");
 
   // Timezone preference state with localStorage persistence
   const [timezone, setTimezone] = useState<"UTC" | "local">(() => {
@@ -615,32 +665,7 @@ export default function AdminUsersPage() {
       case "user_type":
         return row.user_type;
       case "country": {
-        if (activeTab === "creators") {
-          if (row.creator_profiles) {
-            const profiles = Array.isArray(row.creator_profiles)
-              ? row.creator_profiles
-              : [row.creator_profiles];
-            return profiles[0]?.country || null;
-          }
-          return null;
-        }
-
-        // Default behaviour for "all" / "advertisers" tabs:
-        // Prefer country from registration_info (set at registration/IP enrichment)
-        const regCountry =
-          row.registration_info &&
-          (row.registration_info as Record<string, any>)?.country;
-        if (typeof regCountry === "string" && regCountry.trim()) {
-          return regCountry;
-        }
-        // Fallback to creator profile country when available
-        if (row.creator_profiles) {
-          const profiles = Array.isArray(row.creator_profiles)
-            ? row.creator_profiles
-            : [row.creator_profiles];
-          return profiles[0]?.country || null;
-        }
-        return null;
+        return getGeoField(row, "country");
       }
       case "referral_code":
         return row.referral_code;
@@ -792,21 +817,9 @@ export default function AdminUsersPage() {
         }
         return null;
       case "state":
-        if (row.creator_profiles) {
-          const profiles = Array.isArray(row.creator_profiles)
-            ? row.creator_profiles
-            : [row.creator_profiles];
-          return profiles[0]?.state;
-        }
-        return null;
+        return getGeoField(row, "state");
       case "city":
-        if (row.creator_profiles) {
-          const profiles = Array.isArray(row.creator_profiles)
-            ? row.creator_profiles
-            : [row.creator_profiles];
-          return profiles[0]?.city;
-        }
-        return null;
+        return getGeoField(row, "city");
       case "youtube_account":
         if (row.creator_profiles) {
           const profiles = Array.isArray(row.creator_profiles)
@@ -992,7 +1005,7 @@ export default function AdminUsersPage() {
           // Descending: letters/other -> numbers -> null.
 
           const getReferralSortMeta = (
-            value: string | null | undefined
+            value: string | null | undefined,
           ): { rank: number; value: string } => {
             if (!value) return { rank: 2, value: "" };
             const vRaw = value.toLowerCase();
@@ -1022,27 +1035,14 @@ export default function AdminUsersPage() {
               break;
             case "country": {
               const getCountryMeta = (
-                user: User
+                user: User,
               ): { hasCountry: boolean; value: string } => {
-                const regCountry =
-                  user.registration_info &&
-                  (user.registration_info as Record<string, any>)?.country;
-                if (typeof regCountry === "string" && regCountry.trim()) {
+                const geoCountry = getGeoField(user, "country");
+                if (geoCountry) {
                   return {
                     hasCountry: true,
-                    value: regCountry.toLowerCase(),
+                    value: geoCountry.toLowerCase(),
                   };
-                }
-                // Fallback to creator profile country
-                const creatorProfiles = user.creator_profiles
-                  ? Array.isArray(user.creator_profiles)
-                    ? user.creator_profiles
-                    : [user.creator_profiles]
-                  : [];
-                const profileCountry =
-                  creatorProfiles[0]?.country?.toLowerCase() || "";
-                if (profileCountry.trim()) {
-                  return { hasCountry: true, value: profileCountry };
                 }
                 return { hasCountry: false, value: "" };
               };
@@ -1059,6 +1059,35 @@ export default function AdminUsersPage() {
               // If both have (or both don't have) a country, sort alphabetically
               if (!aMeta.hasCountry && !bMeta.hasCountry) {
                 return 0; // both missing -> consider equal
+              }
+
+              const cmp = aMeta.value.localeCompare(bMeta.value);
+              if (cmp === 0) return 0;
+              return sortOrder === "asc" ? cmp : -cmp;
+            }
+            case "state":
+            case "city": {
+              const field = sortColumn as "state" | "city";
+              const getGeoMeta = (
+                user: User,
+              ): { hasValue: boolean; value: string } => {
+                const geoValue = getGeoField(user, field);
+                if (geoValue) {
+                  return { hasValue: true, value: geoValue.toLowerCase() };
+                }
+                return { hasValue: false, value: "" };
+              };
+
+              const aMeta = getGeoMeta(a);
+              const bMeta = getGeoMeta(b);
+
+              // Keep users with a location value before empty values for both asc/desc.
+              if (aMeta.hasValue !== bMeta.hasValue) {
+                return aMeta.hasValue ? -1 : 1;
+              }
+
+              if (!aMeta.hasValue && !bMeta.hasValue) {
+                return 0;
               }
 
               const cmp = aMeta.value.localeCompare(bMeta.value);
@@ -1100,7 +1129,7 @@ export default function AdminUsersPage() {
             }
             case "referred_by": {
               const getReferredByMeta = (
-                value: string | null | undefined
+                value: string | null | undefined,
               ): { rank: number; value: string } => {
                 if (!value) return { rank: 2, value: "" }; // null/empty last
                 const v = value.toLowerCase();
@@ -1653,16 +1682,16 @@ export default function AdminUsersPage() {
               bValue = bProfile?.gender?.toLowerCase() || "";
               break;
             case "country":
-              aValue = aProfile?.country?.toLowerCase() || "";
-              bValue = bProfile?.country?.toLowerCase() || "";
+              aValue = getGeoField(a, "country")?.toLowerCase() || "";
+              bValue = getGeoField(b, "country")?.toLowerCase() || "";
               break;
             case "state":
-              aValue = aProfile?.state?.toLowerCase() || "";
-              bValue = bProfile?.state?.toLowerCase() || "";
+              aValue = getGeoField(a, "state")?.toLowerCase() || "";
+              bValue = getGeoField(b, "state")?.toLowerCase() || "";
               break;
             case "city":
-              aValue = aProfile?.city?.toLowerCase() || "";
-              bValue = bProfile?.city?.toLowerCase() || "";
+              aValue = getGeoField(a, "city")?.toLowerCase() || "";
+              bValue = getGeoField(b, "city")?.toLowerCase() || "";
               break;
             case "address":
               aValue = aProfile?.address?.toLowerCase() || "";
@@ -1932,7 +1961,7 @@ export default function AdminUsersPage() {
             columnValueForFiltering = columnValueInDollars.toFixed(2);
 
             const columnValueStr = String(
-              columnValueForFiltering
+              columnValueForFiltering,
             ).toLowerCase();
 
             // For money columns, use prefix match so typing "4" only matches values like "4.00", "40.00", "4.50", etc.
@@ -1959,12 +1988,12 @@ export default function AdminUsersPage() {
           const colDateOnly = new Date(
             columnDate.getFullYear(),
             columnDate.getMonth(),
-            columnDate.getDate()
+            columnDate.getDate(),
           );
           const filterDateOnly = new Date(
             filterDate.getFullYear(),
             filterDate.getMonth(),
-            filterDate.getDate()
+            filterDate.getDate(),
           );
 
           switch (operator) {
@@ -2016,14 +2045,17 @@ export default function AdminUsersPage() {
       };
 
       // Group filters by column - filters on the same column use OR logic, different columns use AND logic
-      const filtersByColumn = filters.reduce((acc, filter) => {
-        if (!filter.value.trim()) return acc; // Skip empty filters
-        if (!acc[filter.column]) {
-          acc[filter.column] = [];
-        }
-        acc[filter.column].push(filter);
-        return acc;
-      }, {} as Record<string, FilterType[]>);
+      const filtersByColumn = filters.reduce(
+        (acc, filter) => {
+          if (!filter.value.trim()) return acc; // Skip empty filters
+          if (!acc[filter.column]) {
+            acc[filter.column] = [];
+          }
+          acc[filter.column].push(filter);
+          return acc;
+        },
+        {} as Record<string, FilterType[]>,
+      );
 
       filtered = filtered.filter((row) => {
         // For each column group, at least one filter must match (OR logic)
@@ -2041,7 +2073,7 @@ export default function AdminUsersPage() {
   // Calculate counts for each tab
   const allUsersCount = rows.length;
   const advertisersCount = rows.filter(
-    (r) => r.user_type === "advertiser"
+    (r) => r.user_type === "advertiser",
   ).length;
   const creatorsCount = rows.filter((r) => r.user_type === "creator").length;
 
@@ -2055,6 +2087,104 @@ export default function AdminUsersPage() {
   const totalPages = Math.ceil(tabFiltered.length / limit);
   const hasNextPage = page < totalPages;
   const hasPreviousPage = page > 1;
+
+  // Markers for map view (users in current tab with lat/lon)
+  const mapMarkers = useMemo(() => {
+    return tabFiltered
+      .map((u) => {
+        const coords = getGeoCoords(u);
+        if (!coords) return null;
+        const g = u.geo_data as any;
+        const city = g?.city ?? g?.geo_data?.city;
+        const state = g?.state ?? g?.geo_data?.state;
+        const country = g?.country ?? g?.geo_data?.country;
+        const cp = Array.isArray(u.creator_profiles)
+          ? u.creator_profiles[0]
+          : u.creator_profiles;
+        let youtube: { label: string; url: string | null } | null = null;
+        let instagram: { label: string; url: string | null } | null = null;
+        let twitter: { label: string; url: string | null } | null = null;
+        if (cp) {
+          try {
+            const y =
+              typeof cp.youtube_account === "string"
+                ? JSON.parse(cp.youtube_account)
+                : cp.youtube_account;
+            if (y) {
+              const handle = y.channel_custom_url?.replace(/^@/, "").trim();
+              youtube = {
+                label: y.channel_title || y.channel_custom_url || "YouTube",
+                url: handle
+                  ? `https://www.youtube.com/@${handle}`
+                  : y.channel_id
+                    ? `https://www.youtube.com/channel/${y.channel_id}`
+                    : null,
+              };
+            }
+          } catch {}
+          try {
+            const i =
+              typeof cp.instagram_account === "string"
+                ? JSON.parse(cp.instagram_account)
+                : cp.instagram_account;
+            if (i && (i.username || i.name_of_account)) {
+              instagram = {
+                label: i.name_of_account || i.username || "Instagram",
+                url: i.username
+                  ? `https://instagram.com/${i.username.replace(/^@/, "")}`
+                  : null,
+              };
+            }
+          } catch {}
+          try {
+            const t =
+              typeof cp.twitter_account === "string"
+                ? JSON.parse(cp.twitter_account)
+                : cp.twitter_account;
+            if (t && (t.username || t.name)) {
+              twitter = {
+                label: t.name || t.username || "Twitter",
+                url: t.username
+                  ? `https://twitter.com/${t.username.replace(/^@/, "")}`
+                  : null,
+              };
+            }
+          } catch {}
+        }
+        return {
+          lat: coords.lat,
+          lon: coords.lon,
+          id: u.id,
+          full_name: u.full_name,
+          email: u.email,
+          user_type: u.user_type,
+          username: u.username ?? null,
+          profile_picture_url: u.profile_picture_url ?? null,
+          city,
+          state,
+          country,
+          youtube,
+          instagram,
+          twitter,
+        };
+      })
+      .filter(Boolean) as {
+      lat: number;
+      lon: number;
+      id: string;
+      full_name: string;
+      email: string;
+      user_type: string;
+      username?: string | null;
+      profile_picture_url?: string | null;
+      city?: string;
+      state?: string;
+      country?: string;
+      youtube?: { label: string; url: string | null } | null;
+      instagram?: { label: string; url: string | null } | null;
+      twitter?: { label: string; url: string | null } | null;
+    }[];
+  }, [tabFiltered]);
 
   useEffect(() => {
     setPage(1);
@@ -2119,7 +2249,7 @@ export default function AdminUsersPage() {
       <Card
         className={cn(
           "rounded-xl shadow pb-3",
-          isDark ? "bg-[#020817]" : "bg-white"
+          isDark ? "bg-[#020817]" : "bg-white",
         )}
       >
         <CardHeader className="py-3 px-3 sm:px-6">
@@ -2127,7 +2257,7 @@ export default function AdminUsersPage() {
             <CardTitle
               className={cn(
                 "text-xl sm:text-2xl",
-                isDark ? "text-white" : "text-black"
+                isDark ? "text-white" : "text-black",
               )}
             >
               Users Management
@@ -2143,18 +2273,38 @@ export default function AdminUsersPage() {
                   className={cn(
                     isDark
                       ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                      : "border-gray-400 data-[state=checked]:bg-purple-600"
+                      : "border-gray-400 data-[state=checked]:bg-purple-600",
                   )}
                 />
                 <label
                   htmlFor="sticky-header"
                   className={cn(
                     "text-xs sm:text-sm font-normal cursor-pointer select-none hidden sm:inline",
-                    isDark ? "text-gray-300" : "text-gray-700"
+                    isDark ? "text-gray-300" : "text-gray-700",
                   )}
                 >
                   Sticky Header
                 </label>
+              </div>
+              <div className="flex items-center rounded-md border border-input overflow-hidden">
+                <Button
+                  variant={viewMode === "table" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
+                  onClick={() => setViewMode("table")}
+                >
+                  <List className="w-4 h-4" />
+                  <span className="hidden sm:inline">Table</span>
+                </Button>
+                <Button
+                  variant={viewMode === "map" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
+                  onClick={() => setViewMode("map")}
+                >
+                  <Map className="w-4 h-4" />
+                  <span className="hidden sm:inline">Map</span>
+                </Button>
               </div>
               <Button
                 variant="outline"
@@ -2203,7 +2353,7 @@ export default function AdminUsersPage() {
                   setTimezone(newTimezone);
                   localStorage.setItem(
                     "users-management-timezone",
-                    newTimezone
+                    newTimezone,
                   );
                 }}
                 className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3"
@@ -2235,1311 +2385,1317 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      <Card
-        className={cn(
-          "rounded-xl shadow",
-          isDark ? "bg-[#170337]" : "bg-white"
-        )}
-      >
-        <CardContent className="px-6">
-          <div
-            className={cn(
-              stickyHeader
-                ? "max-h-[calc(100vh-200px)] [&>div]:max-h-[calc(100vh-200px)] [&>div]:overflow-y-auto [&>div]:overflow-x-auto"
-                : "[&>div]:overflow-x-auto"
-            )}
-          >
-            <Table>
-              <TableHeader
-                className={cn(
-                  stickyHeader ? "sticky top-0 z-20" : "",
-                  isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]"
-                )}
-              >
-                <TableRow
+      {viewMode === "table" && (
+        <Card
+          className={cn(
+            "rounded-xl shadow",
+            isDark ? "bg-[#170337]" : "bg-white",
+          )}
+        >
+          <CardContent className="px-6">
+            <div
+              className={cn(
+                stickyHeader
+                  ? "max-h-[calc(100vh-200px)] [&>div]:max-h-[calc(100vh-200px)] [&>div]:overflow-y-auto [&>div]:overflow-x-auto"
+                  : "[&>div]:overflow-x-auto",
+              )}
+            >
+              <Table>
+                <TableHeader
                   className={cn(
-                    "text-left border-b",
-                    isDark
-                      ? "bg-[#391A6A] text-white"
-                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                    stickyHeader ? "sticky top-0 z-20" : "",
+                    isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
                   )}
                 >
-                  {isColumnVisible("id") && (
-                    <SortableHeader columnId="id" label="ID" />
-                  )}
-                  {isColumnVisible("full_name") && (
-                    <SortableHeader columnId="full_name" label="Full Name" />
-                  )}
-                  {isColumnVisible("profile") && (
-                    <TableHead
-                      className={cn(
-                        "whitespace-nowrap border-r",
-                        isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]"
-                      )}
-                    >
-                      Profile
-                    </TableHead>
-                  )}
-                  {isColumnVisible("email") && (
-                    <SortableHeader columnId="email" label="Email" />
-                  )}
-                  {activeTab === "advertisers" && (
-                    <>
-                      {isColumnVisible("username") && (
-                        <SortableHeader columnId="username" label="Username" />
-                      )}
-                      {isColumnVisible("company_name") && (
-                        <SortableHeader
-                          columnId="company_name"
-                          label="Company Name"
-                        />
-                      )}
-                      {isColumnVisible("website_url") && (
-                        <SortableHeader
-                          columnId="website_url"
-                          label="Website URL"
-                        />
-                      )}
-                      {isColumnVisible("total_money_spent") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Total Money Spent</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_money_spent");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_money_spent" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_money_spent");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_money_spent" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("total_contests_run") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Total Contests Run</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_contests_run");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_contests_run" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_contests_run");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_contests_run" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("available_deposit_balance") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Available Deposit Balance</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("available_deposit_balance");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn ===
-                                      "available_deposit_balance" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("available_deposit_balance");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn ===
-                                      "available_deposit_balance" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("withdrawable_balance") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Withdrawable Balance</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("withdrawable_balance");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "withdrawable_balance" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("withdrawable_balance");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "withdrawable_balance" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("subscription_info") && (
-                        <SortableHeader
-                          columnId="subscription_info"
-                          label="Subscription Info"
-                        />
-                      )}
-                      {isColumnVisible("created_at") && (
-                        <SortableHeader
-                          columnId="created_at"
-                          label="Created At"
-                        />
-                      )}
-                      {isColumnVisible("updated_at") && (
-                        <SortableHeader
-                          columnId="updated_at"
-                          label="Updated At"
-                        />
-                      )}
-                    </>
-                  )}
-                  {activeTab === "creators" && (
-                    <>
-                      {isColumnVisible("username") && (
-                        <SortableHeader columnId="username" label="Username" />
-                      )}
-                      {isColumnVisible("youtube_account") && (
-                        <SortableHeader
-                          columnId="youtube_account"
-                          label="YouTube Account"
-                        />
-                      )}
-                      {isColumnVisible("instagram_account") && (
-                        <SortableHeader
-                          columnId="instagram_account"
-                          label="Instagram Account"
-                        />
-                      )}
-                      {isColumnVisible("twitter_account") && (
-                        <SortableHeader
-                          columnId="twitter_account"
-                          label="Twitter Account"
-                        />
-                      )}
-                      {isColumnVisible("contests_participated") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Contests Participated</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("contests_participated");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "contests_participated" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("contests_participated");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "contests_participated" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("contests_won") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Contests Won</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("contests_won");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "contests_won" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("contests_won");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "contests_won" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("total_views") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Total Views</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_views");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_views" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_views");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_views" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("total_money_won") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Total Money Won</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_money_won");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_money_won" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_money_won");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_money_won" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("withdrawable_balance") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Withdrawable Balance</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("withdrawable_balance");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "withdrawable_balance" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("withdrawable_balance");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "withdrawable_balance" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("total_submissions_made") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Total Submissions Made</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_submissions_made");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_submissions_made" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_submissions_made");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_submissions_made" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("total_submissions_won") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Total Submissions Won</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_submissions_won");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_submissions_won" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_submissions_won");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_submissions_won" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("date_of_birth") && (
-                        <SortableHeader
-                          columnId="date_of_birth"
-                          label="Date of Birth"
-                        />
-                      )}
-                      {isColumnVisible("gender") && (
-                        <SortableHeader columnId="gender" label="Gender" />
-                      )}
-                      {isColumnVisible("country") && (
-                        <SortableHeader columnId="country" label="Country" />
-                      )}
-                      {isColumnVisible("state") && (
-                        <SortableHeader columnId="state" label="State" />
-                      )}
-                      {isColumnVisible("city") && (
-                        <SortableHeader columnId="city" label="City" />
-                      )}
-                      {isColumnVisible("address") && (
-                        <SortableHeader
-                          columnId="address"
-                          label="Address"
-                          className="min-w-[250px] max-w-md"
-                        />
-                      )}
-                      {isColumnVisible("language") && (
-                        <SortableHeader
-                          columnId="language"
-                          label="Language"
-                          className="min-w-[150px] max-w-sm"
-                        />
-                      )}
-                      {isColumnVisible("categories") && (
-                        <SortableHeader
-                          columnId="categories"
-                          label="Categories"
-                        />
-                      )}
-                      {isColumnVisible("subcategories") && (
-                        <SortableHeader
-                          columnId="subcategories"
-                          label="Subcategories"
-                        />
-                      )}
-                      {isColumnVisible("interests") && (
-                        <SortableHeader
-                          columnId="interests"
-                          label="Interests"
-                          className=""
-                        />
-                      )}
-                      {isColumnVisible("created_at") && (
-                        <SortableHeader
-                          columnId="created_at"
-                          label="Created At"
-                        />
-                      )}
-                      {isColumnVisible("updated_at") && (
-                        <SortableHeader
-                          columnId="updated_at"
-                          label="Updated At"
-                        />
-                      )}
-                    </>
-                  )}
-                  {activeTab !== "advertisers" && activeTab !== "creators" && (
-                    <>
-                      {isColumnVisible("user_type") && (
-                        <SortableHeader
-                          columnId="user_type"
-                          label="User Type"
-                        />
-                      )}
-                      {isColumnVisible("username") && (
-                        <SortableHeader columnId="username" label="Username" />
-                      )}
-                      {isColumnVisible("referral_code") && (
-                        <SortableHeader
-                          columnId="referral_code"
-                          label="Referral Code"
-                        />
-                      )}
-                      {isColumnVisible("referred_by") && (
-                        <SortableHeader
-                          columnId="referred_by"
-                          label="Referred By"
-                        />
-                      )}
-                      {isColumnVisible("coins") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Coins</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("coins");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "coins" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("coins");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "coins" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("advertisers_referred") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Advertisers Referred</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("advertisers_referred");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "advertisers_referred" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("advertisers_referred");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "advertisers_referred" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("creators_referred") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Creators Referred</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("creators_referred");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "creators_referred" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("creators_referred");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "creators_referred" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("total_lifetime_coins") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Total Lifetime Coins</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_lifetime_coins");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_lifetime_coins" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("total_lifetime_coins");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "total_lifetime_coins" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("affiliate_earnings") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Affiliate Earnings</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("affiliate_earnings");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "affiliate_earnings" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("affiliate_earnings");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "affiliate_earnings" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("other_earnings") && (
-                        <TableHead className="whitespace-nowrap border-r">
-                          <div className="flex items-center gap-2">
-                            <span>Other Earnings</span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("other_earnings");
-                                    setSortOrder("asc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "other_earnings" &&
-                                      sortOrder === "asc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Ascending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn("other_earnings");
-                                    setSortOrder("desc");
-                                  }}
-                                  className={cn(
-                                    sortColumn === "other_earnings" &&
-                                      sortOrder === "desc" &&
-                                      "bg-accent"
-                                  )}
-                                >
-                                  Sort by Descending
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSortColumn(null);
-                                    setSortOrder(null);
-                                  }}
-                                >
-                                  Clear Sort
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableHead>
-                      )}
-                      {isColumnVisible("country") && (
-                        <SortableHeader columnId="country" label="Country" />
-                      )}
-                      {isColumnVisible("created_at") && (
-                        <SortableHeader
-                          columnId="created_at"
-                          label="Created At"
-                        />
-                      )}
-                      {isColumnVisible("updated_at") && (
-                        <SortableHeader
-                          columnId="updated_at"
-                          label="Updated At"
-                        />
-                      )}
-                    </>
-                  )}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <>
-                    {Array.from({ length: limit }).map((_, index) => (
-                      <TableRow key={`skeleton-${index}`}>
-                        {Array.from({
-                          length: getVisibleColumnsCount(),
-                        }).map((_, colIndex) => (
-                          <TableCell
-                            key={`skeleton-cell-${index}-${colIndex}`}
-                            className="whitespace-nowrap border-r"
-                          >
-                            <div
-                              className={cn(
-                                "h-4 rounded animate-pulse",
-                                isDark ? "bg-[#391A6A]/50" : "bg-gray-200"
-                              )}
-                              style={{
-                                width: `${Math.random() * 40 + 60}%`,
-                              }}
-                            />
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </>
-                ) : tabFiltered.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={getVisibleColumnsCount()}
-                      className="text-center text-sm text-muted-foreground"
-                    >
-                      No users found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedData.map((r) => {
-                    // Supabase returns advertiser_profiles as an object (one-to-one) or null
-                    // But it might also return as an array in some cases, so handle both
-                    const advertiserProfile = Array.isArray(
-                      r.advertiser_profiles
-                    )
-                      ? r.advertiser_profiles.length > 0
-                        ? r.advertiser_profiles[0]
-                        : null
-                      : r.advertiser_profiles || null;
-                    // Handle both array and object cases for creator_profiles
-                    const creatorProfile = Array.isArray(r.creator_profiles)
-                      ? r.creator_profiles.length > 0
-                        ? r.creator_profiles[0]
-                        : null
-                      : r.creator_profiles || null;
-                    return (
-                      <TableRow key={r.id}>
-                        {isColumnVisible("id") && (
-                          <TableCell className="font-mono text-xs whitespace-nowrap border-r">
-                            {r.id}
-                          </TableCell>
+                  <TableRow
+                    className={cn(
+                      "text-left border-b",
+                      isDark
+                        ? "bg-[#391A6A] text-white"
+                        : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500",
+                    )}
+                  >
+                    {isColumnVisible("id") && (
+                      <SortableHeader columnId="id" label="ID" />
+                    )}
+                    {isColumnVisible("full_name") && (
+                      <SortableHeader columnId="full_name" label="Full Name" />
+                    )}
+                    {isColumnVisible("profile") && (
+                      <TableHead
+                        className={cn(
+                          "whitespace-nowrap border-r",
+                          isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
                         )}
-                        {isColumnVisible("full_name") && (
-                          <TableCell className="whitespace-nowrap border-r">
-                            {r.full_name}
-                          </TableCell>
+                      >
+                        Profile
+                      </TableHead>
+                    )}
+                    {isColumnVisible("email") && (
+                      <SortableHeader columnId="email" label="Email" />
+                    )}
+                    {activeTab === "advertisers" && (
+                      <>
+                        {isColumnVisible("username") && (
+                          <SortableHeader
+                            columnId="username"
+                            label="Username"
+                          />
                         )}
-                        {isColumnVisible("profile") && (
-                          <TableCell className="whitespace-nowrap border-r">
-                            <Avatar className="w-10 h-10">
-                              <AvatarImage
-                                src={r.profile_picture_url || undefined}
-                                alt={r.full_name}
-                                loading="lazy"
-                                referrerPolicy="no-referrer"
-                              />
-                              <AvatarFallback className="text-xs">
-                                {r.full_name?.[0]?.toUpperCase() ||
-                                  r.email?.[0]?.toUpperCase() ||
-                                  "?"}
-                              </AvatarFallback>
-                            </Avatar>
-                          </TableCell>
+                        {isColumnVisible("company_name") && (
+                          <SortableHeader
+                            columnId="company_name"
+                            label="Company Name"
+                          />
                         )}
-                        {isColumnVisible("email") && (
-                          <TableCell className="whitespace-nowrap border-r">
-                            {r.email}
-                          </TableCell>
+                        {isColumnVisible("website_url") && (
+                          <SortableHeader
+                            columnId="website_url"
+                            label="Website URL"
+                          />
                         )}
-                        {activeTab === "advertisers" ? (
-                          <>
-                            {isColumnVisible("username") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {r.username || "-"}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("company_name") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {advertiserProfile?.company_name || "-"}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("website_url") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {advertiserProfile?.website_url ? (
-                                  <a
-                                    href={advertiserProfile.website_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 hover:underline"
+                        {isColumnVisible("total_money_spent") && (
+                          <TableHead className="whitespace-nowrap border-r">
+                            <div className="flex items-center gap-2">
+                              <span>Total Money Spent</span>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
                                   >
-                                    {advertiserProfile.website_url}
-                                  </a>
-                                ) : (
-                                  "-"
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("total_money_spent");
+                                      setSortOrder("asc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "total_money_spent" &&
+                                        sortOrder === "asc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Ascending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("total_money_spent");
+                                      setSortOrder("desc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "total_money_spent" &&
+                                        sortOrder === "desc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Descending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn(null);
+                                      setSortOrder(null);
+                                    }}
+                                  >
+                                    Clear Sort
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableHead>
+                        )}
+                        {isColumnVisible("total_contests_run") && (
+                          <TableHead className="whitespace-nowrap border-r">
+                            <div className="flex items-center gap-2">
+                              <span>Total Contests Run</span>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("total_contests_run");
+                                      setSortOrder("asc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "total_contests_run" &&
+                                        sortOrder === "asc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Ascending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("total_contests_run");
+                                      setSortOrder("desc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "total_contests_run" &&
+                                        sortOrder === "desc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Descending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn(null);
+                                      setSortOrder(null);
+                                    }}
+                                  >
+                                    Clear Sort
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableHead>
+                        )}
+                        {isColumnVisible("available_deposit_balance") && (
+                          <TableHead className="whitespace-nowrap border-r">
+                            <div className="flex items-center gap-2">
+                              <span>Available Deposit Balance</span>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn(
+                                        "available_deposit_balance",
+                                      );
+                                      setSortOrder("asc");
+                                    }}
+                                    className={cn(
+                                      sortColumn ===
+                                        "available_deposit_balance" &&
+                                        sortOrder === "asc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Ascending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn(
+                                        "available_deposit_balance",
+                                      );
+                                      setSortOrder("desc");
+                                    }}
+                                    className={cn(
+                                      sortColumn ===
+                                        "available_deposit_balance" &&
+                                        sortOrder === "desc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Descending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn(null);
+                                      setSortOrder(null);
+                                    }}
+                                  >
+                                    Clear Sort
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableHead>
+                        )}
+                        {isColumnVisible("withdrawable_balance") && (
+                          <TableHead className="whitespace-nowrap border-r">
+                            <div className="flex items-center gap-2">
+                              <span>Withdrawable Balance</span>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("withdrawable_balance");
+                                      setSortOrder("asc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "withdrawable_balance" &&
+                                        sortOrder === "asc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Ascending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("withdrawable_balance");
+                                      setSortOrder("desc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "withdrawable_balance" &&
+                                        sortOrder === "desc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Descending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn(null);
+                                      setSortOrder(null);
+                                    }}
+                                  >
+                                    Clear Sort
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableHead>
+                        )}
+                        {isColumnVisible("subscription_info") && (
+                          <SortableHeader
+                            columnId="subscription_info"
+                            label="Subscription Info"
+                          />
+                        )}
+                        {isColumnVisible("created_at") && (
+                          <SortableHeader
+                            columnId="created_at"
+                            label="Created At"
+                          />
+                        )}
+                        {isColumnVisible("updated_at") && (
+                          <SortableHeader
+                            columnId="updated_at"
+                            label="Updated At"
+                          />
+                        )}
+                      </>
+                    )}
+                    {activeTab === "creators" && (
+                      <>
+                        {isColumnVisible("username") && (
+                          <SortableHeader
+                            columnId="username"
+                            label="Username"
+                          />
+                        )}
+                        {isColumnVisible("youtube_account") && (
+                          <SortableHeader
+                            columnId="youtube_account"
+                            label="YouTube Account"
+                          />
+                        )}
+                        {isColumnVisible("instagram_account") && (
+                          <SortableHeader
+                            columnId="instagram_account"
+                            label="Instagram Account"
+                          />
+                        )}
+                        {isColumnVisible("twitter_account") && (
+                          <SortableHeader
+                            columnId="twitter_account"
+                            label="Twitter Account"
+                          />
+                        )}
+                        {isColumnVisible("contests_participated") && (
+                          <TableHead className="whitespace-nowrap border-r">
+                            <div className="flex items-center gap-2">
+                              <span>Contests Participated</span>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("contests_participated");
+                                      setSortOrder("asc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "contests_participated" &&
+                                        sortOrder === "asc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Ascending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("contests_participated");
+                                      setSortOrder("desc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "contests_participated" &&
+                                        sortOrder === "desc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Descending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn(null);
+                                      setSortOrder(null);
+                                    }}
+                                  >
+                                    Clear Sort
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableHead>
+                        )}
+                        {isColumnVisible("contests_won") && (
+                          <TableHead className="whitespace-nowrap border-r">
+                            <div className="flex items-center gap-2">
+                              <span>Contests Won</span>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("contests_won");
+                                      setSortOrder("asc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "contests_won" &&
+                                        sortOrder === "asc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Ascending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("contests_won");
+                                      setSortOrder("desc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "contests_won" &&
+                                        sortOrder === "desc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Descending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn(null);
+                                      setSortOrder(null);
+                                    }}
+                                  >
+                                    Clear Sort
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableHead>
+                        )}
+                        {isColumnVisible("total_views") && (
+                          <TableHead className="whitespace-nowrap border-r">
+                            <div className="flex items-center gap-2">
+                              <span>Total Views</span>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("total_views");
+                                      setSortOrder("asc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "total_views" &&
+                                        sortOrder === "asc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Ascending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("total_views");
+                                      setSortOrder("desc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "total_views" &&
+                                        sortOrder === "desc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Descending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn(null);
+                                      setSortOrder(null);
+                                    }}
+                                  >
+                                    Clear Sort
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableHead>
+                        )}
+                        {isColumnVisible("total_money_won") && (
+                          <TableHead className="whitespace-nowrap border-r">
+                            <div className="flex items-center gap-2">
+                              <span>Total Money Won</span>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("total_money_won");
+                                      setSortOrder("asc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "total_money_won" &&
+                                        sortOrder === "asc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Ascending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("total_money_won");
+                                      setSortOrder("desc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "total_money_won" &&
+                                        sortOrder === "desc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Descending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn(null);
+                                      setSortOrder(null);
+                                    }}
+                                  >
+                                    Clear Sort
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableHead>
+                        )}
+                        {isColumnVisible("withdrawable_balance") && (
+                          <TableHead className="whitespace-nowrap border-r">
+                            <div className="flex items-center gap-2">
+                              <span>Withdrawable Balance</span>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("withdrawable_balance");
+                                      setSortOrder("asc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "withdrawable_balance" &&
+                                        sortOrder === "asc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Ascending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("withdrawable_balance");
+                                      setSortOrder("desc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "withdrawable_balance" &&
+                                        sortOrder === "desc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Descending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn(null);
+                                      setSortOrder(null);
+                                    }}
+                                  >
+                                    Clear Sort
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableHead>
+                        )}
+                        {isColumnVisible("total_submissions_made") && (
+                          <TableHead className="whitespace-nowrap border-r">
+                            <div className="flex items-center gap-2">
+                              <span>Total Submissions Made</span>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("total_submissions_made");
+                                      setSortOrder("asc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "total_submissions_made" &&
+                                        sortOrder === "asc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Ascending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("total_submissions_made");
+                                      setSortOrder("desc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "total_submissions_made" &&
+                                        sortOrder === "desc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Descending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn(null);
+                                      setSortOrder(null);
+                                    }}
+                                  >
+                                    Clear Sort
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableHead>
+                        )}
+                        {isColumnVisible("total_submissions_won") && (
+                          <TableHead className="whitespace-nowrap border-r">
+                            <div className="flex items-center gap-2">
+                              <span>Total Submissions Won</span>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("total_submissions_won");
+                                      setSortOrder("asc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "total_submissions_won" &&
+                                        sortOrder === "asc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Ascending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn("total_submissions_won");
+                                      setSortOrder("desc");
+                                    }}
+                                    className={cn(
+                                      sortColumn === "total_submissions_won" &&
+                                        sortOrder === "desc" &&
+                                        "bg-accent",
+                                    )}
+                                  >
+                                    Sort by Descending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSortColumn(null);
+                                      setSortOrder(null);
+                                    }}
+                                  >
+                                    Clear Sort
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableHead>
+                        )}
+                        {isColumnVisible("date_of_birth") && (
+                          <SortableHeader
+                            columnId="date_of_birth"
+                            label="Date of Birth"
+                          />
+                        )}
+                        {isColumnVisible("gender") && (
+                          <SortableHeader columnId="gender" label="Gender" />
+                        )}
+                        {isColumnVisible("country") && (
+                          <SortableHeader columnId="country" label="Country" />
+                        )}
+                        {isColumnVisible("state") && (
+                          <SortableHeader columnId="state" label="State" />
+                        )}
+                        {isColumnVisible("city") && (
+                          <SortableHeader columnId="city" label="City" />
+                        )}
+                        {isColumnVisible("address") && (
+                          <SortableHeader
+                            columnId="address"
+                            label="Address"
+                            className="min-w-[250px] max-w-md"
+                          />
+                        )}
+                        {isColumnVisible("language") && (
+                          <SortableHeader
+                            columnId="language"
+                            label="Language"
+                            className="min-w-[150px] max-w-sm"
+                          />
+                        )}
+                        {isColumnVisible("categories") && (
+                          <SortableHeader
+                            columnId="categories"
+                            label="Categories"
+                          />
+                        )}
+                        {isColumnVisible("subcategories") && (
+                          <SortableHeader
+                            columnId="subcategories"
+                            label="Subcategories"
+                          />
+                        )}
+                        {isColumnVisible("interests") && (
+                          <SortableHeader
+                            columnId="interests"
+                            label="Interests"
+                            className=""
+                          />
+                        )}
+                        {isColumnVisible("created_at") && (
+                          <SortableHeader
+                            columnId="created_at"
+                            label="Created At"
+                          />
+                        )}
+                        {isColumnVisible("updated_at") && (
+                          <SortableHeader
+                            columnId="updated_at"
+                            label="Updated At"
+                          />
+                        )}
+                      </>
+                    )}
+                    {activeTab !== "advertisers" &&
+                      activeTab !== "creators" && (
+                        <>
+                          {isColumnVisible("user_type") && (
+                            <SortableHeader
+                              columnId="user_type"
+                              label="User Type"
+                            />
+                          )}
+                          {isColumnVisible("username") && (
+                            <SortableHeader
+                              columnId="username"
+                              label="Username"
+                            />
+                          )}
+                          {isColumnVisible("referral_code") && (
+                            <SortableHeader
+                              columnId="referral_code"
+                              label="Referral Code"
+                            />
+                          )}
+                          {isColumnVisible("referred_by") && (
+                            <SortableHeader
+                              columnId="referred_by"
+                              label="Referred By"
+                            />
+                          )}
+                          {isColumnVisible("coins") && (
+                            <TableHead className="whitespace-nowrap border-r">
+                              <div className="flex items-center gap-2">
+                                <span>Coins</span>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn("coins");
+                                        setSortOrder("asc");
+                                      }}
+                                      className={cn(
+                                        sortColumn === "coins" &&
+                                          sortOrder === "asc" &&
+                                          "bg-accent",
+                                      )}
+                                    >
+                                      Sort by Ascending
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn("coins");
+                                        setSortOrder("desc");
+                                      }}
+                                      className={cn(
+                                        sortColumn === "coins" &&
+                                          sortOrder === "desc" &&
+                                          "bg-accent",
+                                      )}
+                                    >
+                                      Sort by Descending
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn(null);
+                                        setSortOrder(null);
+                                      }}
+                                    >
+                                      Clear Sort
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </TableHead>
+                          )}
+                          {isColumnVisible("advertisers_referred") && (
+                            <TableHead className="whitespace-nowrap border-r">
+                              <div className="flex items-center gap-2">
+                                <span>Advertisers Referred</span>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn("advertisers_referred");
+                                        setSortOrder("asc");
+                                      }}
+                                      className={cn(
+                                        sortColumn === "advertisers_referred" &&
+                                          sortOrder === "asc" &&
+                                          "bg-accent",
+                                      )}
+                                    >
+                                      Sort by Ascending
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn("advertisers_referred");
+                                        setSortOrder("desc");
+                                      }}
+                                      className={cn(
+                                        sortColumn === "advertisers_referred" &&
+                                          sortOrder === "desc" &&
+                                          "bg-accent",
+                                      )}
+                                    >
+                                      Sort by Descending
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn(null);
+                                        setSortOrder(null);
+                                      }}
+                                    >
+                                      Clear Sort
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </TableHead>
+                          )}
+                          {isColumnVisible("creators_referred") && (
+                            <TableHead className="whitespace-nowrap border-r">
+                              <div className="flex items-center gap-2">
+                                <span>Creators Referred</span>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn("creators_referred");
+                                        setSortOrder("asc");
+                                      }}
+                                      className={cn(
+                                        sortColumn === "creators_referred" &&
+                                          sortOrder === "asc" &&
+                                          "bg-accent",
+                                      )}
+                                    >
+                                      Sort by Ascending
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn("creators_referred");
+                                        setSortOrder("desc");
+                                      }}
+                                      className={cn(
+                                        sortColumn === "creators_referred" &&
+                                          sortOrder === "desc" &&
+                                          "bg-accent",
+                                      )}
+                                    >
+                                      Sort by Descending
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn(null);
+                                        setSortOrder(null);
+                                      }}
+                                    >
+                                      Clear Sort
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </TableHead>
+                          )}
+                          {isColumnVisible("total_lifetime_coins") && (
+                            <TableHead className="whitespace-nowrap border-r">
+                              <div className="flex items-center gap-2">
+                                <span>Total Lifetime Coins</span>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn("total_lifetime_coins");
+                                        setSortOrder("asc");
+                                      }}
+                                      className={cn(
+                                        sortColumn === "total_lifetime_coins" &&
+                                          sortOrder === "asc" &&
+                                          "bg-accent",
+                                      )}
+                                    >
+                                      Sort by Ascending
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn("total_lifetime_coins");
+                                        setSortOrder("desc");
+                                      }}
+                                      className={cn(
+                                        sortColumn === "total_lifetime_coins" &&
+                                          sortOrder === "desc" &&
+                                          "bg-accent",
+                                      )}
+                                    >
+                                      Sort by Descending
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn(null);
+                                        setSortOrder(null);
+                                      }}
+                                    >
+                                      Clear Sort
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </TableHead>
+                          )}
+                          {isColumnVisible("affiliate_earnings") && (
+                            <TableHead className="whitespace-nowrap border-r">
+                              <div className="flex items-center gap-2">
+                                <span>Affiliate Earnings</span>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn("affiliate_earnings");
+                                        setSortOrder("asc");
+                                      }}
+                                      className={cn(
+                                        sortColumn === "affiliate_earnings" &&
+                                          sortOrder === "asc" &&
+                                          "bg-accent",
+                                      )}
+                                    >
+                                      Sort by Ascending
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn("affiliate_earnings");
+                                        setSortOrder("desc");
+                                      }}
+                                      className={cn(
+                                        sortColumn === "affiliate_earnings" &&
+                                          sortOrder === "desc" &&
+                                          "bg-accent",
+                                      )}
+                                    >
+                                      Sort by Descending
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn(null);
+                                        setSortOrder(null);
+                                      }}
+                                    >
+                                      Clear Sort
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </TableHead>
+                          )}
+                          {isColumnVisible("other_earnings") && (
+                            <TableHead className="whitespace-nowrap border-r">
+                              <div className="flex items-center gap-2">
+                                <span>Other Earnings</span>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn("other_earnings");
+                                        setSortOrder("asc");
+                                      }}
+                                      className={cn(
+                                        sortColumn === "other_earnings" &&
+                                          sortOrder === "asc" &&
+                                          "bg-accent",
+                                      )}
+                                    >
+                                      Sort by Ascending
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn("other_earnings");
+                                        setSortOrder("desc");
+                                      }}
+                                      className={cn(
+                                        sortColumn === "other_earnings" &&
+                                          sortOrder === "desc" &&
+                                          "bg-accent",
+                                      )}
+                                    >
+                                      Sort by Descending
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSortColumn(null);
+                                        setSortOrder(null);
+                                      }}
+                                    >
+                                      Clear Sort
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </TableHead>
+                          )}
+                          {isColumnVisible("country") && (
+                            <SortableHeader
+                              columnId="country"
+                              label="Country"
+                            />
+                          )}
+                          {isColumnVisible("state") && (
+                            <SortableHeader columnId="state" label="State" />
+                          )}
+                          {isColumnVisible("city") && (
+                            <SortableHeader columnId="city" label="City" />
+                          )}
+                          {isColumnVisible("created_at") && (
+                            <SortableHeader
+                              columnId="created_at"
+                              label="Created At"
+                            />
+                          )}
+                          {isColumnVisible("updated_at") && (
+                            <SortableHeader
+                              columnId="updated_at"
+                              label="Updated At"
+                            />
+                          )}
+                        </>
+                      )}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <>
+                      {Array.from({ length: limit }).map((_, index) => (
+                        <TableRow key={`skeleton-${index}`}>
+                          {Array.from({
+                            length: getVisibleColumnsCount(),
+                          }).map((_, colIndex) => (
+                            <TableCell
+                              key={`skeleton-cell-${index}-${colIndex}`}
+                              className="whitespace-nowrap border-r"
+                            >
+                              <div
+                                className={cn(
+                                  "h-4 rounded animate-pulse",
+                                  isDark ? "bg-[#391A6A]/50" : "bg-gray-200",
                                 )}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("total_money_spent") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                $
-                                {(
-                                  (advertiserProfile?.total_money_spent || 0) /
-                                  100
-                                ).toFixed(2)}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("total_contests_run") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {advertiserProfile?.total_contests_run || 0}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("available_deposit_balance") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                $
-                                {(
-                                  (advertiserProfile?.available_deposit_balance ||
-                                    0) / 100
-                                ).toFixed(2)}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("withdrawable_balance") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                $
-                                {(
-                                  (advertiserProfile?.withdrawable_balance ||
-                                    0) / 100
-                                ).toFixed(2)}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("subscription_info") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {(() => {
-                                  const subscriptionInfo =
-                                    advertiserProfile?.subscription_info;
-                                  if (!subscriptionInfo) {
-                                    return (
-                                      <span className="text-muted-foreground">
-                                        -
-                                      </span>
-                                    );
-                                  }
-
-                                  try {
-                                    const info =
-                                      typeof subscriptionInfo === "string"
-                                        ? JSON.parse(subscriptionInfo)
-                                        : subscriptionInfo;
-
-                                    const isActive =
-                                      info?.status === "active" ||
-                                      info?.status === "trialing";
-
-                                    if (!isActive) {
+                                style={{
+                                  width: `${Math.random() * 40 + 60}%`,
+                                }}
+                              />
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </>
+                  ) : tabFiltered.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={getVisibleColumnsCount()}
+                        className="text-center text-sm text-muted-foreground"
+                      >
+                        No users found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    paginatedData.map((r) => {
+                      // Supabase returns advertiser_profiles as an object (one-to-one) or null
+                      // But it might also return as an array in some cases, so handle both
+                      const advertiserProfile = Array.isArray(
+                        r.advertiser_profiles,
+                      )
+                        ? r.advertiser_profiles.length > 0
+                          ? r.advertiser_profiles[0]
+                          : null
+                        : r.advertiser_profiles || null;
+                      // Handle both array and object cases for creator_profiles
+                      const creatorProfile = Array.isArray(r.creator_profiles)
+                        ? r.creator_profiles.length > 0
+                          ? r.creator_profiles[0]
+                          : null
+                        : r.creator_profiles || null;
+                      return (
+                        <TableRow key={r.id}>
+                          {isColumnVisible("id") && (
+                            <TableCell className="font-mono text-xs whitespace-nowrap border-r">
+                              {r.id}
+                            </TableCell>
+                          )}
+                          {isColumnVisible("full_name") && (
+                            <TableCell className="whitespace-nowrap border-r">
+                              {r.full_name}
+                            </TableCell>
+                          )}
+                          {isColumnVisible("profile") && (
+                            <TableCell className="whitespace-nowrap border-r">
+                              <Avatar className="w-10 h-10">
+                                <AvatarImage
+                                  src={r.profile_picture_url || undefined}
+                                  alt={r.full_name}
+                                  loading="lazy"
+                                  referrerPolicy="no-referrer"
+                                />
+                                <AvatarFallback className="text-xs">
+                                  {r.full_name?.[0]?.toUpperCase() ||
+                                    r.email?.[0]?.toUpperCase() ||
+                                    "?"}
+                                </AvatarFallback>
+                              </Avatar>
+                            </TableCell>
+                          )}
+                          {isColumnVisible("email") && (
+                            <TableCell className="whitespace-nowrap border-r">
+                              {r.email}
+                            </TableCell>
+                          )}
+                          {activeTab === "advertisers" ? (
+                            <>
+                              {isColumnVisible("username") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {r.username || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("company_name") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {advertiserProfile?.company_name || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("website_url") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {advertiserProfile?.website_url ? (
+                                    <a
+                                      href={advertiserProfile.website_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 hover:underline"
+                                    >
+                                      {advertiserProfile.website_url}
+                                    </a>
+                                  ) : (
+                                    "-"
+                                  )}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("total_money_spent") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  $
+                                  {(
+                                    (advertiserProfile?.total_money_spent ||
+                                      0) / 100
+                                  ).toFixed(2)}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("total_contests_run") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {advertiserProfile?.total_contests_run || 0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("available_deposit_balance") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  $
+                                  {(
+                                    (advertiserProfile?.available_deposit_balance ||
+                                      0) / 100
+                                  ).toFixed(2)}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("withdrawable_balance") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  $
+                                  {(
+                                    (advertiserProfile?.withdrawable_balance ||
+                                      0) / 100
+                                  ).toFixed(2)}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("subscription_info") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {(() => {
+                                    const subscriptionInfo =
+                                      advertiserProfile?.subscription_info;
+                                    if (!subscriptionInfo) {
                                       return (
                                         <span className="text-muted-foreground">
                                           -
@@ -3547,662 +3703,768 @@ export default function AdminUsersPage() {
                                       );
                                     }
 
-                                    // Get plan name from product_id
-                                    const plan = info?.product_id
-                                      ? getSubscriptionPlanById(info.product_id)
-                                      : null;
-                                    const planName =
-                                      plan?.displayName ||
-                                      plan?.name ||
-                                      "Unknown Plan";
+                                    try {
+                                      const info =
+                                        typeof subscriptionInfo === "string"
+                                          ? JSON.parse(subscriptionInfo)
+                                          : subscriptionInfo;
 
-                                    // Get amount (price_amount is in cents)
-                                    const amount = info?.price_amount;
-                                    const formattedAmount = amount
-                                      ? `$${(amount / 100).toFixed(2)}`
-                                      : "-";
+                                      const isActive =
+                                        info?.status === "active" ||
+                                        info?.status === "trialing";
 
-                                    return (
-                                      <div className="flex items-center gap-2">
-                                        <div className="flex flex-col">
-                                          <span className="font-medium text-sm">
-                                            {planName}
+                                      if (!isActive) {
+                                        return (
+                                          <span className="text-muted-foreground">
+                                            -
                                           </span>
-                                          {amount !== undefined && (
-                                            <span className="text-xs text-muted-foreground">
-                                              {formattedAmount}
+                                        );
+                                      }
+
+                                      // Get plan name from product_id
+                                      const plan = info?.product_id
+                                        ? getSubscriptionPlanById(
+                                            info.product_id,
+                                          )
+                                        : null;
+                                      const planName =
+                                        plan?.displayName ||
+                                        plan?.name ||
+                                        "Unknown Plan";
+
+                                      // Get amount (price_amount is in cents)
+                                      const amount = info?.price_amount;
+                                      const formattedAmount = amount
+                                        ? `$${(amount / 100).toFixed(2)}`
+                                        : "-";
+
+                                      return (
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex flex-col">
+                                            <span className="font-medium text-sm">
+                                              {planName}
                                             </span>
+                                            {amount !== undefined && (
+                                              <span className="text-xs text-muted-foreground">
+                                                {formattedAmount}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="ml-2"
+                                            onClick={() => {
+                                              setSelectedSubscriptionInfo(
+                                                subscriptionInfo,
+                                              );
+                                              setIsSubscriptionDialogOpen(true);
+                                            }}
+                                          >
+                                            View Details
+                                          </Button>
+                                        </div>
+                                      );
+                                    } catch {
+                                      return (
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-muted-foreground">
+                                            Connected
+                                          </span>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                              setSelectedSubscriptionInfo(
+                                                subscriptionInfo,
+                                              );
+                                              setIsSubscriptionDialogOpen(true);
+                                            }}
+                                          >
+                                            View Details
+                                          </Button>
+                                        </div>
+                                      );
+                                    }
+                                  })()}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("created_at") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {formatDate(r.created_at)}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("updated_at") && (
+                                <TableCell className="whitespace-nowrap">
+                                  {formatDate(r.updated_at)}
+                                </TableCell>
+                              )}
+                            </>
+                          ) : activeTab === "creators" ? (
+                            <>
+                              {isColumnVisible("username") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {r.username || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("youtube_account") && (
+                                <TableCell className="border-r min-w-[200px]">
+                                  {(() => {
+                                    const ytAccount =
+                                      creatorProfile?.youtube_account;
+                                    if (!ytAccount) return "-";
+                                    try {
+                                      const account =
+                                        typeof ytAccount === "string"
+                                          ? JSON.parse(ytAccount)
+                                          : ytAccount;
+
+                                      // Construct YouTube channel URL (@handle or /channel/ID)
+                                      let youtubeUrl = "";
+                                      const handle = account?.channel_custom_url
+                                        ?.replace(/^@/, "")
+                                        .trim();
+                                      if (handle) {
+                                        youtubeUrl = `https://www.youtube.com/@${handle}`;
+                                      } else if (account?.channel_id) {
+                                        youtubeUrl = `https://www.youtube.com/channel/${account.channel_id}`;
+                                      }
+
+                                      return (
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-2">
+                                            <div className="font-medium text-sm">
+                                              {account?.channel_title ||
+                                                "YouTube"}
+                                            </div>
+                                            {youtubeUrl && (
+                                              <a
+                                                href={youtubeUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-red-600 hover:text-red-700 transition-colors"
+                                                title="Visit YouTube Channel"
+                                              >
+                                                <svg
+                                                  className="w-5 h-5"
+                                                  fill="currentColor"
+                                                  viewBox="0 0 24 24"
+                                                  xmlns="http://www.w3.org/2000/svg"
+                                                >
+                                                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                                                </svg>
+                                              </a>
+                                            )}
+                                          </div>
+                                          {account?.subscriber_count && (
+                                            <div className="text-xs text-muted-foreground">
+                                              {account.subscriber_count.toLocaleString()}{" "}
+                                              subscribers
+                                            </div>
+                                          )}
+                                          {account?.video_count && (
+                                            <div className="text-xs text-muted-foreground">
+                                              {account.video_count.toLocaleString()}{" "}
+                                              videos
+                                            </div>
                                           )}
                                         </div>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="ml-2"
-                                          onClick={() => {
-                                            setSelectedSubscriptionInfo(
-                                              subscriptionInfo
-                                            );
-                                            setIsSubscriptionDialogOpen(true);
-                                          }}
-                                        >
-                                          View Details
-                                        </Button>
-                                      </div>
-                                    );
-                                  } catch {
-                                    return (
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-muted-foreground">
+                                      );
+                                    } catch {
+                                      return (
+                                        <Badge variant="secondary">
                                           Connected
-                                        </span>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => {
-                                            setSelectedSubscriptionInfo(
-                                              subscriptionInfo
-                                            );
-                                            setIsSubscriptionDialogOpen(true);
-                                          }}
-                                        >
-                                          View Details
-                                        </Button>
-                                      </div>
-                                    );
-                                  }
-                                })()}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("created_at") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {formatDate(r.created_at)}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("updated_at") && (
-                              <TableCell className="whitespace-nowrap">
-                                {formatDate(r.updated_at)}
-                              </TableCell>
-                            )}
-                          </>
-                        ) : activeTab === "creators" ? (
-                          <>
-                            {isColumnVisible("username") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {r.username || "-"}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("youtube_account") && (
-                              <TableCell className="border-r min-w-[200px]">
-                                {(() => {
-                                  const ytAccount =
-                                    creatorProfile?.youtube_account;
-                                  if (!ytAccount) return "-";
-                                  try {
-                                    const account =
-                                      typeof ytAccount === "string"
-                                        ? JSON.parse(ytAccount)
-                                        : ytAccount;
-
-                                    // Construct YouTube channel URL
-                                    let youtubeUrl = "";
-                                    if (account?.channel_custom_url) {
-                                      youtubeUrl = `https://youtube.com/${account.channel_custom_url}`;
-                                    } else if (account?.channel_id) {
-                                      youtubeUrl = `https://youtube.com/channel/${account.channel_id}`;
+                                        </Badge>
+                                      );
                                     }
+                                  })()}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("instagram_account") && (
+                                <TableCell className="min-w-[200px] border-r">
+                                  {(() => {
+                                    const igAccount =
+                                      creatorProfile?.instagram_account;
+                                    if (!igAccount) return "-";
+                                    try {
+                                      const account =
+                                        typeof igAccount === "string"
+                                          ? JSON.parse(igAccount)
+                                          : igAccount;
 
-                                    return (
-                                      <div className="space-y-1">
-                                        <div className="flex items-center gap-2">
-                                          <div className="font-medium text-sm">
-                                            {account?.channel_title ||
-                                              "YouTube"}
-                                          </div>
-                                          {youtubeUrl && (
-                                            <a
-                                              href={youtubeUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="text-red-600 hover:text-red-700 transition-colors"
-                                              title="Visit YouTube Channel"
-                                            >
-                                              <svg
-                                                className="w-5 h-5"
-                                                fill="currentColor"
-                                                viewBox="0 0 24 24"
-                                                xmlns="http://www.w3.org/2000/svg"
+                                      // Construct Instagram profile URL
+                                      const instagramUrl = account?.username
+                                        ? `https://instagram.com/${account.username}`
+                                        : "";
+
+                                      return (
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-2">
+                                            <div className="font-medium text-sm">
+                                              {account?.name_of_account ||
+                                                account?.username ||
+                                                "Instagram"}
+                                            </div>
+                                            {instagramUrl && (
+                                              <a
+                                                href={instagramUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-pink-600 hover:text-pink-700 transition-colors"
+                                                title="Visit Instagram Profile"
                                               >
-                                                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-                                              </svg>
-                                            </a>
+                                                <svg
+                                                  className="w-5 h-5"
+                                                  fill="currentColor"
+                                                  viewBox="0 0 24 24"
+                                                  xmlns="http://www.w3.org/2000/svg"
+                                                >
+                                                  <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+                                                </svg>
+                                              </a>
+                                            )}
+                                          </div>
+                                          {account?.username && (
+                                            <div className="text-xs text-muted-foreground">
+                                              @{account.username}
+                                            </div>
+                                          )}
+                                          {account?.followers_count !==
+                                            undefined && (
+                                            <div className="text-xs text-muted-foreground">
+                                              {account.followers_count.toLocaleString()}{" "}
+                                              followers
+                                            </div>
+                                          )}
+                                          {account?.account_type && (
+                                            <div className="text-xs text-muted-foreground">
+                                              {account.account_type}
+                                            </div>
                                           )}
                                         </div>
-                                        {account?.subscriber_count && (
-                                          <div className="text-xs text-muted-foreground">
-                                            {account.subscriber_count.toLocaleString()}{" "}
-                                            subscribers
-                                          </div>
-                                        )}
-                                        {account?.video_count && (
-                                          <div className="text-xs text-muted-foreground">
-                                            {account.video_count.toLocaleString()}{" "}
-                                            videos
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  } catch {
-                                    return (
-                                      <Badge variant="secondary">
-                                        Connected
-                                      </Badge>
-                                    );
-                                  }
-                                })()}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("instagram_account") && (
-                              <TableCell className="min-w-[200px] border-r">
-                                {(() => {
-                                  const igAccount =
-                                    creatorProfile?.instagram_account;
-                                  if (!igAccount) return "-";
-                                  try {
-                                    const account =
-                                      typeof igAccount === "string"
-                                        ? JSON.parse(igAccount)
-                                        : igAccount;
+                                      );
+                                    } catch {
+                                      return (
+                                        <Badge variant="secondary">
+                                          Connected
+                                        </Badge>
+                                      );
+                                    }
+                                  })()}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("twitter_account") && (
+                                <TableCell className="min-w-[200px] border-r">
+                                  {(() => {
+                                    const twAccount =
+                                      creatorProfile?.twitter_account;
+                                    if (!twAccount) return "-";
+                                    try {
+                                      const account =
+                                        typeof twAccount === "string"
+                                          ? JSON.parse(twAccount)
+                                          : twAccount;
 
-                                    // Construct Instagram profile URL
-                                    const instagramUrl = account?.username
-                                      ? `https://instagram.com/${account.username}`
-                                      : "";
+                                      const twitterUrl = account?.username
+                                        ? `https://twitter.com/${account.username}`
+                                        : "";
 
-                                    return (
-                                      <div className="space-y-1">
-                                        <div className="flex items-center gap-2">
-                                          <div className="font-medium text-sm">
-                                            {account?.name_of_account ||
-                                              account?.username ||
-                                              "Instagram"}
-                                          </div>
-                                          {instagramUrl && (
-                                            <a
-                                              href={instagramUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="text-pink-600 hover:text-pink-700 transition-colors"
-                                              title="Visit Instagram Profile"
-                                            >
-                                              <svg
-                                                className="w-5 h-5"
-                                                fill="currentColor"
-                                                viewBox="0 0 24 24"
-                                                xmlns="http://www.w3.org/2000/svg"
+                                      return (
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-2">
+                                            <div className="font-medium text-sm">
+                                              {account?.name ||
+                                                account?.username ||
+                                                "Twitter"}
+                                            </div>
+                                            {twitterUrl && (
+                                              <a
+                                                href={twitterUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-sky-500 hover:text-sky-600 transition-colors"
+                                                title="Visit Twitter Profile"
                                               >
-                                                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
-                                              </svg>
-                                            </a>
+                                                <svg
+                                                  className="w-5 h-5"
+                                                  fill="currentColor"
+                                                  viewBox="0 0 24 24"
+                                                  xmlns="http://www.w3.org/2000/svg"
+                                                >
+                                                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                                                </svg>
+                                              </a>
+                                            )}
+                                          </div>
+                                          {account?.username && (
+                                            <div className="text-xs text-muted-foreground">
+                                              @{account.username}
+                                            </div>
+                                          )}
+                                          {account?.followers_count !==
+                                            undefined && (
+                                            <div className="text-xs text-muted-foreground">
+                                              {account.followers_count.toLocaleString()}{" "}
+                                              followers
+                                            </div>
                                           )}
                                         </div>
-                                        {account?.username && (
-                                          <div className="text-xs text-muted-foreground">
-                                            @{account.username}
-                                          </div>
-                                        )}
-                                        {account?.followers_count !==
-                                          undefined && (
-                                          <div className="text-xs text-muted-foreground">
-                                            {account.followers_count.toLocaleString()}{" "}
-                                            followers
-                                          </div>
-                                        )}
-                                        {account?.account_type && (
-                                          <div className="text-xs text-muted-foreground">
-                                            {account.account_type}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  } catch {
-                                    return (
-                                      <Badge variant="secondary">
-                                        Connected
-                                      </Badge>
-                                    );
-                                  }
-                                })()}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("twitter_account") && (
-                              <TableCell className="min-w-[200px] border-r">
-                                {(() => {
-                                  const twAccount =
-                                    creatorProfile?.twitter_account;
-                                  if (!twAccount) return "-";
-                                  try {
-                                    const account =
-                                      typeof twAccount === "string"
-                                        ? JSON.parse(twAccount)
-                                        : twAccount;
-
-                                    const twitterUrl = account?.username
-                                      ? `https://twitter.com/${account.username}`
-                                      : "";
-
-                                    return (
-                                      <div className="space-y-1">
-                                        <div className="flex items-center gap-2">
-                                          <div className="font-medium text-sm">
-                                            {account?.name ||
-                                              account?.username ||
-                                              "Twitter"}
-                                          </div>
-                                          {twitterUrl && (
-                                            <a
-                                              href={twitterUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="text-sky-500 hover:text-sky-600 transition-colors"
-                                              title="Visit Twitter Profile"
-                                            >
-                                              <svg
-                                                className="w-5 h-5"
-                                                fill="currentColor"
-                                                viewBox="0 0 24 24"
-                                                xmlns="http://www.w3.org/2000/svg"
-                                              >
-                                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                                              </svg>
-                                            </a>
-                                          )}
-                                        </div>
-                                        {account?.username && (
-                                          <div className="text-xs text-muted-foreground">
-                                            @{account.username}
-                                          </div>
-                                        )}
-                                        {account?.followers_count !==
-                                          undefined && (
-                                          <div className="text-xs text-muted-foreground">
-                                            {account.followers_count.toLocaleString()}{" "}
-                                            followers
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  } catch {
-                                    return (
-                                      <Badge variant="secondary">
-                                        Connected
-                                      </Badge>
-                                    );
-                                  }
-                                })()}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("contests_participated") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {creatorProfile?.total_contests_participated ||
-                                  0}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("contests_won") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {creatorProfile?.total_contests_won || 0}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("total_views") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {creatorProfile?.total_views?.toLocaleString() ||
-                                  0}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("total_money_won") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                $
-                                {(
-                                  (creatorProfile?.total_money_won || 0) / 100
-                                ).toFixed(2)}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("withdrawable_balance") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                $
-                                {(
-                                  (creatorProfile?.withdrawable_balance || 0) /
-                                  100
-                                ).toFixed(2)}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("total_submissions_made") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {creatorProfile?.total_submissions_made || 0}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("total_submissions_won") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {creatorProfile?.total_submissions_won || 0}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("date_of_birth") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {creatorProfile?.date_of_birth
-                                  ? new Date(
-                                      creatorProfile.date_of_birth
-                                    ).toLocaleDateString()
-                                  : "-"}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("gender") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {creatorProfile?.gender || "-"}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("country") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {creatorProfile?.country || "-"}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("state") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {creatorProfile?.state || "-"}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("city") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {creatorProfile?.city || "-"}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("address") && (
-                              <TableCell className="border-r min-w-[250px] max-w-md">
-                                <div className="break-words">
-                                  {creatorProfile?.address || "-"}
-                                </div>
-                              </TableCell>
-                            )}
-                            {isColumnVisible("language") && (
-                              <TableCell className="border-r min-w-[150px] max-w-sm">
-                                <div className="break-words">
-                                  {Array.isArray(creatorProfile?.languages)
-                                    ? creatorProfile.languages.join(", ")
-                                    : creatorProfile?.languages || "-"}
-                                </div>
-                              </TableCell>
-                            )}
-                            {isColumnVisible("categories") && (
-                              <TableCell className="whitespace-nowrap border-r max-w-xs">
-                                <div className="truncate">
-                                  {creatorProfile?.categories
-                                    ? Array.isArray(creatorProfile.categories)
-                                      ? creatorProfile.categories.join(", ")
-                                      : typeof creatorProfile.categories ===
-                                        "string"
-                                      ? creatorProfile.categories
-                                      : JSON.stringify(
-                                          creatorProfile.categories
-                                        )
+                                      );
+                                    } catch {
+                                      return (
+                                        <Badge variant="secondary">
+                                          Connected
+                                        </Badge>
+                                      );
+                                    }
+                                  })()}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("contests_participated") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {creatorProfile?.total_contests_participated ||
+                                    0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("contests_won") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {creatorProfile?.total_contests_won || 0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("total_views") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {creatorProfile?.total_views?.toLocaleString() ||
+                                    0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("total_money_won") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  $
+                                  {(
+                                    (creatorProfile?.total_money_won || 0) / 100
+                                  ).toFixed(2)}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("withdrawable_balance") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  $
+                                  {(
+                                    (creatorProfile?.withdrawable_balance ||
+                                      0) / 100
+                                  ).toFixed(2)}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("total_submissions_made") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {creatorProfile?.total_submissions_made || 0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("total_submissions_won") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {creatorProfile?.total_submissions_won || 0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("date_of_birth") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {creatorProfile?.date_of_birth
+                                    ? new Date(
+                                        creatorProfile.date_of_birth,
+                                      ).toLocaleDateString()
                                     : "-"}
-                                </div>
-                              </TableCell>
-                            )}
-                            {isColumnVisible("subcategories") && (
-                              <TableCell className="border-r max-w-xs">
-                                {(() => {
-                                  const subcategories =
-                                    creatorProfile?.subcategories;
-                                  if (!subcategories) return <div>-</div>;
+                                </TableCell>
+                              )}
+                              {isColumnVisible("gender") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {creatorProfile?.gender || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("country") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {getGeoField(r, "country") || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("state") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {getGeoField(r, "state") || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("city") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {getGeoField(r, "city") || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("address") && (
+                                <TableCell className="border-r min-w-[250px] max-w-md">
+                                  <div className="break-words">
+                                    {creatorProfile?.address || "-"}
+                                  </div>
+                                </TableCell>
+                              )}
+                              {isColumnVisible("language") && (
+                                <TableCell className="border-r min-w-[150px] max-w-sm">
+                                  <div className="break-words">
+                                    {Array.isArray(creatorProfile?.languages)
+                                      ? creatorProfile.languages.join(", ")
+                                      : creatorProfile?.languages || "-"}
+                                  </div>
+                                </TableCell>
+                              )}
+                              {isColumnVisible("categories") && (
+                                <TableCell className="whitespace-nowrap border-r max-w-xs">
+                                  <div className="truncate">
+                                    {creatorProfile?.categories
+                                      ? Array.isArray(creatorProfile.categories)
+                                        ? creatorProfile.categories.join(", ")
+                                        : typeof creatorProfile.categories ===
+                                            "string"
+                                          ? creatorProfile.categories
+                                          : JSON.stringify(
+                                              creatorProfile.categories,
+                                            )
+                                      : "-"}
+                                  </div>
+                                </TableCell>
+                              )}
+                              {isColumnVisible("subcategories") && (
+                                <TableCell className="border-r max-w-xs">
+                                  {(() => {
+                                    const subcategories =
+                                      creatorProfile?.subcategories;
+                                    if (!subcategories) return <div>-</div>;
 
-                                  let subcategoriesArray: string[] = [];
-                                  if (Array.isArray(subcategories)) {
-                                    // Convert each item to string, handling objects properly
-                                    subcategoriesArray = subcategories.map(
-                                      (item: any) => {
-                                        if (
-                                          typeof item === "object" &&
-                                          item !== null
-                                        ) {
-                                          // If it has category and subcategory, format nicely
+                                    let subcategoriesArray: string[] = [];
+                                    if (Array.isArray(subcategories)) {
+                                      // Convert each item to string, handling objects properly
+                                      subcategoriesArray = subcategories.map(
+                                        (item: any) => {
                                           if (
-                                            item.category &&
-                                            item.subcategory
+                                            typeof item === "object" &&
+                                            item !== null
                                           ) {
-                                            return `${item.category}: ${item.subcategory}`;
-                                          }
-                                          // Otherwise, stringify the object
-                                          return JSON.stringify(item);
-                                        }
-                                        return String(item);
-                                      }
-                                    );
-                                  } else if (
-                                    typeof subcategories === "string"
-                                  ) {
-                                    // Try to parse if it's a JSON string, otherwise split by comma
-                                    try {
-                                      const parsed = JSON.parse(subcategories);
-                                      if (Array.isArray(parsed)) {
-                                        subcategoriesArray = parsed.map(
-                                          (item: any) => {
+                                            // If it has category and subcategory, format nicely
                                             if (
-                                              typeof item === "object" &&
-                                              item !== null
+                                              item.category &&
+                                              item.subcategory
                                             ) {
-                                              if (
-                                                item.category &&
-                                                item.subcategory
-                                              ) {
-                                                return `${item.category}: ${item.subcategory}`;
-                                              }
-                                              return JSON.stringify(item);
+                                              return `${item.category}: ${item.subcategory}`;
                                             }
-                                            return String(item);
+                                            // Otherwise, stringify the object
+                                            return JSON.stringify(item);
                                           }
-                                        );
-                                      } else {
-                                        subcategoriesArray = [subcategories];
+                                          return String(item);
+                                        },
+                                      );
+                                    } else if (
+                                      typeof subcategories === "string"
+                                    ) {
+                                      // Try to parse if it's a JSON string, otherwise split by comma
+                                      try {
+                                        const parsed =
+                                          JSON.parse(subcategories);
+                                        if (Array.isArray(parsed)) {
+                                          subcategoriesArray = parsed.map(
+                                            (item: any) => {
+                                              if (
+                                                typeof item === "object" &&
+                                                item !== null
+                                              ) {
+                                                if (
+                                                  item.category &&
+                                                  item.subcategory
+                                                ) {
+                                                  return `${item.category}: ${item.subcategory}`;
+                                                }
+                                                return JSON.stringify(item);
+                                              }
+                                              return String(item);
+                                            },
+                                          );
+                                        } else {
+                                          subcategoriesArray = [subcategories];
+                                        }
+                                      } catch {
+                                        subcategoriesArray = subcategories
+                                          .split(",")
+                                          .map((s) => s.trim());
                                       }
-                                    } catch {
-                                      subcategoriesArray = subcategories
-                                        .split(",")
-                                        .map((s) => s.trim());
+                                    } else {
+                                      subcategoriesArray = [
+                                        JSON.stringify(subcategories),
+                                      ];
                                     }
-                                  } else {
-                                    subcategoriesArray = [
-                                      JSON.stringify(subcategories),
-                                    ];
-                                  }
 
-                                  return (
-                                    <SubcategoriesCell
-                                      subcategories={subcategoriesArray}
-                                      onViewAll={(subcats, cats) => {
-                                        setSelectedSubcategories(
-                                          creatorProfile?.subcategories
-                                        );
-                                        setSelectedCategories(
-                                          creatorProfile?.categories
-                                        );
-                                        setIsSubcategoriesDialogOpen(true);
-                                      }}
-                                    />
-                                  );
-                                })()}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("interests") && (
-                              <TableCell className="border-r max-w-xs">
-                                {(() => {
-                                  const interests = creatorProfile?.interests;
-                                  if (!interests) return <div>-</div>;
+                                    return (
+                                      <SubcategoriesCell
+                                        subcategories={subcategoriesArray}
+                                        onViewAll={(subcats, cats) => {
+                                          setSelectedSubcategories(
+                                            creatorProfile?.subcategories,
+                                          );
+                                          setSelectedCategories(
+                                            creatorProfile?.categories,
+                                          );
+                                          setIsSubcategoriesDialogOpen(true);
+                                        }}
+                                      />
+                                    );
+                                  })()}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("interests") && (
+                                <TableCell className="border-r max-w-xs">
+                                  {(() => {
+                                    const interests = creatorProfile?.interests;
+                                    if (!interests) return <div>-</div>;
 
-                                  let interestsArray: string[] = [];
-                                  if (Array.isArray(interests)) {
-                                    interestsArray = interests;
-                                  } else if (typeof interests === "string") {
-                                    // Try to parse if it's a JSON string, otherwise split by comma
-                                    try {
-                                      const parsed = JSON.parse(interests);
-                                      interestsArray = Array.isArray(parsed)
-                                        ? parsed
-                                        : [interests];
-                                    } catch {
-                                      interestsArray = interests
-                                        .split(",")
-                                        .map((s) => s.trim());
+                                    let interestsArray: string[] = [];
+                                    if (Array.isArray(interests)) {
+                                      interestsArray = interests;
+                                    } else if (typeof interests === "string") {
+                                      // Try to parse if it's a JSON string, otherwise split by comma
+                                      try {
+                                        const parsed = JSON.parse(interests);
+                                        interestsArray = Array.isArray(parsed)
+                                          ? parsed
+                                          : [interests];
+                                      } catch {
+                                        interestsArray = interests
+                                          .split(",")
+                                          .map((s) => s.trim());
+                                      }
+                                    } else {
+                                      interestsArray = [
+                                        JSON.stringify(interests),
+                                      ];
                                     }
-                                  } else {
-                                    interestsArray = [
-                                      JSON.stringify(interests),
-                                    ];
-                                  }
 
-                                  return (
-                                    <InterestsCell
-                                      interests={interestsArray}
-                                      onViewAll={(interestsList) => {
-                                        setSelectedInterests(
-                                          creatorProfile?.interests
-                                        );
-                                        setIsInterestsDialogOpen(true);
-                                      }}
-                                    />
-                                  );
-                                })()}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("created_at") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {formatDate(r.created_at)}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("updated_at") && (
-                              <TableCell className="whitespace-nowrap">
-                                {formatDate(r.updated_at)}
-                              </TableCell>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            {isColumnVisible("user_type") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                <Badge
-                                  variant={
-                                    r.user_type === "admin"
-                                      ? "destructive"
-                                      : r.user_type === "advertiser"
-                                      ? "default"
-                                      : "secondary"
-                                  }
-                                >
-                                  {r.user_type}
-                                </Badge>
-                              </TableCell>
-                            )}
-                            {isColumnVisible("username") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {r.username || "-"}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("referral_code") && (
-                              <TableCell className="font-mono text-xs whitespace-nowrap border-r">
-                                {r.referral_code || "-"}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("referred_by") && (
-                              <TableCell className="font-mono text-xs whitespace-nowrap border-r">
-                                {r.referred_by || "-"}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("coins") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {r.coins || 0}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("advertisers_referred") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {r.advertisers_referred || 0}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("creators_referred") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {r.creators_referred || 0}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("total_lifetime_coins") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {r.total_lifetime_coins_earned || 0}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("affiliate_earnings") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                $
-                                {((r.affiliate_earnings || 0) / 100).toFixed(2)}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("other_earnings") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                ${((r.other_earnings || 0) / 100).toFixed(2)}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("country") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {(() => {
-                                  const regCountry =
-                                    r.registration_info &&
-                                    (r.registration_info as Record<string, any>)
-                                      ?.country;
-                                  if (
-                                    typeof regCountry === "string" &&
-                                    regCountry.trim()
-                                  ) {
-                                    return regCountry;
-                                  }
-                                  const creatorProfile = Array.isArray(
-                                    r.creator_profiles
-                                  )
-                                    ? r.creator_profiles[0]
-                                    : r.creator_profiles || null;
-                                  return creatorProfile?.country || "-";
-                                })()}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("created_at") && (
-                              <TableCell className="whitespace-nowrap border-r">
-                                {formatDate(r.created_at)}
-                              </TableCell>
-                            )}
-                            {isColumnVisible("updated_at") && (
-                              <TableCell className="whitespace-nowrap">
-                                {formatDate(r.updated_at)}
-                              </TableCell>
-                            )}
-                          </>
-                        )}
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          {!loading && tabFiltered.length > 0 && (
-            <div className="mt-4">
-              <PaginationControls
-                page={page}
-                limit={limit}
-                total={tabFiltered.length}
-                totalPages={totalPages}
-                hasNextPage={hasNextPage}
-                hasPreviousPage={hasPreviousPage}
-                onPageChange={setPage}
-                onLimitChange={setLimit}
-                loading={loading}
-              />
+                                    return (
+                                      <InterestsCell
+                                        interests={interestsArray}
+                                        onViewAll={(interestsList) => {
+                                          setSelectedInterests(
+                                            creatorProfile?.interests,
+                                          );
+                                          setIsInterestsDialogOpen(true);
+                                        }}
+                                      />
+                                    );
+                                  })()}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("created_at") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {formatDate(r.created_at)}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("updated_at") && (
+                                <TableCell className="whitespace-nowrap">
+                                  {formatDate(r.updated_at)}
+                                </TableCell>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {isColumnVisible("user_type") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  <Badge
+                                    variant={
+                                      r.user_type === "admin"
+                                        ? "destructive"
+                                        : r.user_type === "advertiser"
+                                          ? "default"
+                                          : "secondary"
+                                    }
+                                  >
+                                    {r.user_type}
+                                  </Badge>
+                                </TableCell>
+                              )}
+                              {isColumnVisible("username") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {r.username || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("referral_code") && (
+                                <TableCell className="font-mono text-xs whitespace-nowrap border-r">
+                                  {r.referral_code || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("referred_by") && (
+                                <TableCell className="font-mono text-xs whitespace-nowrap border-r">
+                                  {r.referred_by || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("coins") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {r.coins || 0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("advertisers_referred") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {r.advertisers_referred || 0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("creators_referred") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {r.creators_referred || 0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("total_lifetime_coins") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {r.total_lifetime_coins_earned || 0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("affiliate_earnings") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  $
+                                  {((r.affiliate_earnings || 0) / 100).toFixed(
+                                    2,
+                                  )}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("other_earnings") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  ${((r.other_earnings || 0) / 100).toFixed(2)}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("country") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {getGeoField(r, "country") || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("state") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {getGeoField(r, "state") || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("city") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {getGeoField(r, "city") || "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("created_at") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {formatDate(r.created_at)}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("updated_at") && (
+                                <TableCell className="whitespace-nowrap">
+                                  {formatDate(r.updated_at)}
+                                </TableCell>
+                              )}
+                            </>
+                          )}
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
             </div>
+            {!loading && tabFiltered.length > 0 && (
+              <div className="mt-4">
+                <PaginationControls
+                  page={page}
+                  limit={limit}
+                  total={tabFiltered.length}
+                  totalPages={totalPages}
+                  hasNextPage={hasNextPage}
+                  hasPreviousPage={hasPreviousPage}
+                  onPageChange={setPage}
+                  onLimitChange={setLimit}
+                  loading={loading}
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {viewMode === "map" && (
+        <Card
+          className={cn(
+            "rounded-xl shadow",
+            isDark ? "bg-[#170337]" : "bg-white",
           )}
-        </CardContent>
-      </Card>
+        >
+          <CardContent className="px-6">
+            {/* Map view tabs: All Regions | All States | All Countries | All Cities */}
+            <div className="mb-3 flex flex-wrap gap-1 rounded-lg p-1">
+              <Button
+                variant={mapGroupBy === "region" ? "secondary" : "ghost"}
+                size="sm"
+                className={cn(
+                  "flex-1 min-w-0 rounded-md",
+                  mapGroupBy !== "region" &&
+                    isDark &&
+                    "text-slate-300 hover:bg-white/10 hover:text-white",
+                  mapGroupBy !== "region" &&
+                    !isDark &&
+                    "text-gray-600 hover:bg-gray-100",
+                )}
+                onClick={() => setMapGroupBy("region")}
+              >
+                All Regions
+              </Button>
+              <Button
+                variant={mapGroupBy === "state" ? "secondary" : "ghost"}
+                size="sm"
+                className={cn(
+                  "flex-1 min-w-0 rounded-md",
+                  mapGroupBy !== "state" &&
+                    isDark &&
+                    "text-slate-300 hover:bg-white/10 hover:text-white",
+                  mapGroupBy !== "state" &&
+                    !isDark &&
+                    "text-gray-600 hover:bg-gray-100",
+                )}
+                onClick={() => setMapGroupBy("state")}
+              >
+                All States
+              </Button>
+              <Button
+                variant={mapGroupBy === "country" ? "secondary" : "ghost"}
+                size="sm"
+                className={cn(
+                  "flex-1 min-w-0 rounded-md",
+                  mapGroupBy !== "country" &&
+                    isDark &&
+                    "text-slate-300 hover:bg-white/10 hover:text-white",
+                  mapGroupBy !== "country" &&
+                    !isDark &&
+                    "text-gray-600 hover:bg-gray-100",
+                )}
+                onClick={() => setMapGroupBy("country")}
+              >
+                All Countries
+              </Button>
+              <Button
+                variant={mapGroupBy === "city" ? "secondary" : "ghost"}
+                size="sm"
+                className={cn(
+                  "flex-1 min-w-0 rounded-md",
+                  mapGroupBy !== "city" &&
+                    isDark &&
+                    "text-slate-300 hover:bg-white/10 hover:text-white",
+                  mapGroupBy !== "city" &&
+                    !isDark &&
+                    "text-gray-600 hover:bg-gray-100",
+                )}
+                onClick={() => setMapGroupBy("city")}
+              >
+                All Cities
+              </Button>
+            </div>
+            <UsersMap
+              markers={mapMarkers}
+              activeTab={activeTab}
+              totalInTab={tabFiltered.length}
+              isDark={isDark}
+              groupBy={mapGroupBy}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Column Customization Dialog */}
       <Dialog
@@ -4213,7 +4475,7 @@ export default function AdminUsersPage() {
         <DialogContent
           className={cn(
             "max-w-4xl max-h-[80vh] overflow-y-auto",
-            isDark ? "text-white" : "text-gray-900"
+            isDark ? "text-white" : "text-gray-900",
           )}
         >
           <DialogHeader>
@@ -4223,8 +4485,8 @@ export default function AdminUsersPage() {
               {activeTab === "all"
                 ? "Users"
                 : activeTab === "advertisers"
-                ? "Advertisers"
-                : "Creators"}{" "}
+                  ? "Advertisers"
+                  : "Creators"}{" "}
               Columns
             </DialogTitle>
             <DialogDescription
@@ -4234,8 +4496,8 @@ export default function AdminUsersPage() {
               {activeTab === "all"
                 ? "Users"
                 : activeTab === "advertisers"
-                ? "Advertisers"
-                : "Creators"}{" "}
+                  ? "Advertisers"
+                  : "Creators"}{" "}
               table. Click on a column to toggle its visibility.
             </DialogDescription>
           </DialogHeader>
@@ -4254,8 +4516,8 @@ export default function AdminUsersPage() {
                             ? "bg-[#391A6A] border-purple-500 text-white"
                             : "bg-purple-50 border-purple-200 text-gray-900"
                           : isDark
-                          ? "border-gray-600 hover:bg-[#2A1249] text-gray-300"
-                          : "border-gray-300 hover:bg-gray-100 text-gray-700"
+                            ? "border-gray-600 hover:bg-[#2A1249] text-gray-300"
+                            : "border-gray-300 hover:bg-gray-100 text-gray-700",
                       )}
                       onClick={() => toggleColumn(column.id)}
                     >
@@ -4266,8 +4528,8 @@ export default function AdminUsersPage() {
                             isVisible
                               ? "bg-purple-600 border-purple-600"
                               : isDark
-                              ? "border-gray-500"
-                              : "border-gray-400"
+                                ? "border-gray-500"
+                                : "border-gray-400",
                           )}
                         >
                           {isVisible && (
@@ -4280,7 +4542,7 @@ export default function AdminUsersPage() {
                       </div>
                     </div>
                   );
-                }
+                },
               )}
             </div>
           </div>
@@ -4296,27 +4558,27 @@ export default function AdminUsersPage() {
         <DialogContent
           className={cn(
             "w-[calc(100%-1rem)] max-w-[calc(100vw-1rem)] sm:max-w-md md:max-w-2xl lg:max-w-4xl max-h-[90vh] sm:max-h-[80vh] overflow-y-auto p-4 sm:p-6",
-            isDark ? "text-white" : "text-gray-900"
+            isDark ? "text-white" : "text-gray-900",
           )}
         >
           <DialogHeader>
             <DialogTitle
               className={cn(
                 "text-lg sm:text-xl",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               Filter{" "}
               {activeTab === "all"
                 ? "Users"
                 : activeTab === "advertisers"
-                ? "Advertisers"
-                : "Creators"}
+                  ? "Advertisers"
+                  : "Creators"}
             </DialogTitle>
             <DialogDescription
               className={cn(
                 "text-xs sm:text-sm",
-                isDark ? "text-gray-300" : "text-gray-600"
+                isDark ? "text-gray-300" : "text-gray-600",
               )}
             >
               Add filters to search and filter the table data. You can add
@@ -4330,7 +4592,7 @@ export default function AdminUsersPage() {
                   "flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-lg border",
                   isDark
                     ? "bg-[#1a102b] border-gray-700"
-                    : "bg-gray-50 border-gray-200"
+                    : "bg-gray-50 border-gray-200",
                 )}
               >
                 <div className="flex-1 min-w-0">
@@ -4338,7 +4600,7 @@ export default function AdminUsersPage() {
                     value={
                       emptyFilterColumn ||
                       allColumns[activeTab as keyof typeof allColumns].filter(
-                        (column) => column.id !== "profile"
+                        (column) => column.id !== "profile",
                       )[0]?.id ||
                       ""
                     }
@@ -4379,7 +4641,7 @@ export default function AdminUsersPage() {
                     const selectedColumnId =
                       emptyFilterColumn ||
                       allColumns[activeTab as keyof typeof allColumns].filter(
-                        (column) => column.id !== "profile"
+                        (column) => column.id !== "profile",
                       )[0]?.id ||
                       "";
                     const isUserType = selectedColumnId === "user_type";
@@ -4431,7 +4693,7 @@ export default function AdminUsersPage() {
                       const selectedColumn =
                         emptyFilterColumn ||
                         allColumns[activeTab as keyof typeof allColumns].filter(
-                          (column) => column.id !== "profile"
+                          (column) => column.id !== "profile",
                         )[0]?.id ||
                         "";
                       if (selectedColumn && value) {
@@ -4571,7 +4833,7 @@ export default function AdminUsersPage() {
                                   "inline-flex items-center justify-center px-1.5 sm:px-2 text-xs border border-r-0 rounded-l-md flex-shrink-0",
                                   isDark
                                     ? "bg-[#07031D] border-gray-700 text-white"
-                                    : "bg-gray-50 text-gray-700 border-gray-300"
+                                    : "bg-gray-50 text-gray-700 border-gray-300",
                                 )}
                               >
                                 $
@@ -4587,7 +4849,7 @@ export default function AdminUsersPage() {
                                     allColumns[
                                       activeTab as keyof typeof allColumns
                                     ].filter(
-                                      (column) => column.id !== "profile"
+                                      (column) => column.id !== "profile",
                                     )[0]?.id ||
                                     "";
                                   if (selectedColumn && value) {
@@ -4609,7 +4871,7 @@ export default function AdminUsersPage() {
                                   "rounded-l-none border-l-0 flex-1 min-w-0 text-sm",
                                   isDark
                                     ? "bg-[#07031D] border-gray-700 text-white"
-                                    : "bg-white border-gray-300"
+                                    : "bg-white border-gray-300",
                                 )}
                               />
                             </div>
@@ -4625,7 +4887,7 @@ export default function AdminUsersPage() {
                                   allColumns[
                                     activeTab as keyof typeof allColumns
                                   ].filter(
-                                    (column) => column.id !== "profile"
+                                    (column) => column.id !== "profile",
                                   )[0]?.id ||
                                   "";
                                 if (selectedColumn && value) {
@@ -4647,7 +4909,7 @@ export default function AdminUsersPage() {
                                 "flex-1 min-w-0 text-sm",
                                 isDark
                                   ? "bg-[#07031D] border-gray-700 text-white"
-                                  : "bg-white border-gray-300"
+                                  : "bg-white border-gray-300",
                               )}
                             />
                           ) : (
@@ -4662,7 +4924,7 @@ export default function AdminUsersPage() {
                                   allColumns[
                                     activeTab as keyof typeof allColumns
                                   ].filter(
-                                    (column) => column.id !== "profile"
+                                    (column) => column.id !== "profile",
                                   )[0]?.id ||
                                   "";
                                 if (selectedColumn && value) {
@@ -4684,7 +4946,7 @@ export default function AdminUsersPage() {
                                 "flex-1 min-w-0 text-sm",
                                 isDark
                                   ? "bg-[#07031D] border-gray-700 text-white"
-                                  : "bg-white border-gray-300"
+                                  : "bg-white border-gray-300",
                               )}
                             />
                           )}
@@ -4727,7 +4989,7 @@ export default function AdminUsersPage() {
                           "text-sm",
                           isDark
                             ? "bg-[#07031D] border-gray-700 text-white"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                       />
                     );
@@ -4750,7 +5012,7 @@ export default function AdminUsersPage() {
                     "flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-lg border",
                     isDark
                       ? "bg-[#1a102b] border-gray-700"
-                      : "bg-gray-50 border-gray-200"
+                      : "bg-gray-50 border-gray-200",
                   )}
                 >
                   <div className="flex-1 min-w-0">
@@ -4768,8 +5030,8 @@ export default function AdminUsersPage() {
                                   value: "",
                                   operator: undefined,
                                 }
-                              : f
-                          )
+                              : f,
+                          ),
                         );
                       }}
                     >
@@ -4798,8 +5060,8 @@ export default function AdminUsersPage() {
                         onValueChange={(value) => {
                           setFilters(
                             filters.map((f) =>
-                              f.id === filter.id ? { ...f, value } : f
-                            )
+                              f.id === filter.id ? { ...f, value } : f,
+                            ),
                           );
                         }}
                       >
@@ -4824,8 +5086,8 @@ export default function AdminUsersPage() {
                         onValueChange={(value) => {
                           setFilters(
                             filters.map((f) =>
-                              f.id === filter.id ? { ...f, value } : f
-                            )
+                              f.id === filter.id ? { ...f, value } : f,
+                            ),
                           );
                         }}
                       >
@@ -4850,8 +5112,8 @@ export default function AdminUsersPage() {
                         onValueChange={(value) => {
                           setFilters(
                             filters.map((f) =>
-                              f.id === filter.id ? { ...f, value } : f
-                            )
+                              f.id === filter.id ? { ...f, value } : f,
+                            ),
                           );
                         }}
                       >
@@ -4873,8 +5135,8 @@ export default function AdminUsersPage() {
                         onValueChange={(value) => {
                           setFilters(
                             filters.map((f) =>
-                              f.id === filter.id ? { ...f, value } : f
-                            )
+                              f.id === filter.id ? { ...f, value } : f,
+                            ),
                           );
                         }}
                       >
@@ -4923,13 +5185,13 @@ export default function AdminUsersPage() {
                           "date_of_birth",
                         ];
                         const isEarningsField = earningsFields.includes(
-                          filter.column
+                          filter.column,
                         );
                         const isIntegerField = integerFields.includes(
-                          filter.column
+                          filter.column,
                         );
                         const isMoneyField = moneyFields.includes(
-                          filter.column
+                          filter.column,
                         );
                         const isDateField = dateFields.includes(filter.column);
                         const supportsOperators =
@@ -4949,8 +5211,8 @@ export default function AdminUsersPage() {
                                       filters.map((f) =>
                                         f.id === filter.id
                                           ? { ...f, operator: value }
-                                          : f
-                                      )
+                                          : f,
+                                      ),
                                     );
                                   }}
                                 >
@@ -4999,7 +5261,7 @@ export default function AdminUsersPage() {
                                     "inline-flex items-center justify-center px-1.5 sm:px-2 text-xs border border-r-0 rounded-l-md flex-shrink-0",
                                     isDark
                                       ? "bg-[#07031D] border-gray-700 text-white"
-                                      : "bg-gray-50 text-gray-700 border-gray-300"
+                                      : "bg-gray-50 text-gray-700 border-gray-300",
                                   )}
                                 >
                                   $
@@ -5012,8 +5274,8 @@ export default function AdminUsersPage() {
                                       filters.map((f) =>
                                         f.id === filter.id
                                           ? { ...f, value: e.target.value }
-                                          : f
-                                      )
+                                          : f,
+                                      ),
                                     );
                                   }}
                                   placeholder="Enter amount..."
@@ -5021,7 +5283,7 @@ export default function AdminUsersPage() {
                                     "rounded-l-none border-l-0 flex-1 min-w-0 text-sm",
                                     isDark
                                       ? "bg-[#07031D] border-gray-700 text-white"
-                                      : "bg-white border-gray-300"
+                                      : "bg-white border-gray-300",
                                   )}
                                 />
                               </div>
@@ -5039,8 +5301,8 @@ export default function AdminUsersPage() {
                                     filters.map((f) =>
                                       f.id === filter.id
                                         ? { ...f, operator: value }
-                                        : f
-                                    )
+                                        : f,
+                                    ),
                                   );
                                 }}
                               >
@@ -5090,8 +5352,8 @@ export default function AdminUsersPage() {
                                     filters.map((f) =>
                                       f.id === filter.id
                                         ? { ...f, value: e.target.value }
-                                        : f
-                                    )
+                                        : f,
+                                    ),
                                   );
                                 }}
                                 placeholder="Enter value..."
@@ -5099,7 +5361,7 @@ export default function AdminUsersPage() {
                                   "flex-1 min-w-0 text-sm",
                                   isDark
                                     ? "bg-[#07031D] border-gray-700 text-white"
-                                    : "bg-white border-gray-300"
+                                    : "bg-white border-gray-300",
                                 )}
                               />
                             </div>
@@ -5116,8 +5378,8 @@ export default function AdminUsersPage() {
                                     filters.map((f) =>
                                       f.id === filter.id
                                         ? { ...f, operator: value }
-                                        : f
-                                    )
+                                        : f,
+                                    ),
                                   );
                                 }}
                               >
@@ -5167,8 +5429,8 @@ export default function AdminUsersPage() {
                                     filters.map((f) =>
                                       f.id === filter.id
                                         ? { ...f, value: e.target.value }
-                                        : f
-                                    )
+                                        : f,
+                                    ),
                                   );
                                 }}
                                 placeholder="Select date..."
@@ -5176,7 +5438,7 @@ export default function AdminUsersPage() {
                                   "flex-1 min-w-0 text-sm",
                                   isDark
                                     ? "bg-[#07031D] border-gray-700 text-white"
-                                    : "bg-white border-gray-300"
+                                    : "bg-white border-gray-300",
                                 )}
                               />
                             </div>
@@ -5198,8 +5460,8 @@ export default function AdminUsersPage() {
                                 filters.map((f) =>
                                   f.id === filter.id
                                     ? { ...f, value: e.target.value }
-                                    : f
-                                )
+                                    : f,
+                                ),
                               );
                             }}
                             placeholder={
@@ -5213,7 +5475,7 @@ export default function AdminUsersPage() {
                               "text-sm",
                               isDark
                                 ? "bg-[#07031D] border-gray-700 text-white"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           />
                         );
@@ -5252,7 +5514,7 @@ export default function AdminUsersPage() {
                 "w-full text-sm sm:text-base",
                 isDark
                   ? "border-gray-700 text-white hover:bg-gray-800"
-                  : "border-gray-300"
+                  : "border-gray-300",
               )}
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -5267,7 +5529,9 @@ export default function AdminUsersPage() {
                   }}
                   className={cn(
                     "w-full sm:w-auto text-sm sm:text-base",
-                    isDark ? "border-gray-700 text-white hover:bg-gray-800" : ""
+                    isDark
+                      ? "border-gray-700 text-white hover:bg-gray-800"
+                      : "",
                   )}
                 >
                   Clear All
@@ -5278,7 +5542,7 @@ export default function AdminUsersPage() {
                   }}
                   className={cn(
                     "w-full sm:w-auto text-sm sm:text-base bg-purple-600 text-white hover:bg-purple-700",
-                    isDark && "bg-purple-600 hover:bg-purple-700"
+                    isDark && "bg-purple-600 hover:bg-purple-700",
                   )}
                 >
                   Apply Filters
@@ -5297,14 +5561,14 @@ export default function AdminUsersPage() {
         <DialogContent
           className={cn(
             "max-w-3xl max-h-[80vh] overflow-y-auto",
-            isDark ? "text-white" : "text-gray-900"
+            isDark ? "text-white" : "text-gray-900",
           )}
         >
           <DialogHeader>
             <DialogTitle
               className={cn(
                 "text-xl font-semibold",
-                isDark ? "text-white" : "text-gray-900"
+                isDark ? "text-white" : "text-gray-900",
               )}
             >
               Subscription Information
@@ -5343,8 +5607,8 @@ export default function AdminUsersPage() {
                   typeof info?.price_amount === "number"
                     ? info.price_amount
                     : typeof info?.amount_cents === "number"
-                    ? info.amount_cents
-                    : undefined;
+                      ? info.amount_cents
+                      : undefined;
                 const formattedAmount =
                   amountCents !== undefined
                     ? `$${(amountCents / 100).toFixed(2)}`
@@ -5382,16 +5646,16 @@ export default function AdminUsersPage() {
                       ? "bg-emerald-900/60 text-emerald-200 border-emerald-700"
                       : "bg-emerald-50 text-emerald-700 border-emerald-300"
                     : status === "canceled" || status === "incomplete_expired"
-                    ? isDark
-                      ? "bg-rose-900/60 text-rose-200 border-rose-700"
-                      : "bg-rose-50 text-rose-700 border-rose-300"
-                    : status === "past_due" || status === "unpaid"
-                    ? isDark
-                      ? "bg-amber-900/60 text-amber-200 border-amber-700"
-                      : "bg-amber-50 text-amber-700 border-amber-300"
-                    : isDark
-                    ? "bg-slate-800 text-slate-100 border-slate-700"
-                    : "bg-slate-50 text-slate-700 border-slate-300";
+                      ? isDark
+                        ? "bg-rose-900/60 text-rose-200 border-rose-700"
+                        : "bg-rose-50 text-rose-700 border-rose-300"
+                      : status === "past_due" || status === "unpaid"
+                        ? isDark
+                          ? "bg-amber-900/60 text-amber-200 border-amber-700"
+                          : "bg-amber-50 text-amber-700 border-amber-300"
+                        : isDark
+                          ? "bg-slate-800 text-slate-100 border-slate-700"
+                          : "bg-slate-50 text-slate-700 border-slate-300";
 
                 return (
                   <div className="space-y-6">
@@ -5401,14 +5665,14 @@ export default function AdminUsersPage() {
                         "rounded-xl border p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4",
                         isDark
                           ? "bg-[#1a102b] border-purple-700/50"
-                          : "bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-100"
+                          : "bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-100",
                       )}
                     >
                       <div className="space-y-1.5">
                         <p
                           className={cn(
                             "text-xs uppercase tracking-wide",
-                            isDark ? "text-gray-300" : "text-gray-600"
+                            isDark ? "text-gray-300" : "text-gray-600",
                           )}
                         >
                           Current Plan
@@ -5426,7 +5690,7 @@ export default function AdminUsersPage() {
                         <p
                           className={cn(
                             "text-sm",
-                            isDark ? "text-gray-200" : "text-gray-900"
+                            isDark ? "text-gray-200" : "text-gray-900",
                           )}
                         >
                           {formattedAmount}{" "}
@@ -5439,7 +5703,7 @@ export default function AdminUsersPage() {
                           <span
                             className={cn(
                               "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium",
-                              statusColorClasses
+                              statusColorClasses,
                             )}
                           >
                             <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
@@ -5466,7 +5730,7 @@ export default function AdminUsersPage() {
                           "rounded-lg border p-4 space-y-2",
                           isDark
                             ? "bg-[#130b21] border-slate-700"
-                            : "bg-white border-slate-200"
+                            : "bg-white border-slate-200",
                         )}
                       >
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -5517,7 +5781,7 @@ export default function AdminUsersPage() {
                           "rounded-lg border p-4 space-y-2",
                           isDark
                             ? "bg-[#130b21] border-slate-700"
-                            : "bg-white border-slate-200"
+                            : "bg-white border-slate-200",
                         )}
                       >
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -5564,7 +5828,7 @@ export default function AdminUsersPage() {
               <p
                 className={cn(
                   "text-sm",
-                  isDark ? "text-gray-300" : "text-muted-foreground"
+                  isDark ? "text-gray-300" : "text-muted-foreground",
                 )}
               >
                 No subscription information is available for this advertiser.
@@ -5582,7 +5846,7 @@ export default function AdminUsersPage() {
         <DialogContent
           className={cn(
             "max-w-3xl max-h-[80vh] overflow-y-auto",
-            isDark ? "text-white" : "text-gray-900"
+            isDark ? "text-white" : "text-gray-900",
           )}
         >
           <DialogHeader>
@@ -5615,11 +5879,11 @@ export default function AdminUsersPage() {
                         }
                         if (
                           !subcategoriesByCategory[item.category].includes(
-                            item.subcategory
+                            item.subcategory,
                           )
                         ) {
                           subcategoriesByCategory[item.category].push(
-                            item.subcategory
+                            item.subcategory,
                           );
                         }
                       } else {
@@ -5666,11 +5930,11 @@ export default function AdminUsersPage() {
                           }
                           if (
                             !subcategoriesByCategory[item.category].includes(
-                              item.subcategory
+                              item.subcategory,
                             )
                           ) {
                             subcategoriesByCategory[item.category].push(
-                              item.subcategory
+                              item.subcategory,
                             );
                           }
                         } else if (typeof item === "object" && item !== null) {
@@ -5706,14 +5970,14 @@ export default function AdminUsersPage() {
               if (selectedCategories) {
                 if (Array.isArray(selectedCategories)) {
                   categoriesList = selectedCategories.filter(
-                    (cat) => typeof cat === "string"
+                    (cat) => typeof cat === "string",
                   );
                 } else if (typeof selectedCategories === "string") {
                   try {
                     const parsed = JSON.parse(selectedCategories);
                     if (Array.isArray(parsed)) {
                       categoriesList = parsed.filter(
-                        (cat) => typeof cat === "string"
+                        (cat) => typeof cat === "string",
                       );
                     }
                   } catch {
@@ -5727,7 +5991,7 @@ export default function AdminUsersPage() {
                 new Set([
                   ...categoriesList,
                   ...Object.keys(subcategoriesByCategory),
-                ])
+                ]),
               );
 
               const hasOrganizedSubcategories =
@@ -5736,14 +6000,14 @@ export default function AdminUsersPage() {
               const totalCount =
                 Object.values(subcategoriesByCategory).reduce(
                   (sum, arr) => sum + arr.length,
-                  0
+                  0,
                 ) + flatSubcategories.length;
 
               if (!hasOrganizedSubcategories && !hasFlatSubcategories) {
                 return (
                   <p
                     className={cn(
-                      isDark ? "text-gray-300" : "text-muted-foreground"
+                      isDark ? "text-gray-300" : "text-muted-foreground",
                     )}
                   >
                     No subcategories available
@@ -5758,7 +6022,7 @@ export default function AdminUsersPage() {
                     <span
                       className={cn(
                         "text-sm font-medium",
-                        isDark ? "text-gray-200" : "text-gray-900"
+                        isDark ? "text-gray-200" : "text-gray-900",
                       )}
                     >
                       Total: {totalCount} subcategories
@@ -5777,7 +6041,7 @@ export default function AdminUsersPage() {
                             <h3
                               className={cn(
                                 "text-base font-semibold capitalize",
-                                isDark ? "text-white" : "text-foreground"
+                                isDark ? "text-white" : "text-foreground",
                               )}
                             >
                               {category}
@@ -5791,7 +6055,7 @@ export default function AdminUsersPage() {
                                     "text-sm py-1.5 px-3 font-normal",
                                     isDark
                                       ? "bg-[#391A6A] text-gray-200 border-purple-500"
-                                      : ""
+                                      : "",
                                   )}
                                 >
                                   {subcat}
@@ -5810,7 +6074,7 @@ export default function AdminUsersPage() {
                       <h3
                         className={cn(
                           "text-base font-semibold",
-                          isDark ? "text-white" : "text-foreground"
+                          isDark ? "text-white" : "text-foreground",
                         )}
                       >
                         Other Subcategories
@@ -5824,7 +6088,7 @@ export default function AdminUsersPage() {
                               "text-sm py-1.5 px-3 font-normal",
                               isDark
                                 ? "bg-[#391A6A] text-gray-200 border-purple-500"
-                                : ""
+                                : "",
                             )}
                           >
                             {subcat}
@@ -5848,7 +6112,7 @@ export default function AdminUsersPage() {
         <DialogContent
           className={cn(
             "max-w-3xl max-h-[80vh] overflow-y-auto",
-            isDark ? "text-white" : "text-gray-900"
+            isDark ? "text-white" : "text-gray-900",
           )}
         >
           <DialogHeader>
@@ -5870,14 +6134,14 @@ export default function AdminUsersPage() {
               if (selectedInterests) {
                 if (Array.isArray(selectedInterests)) {
                   interestsArray = selectedInterests.filter(
-                    (item: any) => typeof item === "string"
+                    (item: any) => typeof item === "string",
                   );
                 } else if (typeof selectedInterests === "string") {
                   try {
                     const parsed = JSON.parse(selectedInterests);
                     if (Array.isArray(parsed)) {
                       interestsArray = parsed.filter(
-                        (item: any) => typeof item === "string"
+                        (item: any) => typeof item === "string",
                       );
                     } else {
                       interestsArray = [selectedInterests];
@@ -5896,7 +6160,7 @@ export default function AdminUsersPage() {
                 return (
                   <p
                     className={cn(
-                      isDark ? "text-gray-300" : "text-muted-foreground"
+                      isDark ? "text-gray-300" : "text-muted-foreground",
                     )}
                   >
                     No interests available
@@ -5911,7 +6175,7 @@ export default function AdminUsersPage() {
                     <span
                       className={cn(
                         "text-sm font-medium",
-                        isDark ? "text-gray-200" : "text-gray-900"
+                        isDark ? "text-gray-200" : "text-gray-900",
                       )}
                     >
                       Total: {totalCount} interests
@@ -5928,7 +6192,7 @@ export default function AdminUsersPage() {
                           "text-sm py-1.5 px-3 font-normal",
                           isDark
                             ? "bg-[#391A6A] text-gray-200 border-purple-500"
-                            : ""
+                            : "",
                         )}
                       >
                         {interest}

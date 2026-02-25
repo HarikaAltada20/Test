@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { getGeoDataForIp, buildGeoDataColumn } from '@/lib/geo-ip';
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
     return { browser_name, browser_version, os_name, os_version, user_agent: ua };
   }
   const uaInfo = parseUserAgent(user_agent || '');
-  // Fetch current login_history
+  const geo_data = await getGeoDataForIp(ip);
   const { data: user, error } = await supabase
     .from('users')
     .select('login_history')
@@ -58,11 +59,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   let history = user?.login_history || [];
-  history.unshift({ ip_address: ip, timestamp: new Date().toISOString(), ...uaInfo });
+  history.unshift({
+    ip_address: ip,
+    timestamp: new Date().toISOString(),
+    ...uaInfo,
+  });
   if (history.length > 10) history = history.slice(0, 10);
+  const geoDataColumn = buildGeoDataColumn(ip, geo_data);
+  const updatePayload: { login_history: typeof history; geo_data?: { ip: string; geo_data: typeof geo_data }; updated_at: string } = {
+    login_history: history,
+    updated_at: new Date().toISOString(),
+  };
+  if (geoDataColumn) updatePayload.geo_data = geoDataColumn;
   const { error: updateError } = await supabase
     .from('users')
-    .update({ login_history: history })
+    .update(updatePayload)
     .eq('id', user_id);
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });

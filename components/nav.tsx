@@ -24,6 +24,7 @@ import {
 import {
   Menu,
   User,
+  Trophy,
   Settings,
   LogOut,
   LayoutDashboard,
@@ -88,6 +89,24 @@ export function Nav({
   const avatarSrc =
     profilePictureUrl || user?.user_metadata?.profile_picture_url || "";
   const avatarFallback = displayName.charAt(0).toUpperCase();
+  const quickLinkHref =
+    userType === "advertiser"
+      ? "/dashboard/contests"
+      : userType === "creator"
+        ? "/dashboard/opportunities"
+        : "/dashboard/profile";
+  const quickLinkLabel =
+    userType === "advertiser"
+      ? "Contests"
+      : userType === "creator"
+        ? "Opportunities"
+        : "Profile";
+  const QuickLinkIcon =
+    userType === "advertiser"
+      ? Trophy
+      : userType === "creator"
+        ? Trophy
+        : User;
   const [open, setOpen] = useState(false);
   
 
@@ -257,12 +276,9 @@ export function Nav({
                         asChild
                         className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
                       >
-                        <Link
-                          href="/dashboard/profile"
-                          className="flex items-center"
-                        >
-                          <User className="mr-2 h-4 w-4" />
-                          Profile
+                        <Link href={quickLinkHref} className="flex items-center">
+                          <QuickLinkIcon className="mr-2 h-4 w-4" />
+                          {quickLinkLabel}
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem
@@ -442,11 +458,11 @@ export function Nav({
                               </div>
                             </Link>
                             <Link
-                              href="/dashboard/profile"
+                              href={quickLinkHref}
                               className="flex items-center gap-3 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-violet-600/10 transition-colors"
                             >
-                              <User className="h-5 w-5" />
-                              Profile
+                              <QuickLinkIcon className="h-5 w-5" />
+                              {quickLinkLabel}
                             </Link>
                             <Link
                               href="/dashboard"
