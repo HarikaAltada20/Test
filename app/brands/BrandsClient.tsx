@@ -10,6 +10,7 @@ import {
   Crown,
   Sparkles,
   Trophy,
+  ArrowUpRight,
 } from "lucide-react";
 import CtcBanner from "@/components/CtcBanner";
 import NumbersSection from "@/components/NumberSection";
@@ -71,6 +72,8 @@ export default function BrandsClient() {
 
   const animationRef = useRef<HTMLDivElement>(null);
   const [isAnimated, setIsAnimated] = useState(false);
+  const servicesRef = useRef<HTMLDivElement>(null);
+  const [servicesAnimated, setServicesAnimated] = useState(false);
   const howItWorksRef = useRef<HTMLDivElement>(null);
   const [howItWorksAnimated, setHowItWorksAnimated] = useState(false);
 
@@ -89,6 +92,11 @@ export default function BrandsClient() {
               observerInstance.unobserve(entry.target);
             }
 
+            if (entry.target === servicesRef.current) {
+              setServicesAnimated(true);
+              observerInstance.unobserve(entry.target);
+            }
+
             if (entry.target === sectionRef.current) {
               setAnimate(true);
               observerInstance.unobserve(entry.target);
@@ -96,19 +104,39 @@ export default function BrandsClient() {
           }
         });
       },
-      { threshold: 0.3 } // Adjust if you want different triggers
+      { threshold: 0.3 }, // Adjust if you want different triggers
     );
 
     if (animationRef.current) observer.observe(animationRef.current);
     if (howItWorksRef.current) observer.observe(howItWorksRef.current);
+    if (servicesRef.current) observer.observe(servicesRef.current);
     if (sectionRef.current) observer.observe(sectionRef.current);
 
     return () => {
       if (animationRef.current) observer.unobserve(animationRef.current);
       if (howItWorksRef.current) observer.unobserve(howItWorksRef.current);
+      if (servicesRef.current) observer.unobserve(servicesRef.current);
       if (sectionRef.current) observer.unobserve(sectionRef.current);
     };
   }, []);
+
+  const servicesWeOffer = [
+    {
+      title: "CREATOR COLLABS",
+      image: "/images/creator-collabs.avif",
+      accent: "from-violet-500 to-purple-500",
+    },
+    {
+      title: "MASS DISTRIBUTION",
+      image: "/images/mass-distribution.avif",
+      accent: "from-blue-500 to-cyan-400",
+    },
+    {
+      title: "CONTENT CONSULTING",
+      image: "/images/consultant.avif",
+      accent: "from-emerald-500 to-lime-400",
+    },
+  ];
 
   // useEffect(() => {
   //   const interval = setInterval(() => {
@@ -166,126 +194,160 @@ export default function BrandsClient() {
           {/* Orange Ellipse Background Glow */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1200px] h-[500px] rounded-full blur-3xl opacity-50 pointer-events-none bg-blue-ellipse"></div>
 
-          <div className="container mx-auto px-4 text-center relative z-10">
-            {/* Premium Badge */}
-            <div className="inline-grid grid-cols-[auto_1fr] items-center gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-6 sm:py-3 mb-8 max-w-[92vw] sm:max-w-none mx-auto">
-              <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white shrink-0" />
-              <span className="text-xs sm:text-lg font-semibold bg-white bg-clip-text text-transparent leading-tight whitespace-normal text-left">
-                #1 Gamified Creator Marketing Platform
-              </span>
-            </div>
+          <div className="container max-w-[1300px] mx-auto px-4 relative z-10">
+            <div className="grid lg:grid-cols-2 gap-10 xl:gap-16 items-center">
+              <div className="text-center lg:text-left">
+                {/* Premium Badge */}
+                <div className="inline-grid grid-cols-[auto_1fr] items-center gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-6 sm:py-3 mb-8 max-w-[92vw] sm:max-w-none mx-auto lg:mx-0">
+                  <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white shrink-0" />
+                  <span className="text-xs sm:text-lg font-semibold bg-white bg-clip-text text-transparent leading-tight whitespace-normal text-left">
+                    #1 Gamified Creator Marketing Platform
+                  </span>
+                </div>
 
-            {/* Enhanced Social Icons */}
-            <div className="flex justify-center mb-8">
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
-                <div className="relative">
-                  <Image
-                    src={SocialPair}
-                    alt="Social Media Icons"
-                    width={150}
-                    height={40}
-                    className="relative z-10"
-                  />
+                {/* Enhanced Social Icons */}
+                <div className="flex justify-center lg:justify-start mb-8">
+                  {/* <div className="relative group">
+                    <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    <div className="relative">
+                      <Image
+                        src={SocialPair}
+                        alt="Social Media Icons"
+                        width={150}
+                        height={40}
+                        className="relative z-10"
+                      />
+                    </div>
+                  </div> */}
+                </div>
+
+                {/* Massive Gaming Title */}
+                <h1
+                  className="
+    text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl
+    flex flex-wrap justify-center lg:justify-start gap-x-2 md:gap-x-3
+    mb-6 leading-tight text-center lg:text-left slide-up
+  "
+                  style={{ animationDelay: "1s" }}
+                >
+                  <span
+                    className="font-semibold text-white drop-shadow-2xl"
+                    style={{ fontFamily: "Montserrat, sans-serif" }}
+                  >
+                    Make your product
+                  </span>
+
+                  <span
+                    className="font-semibold text-white drop-shadow-2xl whitespace-nowrap"
+                    style={{ fontFamily: "Montserrat, sans-serif" }}
+                  >
+                    go{" "}
+                    <span className="relative inline-block">
+                      <span
+                        style={{
+                          background:
+                            "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
+                          WebkitBackgroundClip: "text",
+                          WebkitTextFillColor: "transparent",
+                          backgroundClip: "text",
+                          display: "inline",
+                        }}
+                      >
+                        viral
+                      </span>
+                      <span className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl"></span>
+                    </span>
+                  </span>
+                </h1>
+
+                {/* Strategic Subtitle */}
+                <p
+                  className="text-base sm:text-lg md:text-2xl text-slate-300 max-w-3xl mx-auto lg:mx-0 mb-10 leading-relaxed drop-shadow-lg text-center lg:text-left slide-left"
+                  style={{ animationDelay: "2s" }}
+                >
+                  Launch strategic{" "}
+                  <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">
+                    creator contests
+                  </span>{" "}
+                  and drive organic viral marketing with{" "}
+                  <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">
+                    1000s of creators
+                  </span>{" "}
+                  producing content that scales your brand&apos;s reach.
+                </p>
+
+                {/* Call-to-Action Buttons */}
+                <div className="flex flex-col sm:flex-row justify-center lg:justify-start items-center sm:items-start gap-4 mb-8">
+                  <BrandGetStartedButton />
+
+                  <Button
+                    variant="outline"
+                    className="w-auto rounded-3xl border-2 border-slate-400/40 text-slate-300 font-semibold px-8 py-6 text-lg hover:border-purple-400/50 hover:text-purple-400 transition-all duration-300 bg-transparent hover:bg-slate-800/20 hover:shadow-lg"
+                    asChild
+                  >
+                    <a
+                      href="https://www.youtube.com/watch?v=kV4dXlWR8sY"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Watch Demo
+                    </a>
+                  </Button>
+                </div>
+
+                {/* Launch Campaign - always visible, direct link to form */}
+                <div className="flex justify-center lg:justify-start items-center mb-8">
+                  <Button
+                    variant="outline"
+                    className="rounded-full border border-amber-500/50 text-amber-400 font-medium px-4 py-2 text-sm hover:border-amber-400 hover:text-amber-300 transition-all duration-300 bg-transparent hover:bg-amber-500/10 text-center whitespace-normal"
+                    asChild
+                  >
+                    <a
+                      href="https://docs.google.com/forms/d/e/1FAIpQLSf7C6hOBIr90e8pBDt9mMo4AzJaFM0Dlbud-EleVIPtuCC68A/viewform"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Launch Your First Campaign — Get 50% Off
+                    </a>
+                  </Button>
+                </div>
+
+                {/* Social Proof */}
+                <div className="flex justify-center lg:justify-start items-center text-base text-slate-300 mb-8">
+                  <span className="font-medium">
+                    Trusted by 500+ creators and brands
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex justify-center items-center mt-2 lg:mt-0">
+                <div className="relative w-full max-w-[320px] sm:max-w-[380px] md:max-w-[440px] lg:max-w-[520px] h-[320px] sm:h-[380px] md:h-[440px] lg:h-[520px]">
+                  {/* <div className="absolute right-10 top-20 w-[280px] h-[280px] bg-[#1F88FF] rounded-[40%] blur-[2px] opacity-90"></div> */}
+
+                  <div className="absolute left-2 sm:left-4 md:left-6 lg:left-8 top-2 sm:top-4 md:top-5 lg:top-6 w-[150px] h-[240px] sm:w-[180px] sm:h-[290px] md:w-[210px] md:h-[330px] lg:w-[240px] lg:h-[380px] rounded-[20px] sm:rounded-[24px] lg:rounded-[28px] border-2 border-white/70 bg-slate-900/90 shadow-2xl -rotate-6 overflow-hidden">
+                    <video
+                      src="/videos/SnapInsta.to_AQN_SiDJU.mp4"
+                      className="w-full h-full object-cover"
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                    />
+                  </div>
+
+                  <div className="absolute right-2 sm:right-4 md:right-6 lg:right-8 top-16 sm:top-20 md:top-24 lg:top-28 w-[140px] h-[220px] sm:w-[165px] sm:h-[270px] md:w-[190px] md:h-[310px] lg:w-[220px] lg:h-[360px] rounded-[20px] sm:rounded-[24px] lg:rounded-[28px] border-2 border-white/70 bg-slate-900/90 shadow-2xl rotate-[8deg] overflow-hidden">
+                    <video
+                      src="/videos/SnapInsta.to_AQNTex61ndS.mp4"
+                      className="w-full h-full object-cover"
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-
-            {/* Massive Gaming Title */}
-            <h1
-              className="
-    text-3xl sm:text-3xl md:text-5xl lg:text-6xl xl:text-7xl
-    flex flex-wrap justify-center gap-x-2 md:gap-x-3 
-    mb-6 leading-tight text-center slide-up
-  "
-              style={{ animationDelay: "1s" }}
-            >
-              <span
-                className="font-semibold text-white drop-shadow-2xl"
-                style={{ fontFamily: "Montserrat, sans-serif" }}
-              >
-                Make your product go
-              </span>
-
-              <span
-                className="font-semibold text-white drop-shadow-2xl"
-                style={{ fontFamily: "Montserrat, sans-serif" }}
-              >
-                <span className="relative">
-                  <span
-                    style={{
-                      background:
-                        "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
-                      WebkitBackgroundClip: "text",
-                      WebkitTextFillColor: "transparent",
-                      backgroundClip: "text",
-                      display: "inline",
-                    }}
-                  >
-                    viral
-                  </span>
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl"></div>
-                </span>
-              </span>
-            </h1>
-
-            {/* Strategic Subtitle */}
-            <p
-              className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
-              style={{ animationDelay: "2s" }}
-            >
-              Launch strategic{" "}
-              <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">
-                creator contests
-              </span>{" "}
-              and drive organic viral marketing with{" "}
-              <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">
-                1000s of creators
-              </span>{" "}
-              producing content that scales your brand's reach.
-            </p>
-          </div>
-
-          {/* Call-to-Action Buttons */}
-          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
-            <BrandGetStartedButton />
-
-            <Button
-              variant="outline"
-              className="rounded-3xl border-2 border-slate-400/40 text-slate-300 font-semibold px-8 py-6 text-lg hover:border-purple-400/50 hover:text-purple-400 transition-all duration-300 bg-transparent hover:bg-slate-800/20 hover:shadow-lg"
-              asChild
-            >
-              <a
-                href="https://www.youtube.com/watch?v=kV4dXlWR8sY"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Watch Demo
-              </a>
-            </Button>
-          </div>
-
-          {/* Launch Campaign - always visible, direct link to form */}
-          <div className="flex justify-center items-center mb-8">
-            <Button
-              variant="outline"
-              className="rounded-full border border-amber-500/50 text-amber-400 font-medium px-4 py-2 text-sm hover:border-amber-400 hover:text-amber-300 transition-all duration-300 bg-transparent hover:bg-amber-500/10"
-              asChild
-            >
-              <a
-                href="https://docs.google.com/forms/d/e/1FAIpQLSf7C6hOBIr90e8pBDt9mMo4AzJaFM0Dlbud-EleVIPtuCC68A/viewform"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Launch Your First Campaign — Get 50% Off
-              </a>
-            </Button>
-          </div>
-          {/* Social Proof */}
-          <div className="flex justify-center items-center text-base text-slate-300 mb-8">
-            <span className="font-medium">
-              Trusted by 500+ creators and brands
-            </span>
           </div>
         </section>
 
@@ -296,7 +358,7 @@ export default function BrandsClient() {
               {[...brandImages, ...brandImages].map((image, index) => {
                 const isLarge =
                   image === "/images/vows-streams-logo.avif" ||
-                  image === "/images/song-gpt.logo.avif"
+                  image === "/images/song-gpt.logo.avif";
                 const isCatchPhrase = image === "/images/catch-phrase.avif";
                 const allImages = [...brandImages, ...brandImages];
                 const nextImage =
@@ -314,8 +376,8 @@ export default function BrandsClient() {
                       isCatchPhrase
                         ? "w-[160px] h-[96px] md:w-[200px] md:h-[120px]"
                         : isLarge
-                        ? "w-[180px] h-[108px] md:w-[240px] md:h-[190px]"
-                        : "w-[120px] h-[72px] md:w-[150px] md:h-[90px]"
+                          ? "w-[180px] h-[108px] md:w-[240px] md:h-[190px]"
+                          : "w-[120px] h-[72px] md:w-[150px] md:h-[90px]"
                     } ${isNextToLarge ? "-mr-4 md:-mr-8" : ""}`}
                   >
                     <Image
@@ -430,44 +492,109 @@ export default function BrandsClient() {
             </div>
           </div>
         </section>
+        {/* Services We Offer */}
+        <section className="py-16 md:py-20" ref={servicesRef}>
+          <div className="max-w-[1200px] mx-auto px-4 md:px-12 xl:px-4 text-center">
+            {/* <p className="text-xs sm:text-sm tracking-[0.3em] text-slate-400 font-semibold mb-3">
+              SERVICES
+            </p> */}
+            <h2
+              className={`text-3xl sm:text-4xl md:text-5xl font-bold mb-4 ${
+                servicesAnimated ? "slide-up" : "hide-before-animate"
+              }`}
+            >
+              <span className="text-white">The </span>
+              <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+              Services
+              </span>
+              <span className="text-white"> We Offer</span>
+            </h2>
+            <p
+              className={`text-slate-300 text-base sm:text-lg md:text-xl mb-10 ${
+                servicesAnimated ? "slide-left" : "hide-before-animate"
+              }`}
+            >
+              The tools to make your brand go viral.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {servicesWeOffer.map((service) => (
+                <Link key={service.title} href="/contact" className="block">
+                  <article className="group relative rounded-[28px] border border-slate-700/80 bg-[#0B1234] p-4 sm:p-5 text-left overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-slate-500">
+                    <div className="relative h-56 sm:h-64 md:h-72 w-full overflow-hidden rounded-2xl border border-slate-600/70">
+                      <Image
+                        src={service.image}
+                        alt={service.title}
+                        fill
+                        className="h-full w-full object-cover bg-[#0A102D] p-4 transition-transform duration-500 group-hover:scale-105"
+                        sizes="(min-width: 768px) 33vw, 100vw"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#00000099] via-transparent to-transparent" />
+                    </div>
+
+                    <div className="mt-5 flex items-end justify-between gap-4">
+                      <h3 className="text-xl sm:text-2xl font-extrabold leading-[1.05] tracking-tight text-white max-w-[12ch]">
+                        {service.title}
+                      </h3>
+
+                      <span
+                        className={`shrink-0 inline-flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-r ${service.accent} text-black transition-transform duration-300 group-hover:rotate-12`}
+                      >
+                        <ArrowUpRight size={20} strokeWidth={2.5} />
+                      </span>
+                    </div>
+                  </article>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
         {/* Campaign Process Cards */}
-        <section ref={howItWorksRef} className="py-12 sm:py-16 px-4 md:px-8 xl:px-4 text-white">
+        <section
+          ref={howItWorksRef}
+          className="py-12 sm:py-16 px-4 md:px-8 xl:px-4 text-white"
+        >
           <div className="container mx-auto max-w-[1380px]">
-            <h2   className={`text-center text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold mb-8 sm:mb-12 ${
+            <h2
+              className={`text-center text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold mb-8 sm:mb-12 ${
                 howItWorksAnimated ? "slide-up" : "hide-before-animate"
               }`}
-              style={{ animationDelay: "0.1s" }}>
+              style={{ animationDelay: "0.1s" }}
+            >
               How it Works
             </h2>
-           
 
             <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 {
                   id: "1",
                   title: "Create a Contest",
-                  description: "Set your brief, budget, duration, and payout model (Leaderboard or CPM). Choose platforms like Instagram, YouTube, or Twitter (X).",
+                  description:
+                    "Set your brief, budget, duration, and payout model (Leaderboard or CPM). Choose platforms like Instagram, YouTube, or Twitter (X).",
                   image: "/images/GoC How It Works - 1.png",
                   number: "1",
                 },
                 {
                   id: "2",
                   title: "Creators Publish Content",
-                  description: "Creators publish organic content on their own accounts, sharing videos on Instagram and YouTube and tweets on Twitter",
+                  description:
+                    "Creators publish organic content on their own accounts, sharing videos on Instagram and YouTube and tweets on Twitter",
                   image: "/images/GoC How It Works - 2.png",
                   number: "2",
                 },
                 {
                   id: "3",
                   title: "Performance Is Tracked",
-                  description: "Performance is tracked automatically using platform APIs: views on Instagram and YouTube, and engagement points on Twitter based on likes, reposts, replies, and quotes.",
+                  description:
+                    "Performance is tracked automatically using platform APIs: views on Instagram and YouTube, and engagement points on Twitter based on likes, reposts, replies, and quotes.",
                   image: "/images/GoC How It Works - 3.png",
                   number: "3",
                 },
                 {
                   id: "4",
                   title: "Pay Only for Performance",
-                  description: "Leaderboard: Top creators get paid. CPM: Pay per 1,000 views for Instagram & YouTube, per 1,000 engagement points for Twitter.",
+                  description:
+                    "Leaderboard: Top creators get paid. CPM: Pay per 1,000 views for Instagram & YouTube, per 1,000 engagement points for Twitter.",
                   image: "/images/GoC How It Works - 4.png",
                   number: "4",
                 },
@@ -487,12 +614,9 @@ export default function BrandsClient() {
                       alt={item.title}
                       className="w-full h-full lg:object-contain xl:object-cover object-center group-hover:scale-[1.06] transition-transform duration-700 ease-out"
                       style={{
-                        imageRendering: 'auto',
+                        imageRendering: "auto",
                       }}
                     />
-
-                  
-                   
                   </div>
 
                   <div className="relative p-4 sm:p-5 lg:p-6 flex flex-col gap-3 sm:gap-4 flex-1">
@@ -506,8 +630,6 @@ export default function BrandsClient() {
                     <p className="text-xs sm:text-sm lg:text-base text-slate-300/90 leading-relaxed line-clamp-4 sm:line-clamp-6 group-hover:text-slate-100 transition-colors">
                       {item.description}
                     </p>
-
-                   
                   </div>
                 </div>
               ))}
