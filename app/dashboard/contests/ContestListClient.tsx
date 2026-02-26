@@ -272,6 +272,8 @@ export function ContestListClient({
       return;
     }
     try {
+      await fetch("/api/contests/clear-cache", { method: "POST" });
+
       // Add cache-busting timestamp to ensure fresh data
       const timestamp = Date.now();
       console.log(
@@ -312,7 +314,7 @@ export function ContestListClient({
       //   }
       // });
 
-      // setContests(payload.contests);
+      setContests(payload.contests);
     } catch (error) {
       console.error("[ContestListClient] Error refreshing contests:", error);
     }
@@ -2564,6 +2566,267 @@ export function ContestListClient({
     page * limit,
   );
   const hasCreatedContests = contests.length > 0;
+  const hasPendingApprovalOrPublishedContest = contests.some((contest) =>
+    ["pending_approval", "approved", "published","rejected"].includes(
+      contest.moderation_status,
+    ),
+  );
+  const shouldShowContestTypeGuide = !hasPendingApprovalOrPublishedContest;
+  const contestTypeGuideCards = (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <Card
+        className={cn(
+          "shadow-lg",
+          isDark ? "border border-gray-700 bg-[#07031D]" : "border border-gray-200 bg-white",
+        )}
+      >
+        <div
+          className={cn(
+            "aspect-[16/10] flex items-center justify-center overflow-hidden relative rounded-md border",
+            isDark
+              ? "bg-slate-900 border-gray-700"
+              : "bg-slate-100 border-gray-100",
+          )}
+        >
+          <img
+            src="/images/leaderboard.avif"
+            alt="Leaderboard contest preview"
+            className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+          />
+        </div>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <CardTitle className={cn("text-base", isDark ? "text-white" : "text-gray-900")}>
+                Leaderboard Contest
+              </CardTitle>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className={cn("space-y-4 text-md leading-6", isDark ? "text-slate-300" : "text-slate-700")}>
+            <div>
+              <p className="mt-2">
+                A Leaderboard Contest is a performance-based campaign where
+                creators compete to deliver the highest number of{" "}
+                <strong>organic views</strong> for your brand&apos;s content.
+                Creators are ranked on a live leaderboard, and top performers win
+                prize money.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
+                >
+                  1
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                    Create Your Contest
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                  Set your brief, start & end dates,select the platform where creators should post, set the prize pool distribution according to each winning position.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
+                >
+                  2
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                    Creators Participate
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                  Creators produce original content based on the campaign requirements and publish it on the selected social media platforms within the contest duration
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
+                >
+                  3
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                    Reward Top Performers
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                    Once the contest ends, rankings are finalized and payouts are
+                    made to creators based on their leaderboard position.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
+              onClick={() =>
+                router.push(
+                  "/dashboard/contests/create?new=true&contestType=leaderboard",
+                )
+              }
+            >
+              Create Leaderboard Contest
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card
+        className={cn(
+          "shadow-lg",
+          isDark ? "border border-gray-700 bg-[#07031D]" : "border border-gray-200 bg-white",
+        )}
+      >
+      <div
+        className={cn(
+          "aspect-[16/10] flex items-center justify-center overflow-hidden relative rounded-md border",
+          isDark ? "bg-slate-900 border-gray-700" : "bg-slate-100 border-gray-100",
+        )}
+      >
+          <img
+            src="/images/cpm.avif"
+            alt="CPM contest preview"
+            className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+          />
+        </div>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <CardTitle className={cn("text-base", isDark ? "text-white" : "text-gray-900")}>CPM Contest</CardTitle>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className={cn("space-y-4 text-md leading-6", isDark ? "text-slate-300" : "text-slate-800")}>
+            <div className="rounded-lg">
+              <p className="mt-2">
+              CPM-based contests pay creators purely based on the number of views they generate, at a fixed rate per 1,000 views. This gives you predictable, performance-based costs and allows you to scale content efficiently.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                    className={cn(
+                      "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                      isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                    )}
+                >
+                  1
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                    Create Your Contest
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                    Set your brief, start and end dates, total budget,
+                    platform(s) for posting, and the{" "}
+                    <strong>CPM rate</strong> (payment per 1,000 views).
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                     className={cn(
+                      "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                      isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                    )}
+                >
+                  2
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                    Creators Participate
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                  Creators produce original content based on the campaign requirements and publish it on the selected social media platforms within the contest duration
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                    className={cn(
+                      "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                      isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                    )}
+                >
+                  3
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                    Views Determine Payout
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                    Payouts are calculated based on the number of views (per
+                    thousand views) each creator generates.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
+              onClick={() =>
+                router.push("/dashboard/contests/create?new=true&contestType=cpm")
+              }
+            >
+              Create CPM Contest
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 
   return (
     <div className="w-full no-theme-transition">
@@ -3138,210 +3401,13 @@ export function ContestListClient({
               </TabsContent>
             ))}
           </Tabs>
+          {shouldShowContestTypeGuide && (
+            <div className="mt-10">{contestTypeGuideCards}</div>
+          )}
         </>
       ) : (
         <div className="py-10">
-          {/* <div className="text-center mb-8">
-            <h3
-              className="text-lg font-semibold"
-              style={{ color: isDark ? "white" : "black", transition: "none" }}
-            >
-              No contests yet
-            </h3>
-            <p
-              className="mt-2"
-              style={{
-                color: isDark ? "#94a3b8" : "#64748b",
-                transition: "none",
-              }}
-            >
-              You haven&apos;t created any contests yet. Pick a contest type below
-              to understand what works best for your campaign goals.
-            </p>
-          </div> */}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="border border-gray-200 bg-white shadow-sm">
-              <div className="px-6 pt-6">
-                <img
-                  src="/images/leaderboard.avif"
-                  alt="Leaderboard contest preview"
-                  className="h-[390px] w-full rounded-md border border-gray-100 bg-white object-cover"
-                />
-              </div>
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <CardTitle className="text-base text-gray-900">
-                      Leaderboard Contest
-                    </CardTitle>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="space-y-4 text-md leading-6 text-slate-700">
-                  <div>
-                    <p className="mt-2">
-                      A Leaderboard Contest is a performance-based campaign
-                      where creators compete to deliver the highest number of{" "}
-                      <strong>organic views</strong> for your brand&apos;s
-                      content. Creators are ranked on a live leaderboard, and
-                      top performers win prize money.
-                    </p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700">
-                        1
-                      </span>
-                      <div>
-                        <p className="font-semibold text-slate-900">
-                          Create Your Contest
-                        </p>
-                        <p className="mt-1 text-slate-600">
-                          Set your brief, start & end dates, total budget, and
-                          select the platform where creators should post.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700">
-                        2
-                      </span>
-                      <div>
-                        <p className="font-semibold text-slate-900">
-                         
-                          Creators Participate
-                        </p>
-                        <p className="mt-1 text-slate-600">
-                        Creators produce content, post it on the selected platform(s), and submit links for tracking.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700">
-                        3
-                      </span>
-                      <div>
-                        <p className="font-semibold text-slate-900">
-                          Reward Top Performers
-                        </p>
-                        <p className="mt-1 text-slate-600">
-                          Once the contest ends, rankings are finalized and
-                          payouts are made to creators based on their
-                          leaderboard position.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    className="w-full bg-purple-600 text-white hover:bg-purple-700"
-                    onClick={() =>
-                      router.push(
-                        "/dashboard/contests/create?new=true&contestType=leaderboard",
-                      )
-                    }
-                  >
-                    Create Leaderboard Contest
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border border-gray-200 bg-white shadow-sm">
-              <div className="px-6 pt-6">
-                <img
-                  src="/images/cpm.avif"
-                  alt="CPM contest preview"
-                  className="h-[400px] w-full rounded-md border border-gray-100 object-cover"
-                />
-              </div>
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <CardTitle className="text-base text-gray-900">
-                      CPM Contest
-                    </CardTitle>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="space-y-4 text-md leading-6 text-slate-800">
-                  <div className="rounded-lg">
-                    <p className="mt-2">
-                      A CPM (Cost Per Mille) Contest rewards creators based on{" "}
-                      <strong> per thousand views</strong>. Creators
-                      earn payouts directly based on the reach of their content.
-                    </p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-700">
-                        1
-                      </span>
-                      <div>
-                        <p className="font-semibold text-slate-900">
-                          Create Your Contest
-                        </p>
-                        <p className="mt-1 text-slate-600">
-                        Set your brief,
-                          start and end dates, total budget, platform(s) for
-                          posting, and the <strong>CPM rate</strong> (payment
-                          per 1,000 views).
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-700">
-                        2
-                      </span>
-                      <div>
-                        <p className="font-semibold text-slate-900">
-                          Creators Participate
-                        </p>
-                        <p className="mt-1 text-slate-600">
-                          Creators produce content, post it on the selected
-                          platform(s), and submit links for tracking.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-700">
-                        3
-                      </span>
-                      <div>
-                        <p className="font-semibold text-slate-900">
-                          Views Determine Payout
-                        </p>
-                        <p className="mt-1 text-slate-600">
-                          Payouts are calculated based on the number of views
-                          (per thousand views) each creator generates.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    className="w-full bg-purple-600 text-white hover:bg-purple-700"
-                    onClick={() =>
-                      router.push(
-                        "/dashboard/contests/create?new=true&contestType=cpm",
-                      )
-                    }
-                  >
-                    Create CPM Contest
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          {contestTypeGuideCards}
         </div>
       )}
     </div>

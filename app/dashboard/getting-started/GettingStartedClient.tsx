@@ -150,7 +150,7 @@ export default function GettingStartedClient({
             <iframe
               src={
                 (userType === "advertiser"
-                  ? "https://www.youtube.com/embed/hlQ1kXSmNvQ"
+                  ? "https://www.youtube.com/embed/kV4dXlWR8sY"
                   : "https://www.youtube.com/embed/KrtpC2DB9zk") + "?rel=0"
               }
               title="How it works"

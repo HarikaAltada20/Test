@@ -625,6 +625,15 @@ export default function ContestDetailClient({
   const groupSubmissionsByCreator = useMemo(() => {
     if (!filteredSubmissions) return [];
 
+    const isSubmissionPaidForGrantedReward = (submission: any) => {
+      const status = (submission?.status || "").toLowerCase();
+      return (
+        submission?.paid === true ||
+        status === "paid" ||
+        Boolean(submission?.paid_at)
+      );
+    };
+
     // Check if this is a Twitter leaderboard campaign
     const isTwitterLeaderboard =
       (currentContest?.platform?.toLowerCase() === "twitter" ||
@@ -1197,8 +1206,10 @@ export default function ContestDetailClient({
         const submissionEarnings =
           calculateSubmissionExpectedEarnings(submission);
         group.earnings.expected += submissionEarnings;
-        if (submission.paid) {
-          group.earnings.granted += submissionEarnings;
+        if (isSubmissionPaidForGrantedReward(submission)) {
+          const storedGrantedEarnings = Number((submission as any).earnings) || 0;
+          group.earnings.granted +=
+            storedGrantedEarnings > 0 ? storedGrantedEarnings : submissionEarnings;
         }
       }
 
@@ -1487,7 +1498,7 @@ export default function ContestDetailClient({
 
           // If any submission is paid, mirror the prize in granted earnings
           const hasPaidSubmissions = (group.submissions || []).some(
-            (s: any) => s.status === "paid" || s.paid,
+            (s: any) => isSubmissionPaidForGrantedReward(s),
           );
           if (
             hasPaidSubmissions &&

@@ -256,7 +256,7 @@ export default function BrandsClient() {
               asChild
             >
               <a
-                href="https://youtu.be/hlQ1kXSmNvQ?si=wNjmnRgr43CNlPnx"
+                href="https://www.youtube.com/watch?v=kV4dXlWR8sY"
                 target="_blank"
                 rel="noopener noreferrer"
               >
