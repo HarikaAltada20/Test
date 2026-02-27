@@ -1,37 +1,21 @@
 "use client";
-import { MapPin, Phone, Mail } from "lucide-react";
-import { useEffect, useState } from "react";
-import Image from "next/image";
+import { Mail, Calendar, ArrowRight } from "lucide-react";
+import { useState } from "react";
+import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 
-export default function ContactPage() {
-  const images = [
-    "/images/Component 347.avif",
-    "/images/Property 1=Frame 2147207675.avif",
-    "/images/Property 1=Frame 2147207676.avif",
-  ];
+const CALENDLY_URL = "https://calendly.com/guptavishesh2/30min";
 
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [fade, setFade] = useState(true);
+export default function ContactPage() {
   const { toast } = useToast();
   // form state
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    phone: "",
     message: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("");
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % images.length);
-      setFade(true);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [images.length]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -40,25 +24,15 @@ export default function ContactPage() {
     setErrors({ ...errors, [e.target.name]: "" }); // clear error on typing
   };
 
-  // validation function
   const validate = () => {
-    let newErrors: Record<string, string> = {};
+    const newErrors: Record<string, string> = {};
     if (!formData.name.trim()) newErrors.name = "Name is required";
-
     if (!formData.email.trim()) {
       newErrors.email = "Email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = "Enter a valid email address";
     }
-
-    if (!formData.phone.trim()) {
-      newErrors.phone = "Phone number is required";
-    } else if (!/^\+?[0-9]{10,15}$/.test(formData.phone)) {
-      newErrors.phone = "Enter a valid phone number";
-    }
-
     if (!formData.message.trim()) newErrors.message = "Message is required";
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -75,7 +49,7 @@ export default function ContactPage() {
       const res = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ name: formData.name, email: formData.email, message: formData.message }),
       });
 
       const data = await res.json();
@@ -87,7 +61,7 @@ export default function ContactPage() {
           description: successMsg,
           variant: "default",
         });
-        setFormData({ name: "", email: "", phone: "", message: "" });
+        setFormData({ name: "", email: "", message: "" });
       } else {
         const errorMsg = "❌ Failed: " + data.error;
         setStatus(errorMsg);
@@ -111,133 +85,111 @@ export default function ContactPage() {
   };
 
   return (
-    <section className="bg-[#050A30] text-white py-8 px-4 sm:py-12 sm:px-6 md:py-16 border-b border-[#A87313]">
-      <div className="max-w-[1200px] mx-auto grid md:grid-cols-2 gap-8 sm:gap-12 md:gap-20 items-start">
-        {/* Left Section */}
-        <div>
-          <div
-            className="p-4 sm:p-6 rounded-xl space-y-4 sm:space-y-6"
-            style={{
-              background:
-                "linear-gradient(180deg, rgba(127, 57, 236, 0.46) 0%, rgba(0, 8, 37, 0.46) 100%)",
-            }}
-          >
-            <h2 className="text-xl sm:text-2xl font-bold">Lets get in touch</h2>
-            <p className="text-base sm:text-lg text-gray-200">
-              We&apos;re open for any suggestion or just to have a chat
-            </p>
+    <section className="bg-[#050A30] text-white py-12 px-6 sm:py-20 sm:px-10 border-b border-[#A87313]">
+      <div className="max-w-5xl mx-auto">
 
-            <div className="flex items-start gap-3 sm:gap-4">
-              <MapPin className="text-white mt-1 flex-shrink-0 w-5 h-5" />
-              <p className="text-sm sm:text-lg break-words">
-                6425 Weidlake Dr, <br />
-                Los Angeles, California 90068, US
-              </p>
-            </div>
-
-            {/* <div className="flex items-center gap-4">
-              <Phone className="text-white" />
-              <p className="text-lg">+91-9876543210</p>
-            </div> */}
-
-            <div className="flex items-center gap-3 sm:gap-4">
-              <Mail className="text-white flex-shrink-0 w-5 h-5" />
-              <p className="text-sm sm:text-lg break-all">
-                support@gameofcreators.com
-              </p>
-            </div>
-          </div>
-
-          {/* Image */}
-          <div className="rounded-xl mt-3 overflow-hidden">
-            <Image
-              src={images[currentIndex]}
-              alt="Contact"
-              width={500}
-              height={300}
-              className={`w-full h-full object-cover transition-opacity duration-500 ${
-                fade ? "opacity-100" : "opacity-0"
-              }`}
-            />
-          </div>
+        {/* Header */}
+        <div className="mb-12">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-3">
+            Get in Touch
+          </h1>
+          <p className="text-slate-400 text-base sm:text-lg max-w-xl">
+            Have a question or need support? We&apos;d love to hear from you.
+          </p>
         </div>
 
-        {/* Right Section */}
-        <div>
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 sm:mb-3">
-            Get in Touch
-          </h2>
-          <p className="text-sm sm:text-base md:text-lg text-gray-300 mb-4 sm:mb-6">
-            We&apos;d love to hear from you! Reach out and our team will get
-            back to you soon.
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
-            <div>
-              <input
-                type="text"
-                name="name"
-                placeholder="Enter the Name"
-                value={formData.name}
-                onChange={handleChange}
-                className="w-full p-3 sm:p-4 rounded-md bg-transparent border border-gray-400 text-white text-sm sm:text-base focus:outline-none"
-              />
-              {errors.name && (
-                <p className="text-red-400 mt-2 text-sm">{errors.name}</p>
-              )}
+        <div className="grid md:grid-cols-2 gap-8 items-start">
+          {/* Left — Contact info + Book a call */}
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-purple-600/20 border border-purple-500/30 flex items-center justify-center">
+                  <Mail className="h-4 w-4 text-purple-400" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 uppercase tracking-wider">Email</p>
+                  <a
+                    href="mailto:support@gameofcreators.com"
+                    className="text-sm text-white hover:text-purple-400 transition-colors"
+                  >
+                    support@gameofcreators.com
+                  </a>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <input
-                type="email"
-                name="email"
-                placeholder="Enter the Email"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full p-3 sm:p-4 rounded-md bg-transparent border border-gray-400 text-white text-sm sm:text-base focus:outline-none"
-              />
-              {errors.email && (
-                <p className="text-red-400 mt-2 text-sm">{errors.email}</p>
-              )}
+            {/* Book a Call CTA */}
+            <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-b from-purple-900/20 to-transparent p-6">
+              <h3 className="font-semibold text-white mb-1">Are you a brand?</h3>
+              <p className="text-sm text-slate-400 mb-5">
+                Skip the form — book a free 30-min call and we&apos;ll build your campaign plan together.
+              </p>
+              <a
+                href={CALENDLY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-[#4C238B] to-[#7F39EC] text-white font-semibold text-sm hover:from-[#5a2ba3] hover:to-[#8f45f5] transition-all duration-300"
+              >
+                <Calendar className="h-4 w-4" />
+                Book a Free Call
+                <ArrowRight className="h-4 w-4" />
+              </a>
+              <p className="text-xs text-slate-600 mt-3">Or visit our{" "}
+                <Link href="/get-started" className="text-purple-400 hover:text-purple-300 underline underline-offset-4">
+                  brand page
+                </Link>{" "}for more options.
+              </p>
             </div>
+          </div>
 
-            <div>
-              <input
-                type="tel"
-                name="phone"
-                placeholder="Enter the Mobile Number"
-                value={formData.phone}
-                onChange={handleChange}
-                className="w-full p-3 sm:p-4 rounded-md bg-transparent border border-gray-400 text-white text-sm sm:text-base focus:outline-none"
-              />
-              {errors.phone && (
-                <p className="text-red-400 mt-2 text-sm">{errors.phone}</p>
-              )}
-            </div>
+          {/* Right — Form */}
+          <div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="Your name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-purple-500/60 transition-colors"
+                />
+                {errors.name && <p className="text-red-400 mt-1 text-xs">{errors.name}</p>}
+              </div>
 
-            <div>
-              <textarea
-                name="message"
-                placeholder="Enter your Message"
-                rows={6}
-                value={formData.message}
-                onChange={handleChange}
-                className="w-full p-3 sm:p-4 rounded-md bg-transparent border border-gray-400 text-white text-sm sm:text-base focus:outline-none resize-y"
-              ></textarea>
-              {errors.message && (
-                <p className="text-red-400 mt-2 text-sm">{errors.message}</p>
-              )}
-            </div>
+              <div>
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="Your email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-purple-500/60 transition-colors"
+                />
+                {errors.email && <p className="text-red-400 mt-1 text-xs">{errors.email}</p>}
+              </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 sm:py-3 rounded-full bg-gradient-to-r from-[#7F39EC] to-[#B16FF4] font-semibold text-white text-sm sm:text-base"
-            >
-              {loading ? "Sending..." : "Submit"}
-            </button>
-            {/* {status && <p className="text-sm mt-2">{status}</p>} */}
-          </form>
+              <div>
+                <textarea
+                  name="message"
+                  placeholder="How can we help you?"
+                  rows={5}
+                  value={formData.message}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-purple-500/60 transition-colors resize-none"
+                />
+                {errors.message && <p className="text-red-400 mt-1 text-xs">{errors.message}</p>}
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#7F39EC] to-[#B16FF4] font-semibold text-white text-sm hover:from-[#8f45f5] hover:to-[#c07ff5] transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {loading ? "Sending..." : "Send Message"}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     </section>

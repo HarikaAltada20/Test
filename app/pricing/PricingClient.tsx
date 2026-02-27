@@ -761,7 +761,7 @@ export default function PricingClient() {
           <>
             <div ref={section1Ref} className="text-center mt-10 mb-10">
               {/* Header with Image */}
-              <div className="flex items-center justify-center gap-2 bg-[#121230] inline-flex px-4 py-2 rounded-full mb-4">
+              <div className="inline-flex items-center justify-center gap-2 bg-[#121230] px-4 py-2 rounded-full mb-4">
                 <img
                   src="/images/Vector.png" // ← replace with your actual image path
                   alt="Payment Plan"
@@ -1001,7 +1001,7 @@ export default function PricingClient() {
                       </CardContent>
                       <div className="flex items-end justify-center flex-grow">
                         <Button
-                          className="w-full rounded-3xl mt-8 relative text-white text-white font-bold px-8 py-5 text-lg overflow-hidden"
+                          className="w-full rounded-3xl mt-8 relative text-white font-bold px-8 py-5 text-lg overflow-hidden"
                           style={{
                             background:
                               "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",

@@ -652,7 +652,7 @@ export default function GettingStartedModal({
                       isDark ? "text-white" : "text-black"
                     )}
                   >
-                    Example: $5 per 1K views, 50K views = $250 payment
+                    Example: $1 per 1K views, 50K views = $50 payment
                   </div>
                 </div>
               </div>

@@ -142,7 +142,7 @@ export default function HeroContent() {
           }
         });
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 },
     );
 
     if (worksRef.current) observer.observe(worksRef.current);
@@ -158,7 +158,7 @@ export default function HeroContent() {
           setAnimate(true);
         }
       },
-      { threshold: 0.3 }
+      { threshold: 0.3 },
     );
 
     if (sectionRef.current) {
@@ -231,9 +231,11 @@ export default function HeroContent() {
           ></div>
         </div>
 
-        <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-6 py-3 mb-8">
-          <Crown className="h-5 w-5 text-white" />
-          <span className="text-lg font-semibold bg-white bg-clip-text text-transparent">
+        <div className="inline-flex items-center gap-2.5 bg-[#FFFFFF0F] border border-[#FFFFFF1A] rounded-full px-5 py-2.5 mb-8 backdrop-blur-sm">
+          <span className="flex items-center justify-center h-6 w-6 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shrink-0 shadow-[0_0_8px_rgba(251,191,36,0.5)]">
+            <Crown className="h-3.5 w-3.5 text-white" />
+          </span>
+          <span className="text-base font-semibold bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
             #1 Creator Marketing Platform
           </span>
         </div>
@@ -342,7 +344,7 @@ export default function HeroContent() {
                 }`}
                 style={{ animationDelay: "0.3s" }}
               >
-                Join 50,000+ Active Creators
+                Join 1000+ Active Creators
               </span>
 
               {/* Avatar Stack */}
@@ -388,51 +390,36 @@ export default function HeroContent() {
       <div className="absolute bottom-[80px] lg:bottom-[90px] left-1/2 -translate-x-1/2 z-20 w-full scroll-container">
         <div className="scroll-track">
           {[
-            "/images/434ce5e441255007a5349fd85232df9726062927.avif",
-            "/images/028df62b75a0a5e07e3025b313d8b74cda06d987.avif",
-            "/images/f3a549313a8c77a542d9239fdd18733c34787a69.avif",
-            "/images/deff86ae51601b2f5dcbe09c5c677dbdac8680c5.avif",
-            "/images/789ee6238c4c890fd4315ca0b2baad140bd22410.avif",
-            "/images/14f2649763f196d1c4636f67f952c24d1ffd273d.avif",
-            "/images/f0c4aef454fceee8af51bb454a70238d17ad978a.avif",
-            "/images/776584be4e29200a5a72df8ebba39153a4aa21b6.avif",
+            { src: "/videos/SnapInsta.to_AQNd.mp4",               poster: "/images/thumb_AQNd.jpg" },
+            { src: "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4",      poster: "/images/thumb_AQMAznjnb2VYJ.jpg" },
+            { src: "/videos/SnapInsta.to_AQNxeCNjx2k.mp4",        poster: "/images/thumb_AQNxeCNjx2k.jpg" },
+            { src: "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4",      poster: "/images/thumb_AQNVKvZ3ezk6J.jpg" },
+            { src: "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4",    poster: "/images/thumb_AQPB-nUfz2at6Wa.jpg" },
+            { src: "/videos/SnapInsta.to_AQMa90k.mp4",            poster: "/images/thumb_AQMa90k.jpg" },
           ]
             .concat([
-              "/images/434ce5e441255007a5349fd85232df9726062927.avif",
-              "/images/028df62b75a0a5e07e3025b313d8b74cda06d987.avif",
-              "/images/f3a549313a8c77a542d9239fdd18733c34787a69.avif",
-              "/images/deff86ae51601b2f5dcbe09c5c677dbdac8680c5.avif",
-              "/images/789ee6238c4c890fd4315ca0b2baad140bd22410.avif",
-              "/images/14f2649763f196d1c4636f67f952c24d1ffd273d.avif",
-              "/images/f0c4aef454fceee8af51bb454a70238d17ad978a.avif",
-              "/images/776584be4e29200a5a72df8ebba39153a4aa21b6.avif",
-            ]) // duplicate images for seamless loop
-            .map((src, idx) => (
+              { src: "/videos/SnapInsta.to_AQNd.mp4",               poster: "/images/thumb_AQNd.jpg" },
+              { src: "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4",      poster: "/images/thumb_AQMAznjnb2VYJ.jpg" },
+              { src: "/videos/SnapInsta.to_AQNxeCNjx2k.mp4",        poster: "/images/thumb_AQNxeCNjx2k.jpg" },
+              { src: "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4",      poster: "/images/thumb_AQNVKvZ3ezk6J.jpg" },
+              { src: "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4",    poster: "/images/thumb_AQPB-nUfz2at6Wa.jpg" },
+              { src: "/videos/SnapInsta.to_AQMa90k.mp4",            poster: "/images/thumb_AQMa90k.jpg" },
+            ]) // duplicate videos for seamless loop
+            .map(({ src, poster }, idx) => (
               <div
                 key={idx}
-                className="relative w-[80px] h-[150px] md:w-[150px] md:h-[250px] rounded-[40%] overflow-hidden shadow-lg mx-5"
-                style={{
-                  clipPath: "ellipse(50% 50% at 50% 50%)",
-                }}
+                className="relative w-[110px] h-[180px] md:w-[190px] md:h-[300px] rounded-[10px] overflow-hidden shadow-lg mx-6 border-2 border-purple-500/70"
               >
-                <Image
+                <video
                   src={src}
-                  alt={`Person ${idx + 1}`}
-                  fill
-                  className="object-cover"
-                  sizes="(min-width: 768px) 150px, 80px"
-                  loading="lazy"
+                  poster={poster}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  preload={idx < 2 ? "auto" : "metadata"}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
                 />
-                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="w-8 h-8 text-white"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                </div>
               </div>
             ))}
         </div>
