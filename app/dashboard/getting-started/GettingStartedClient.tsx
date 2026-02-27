@@ -40,6 +40,7 @@ export default function GettingStartedClient({
 }: GettingStartedClientProps) {
   const [userType, setUserType] = useState<string | null>(null);
   const [showDiscordModal, setShowDiscordModal] = useState(false);
+  const [caseStudyImageOpen, setCaseStudyImageOpen] = useState(false);
   const supabase = createClient();
   const [mode, setMode] = useState<"light" | "dark">("light");
   const searchParams = useSearchParams();
@@ -459,8 +460,8 @@ export default function GettingStartedClient({
             </div>
 
             {/* Contest Types Section */}
-            <div>
-              <div className="text-center pb-4">
+            <div className="space-y-5">
+              <div className="text-center">
                 <h2
                   className={cn(
                     "text-2xl font-bold",
@@ -469,309 +470,294 @@ export default function GettingStartedClient({
                 >
                   Choose Your Contest Type
                 </h2>
+                <p className={cn("mt-1 text-sm", isDark ? "text-[#C4AEED]" : "text-gray-500")}>
+                  Pick the model that fits your goal — you can always try both.
+                </p>
               </div>
 
-              <div className="p-2 md:px-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Leaderboard Contest Section */}
-                  <div
-                    className={cn(
-                      "p-6 rounded-2xl border shadow-[0px_18px_34px_-24px_rgba(127,57,236,0.65)] transition-all duration-200 hover:-translate-y-0.5",
-                      isDark
-                        ? "bg-[#22074A] border-[#B994F8]/45 text-white"
-                        : "bg-white border-[#E9D8FF] text-[#2D1B4E]",
-                    )}
-                  >
-                    <div className="flex flex-wrap items-center gap-3 mb-4">
-                      <div
-                        className={cn(
-                          "p-2 rounded-full",
-                          isDark ? "bg-[#D8C3FF]" : "bg-[#D8C3FF]",
-                        )}
-                      >
-                        <Trophy className="w-5 h-5 text-[#4A00BE]" />
-                      </div>
-                      <h3 className="font-bold text-lg">
-                        Leaderboard Contests
-                      </h3>
-
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Leaderboard Card */}
+                <div
+                  className={cn(
+                    "p-6 rounded-2xl border flex flex-col gap-4 shadow-[0px_18px_34px_-24px_rgba(127,57,236,0.65)] transition-all duration-200 hover:-translate-y-0.5",
+                    isDark
+                      ? "bg-[#22074A] border-[#B994F8]/45 text-white"
+                      : "bg-white border-[#E9D8FF] text-[#2D1B4E]",
+                  )}
+                >
+                  {/* Header */}
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-[#D8C3FF] rounded-full shrink-0">
+                      <Trophy className="w-5 h-5 text-[#4A00BE]" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-base leading-tight">Leaderboard Contest</h3>
                       <Badge
                         variant="outline"
                         className={cn(
-                          "border text-purple-700",
+                          "text-xs mt-0.5",
                           isDark
                             ? "bg-[#2E1160] border-[#B994F8]/55 text-[#E7D5FF]"
-                            : "bg-[#ECE1FC] border-[#DABFFF]",
+                            : "bg-[#ECE1FC] border-[#DABFFF] text-purple-700",
                         )}
                       >
-                        Competition Based
+                        Fixed Prize Pool
                       </Badge>
-                    </div>
-
-                    <p
-                      className={cn(
-                        "text-md mb-4",
-                        isDark ? "text-[#D8C7F5]" : "text-gray-600",
-                      )}
-                    >
-                      Set a fixed prize pool and let creators compete for the
-                      top spots.
-                    </p>
-
-                    {/* Visual Process */}
-                    <div className="text-center mb-4">
-                      <div
-                        className={cn(
-                          "inline-block p-4 border rounded-lg",
-                          isDark
-                            ? "bg-[#2A0C5A] border-[#B994F8]/50 text-[#F5EEFF]"
-                            : "bg-[#F7F1FF] border-[#D6B6FF] text-black",
-                        )}
-                      >
-                        <div className="text-lg font-bold mb-1">
-                          Set Prize Pool → Creators Compete → Winners Get Paid
-                        </div>
-                        <div className="text-sm">
-                          Example: $1000 total, 3 winners get $500, $300, $200
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Benefits */}
-                    <div className="space-y-4">
-                      <div className="flex items-start space-x-2">
-                        <Check
-                          className={cn(
-                            "w-5 h-5 mt-0.5 flex-shrink-0",
-                            isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]",
-                          )}
-                        />
-                        <span
-                          className={cn(
-                            "text-md",
-                            isDark ? "text-[#E7DAFF]" : "text-gray-700",
-                          )}
-                        >
-                          Fixed budget - know your total cost upfront
-                        </span>
-                      </div>
-                      <div className="flex items-start space-x-2">
-                        <Check
-                          className={cn(
-                            "w-5 h-5 mt-0.5 flex-shrink-0",
-                            isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]",
-                          )}
-                        />
-                        <span
-                          className={cn(
-                            "text-md",
-                            isDark ? "text-[#E7DAFF]" : "text-gray-700",
-                          )}
-                        >
-                          High competition drives quality content
-                        </span>
-                      </div>
-                      <div className="flex items-start space-x-2">
-                        <Check
-                          className={cn(
-                            "w-5 h-5 mt-0.5 flex-shrink-0",
-                            isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]",
-                          )}
-                        />
-                        <span
-                          className={cn(
-                            "text-md",
-                            isDark ? "text-[#E7DAFF]" : "text-gray-700",
-                          )}
-                        >
-                          Own winning videos forever
-                        </span>
-                      </div>
-                      <div className="flex items-start space-x-2">
-                        <Check
-                          className={cn(
-                            "w-5 h-5 mt-0.5 flex-shrink-0",
-                            isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]",
-                          )}
-                        />
-                        <span
-                          className={cn(
-                            "text-md",
-                            isDark ? "text-[#E7DAFF]" : "text-gray-700",
-                          )}
-                        >
-                          Perfect for viral marketing & brand awareness
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="text-center pt-4">
-                      <Link href="/dashboard/contests">
-                        <Button
-                          className={cn(
-                            "text-md text-white w-full",
-                            isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]",
-                          )}
-                        >
-                          <Trophy className="w-4 h-4" />
-                          Create Leaderboard Contest
-                        </Button>
-                      </Link>
                     </div>
                   </div>
 
-                  {/* CPM Contest Section */}
-                  <div
-                    className={cn(
-                      "p-6 rounded-2xl border shadow-[0px_18px_34px_-24px_rgba(127,57,236,0.65)] transition-all duration-200 hover:-translate-y-0.5",
-                      isDark
-                        ? "bg-[#22074A] border-[#B994F8]/45 text-white"
-                        : "bg-white border-[#E9D8FF] text-[#2D1B4E]",
-                    )}
-                  >
-                    <div className="flex flex-wrap items-center gap-3 mb-4">
-                      <div className="p-2 bg-[#D8C3FF]  rounded-full">
+                  {/* Tagline */}
+                  <p className={cn("text-sm leading-relaxed", isDark ? "text-[#D8C7F5]" : "text-gray-600")}>
+                    Set a prize pool. Creators compete for views. Top performers win — you own the content.
+                  </p>
+
+                  {/* Example */}
+                  <div className={cn(
+                    "rounded-lg px-4 py-3 text-sm",
+                    isDark ? "bg-[#2A0C5A] border border-[#B994F8]/30" : "bg-[#F7F1FF] border border-[#D6B6FF]",
+                  )}>
+                    <span className={cn("font-semibold", isDark ? "text-[#D0AAFF]" : "text-purple-700")}>Example: </span>
+                    <span className={cn(isDark ? "text-[#E7DAFF]" : "text-gray-600")}>
+                      $1,000 pool — 1st gets $500, 2nd $300, 3rd $200
+                    </span>
+                  </div>
+
+                  {/* Benefits */}
+                  <ul className="space-y-2">
+                    {[
+                      "Fixed budget — know your total cost upfront",
+                      "Competition drives higher quality content",
+                      "You keep the winning videos forever",
+                      "Great for brand awareness & viral campaigns",
+                    ].map((point) => (
+                      <li key={point} className="flex items-start gap-2">
+                        <Check className={cn("w-4 h-4 mt-0.5 shrink-0", isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]")} />
+                        <span className={cn("text-sm", isDark ? "text-[#E7DAFF]" : "text-gray-700")}>{point}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Link href="/dashboard/contests" className="mt-auto">
+                    <Button className={cn("text-sm text-white w-full", isDark ? "bg-[#5F2BB1] hover:bg-[#4A1E99]" : "bg-[#4A00BE] hover:bg-[#3900a0]")}>
+                      <Trophy className="w-4 h-4" />
+                      Create Leaderboard Contest
+                    </Button>
+                  </Link>
+                </div>
+
+                {/* CPM Card */}
+                <div
+                  className={cn(
+                    "p-6 rounded-2xl border flex flex-col gap-4 shadow-[0px_18px_34px_-24px_rgba(127,57,236,0.65)] transition-all duration-200 hover:-translate-y-0.5",
+                    isDark
+                      ? "bg-[#22074A] border-[#B994F8]/45 text-white"
+                      : "bg-white border-[#E9D8FF] text-[#2D1B4E]",
+                  )}
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-[#D8C3FF] rounded-full shrink-0">
                         <DollarSign className="w-5 h-5 text-[#4A00BE]" />
                       </div>
-                      <h3 className="font-bold text-lg flex items-center">
-                        CPM Contests
-                        {/* Info Icon with hover tooltip */}
-                        {/* <div className="ml-2 relative group">
-                          <Info className="w-4 h-4 text-black cursor-pointer" />
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 text-sm text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
-                            <strong>CPM</strong> stands for{" "}
-                            <em>COST PER MILE</em>
-                          </div>
-                        </div> */}
-                      </h3>
+                      <div>
+                        <h3 className="font-bold text-base leading-tight">CPM Contest</h3>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-xs mt-0.5",
+                            isDark
+                              ? "bg-[#2E1160] border-[#B994F8]/55 text-[#E7D5FF]"
+                              : "bg-[#ECE1FC] border-[#DABFFF] text-purple-700",
+                          )}
+                        >
+                          Pay Per 1,000 Views
+                        </Badge>
+                      </div>
+                    </div>
+                    <span className={cn(
+                      "text-xs font-medium px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap",
+                      isDark ? "bg-yellow-900/40 text-yellow-300 border border-yellow-700/30" : "bg-yellow-50 text-yellow-700 border border-yellow-200",
+                    )}>
+                      Paid plans only
+                    </span>
+                  </div>
 
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "border text-purple-700",
-                          isDark
-                            ? "bg-[#2E1160] border-[#B994F8]/55 text-[#E7D5FF]"
-                            : "bg-[#ECE1FC] border-[#DABFFF]",
-                        )}
-                      >
-                        Pay Per 1000 Views
-                      </Badge>
+                  {/* Tagline */}
+                  <p className={cn("text-sm leading-relaxed", isDark ? "text-[#D8C7F5]" : "text-gray-600")}>
+                    Pay creators only for the views they generate. More views = more reach, no wasted budget.
+                  </p>
+
+                  {/* Example */}
+                  <div className={cn(
+                    "rounded-lg px-4 py-3 text-sm",
+                    isDark ? "bg-[#2A0C5A] border border-[#B994F8]/30" : "bg-[#F7F1FF] border border-[#D6B6FF]",
+                  )}>
+                    <span className={cn("font-semibold", isDark ? "text-[#D0AAFF]" : "text-purple-700")}>Example: </span>
+                    <span className={cn(isDark ? "text-[#E7DAFF]" : "text-gray-600")}>
+                      $1 per 1K views — 50K views = $50 total payment
+                    </span>
+                  </div>
+
+                  {/* Benefits */}
+                  <ul className="space-y-2">
+                    {[
+                      "Pay only for performance — zero wasted spend",
+                      "Set a max budget cap for full cost control",
+                      "Scales naturally with creator reach",
+                      "Ideal for ongoing & performance-based campaigns",
+                    ].map((point) => (
+                      <li key={point} className="flex items-start gap-2">
+                        <Check className={cn("w-4 h-4 mt-0.5 shrink-0", isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]")} />
+                        <span className={cn("text-sm", isDark ? "text-[#E7DAFF]" : "text-gray-700")}>{point}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Link href="/dashboard/contests" className="mt-auto">
+                    <Button className={cn("text-sm text-white w-full", isDark ? "bg-[#5F2BB1] hover:bg-[#4A1E99]" : "bg-[#4A00BE] hover:bg-[#3900a0]")}>
+                      <DollarSign className="w-4 h-4" />
+                      Create CPM Contest
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Shared Book a Call row */}
+              <div className={cn(
+                "flex flex-col sm:flex-row items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm border",
+                isDark ? "bg-[#1A0438] border-[#B994F8]/20 text-[#C4AEED]" : "bg-[#F9F5FF] border-[#E9D8FF] text-gray-500",
+              )}>
+                <span>Not sure which to pick?</span>
+                <a
+                  href="https://calendly.com/guptavishesh2/30min"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "font-semibold underline underline-offset-2",
+                    isDark ? "text-[#C9A1FF] hover:text-[#DDB8FF]" : "text-[#6A30CC] hover:text-[#4A00BE]",
+                  )}
+                >
+                  Book a free call — we&apos;ll help you decide
+                </a>
+              </div>
+            </div>
+
+            {/* Case Study Section */}
+            <>
+              {/* Lightbox overlay */}
+              {caseStudyImageOpen && (
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 cursor-zoom-out"
+                  onClick={() => setCaseStudyImageOpen(false)}
+                >
+                  <img
+                    src="/images/case-study-analytics.png"
+                    alt="Client analytics — 3.8M views in 19 days"
+                    className="max-w-full max-h-[90vh] rounded-xl shadow-2xl object-contain"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <button
+                    className="absolute top-4 right-4 text-white bg-black/50 hover:bg-black/70 rounded-full w-9 h-9 flex items-center justify-center text-lg font-bold"
+                    onClick={() => setCaseStudyImageOpen(false)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              <div className={cn(
+                "rounded-2xl border overflow-hidden",
+                isDark ? "border-[#B994F8]/30 bg-[#22074A]" : "border-[#E9D8FF] bg-white",
+              )}>
+                {/* Badge row */}
+                <div className="px-6 pt-5 pb-0 flex items-center gap-2">
+                  <span className={cn(
+                    "text-xs font-semibold px-2.5 py-1 rounded-full border",
+                    isDark ? "bg-green-900/40 text-green-300 border-green-700/40" : "bg-green-50 text-green-700 border-green-200",
+                  )}>
+                    ✦ Real Client Results
+                  </span>
+                  <span className={cn("text-xs", isDark ? "text-gray-400" : "text-gray-400")}>
+                    CPM Contest · 19 days
+                  </span>
+                </div>
+
+                {/* Body: image thumbnail + stats */}
+                <div className="flex flex-col sm:flex-row gap-6 p-6">
+
+                  {/* Clickable thumbnail */}
+                  <button
+                    type="button"
+                    onClick={() => setCaseStudyImageOpen(true)}
+                    className="group relative sm:w-64 shrink-0 rounded-xl overflow-hidden border cursor-zoom-in focus:outline-none"
+                    style={{ borderColor: isDark ? "rgba(185,148,248,0.2)" : "#E9D8FF" }}
+                    title="Click to enlarge"
+                  >
+                    <img
+                      src="/images/case-study-analytics.png"
+                      alt="Client analytics screenshot"
+                      className="w-full h-44 sm:h-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
+                    />
+                    {/* Zoom hint overlay */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-200 flex items-center justify-center">
+                      <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/90 text-gray-800 text-xs font-semibold px-3 py-1.5 rounded-full shadow">
+                        🔍 Click to zoom
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Stats */}
+                  <div className="flex flex-col justify-center gap-5 flex-1">
+                    <div>
+                      <h3 className={cn("text-lg font-bold leading-snug", isDark ? "text-white" : "text-gray-900")}>
+                        What we achieved for one brand in 19 days
+                      </h3>
+                      <p className={cn("text-sm mt-1", isDark ? "text-[#C4AEED]" : "text-gray-500")}>
+                        One CPM contest. Real creators. 100% organic.
+                      </p>
                     </div>
 
-                    <p
+                    <div className="space-y-4">
+                      {[
+                        { icon: "🎬", value: "200+", label: "Reels posted by creators" },
+                        { icon: "👁️", value: "3.8M+", label: "Views generated" },
+                        { icon: "💰", value: "$0.05", label: "Effective CPM" },
+                      ].map((stat) => (
+                        <div key={stat.label} className="flex items-center gap-3">
+                          <span className={cn(
+                            "text-xl w-10 h-10 flex items-center justify-center rounded-xl shrink-0",
+                            isDark ? "bg-purple-900/40" : "bg-[#F0E8FF]",
+                          )}>
+                            {stat.icon}
+                          </span>
+                          <div>
+                            <div className={cn("text-xl font-bold leading-tight", isDark ? "text-white" : "text-[#2D1B4E]")}>
+                              {stat.value}
+                            </div>
+                            <div className={cn("text-sm", isDark ? "text-[#C4AEED]" : "text-gray-500")}>
+                              {stat.label}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <a
+                      href="https://calendly.com/guptavishesh2/30min"
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className={cn(
-                        "text-md mb-4",
-                        isDark ? "text-[#D8C7F5]" : "text-gray-600",
+                        "text-sm font-semibold underline underline-offset-2 w-fit",
+                        isDark ? "text-[#C9A1FF] hover:text-[#DDB8FF]" : "text-[#6A30CC] hover:text-[#4A00BE]",
                       )}
                     >
-                      Pay only for actual views. More views = more marketing
-                      reach for your brand.
-                    </p>
-
-                    {/* Visual Process */}
-                    <div className="text-center mb-4">
-                      <div
-                        className={cn(
-                          "inline-block p-4 border rounded-lg",
-                          isDark
-                            ? "bg-[#2A0C5A] border-[#B994F8]/50 text-[#F5EEFF]"
-                            : "bg-[#F7F1FF] border-[#D6B6FF] text-black",
-                        )}
-                      >
-                        <div className="text-lg font-bold mb-2">
-                          Set CPM Rate → Creators Post → Pay Per Views
-                        </div>
-                        <div className="text-md">
-                          Example: $5 per 1K views, 50K views = $250 payment
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Benefits */}
-                    <div className="space-y-4">
-                      <div className="flex items-start space-x-2">
-                        <Check
-                          className={cn(
-                            "w-5 h-5 mt-0.5 flex-shrink-0",
-                            isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]",
-                          )}
-                        />
-                        <span
-                          className={cn(
-                            "text-md",
-                            isDark ? "text-[#E7DAFF]" : "text-gray-700",
-                          )}
-                        >
-                          Pay only for performance - no wasted budget
-                        </span>
-                      </div>
-                      <div className="flex items-start space-x-2">
-                        <Check
-                          className={cn(
-                            "w-5 h-5 mt-0.5 flex-shrink-0",
-                            isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]",
-                          )}
-                        />
-                        <span
-                          className={cn(
-                            "text-md",
-                            isDark ? "text-[#E7DAFF]" : "text-gray-700",
-                          )}
-                        >
-                          Scalable - more views = more marketing
-                        </span>
-                      </div>
-                      <div className="flex items-start space-x-2">
-                        <Check
-                          className={cn(
-                            "w-5 h-5 mt-0.5 flex-shrink-0",
-                            isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]",
-                          )}
-                        />
-                        <span
-                          className={cn(
-                            "text-md",
-                            isDark ? "text-[#E7DAFF]" : "text-gray-700",
-                          )}
-                        >
-                          Set max budget & CPM rate for control
-                        </span>
-                      </div>
-                      <div className="flex items-start space-x-2">
-                        <Check
-                          className={cn(
-                            "w-5 h-5 mt-0.5 flex-shrink-0",
-                            isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]",
-                          )}
-                        />
-                        <span
-                          className={cn(
-                            "text-md",
-                            isDark ? "text-[#E7DAFF]" : "text-gray-700",
-                          )}
-                        >
-                          Perfect for ongoing marketing & paid advertising
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="text-center pt-4">
-                      <Link href="/dashboard/contests">
-                        <Button
-                          className={cn(
-                            "text-md text-white w-full",
-                            isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]",
-                          )}
-                        >
-                          <DollarSign className="w-4 h-4" />
-                          Create CPM Contest
-                        </Button>
-                      </Link>
-                    </div>
+                      Want results like this? Book a free call →
+                    </a>
                   </div>
                 </div>
               </div>
-            </div>
+            </>
 
             {/* Content Quality & Safety */}
             <div>
@@ -1459,7 +1445,7 @@ export default function GettingStartedClient({
                             isDark ? "text-gray-300" : "text-black",
                           )}
                         >
-                          $50
+                          $10
                         </span>
                       </div>
                       <div className="flex items-center justify-between p-3 rounded-lg border border-gray-400">
@@ -1480,7 +1466,7 @@ export default function GettingStartedClient({
                             isDark ? "text-gray-300" : "text-black",
                           )}
                         >
-                          $250
+                          $50
                         </span>
                       </div>
                       <div className="flex items-center justify-between p-3 rounded-lg border border-gray-400">
@@ -1501,7 +1487,7 @@ export default function GettingStartedClient({
                             isDark ? "text-gray-300" : "text-black",
                           )}
                         >
-                          $500
+                          $100
                         </span>
                       </div>
                     </div>
@@ -1563,7 +1549,7 @@ export default function GettingStartedClient({
                 <div className="grid md:grid-cols-3 gap-6">
                   <div
                     className={cn(
-                      "text-center text-start p-6 rounded-3xl border shadow-[0px_18px_34px_-24px_rgba(106,48,204,0.6)] transition-all duration-300 hover:-translate-y-0.5",
+                      "text-center p-6 rounded-3xl border shadow-[0px_18px_34px_-24px_rgba(106,48,204,0.6)] transition-all duration-300 hover:-translate-y-0.5",
                       isDark
                         ? "bg-[#21094A] border-[#B994F8]/50"
                         : "bg-white border-[#E9D8FF]",

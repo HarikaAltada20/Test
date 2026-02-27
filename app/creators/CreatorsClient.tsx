@@ -146,11 +146,13 @@ const images: string[] = [
 
 interface CreatorsClientProps {
   totalViews: number;
+  totalMoneyCreditedCents: number;
   initialContests?: any[];
 }
 
 export default function CreatorsClient({
   totalViews,
+  totalMoneyCreditedCents,
   initialContests = [],
 }: CreatorsClientProps) {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -734,14 +736,18 @@ export default function CreatorsClient({
           {/* Orange Ellipse Background Glow */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1250px] h-[600px] rounded-full blur-3xl opacity-50 pointer-events-none bg-orange-ellipse"></div>
 
-          <div className="container mx-auto px-4 text-center relative z-10">
+          <div className="container mx-auto px-6 sm:px-10 lg:px-16 text-center relative z-10">
             {/* Premium Badge */}
-            <div className="inline-grid grid-cols-[auto_1fr] items-center gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-6 sm:py-3 mb-8 max-w-[92vw] sm:max-w-none mx-auto">
-              <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white shrink-0" />
-              <span className="text-xs sm:text-lg font-semibold bg-white bg-clip-text text-transparent leading-tight whitespace-normal text-left">
-                {`${totalViews.toLocaleString(
-                  "en-US"
-                )} views generated so far!`}
+            <div className="inline-flex items-center gap-2.5 bg-[#FFFFFF0F] border border-[#FFFFFF1A] rounded-full px-4 py-2 sm:px-5 sm:py-2.5 mb-8 mx-auto backdrop-blur-sm">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-400"></span>
+              </span>
+              <span className="text-xs sm:text-base font-semibold text-white leading-tight">
+                <span className="text-orange-400">
+                  {totalViews.toLocaleString("en-US")}+
+                </span>{" "}
+                views generated so far!
               </span>
             </div>
 
@@ -840,7 +846,7 @@ export default function CreatorsClient({
                 href={SOCIAL_LINKS.discord}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-[#5865F2]/30 bg-[#5865F2]/10 px-4 py-2 text-sm text-[#C7CEFF] hover:bg-[#5865F2]/20 hover:shadow-[0_0_18px_rgba(88,101,242,0.35)] hover:ring-1 hover:ring-[#5865F2]/40 transition-colors transition-shadow"
+                className="inline-flex items-center gap-2 rounded-full border border-[#5865F2]/30 bg-[#5865F2]/10 px-4 py-2 text-sm text-[#C7CEFF] hover:bg-[#5865F2]/20 hover:shadow-[0_0_18px_rgba(88,101,242,0.35)] hover:ring-1 hover:ring-[#5865F2]/40 transition-all"
               >
                 <FaDiscord className="h-4 w-4 text-[#5865F2]" />
                 Join Creator Community
@@ -1417,7 +1423,7 @@ export default function CreatorsClient({
               {/* <DialogTitle className="text-2xl font-bold text-white">
                 You are logged in as a brand
               </DialogTitle> */}
-              <DialogDescription className="text-base text-lg text-slate-300 leading-relaxed">
+              <DialogDescription className="text-base text-slate-300 leading-relaxed">
                 To continue as a creator, please sign out from your brand account first, then log in or sign up as a creator account.
               </DialogDescription>
             </DialogHeader>

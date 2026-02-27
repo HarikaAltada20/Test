@@ -231,9 +231,11 @@ export default function HeroContent() {
           ></div>
         </div>
 
-        <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-6 py-3 mb-8">
-          <Crown className="h-5 w-5 text-white" />
-          <span className="text-lg font-semibold bg-white bg-clip-text text-transparent">
+        <div className="inline-flex items-center gap-2.5 bg-[#FFFFFF0F] border border-[#FFFFFF1A] rounded-full px-5 py-2.5 mb-8 backdrop-blur-sm">
+          <span className="flex items-center justify-center h-6 w-6 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shrink-0 shadow-[0_0_8px_rgba(251,191,36,0.5)]">
+            <Crown className="h-3.5 w-3.5 text-white" />
+          </span>
+          <span className="text-base font-semibold bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
             #1 Creator Marketing Platform
           </span>
         </div>
@@ -388,31 +390,29 @@ export default function HeroContent() {
       <div className="absolute bottom-[80px] lg:bottom-[90px] left-1/2 -translate-x-1/2 z-20 w-full scroll-container">
         <div className="scroll-track">
           {[
-            "/videos/SnapInsta.to_AQNd.mp4",
-            "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4",
-            "/videos/SnapInsta.to_AQNxeCNjx2k.mp4",
-            "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4",
-            "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4",
-            "/videos/SnapInsta.to_AQMa90k.mp4",
+            { src: "/videos/SnapInsta.to_AQNd.mp4",               poster: "/images/thumb_AQNd.jpg" },
+            { src: "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4",      poster: "/images/thumb_AQMAznjnb2VYJ.jpg" },
+            { src: "/videos/SnapInsta.to_AQNxeCNjx2k.mp4",        poster: "/images/thumb_AQNxeCNjx2k.jpg" },
+            { src: "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4",      poster: "/images/thumb_AQNVKvZ3ezk6J.jpg" },
+            { src: "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4",    poster: "/images/thumb_AQPB-nUfz2at6Wa.jpg" },
+            { src: "/videos/SnapInsta.to_AQMa90k.mp4",            poster: "/images/thumb_AQMa90k.jpg" },
           ]
             .concat([
-              "/videos/SnapInsta.to_AQNd.mp4",
-              "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4",
-              "/videos/SnapInsta.to_AQNxeCNjx2k.mp4",
-              "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4",
-              "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4",
-              "/videos/SnapInsta.to_AQMa90k.mp4",
+              { src: "/videos/SnapInsta.to_AQNd.mp4",               poster: "/images/thumb_AQNd.jpg" },
+              { src: "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4",      poster: "/images/thumb_AQMAznjnb2VYJ.jpg" },
+              { src: "/videos/SnapInsta.to_AQNxeCNjx2k.mp4",        poster: "/images/thumb_AQNxeCNjx2k.jpg" },
+              { src: "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4",      poster: "/images/thumb_AQNVKvZ3ezk6J.jpg" },
+              { src: "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4",    poster: "/images/thumb_AQPB-nUfz2at6Wa.jpg" },
+              { src: "/videos/SnapInsta.to_AQMa90k.mp4",            poster: "/images/thumb_AQMa90k.jpg" },
             ]) // duplicate videos for seamless loop
-            .map((src, idx) => (
+            .map(({ src, poster }, idx) => (
               <div
                 key={idx}
                 className="relative w-[110px] h-[180px] md:w-[190px] md:h-[300px] rounded-[10px] overflow-hidden shadow-lg mx-6 border-2 border-purple-500/70"
-                // style={{
-                //   clipPath: "ellipse(50% 50% at 50% 50%)",
-                // }}
               >
                 <video
                   src={src}
+                  poster={poster}
                   className="absolute inset-0 w-full h-full object-cover"
                   preload={idx < 2 ? "auto" : "metadata"}
                   autoPlay

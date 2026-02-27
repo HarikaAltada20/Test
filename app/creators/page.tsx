@@ -42,6 +42,17 @@ export default async function CreatorsPage() {
       0
     ) || 0;
 
+  const { data: creatorProfiles } = await supabase
+    .from("creator_profiles")
+    .select("total_money_won");
+
+  const totalMoneyCreditedCents =
+    creatorProfiles?.reduce(
+      (sum, p: { total_money_won: number | null }) =>
+        sum + (p.total_money_won || 0),
+      0
+    ) || 0;
+
   // Fetch contests on the server for immediate display
   const { data: contestsData, error: contestsError } = await supabase
     .from("contests_with_status")
@@ -61,5 +72,11 @@ export default async function CreatorsPage() {
 
   const contests = contestsData || [];
 
-  return <CreatorsClient totalViews={totalViews} initialContests={contests} />;
+  return (
+    <CreatorsClient
+      totalViews={totalViews}
+      totalMoneyCreditedCents={totalMoneyCreditedCents}
+      initialContests={contests}
+    />
+  );
 }

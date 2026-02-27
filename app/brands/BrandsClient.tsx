@@ -60,7 +60,11 @@ const brandImages: string[] = [
   "/images/create-music-group.avif",
   "/images/empire-distribution.avif",
 ];
-export default function BrandsClient() {
+interface BrandsClientProps {
+  totalViews: number;
+}
+
+export default function BrandsClient({ totalViews }: BrandsClientProps) {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [fade, setFade] = useState<boolean>(true);
   const [windowWidth, setWindowWidth] = useState<number>(0);
@@ -194,14 +198,20 @@ export default function BrandsClient() {
           {/* Orange Ellipse Background Glow */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1200px] h-[500px] rounded-full blur-3xl opacity-50 pointer-events-none bg-blue-ellipse"></div>
 
-          <div className="container max-w-[1300px] mx-auto px-4 relative z-10">
+          <div className="container max-w-[1300px] mx-auto px-6 sm:px-10 lg:px-16 relative z-10">
             <div className="grid lg:grid-cols-2 gap-10 xl:gap-16 items-center">
               <div className="text-center lg:text-left">
                 {/* Premium Badge */}
-                <div className="inline-grid grid-cols-[auto_1fr] items-center gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-6 sm:py-3 mb-8 max-w-[92vw] sm:max-w-none mx-auto lg:mx-0">
-                  <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white shrink-0" />
-                  <span className="text-xs sm:text-lg font-semibold bg-white bg-clip-text text-transparent leading-tight whitespace-normal text-left">
-                    #1 Gamified Creator Marketing Platform
+                <div className="inline-flex items-center gap-2.5 bg-[#FFFFFF0F] border border-[#FFFFFF1A] rounded-full px-4 py-2 sm:px-5 sm:py-2.5 mb-8 mx-auto lg:mx-0 backdrop-blur-sm">
+                  <span className="relative flex h-2 w-2 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-400"></span>
+                  </span>
+                  <span className="text-xs sm:text-base font-semibold text-white leading-tight">
+                    <span className="text-purple-400">
+                      {totalViews.toLocaleString("en-US")}+
+                    </span>{" "}
+                    views generated for brands
                   </span>
                 </div>
 
@@ -295,27 +305,10 @@ export default function BrandsClient() {
                   </Button>
                 </div>
 
-                {/* Launch Campaign - always visible, direct link to form */}
-                <div className="flex justify-center lg:justify-start items-center mb-8">
-                  <Button
-                    variant="outline"
-                    className="rounded-full border border-amber-500/50 text-amber-400 font-medium px-4 py-2 text-sm hover:border-amber-400 hover:text-amber-300 transition-all duration-300 bg-transparent hover:bg-amber-500/10 text-center whitespace-normal"
-                    asChild
-                  >
-                    <a
-                      href="https://docs.google.com/forms/d/e/1FAIpQLSf7C6hOBIr90e8pBDt9mMo4AzJaFM0Dlbud-EleVIPtuCC68A/viewform"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Launch Your First Campaign — Get 50% Off
-                    </a>
-                  </Button>
-                </div>
-
                 {/* Social Proof */}
                 <div className="flex justify-center lg:justify-start items-center text-base text-slate-300 mb-8">
                   <span className="font-medium">
-                    Trusted by 500+ creators and brands
+                    Trusted by 1,000+ creators and brands
                   </span>
                 </div>
               </div>
@@ -519,7 +512,7 @@ export default function BrandsClient() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {servicesWeOffer.map((service) => (
-                <Link key={service.title} href="/contact" className="block">
+                <Link key={service.title} href="/get-started" className="block">
                   <article className="group relative rounded-[28px] border border-slate-700/80 bg-[#0B1234] p-4 sm:p-5 text-left overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-slate-500">
                     <div className="relative h-56 sm:h-64 md:h-72 w-full overflow-hidden rounded-2xl border border-slate-600/70">
                       <Image

@@ -64,6 +64,7 @@ import {
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useToast } from "@/hooks/use-toast";
+import { PaidPlanUpgradeModal } from "@/components/PaidPlanUpgradeModal";
 
 // Define the type for a contest
 type Contest = {
@@ -255,6 +256,7 @@ export function ContestListClient({
     Contest[]
   >([]);
   const [isCheckingCpmAccess, setIsCheckingCpmAccess] = useState(false);
+  const [showCpmUpgradeModal, setShowCpmUpgradeModal] = useState(false);
   const [page, setPage] = useState<number>(1);
   // Default to 9 campaigns per page with options: 9, 15, 21, 30
   const [limit, setLimit] = useState<number>(9);
@@ -2596,12 +2598,7 @@ export function ContestListClient({
       );
 
       if (!canCreateCpm) {
-        toast({
-          title: "Upgrade required",
-          description:
-            "CPM contests are available on paid plans. Please upgrade your plan to continue.",
-          variant: "destructive",
-        });
+        setShowCpmUpgradeModal(true);
         return;
       }
 
@@ -2681,7 +2678,7 @@ export function ContestListClient({
                     Create Your Contest
                   </p>
                   <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
-                  Set your brief, start & end dates,select the platform where creators should post, set the prize pool distribution according to each winning position.
+                    Set your brief, start &amp; end dates, select the platform where creators should post, set the prize pool distribution according to each winning position.
                   </p>
                 </div>
               </div>
@@ -2705,7 +2702,7 @@ export function ContestListClient({
                     Creators Participate
                   </p>
                   <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
-                  Creators produce original content based on the campaign requirements and publish it on the selected social media platforms within the contest duration
+                    Creators produce original content based on the campaign requirements and publish it on the selected social media platforms within the contest duration.
                   </p>
                 </div>
               </div>
@@ -2746,6 +2743,20 @@ export function ContestListClient({
             >
               Create Leaderboard Contest
             </button>
+            <a
+              href="https://calendly.com/guptavishesh2/30min"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "w-full text-md rounded-lg font-medium py-2 flex items-center justify-center gap-2 border transition-colors",
+                isDark
+                  ? "border-gray-600 text-gray-300 hover:bg-gray-800"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-50",
+              )}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.55 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Need Help? Book a Call
+            </a>
           </div>
         </CardContent>
       </Card>
@@ -2756,12 +2767,12 @@ export function ContestListClient({
           isDark ? "border border-gray-700 bg-[#07031D]" : "border border-gray-200 bg-white",
         )}
       >
-      <div
-        className={cn(
-          "aspect-[16/10] flex items-center justify-center overflow-hidden relative rounded-md border",
-          isDark ? "bg-slate-900 border-gray-700" : "bg-slate-100 border-gray-100",
-        )}
-      >
+        <div
+          className={cn(
+            "aspect-[16/10] flex items-center justify-center overflow-hidden relative rounded-md border",
+            isDark ? "bg-slate-900 border-gray-700" : "bg-slate-100 border-gray-100",
+          )}
+        >
           <img
             src="/images/cpm-contest.avif"
             alt="CPM contest preview"
@@ -2779,7 +2790,7 @@ export function ContestListClient({
           <div className={cn("space-y-4 text-md leading-6", isDark ? "text-slate-300" : "text-slate-800")}>
             <div className="rounded-lg">
               <p className="mt-2">
-              CPM-based contests pay creators purely based on the number of views they generate, at a fixed rate per 1,000 views. This gives you predictable, performance-based costs and allows you to scale content efficiently.
+                CPM-based contests pay creators purely based on the number of views they generate, at a fixed rate per 1,000 views. This gives you predictable, performance-based costs and allows you to scale content efficiently.
               </p>
             </div>
 
@@ -2791,10 +2802,10 @@ export function ContestListClient({
                 )}
               >
                 <span
-                    className={cn(
-                      "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                      isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
-                    )}
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
                 >
                   1
                 </span>
@@ -2817,10 +2828,10 @@ export function ContestListClient({
                 )}
               >
                 <span
-                     className={cn(
-                      "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                      isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
-                    )}
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
                 >
                   2
                 </span>
@@ -2829,7 +2840,7 @@ export function ContestListClient({
                     Creators Participate
                   </p>
                   <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
-                  Creators produce original content based on the campaign requirements and publish it on the selected social media platforms within the contest duration
+                    Creators produce original content based on the campaign requirements and publish it on the selected social media platforms within the contest duration.
                   </p>
                 </div>
               </div>
@@ -2841,10 +2852,10 @@ export function ContestListClient({
                 )}
               >
                 <span
-                    className={cn(
-                      "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                      isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
-                    )}
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
                 >
                   3
                 </span>
@@ -2867,6 +2878,20 @@ export function ContestListClient({
             >
               Create CPM Contest
             </button>
+            <a
+              href="https://calendly.com/guptavishesh2/30min"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "w-full text-md rounded-lg font-medium py-2 flex items-center justify-center gap-2 border transition-colors",
+                isDark
+                  ? "border-gray-600 text-gray-300 hover:bg-gray-800"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-50",
+              )}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.55 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Need Help? Book a Call
+            </a>
           </div>
         </CardContent>
       </Card>
@@ -2875,6 +2900,11 @@ export function ContestListClient({
 
   return (
     <div className="w-full no-theme-transition">
+      <PaidPlanUpgradeModal
+        isOpen={showCpmUpgradeModal}
+        onClose={() => setShowCpmUpgradeModal(false)}
+        featureName="CPM Contests"
+      />
       {hasCreatedContests ? (
         <>
           {/* Header with filters */}
