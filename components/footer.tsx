@@ -92,13 +92,16 @@ export function Footer() {
             </h3>
             <ul className="space-y-3">
               {[
-                { name: "How it Works", href: "/brands" },
-                { name: "Pricing", href: "/pricing" },
-                // { name: "Success Stories", href: "#" },
-              ].map(({ name, href }, idx) => (
+                { name: "How it Works", href: "/brands", external: false },
+                { name: "Pricing", href: "/pricing", external: false },
+                { name: "Get Started", href: "/get-started", external: false },
+                { name: "Book a Demo", href: "https://calendly.com/guptavishesh2/30min", external: true },
+              ].map(({ name, href, external }, idx) => (
                 <li key={idx}>
                   <Link
                     href={href}
+                    target={external ? "_blank" : undefined}
+                    rel={external ? "noopener noreferrer" : undefined}
                     className="hover:underline hover:text-white transition-colors duration-200"
                   >
                     {name}
@@ -116,11 +119,6 @@ export function Footer() {
             <ul className="space-y-3">
               {[
                 { name: "Join as Creator", href: "/creators" },
-                // {
-                //   name: "Find Opportunities",
-                //   href: "/dashboard/opportunities",
-                // },
-                // { name: "Creator Guidelines", href: "#" },
               ].map(({ name, href }, idx) => (
                 <li key={idx}>
                   <Link
@@ -156,7 +154,7 @@ export function Footer() {
               ))}
               <li>
                 <a
-                  href="https://www.linkedin.com/in/visheshgupta2/"
+                  href="https://www.linkedin.com/in/vishesh-gupta-a34111209/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:underline hover:text-white transition-colors duration-200"

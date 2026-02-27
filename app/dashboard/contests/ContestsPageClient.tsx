@@ -3,10 +3,12 @@
 import React, { Suspense, useEffect, useState } from "react";
 import { ContestListClient } from "./ContestListClient";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, Phone } from "lucide-react";
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
 import { cn } from "@/lib/utils";
+
+const BOOK_A_CALL_URL = "https://calendly.com/guptavishesh2/30min";
 
 interface ContestsPageClientProps {
   initialContests: any[];
@@ -76,6 +78,22 @@ export function ContestsPageClient({
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          {!initialContests.some((c) => c.moderation_status !== "draft") && (
+            <a
+              href={BOOK_A_CALL_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 text-md rounded-xl font-medium border transition-colors",
+                isDark
+                  ? "border-gray-600 text-gray-200 hover:bg-gray-800"
+                  : "border-gray-300 text-gray-700 hover:bg-gray-50"
+              )}
+            >
+              <Phone className="h-4 w-4" />
+              Book a Call
+            </a>
+          )}
           <button
             onClick={handleCreateContestClick}
             disabled={loading}

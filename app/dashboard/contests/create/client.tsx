@@ -4156,8 +4156,17 @@ export default function CreateContestPage({
 
       const userId = authData.user.id;
 
-      // Check if there's a 'new' parameter in the URL - if so, don't load any draft
+      // Allow pre-selecting contest type from URL.
       const urlParams = new URLSearchParams(window.location.search);
+      const selectedTypeParam =
+        (urlParams.get("contestType") || urlParams.get("type") || "")
+          .trim()
+          .toLowerCase();
+      if (selectedTypeParam === "leaderboard" || selectedTypeParam === "cpm") {
+        setContestType(selectedTypeParam);
+      }
+
+      // Check if there's a 'new' parameter in the URL - if so, don't load any draft
       const isNewContest = urlParams.get("new") === "true";
 
       if (isNewContest) {

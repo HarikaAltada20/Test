@@ -1,6 +1,9 @@
 import React from "react";
 import { Metadata } from "next";
 import BrandsClient from "./BrandsClient";
+import { createClient } from "@/utils/supabase/server";
+
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: "Best Platform for Creator Marketing - Make Your Product Go Viral | Game Of Creators",
@@ -26,6 +29,18 @@ export const metadata: Metadata = {
   },
 };
 
-export default function BrandsPage() {
-  return <BrandsClient />;
+export default async function BrandsPage() {
+  const supabase = await createClient();
+
+  const { data: submissions } = await supabase
+    .from("submissions")
+    .select("views");
+
+  const totalViews =
+    submissions?.reduce(
+      (sum, sub: { views: number | null }) => sum + (sub.views || 0),
+      0
+    ) || 0;
+
+  return <BrandsClient totalViews={totalViews} />;
 }

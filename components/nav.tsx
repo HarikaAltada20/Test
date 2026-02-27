@@ -173,34 +173,32 @@ export function Nav({
                   href="/brands"
                   className={cn(
                     "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl",
-                    "text-slate-300 ",
                     pathname === "/brands"
-                      ? "text-purple-500"
-                      : "hover:text-purple-400"
+                      ? "text-purple-400"
+                      : "text-slate-300 hover:text-purple-400"
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <Crown className="h-5 w-5" />
-                    <span className="relative z-10">For Brands</span>
+                    <Crown className="h-4 w-4 text-purple-400 shrink-0" />
+                    <span>For Brands</span>
                   </div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-violet-600/0 to-purple-600/0 group-hover:from-violet-600/5 group-hover:to-purple-600/5 rounded-xl transition-all duration-300"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-violet-600/0 to-purple-600/0 group-hover:from-violet-600/10 group-hover:to-purple-600/10 rounded-xl transition-all duration-300" />
                 </Link>
 
                 <Link
                   href="/creators"
                   className={cn(
-                    "group relative px-6 py-3 text-lg font-semibold rounded-xl",
-                    "text-slate-300",
+                    "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl",
                     pathname === "/creators"
                       ? "text-orange-400"
-                      : "hover:text-orange-400"
+                      : "text-slate-300 hover:text-orange-400"
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <Sparkles className="h-5 w-5" />
-                    <span className="relative z-10">For Creators</span>
+                    <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
+                    <span>For Creators</span>
                   </div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-600/0 to-orange-600/0 rounded-xl transition-all duration-300"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-600/0 to-orange-600/0 group-hover:from-amber-600/10 group-hover:to-orange-600/10 rounded-xl transition-all duration-300" />
                 </Link>
               </nav>
             </div>
@@ -407,23 +405,29 @@ export function Nav({
                         </Link>
 
                         {/* Mobile Navigation Links */}
-                        <nav className="space-y-3 mb-8">
+                        <nav className="space-y-2 mb-8">
                           <Link
                             href="/brands"
-                            className="group flex items-center gap-3 text-base font-semibold transition-all duration-300 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-gradient-to-r hover:from-violet-600/10 hover:to-purple-600/10 border border-transparent hover:border-violet-400/20"
+                            className={cn(
+                              "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200",
+                              pathname === "/brands"
+                                ? "text-white bg-white/5 border-l-2 border-purple-500"
+                                : "text-slate-200 hover:text-white hover:bg-white/5"
+                            )}
                           >
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-violet-600/20 to-purple-600/20 flex items-center justify-center group-hover:from-violet-600/30 group-hover:to-purple-600/30 transition-all duration-300">
-                              <Crown className="h-5 w-5" />
-                            </div>
+                            <Crown className="h-4 w-4 text-purple-400 shrink-0" />
                             For Brands
                           </Link>
                           <Link
                             href="/creators"
-                            className="group flex items-center gap-3 text-base font-semibold transition-all duration-300 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-gradient-to-r hover:from-amber-600/10 hover:to-orange-600/10 border border-transparent hover:border-amber-400/20"
+                            className={cn(
+                              "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200",
+                              pathname === "/creators"
+                                ? "text-white bg-white/5 border-l-2 border-orange-400"
+                                : "text-slate-200 hover:text-white hover:bg-white/5"
+                            )}
                           >
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-amber-600/20 to-orange-600/20 flex items-center justify-center group-hover:from-amber-600/30 group-hover:to-orange-600/30 transition-all duration-300">
-                              <Sparkles className="h-5 w-5" />
-                            </div>
+                            <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
                             For Creators
                           </Link>
                         </nav>
