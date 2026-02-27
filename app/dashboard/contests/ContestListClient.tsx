@@ -63,6 +63,7 @@ import {
 } from "@/lib/contest-utils-client";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { useToast } from "@/hooks/use-toast";
 
 // Define the type for a contest
 type Contest = {
@@ -215,6 +216,7 @@ export function ContestListClient({
   onViewModeChange,
 }: ContestListClientProps) {
   const router = useRouter();
+  const { toast } = useToast();
   const [sortOption, setSortOption] =
     useState<SortOptionType>("created_at_desc");
   const [internalSelectedTab, setInternalSelectedTab] = useState("all");
@@ -252,6 +254,7 @@ export function ContestListClient({
   const [filteredAndSortedContests, setFilteredAndSortedContests] = useState<
     Contest[]
   >([]);
+  const [isCheckingCpmAccess, setIsCheckingCpmAccess] = useState(false);
   const [page, setPage] = useState<number>(1);
   // Default to 9 campaigns per page with options: 9, 15, 21, 30
   const [limit, setLimit] = useState<number>(9);
@@ -2572,6 +2575,49 @@ export function ContestListClient({
     ),
   );
   const shouldShowContestTypeGuide = !hasPendingApprovalOrPublishedContest;
+
+  const handleCreateCpmContest = useCallback(async () => {
+    if (isCheckingCpmAccess) return;
+
+    setIsCheckingCpmAccess(true);
+    try {
+      const response = await fetch(`/api/subscriptions/current?t=${Date.now()}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch subscription details");
+      }
+
+      const data = await response.json();
+      const canCreateCpm = Boolean(
+        data?.plan?.features?.contestTypes?.includes("cpm"),
+      );
+
+      if (!canCreateCpm) {
+        toast({
+          title: "Upgrade required",
+          description:
+            "CPM contests are available on paid plans. Please upgrade your plan to continue.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      router.push("/dashboard/contests/create?new=true&contestType=cpm");
+    } catch (error) {
+      console.error("Error checking CPM contest access:", error);
+      toast({
+        title: "Unable to verify your plan",
+        description: "Please try again. If needed, upgrade your plan in Billing.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCheckingCpmAccess(false);
+    }
+  }, [isCheckingCpmAccess, router, toast]);
+
   const contestTypeGuideCards = (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <Card
@@ -2717,7 +2763,7 @@ export function ContestListClient({
         )}
       >
           <img
-            src="/images/cpm.avif"
+            src="/images/cpm-contest.avif"
             alt="CPM contest preview"
             className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
           />
@@ -2816,9 +2862,8 @@ export function ContestListClient({
             <button
               type="button"
               className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
-              onClick={() =>
-                router.push("/dashboard/contests/create?new=true&contestType=cpm")
-              }
+              onClick={handleCreateCpmContest}
+              disabled={isCheckingCpmAccess}
             >
               Create CPM Contest
             </button>
