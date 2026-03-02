@@ -79,6 +79,8 @@ import PaymentModal from "@/components/PaymentModal";
 import ManualPointsModal from "@/components/ManualPointsModal";
 import { CreatorSubmissionsModal } from "@/components/CreatorSubmissionsModal";
 import { BudgetProgress } from "@/components/BudgetProgress";
+import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
+import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { TwitterFeed } from "@/components/twitter-feed";
 import {
@@ -119,6 +121,7 @@ import {
   Pause,
   Settings,
   Wallet,
+  BarChart2,
   BarChart3,
   TrendingUp,
   CheckCheck,
@@ -383,6 +386,15 @@ export default function ContestDetailClient({
 
   // Refresh metrics state
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
+
+  // YouTube detailed analytics refresh state
+  const [isRefreshingTraffic, setIsRefreshingTraffic] = useState(false);
+  const [isRefreshingDemographics, setIsRefreshingDemographics] = useState(false);
+  const [isRefreshingCore, setIsRefreshingCore] = useState(false);
+  // Track per-submission loading state for detailed analytics
+  const [loadingDetailedAnalytics, setLoadingDetailedAnalytics] = useState<
+    Record<string, "core" | "traffic" | "demographics" | "both" | "all" | null>
+  >({});
 
   // Twitter campaign metrics state
   const [twitterMetrics, setTwitterMetrics] = useState<any>(null);
@@ -3377,6 +3389,76 @@ export default function ContestDetailClient({
     }
   };
 
+  // Handler: refresh core analytics, traffic sources, demographics, or all (on-demand YouTube analytics)
+  const handleRefreshDetailedAnalytics = async (
+    type: "core" | "traffic" | "demographics" | "both" | "all",
+    opts?: { submissionId?: string; creatorId?: string }
+  ) => {
+    const isContestLevel = !opts?.submissionId && !opts?.creatorId;
+    const key = opts?.submissionId || opts?.creatorId || "contest";
+
+    if (isContestLevel) {
+      if (type === "core" || type === "all") setIsRefreshingCore(true);
+      if (type === "traffic" || type === "both" || type === "all") setIsRefreshingTraffic(true);
+      if (type === "demographics" || type === "both" || type === "all") setIsRefreshingDemographics(true);
+    } else {
+      setLoadingDetailedAnalytics((prev) => ({ ...prev, [key]: type }));
+    }
+
+    try {
+      const body: Record<string, string> = { type };
+      if (opts?.submissionId) body.submissionId = opts.submissionId;
+      else if (opts?.creatorId) {
+        body.creatorId = opts.creatorId;
+        body.contestId = contestId;
+      } else {
+        body.contestId = contestId;
+      }
+
+      const response = await fetch("/api/youtube/refresh-detailed-analytics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to refresh analytics");
+      }
+
+      toast({
+        title: "Analytics Updated",
+        description: result.message || `Updated ${result.updated} submission(s)`,
+      });
+
+      if (result.reauth_needed?.length) {
+        toast({
+          title: "Reconnection Required",
+          description:
+            "Some creators need to reconnect their YouTube account to grant analytics access.",
+          variant: "destructive",
+        });
+      }
+
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (error: any) {
+      toast({
+        title: "Refresh Failed",
+        description: error.message || "Could not refresh analytics. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      if (isContestLevel) {
+        setIsRefreshingCore(false);
+        setIsRefreshingTraffic(false);
+        setIsRefreshingDemographics(false);
+      } else {
+        setLoadingDetailedAnalytics((prev) => ({ ...prev, [key]: null }));
+      }
+    }
+  };
+
   // Helper function to determine if refresh should be disabled and why
   const getRefreshButtonState = () => {
     const isLocked =
@@ -3464,11 +3546,25 @@ export default function ContestDetailClient({
       return {
         views: baseViews,
         likes: youtubeStats.likes || youtubeStats.like_count || 0,
+        dislikes: youtubeStats.dislikes || 0,
         comments: youtubeStats.comments || youtubeStats.comment_count || 0,
-        shares: 0, // Not available
-        subscribers_gained: 0, // Not available
-        watch_time: 0, // Not available
-        engagement_rate: 0, // Not available
+        shares: youtubeStats.shares || 0,
+        subscribers_gained: youtubeStats.subscribers_gained || 0,
+        subscribers_lost: youtubeStats.subscribers_lost || 0,
+        videos_added_to_playlists: youtubeStats.videos_added_to_playlists || 0,
+        videos_removed_from_playlists: youtubeStats.videos_removed_from_playlists || 0,
+        estimated_minutes_watched: youtubeStats.estimated_minutes_watched || 0,
+        avg_view_duration_seconds: youtubeStats.avg_view_duration_seconds || 0,
+        avg_view_percentage: youtubeStats.avg_view_percentage || 0,
+        engaged_views: youtubeStats.engaged_views || 0,
+        traffic_sources: youtubeStats.traffic_sources || null,
+        demographics: youtubeStats.demographics || null,
+        bot_score: youtubeStats.bot_score ?? null,
+        bot_flags: youtubeStats.bot_flags || [],
+        analytics_needs_reauth: youtubeStats.analytics_needs_reauth || false,
+        last_basic_update: youtubeStats.last_basic_update || null,
+        last_traffic_update: youtubeStats.last_traffic_update || null,
+        last_demographics_update: youtubeStats.last_demographics_update || null,
       };
     } else if (platform?.includes("instagram")) {
       const igStats = stats.instagram || stats;
@@ -8803,7 +8899,7 @@ export default function ContestDetailClient({
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {(() => {
                           const { isDisabled, disabledReason } =
                             getRefreshButtonState();
@@ -8835,6 +8931,80 @@ export default function ContestDetailClient({
                             </button>
                           );
                         })()}
+                        {/* YouTube-only on-demand analytics buttons (admin only) */}
+                        {isAdminView &&
+                          currentContest.platform?.toLowerCase() === "youtube" && (
+                            <>
+                              <button
+                                onClick={() =>
+                                  handleRefreshDetailedAnalytics("core")
+                                }
+                                disabled={isRefreshingCore || isRefreshingTraffic || isRefreshingDemographics}
+                                className={cn(
+                                  "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm",
+                                  isRefreshingCore
+                                    ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
+                                    : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
+                                )}
+                                title="Fetch core analytics (watch time, shares, subscribers…) for all submissions"
+                              >
+                                {isRefreshingCore ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <BarChart2 className="h-3.5 w-3.5" />
+                                )}
+                                {isRefreshingCore ? "Fetching..." : "Core Analytics"}
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleRefreshDetailedAnalytics("traffic")
+                                }
+                                disabled={isRefreshingCore || isRefreshingTraffic || isRefreshingDemographics}
+                                className={cn(
+                                  "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm",
+                                  isRefreshingTraffic
+                                    ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
+                                    : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
+                                )}
+                                title="Fetch traffic source breakdown for all submissions (bot detection)"
+                              >
+                                {isRefreshingTraffic ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <TrendingUp className="h-3.5 w-3.5" />
+                                )}
+                                {isRefreshingTraffic ? "Fetching..." : "Traffic Sources"}
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleRefreshDetailedAnalytics("demographics")
+                                }
+                                disabled={isRefreshingCore || isRefreshingTraffic || isRefreshingDemographics}
+                                className={cn(
+                                  "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm",
+                                  isRefreshingDemographics
+                                    ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
+                                    : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
+                                )}
+                                title="Fetch audience demographics for all submissions (brand insights)"
+                              >
+                                {isRefreshingDemographics ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Users className="h-3.5 w-3.5" />
+                                )}
+                                {isRefreshingDemographics ? "Fetching..." : "Demographics"}
+                              </button>
+                              <span
+                                className={cn(
+                                  "text-[10px] text-slate-400",
+                                  isDark && "text-slate-500"
+                                )}
+                              >
+                                Analytics window: last {YT_ANALYTICS_DEFAULT_WINDOW_DAYS} days
+                              </span>
+                            </>
+                          )}
                       </div>
                     </div>
                   </CardContent>
@@ -9341,7 +9511,27 @@ export default function ContestDetailClient({
                                   <TableHead className="text-center">
                                     Total Watch Time
                                   </TableHead>
-                                  {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
+                                </>
+                              )}
+                              {currentContest.platform
+                                ?.toLowerCase()
+                                .includes("youtube") && (
+                                <>
+                                  <TableHead className="text-center">
+                                    Shares
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Avg View %
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Watch Time
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Bot Score
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Analytics
+                                  </TableHead>
                                 </>
                               )}
                               {/* Show reward columns for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
@@ -10327,9 +10517,138 @@ export default function ContestDetailClient({
                                           </span>
                                         </div>
                                       </TableCell>
-                                      {/* <TableCell className="text-center font-mono text-sm">
-                                                                            {formatMetricValue(metrics.engagement_rate, true)}
-                                                                        </TableCell> */}
+                                    </>
+                                  )}
+                                  {/* YouTube-specific metric cells */}
+                                  {currentContest.platform
+                                    ?.toLowerCase()
+                                    .includes("youtube") && (
+                                    <>
+                                      {/* Shares */}
+                                      <TableCell className="text-center font-mono text-sm">
+                                        <div className="flex items-center justify-center gap-1">
+                                          <Share2 className="h-3 w-3 text-purple-500" />
+                                          {(metrics as any).shares > 0
+                                            ? formatMetricValue((metrics as any).shares)
+                                            : <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>—</span>}
+                                        </div>
+                                      </TableCell>
+                                      {/* Avg View % */}
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {(metrics as any).avg_view_percentage > 0 ? (
+                                          <div className="flex flex-col items-center">
+                                            <span className={cn(
+                                              "font-bold",
+                                              (metrics as any).avg_view_percentage < 10
+                                                ? "text-red-500"
+                                                : (metrics as any).avg_view_percentage < 30
+                                                  ? "text-yellow-500"
+                                                  : "text-green-500"
+                                            )}>
+                                              {((metrics as any).avg_view_percentage as number).toFixed(1)}%
+                                            </span>
+                                            <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                              watched
+                                            </span>
+                                          </div>
+                                        ) : (
+                                          <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>—</span>
+                                        )}
+                                      </TableCell>
+                                      {/* Total Watch Time */}
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {(metrics as any).estimated_minutes_watched > 0 ? (
+                                          <div className="flex flex-col items-center">
+                                            <span className="font-bold">
+                                              {formatWatchTime((metrics as any).estimated_minutes_watched * 60 * 1000)}
+                                            </span>
+                                            <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                              total
+                                            </span>
+                                          </div>
+                                        ) : (
+                                          <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>—</span>
+                                        )}
+                                      </TableCell>
+                                      {/* Bot Score */}
+                                      <TableCell className="text-center">
+                                        {(metrics as any).analytics_needs_reauth ? (
+                                          <span
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 border border-yellow-300"
+                                            title="Creator needs to reconnect YouTube for analytics"
+                                          >
+                                            <AlertTriangle className="h-3 w-3" />
+                                            Reauth
+                                          </span>
+                                        ) : (metrics as any).bot_score !== null && (metrics as any).bot_score !== undefined ? (
+                                          <div className="flex flex-col items-center gap-0.5">
+                                            <span className={cn(
+                                              "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
+                                              (metrics as any).bot_score >= 60
+                                                ? "bg-red-100 text-red-700 border-red-300"
+                                                : (metrics as any).bot_score >= 30
+                                                  ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                                  : "bg-green-100 text-green-600 border-green-300"
+                                            )}
+                                              title={(metrics as any).bot_flags?.join("\n") || "No flags"}
+                                            >
+                                              {(metrics as any).bot_score >= 60 ? "⚠ " : ""}
+                                              {(metrics as any).bot_score}/100
+                                            </span>
+                                            {(metrics as any).bot_flags?.length > 0 && (
+                                              <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                                {(metrics as any).bot_flags.length} flag{(metrics as any).bot_flags.length !== 1 ? "s" : ""}
+                                              </span>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>
+                                            No data
+                                          </span>
+                                        )}
+                                      </TableCell>
+                                      {/* Analytics Details — full breakdown in popover */}
+                                      <TableCell className="text-center">
+                                        <YouTubeAnalyticsPanel
+                                          metrics={{
+                                            views: (metrics as any).views,
+                                            likes: (metrics as any).likes,
+                                            dislikes: (metrics as any).dislikes,
+                                            comments: (metrics as any).comments,
+                                            shares: (metrics as any).shares,
+                                            subscribers_gained: (metrics as any).subscribers_gained,
+                                            subscribers_lost: (metrics as any).subscribers_lost,
+                                            videos_added_to_playlists: (metrics as any).videos_added_to_playlists,
+                                            videos_removed_from_playlists: (metrics as any).videos_removed_from_playlists,
+                                            estimated_minutes_watched: (metrics as any).estimated_minutes_watched,
+                                            avg_view_duration_seconds: (metrics as any).avg_view_duration_seconds,
+                                            avg_view_percentage: (metrics as any).avg_view_percentage,
+                                            engaged_views: (metrics as any).engaged_views,
+                                            traffic_sources: (metrics as any).traffic_sources,
+                                            demographics: (metrics as any).demographics,
+                                            bot_score: (metrics as any).bot_score,
+                                            bot_flags: (metrics as any).bot_flags,
+                                            analytics_needs_reauth: (metrics as any).analytics_needs_reauth,
+                                            last_basic_update: (metrics as any).last_basic_update,
+                                            last_traffic_update: (metrics as any).last_traffic_update,
+                                            last_demographics_update: (metrics as any).last_demographics_update,
+                                          }}
+                                          isDark={isDark}
+                                        >
+                                          <button
+                                            className={cn(
+                                              "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
+                                              isDark
+                                                ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                                : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700"
+                                            )}
+                                            title="View full analytics breakdown"
+                                          >
+                                            <BarChart2 className="h-3 w-3" />
+                                            Details
+                                          </button>
+                                        </YouTubeAnalyticsPanel>
+                                      </TableCell>
                                     </>
                                   )}
                                   {/* Show reward cells for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
@@ -10742,6 +11061,104 @@ export default function ContestDetailClient({
                                             View Content
                                           </a>
                                         </DropdownMenuItem>
+                                        {/* YouTube-only per-submission analytics refresh (admin only) */}
+                                        {isAdminView &&
+                                          !isTwitterTweet &&
+                                          currentContest.platform?.toLowerCase() === "youtube" && (
+                                            <>
+                                              <DropdownMenuSeparator />
+                                              <DropdownMenuLabel className="text-purple-500">
+                                                Analytics
+                                              </DropdownMenuLabel>
+                                              <DropdownMenuItem
+                                                disabled={
+                                                  loadingDetailedAnalytics[submission.id] !== undefined &&
+                                                  loadingDetailedAnalytics[submission.id] !== null
+                                                }
+                                                onClick={() =>
+                                                  handleRefreshDetailedAnalytics("core", {
+                                                    submissionId: submission.id,
+                                                  })
+                                                }
+                                              >
+                                                {loadingDetailedAnalytics[submission.id] === "core" ? (
+                                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                ) : (
+                                                  <BarChart2 className="h-4 w-4 mr-2" />
+                                                )}
+                                                Refresh Core Analytics
+                                                {(() => {
+                                                  const ytStats = submission.other_stats?.youtube || submission.other_stats;
+                                                  const ts = ytStats?.last_basic_update;
+                                                  return ts ? (
+                                                    <span className="ml-auto text-xs text-slate-400">
+                                                      {formatTimeAgo(ts)}
+                                                    </span>
+                                                  ) : (
+                                                    <span className="ml-auto text-xs text-slate-400">Never</span>
+                                                  );
+                                                })()}
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem
+                                                disabled={
+                                                  loadingDetailedAnalytics[submission.id] !== undefined &&
+                                                  loadingDetailedAnalytics[submission.id] !== null
+                                                }
+                                                onClick={() =>
+                                                  handleRefreshDetailedAnalytics("traffic", {
+                                                    submissionId: submission.id,
+                                                  })
+                                                }
+                                              >
+                                                {loadingDetailedAnalytics[submission.id] === "traffic" ? (
+                                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                ) : (
+                                                  <TrendingUp className="h-4 w-4 mr-2" />
+                                                )}
+                                                Refresh Traffic Sources
+                                                {(() => {
+                                                  const ytStats = submission.other_stats?.youtube || submission.other_stats;
+                                                  const ts = ytStats?.last_traffic_update;
+                                                  return ts ? (
+                                                    <span className="ml-auto text-xs text-slate-400">
+                                                      {formatTimeAgo(ts)}
+                                                    </span>
+                                                  ) : (
+                                                    <span className="ml-auto text-xs text-slate-400">Never</span>
+                                                  );
+                                                })()}
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem
+                                                disabled={
+                                                  loadingDetailedAnalytics[submission.id] !== undefined &&
+                                                  loadingDetailedAnalytics[submission.id] !== null
+                                                }
+                                                onClick={() =>
+                                                  handleRefreshDetailedAnalytics("demographics", {
+                                                    submissionId: submission.id,
+                                                  })
+                                                }
+                                              >
+                                                {loadingDetailedAnalytics[submission.id] === "demographics" ? (
+                                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                ) : (
+                                                  <Users className="h-4 w-4 mr-2" />
+                                                )}
+                                                Refresh Demographics
+                                                {(() => {
+                                                  const ytStats = submission.other_stats?.youtube || submission.other_stats;
+                                                  const ts = ytStats?.last_demographics_update;
+                                                  return ts ? (
+                                                    <span className="ml-auto text-xs text-slate-400">
+                                                      {formatTimeAgo(ts)}
+                                                    </span>
+                                                  ) : (
+                                                    <span className="ml-auto text-xs text-slate-400">Never</span>
+                                                  );
+                                                })()}
+                                              </DropdownMenuItem>
+                                            </>
+                                          )}
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   </TableCell>
@@ -10920,14 +11337,14 @@ export default function ContestDetailClient({
                                       <TableHead className="text-center">
                                         Comments
                                       </TableHead>
+                                      <TableHead className="text-center">
+                                        Shares
+                                      </TableHead>
                                       {/* Instagram-specific metrics */}
                                       {currentContest.platform
                                         ?.toLowerCase()
                                         .includes("instagram") && (
                                         <>
-                                          <TableHead className="text-center">
-                                            Shares
-                                          </TableHead>
                                           <TableHead className="text-center">
                                             Saves
                                           </TableHead>
@@ -11349,20 +11766,19 @@ export default function ContestDetailClient({
                                               <TableCell className="text-center">
                                                 {group.metrics.comments.toLocaleString()}
                                               </TableCell>
+                                              <TableCell className="text-center font-mono text-sm">
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <Share2 className="h-3 w-3 text-purple-500" />
+                                                  {formatMetricValue(
+                                                    group.metrics.shares || 0,
+                                                  )}
+                                                </div>
+                                              </TableCell>
                                               {/* Instagram-specific metrics */}
                                               {currentContest.platform
                                                 ?.toLowerCase()
                                                 .includes("instagram") && (
                                                 <>
-                                                  <TableCell className="text-center font-mono text-sm">
-                                                    <div className="flex items-center justify-center gap-1">
-                                                      <Share2 className="h-3 w-3 text-purple-500" />
-                                                      {formatMetricValue(
-                                                        group.metrics.shares ||
-                                                          0,
-                                                      )}
-                                                    </div>
-                                                  </TableCell>
                                                   <TableCell className="text-center font-mono text-sm">
                                                     {formatMetricValue(
                                                       group.metrics.saves || 0,
@@ -11642,6 +12058,86 @@ export default function ContestDetailClient({
                                                 >
                                                   View All ({group.totalCount})
                                                 </Button>
+                                                {/* YouTube per-creator analytics refresh (admin only) */}
+                                                {isAdminView &&
+                                                  currentContest.platform?.toLowerCase() === "youtube" && (
+                                                    <DropdownMenu>
+                                                      <DropdownMenuTrigger asChild>
+                                                        <Button
+                                                          size="sm"
+                                                          variant="ghost"
+                                                          className="h-8 w-8 p-0"
+                                                        >
+                                                          {loadingDetailedAnalytics[group.creator.id] ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                          ) : (
+                                                            <MoreVertical className="h-4 w-4" />
+                                                          )}
+                                                        </Button>
+                                                      </DropdownMenuTrigger>
+                                                      <DropdownMenuContent align="end">
+                                                        <DropdownMenuLabel className="text-purple-500">
+                                                          Analytics
+                                                        </DropdownMenuLabel>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem
+                                                          disabled={!!loadingDetailedAnalytics[group.creator.id]}
+                                                          onClick={() =>
+                                                            handleRefreshDetailedAnalytics("core", {
+                                                              creatorId: group.creator.id,
+                                                            })
+                                                          }
+                                                        >
+                                                          <BarChart2 className="h-4 w-4 mr-2" />
+                                                          Refresh Core Analytics
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                          disabled={!!loadingDetailedAnalytics[group.creator.id]}
+                                                          onClick={() =>
+                                                            handleRefreshDetailedAnalytics("traffic", {
+                                                              creatorId: group.creator.id,
+                                                            })
+                                                          }
+                                                        >
+                                                          <TrendingUp className="h-4 w-4 mr-2" />
+                                                          Refresh Traffic Sources
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                          disabled={!!loadingDetailedAnalytics[group.creator.id]}
+                                                          onClick={() =>
+                                                            handleRefreshDetailedAnalytics("demographics", {
+                                                              creatorId: group.creator.id,
+                                                            })
+                                                          }
+                                                        >
+                                                          <Users className="h-4 w-4 mr-2" />
+                                                          Refresh Demographics
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                          disabled={!!loadingDetailedAnalytics[group.creator.id]}
+                                                          onClick={() =>
+                                                            handleRefreshDetailedAnalytics("both", {
+                                                              creatorId: group.creator.id,
+                                                            })
+                                                          }
+                                                        >
+                                                          <RefreshCw className="h-4 w-4 mr-2" />
+                                                          Refresh Traffic + Demo
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                          disabled={!!loadingDetailedAnalytics[group.creator.id]}
+                                                          onClick={() =>
+                                                            handleRefreshDetailedAnalytics("all", {
+                                                              creatorId: group.creator.id,
+                                                            })
+                                                          }
+                                                        >
+                                                          <RefreshCw className="h-4 w-4 mr-2 text-purple-500" />
+                                                          Refresh All Analytics
+                                                        </DropdownMenuItem>
+                                                      </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                  )}
                                                 {/* Creator moderation and payment options for Twitter campaigns */}
                                                 {(currentContest.platform?.toLowerCase() ===
                                                   "twitter" ||

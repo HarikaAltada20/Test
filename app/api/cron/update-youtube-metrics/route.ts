@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { google } from "googleapis";
 import { refreshAccessToken, extractYoutubeId } from "@/lib/youtube-api";
+import {
+  getVideoAnalytics,
+  computeBotScore,
+  isYouTubeShort,
+  getDefaultAnalyticsStartDate,
+} from "@/lib/youtube-analytics";
 
 // Type definition for the youtube_account JSON object
 type YouTubeAccount = {
@@ -209,7 +215,7 @@ async function handleTokenRefresh(
   }
 }
 
-// Fetch and process YouTube stats
+// Fetch and process YouTube stats (Data API v3 + Analytics API)
 async function fetchYouTubeStats(
   creator: any,
   videoIds: string[],
@@ -219,6 +225,7 @@ async function fetchYouTubeStats(
   const updates: SubmissionUpdate[] = [];
   const youtube = google.youtube("v3");
   const chunks = chunkArray(videoIds, 50);
+  const now = new Date().toISOString();
 
   for (const chunk of chunks) {
     try {
@@ -232,23 +239,101 @@ async function fetchYouTubeStats(
 
       for (const video of videoStats) {
         const stats = video.statistics!;
-        const youtubeMetrics = {
-          views: parseInt(stats.viewCount || "0", 10),
-          likes: parseInt(stats.likeCount || "0", 10),
-          comments: parseInt(stats.commentCount || "0", 10),
-        };
+        const rawViews = parseInt(stats.viewCount || "0", 10);
+        const rawLikes = parseInt(stats.likeCount || "0", 10);
+        const rawComments = parseInt(stats.commentCount || "0", 10);
 
         const matchingSubmissions = submissionsByCreator[creator.id].filter(
           (s: any) => s.video_id === video.id
         );
 
-        matchingSubmissions.forEach((sub: any) => {
+        for (const sub of matchingSubmissions) {
+          // Preserve previously fetched traffic/demographics data
+          const existingYT = (sub.other_stats?.youtube || sub.other_stats || {}) as Record<string, any>;
+
+          // Start with the base Data API metrics
+          const youtubeMetrics: Record<string, any> = {
+            views: rawViews,
+            likes: rawLikes,
+            comments: rawComments,
+            // Carry forward on-demand data if it exists
+            traffic_sources: existingYT.traffic_sources || undefined,
+            last_traffic_update: existingYT.last_traffic_update || undefined,
+            demographics: existingYT.demographics || undefined,
+            last_demographics_update: existingYT.last_demographics_update || undefined,
+            analytics_needs_reauth: existingYT.analytics_needs_reauth || false,
+            last_basic_update: now,
+          };
+
+          // --- Call 1: Core Analytics via YouTube Analytics API ---
+          try {
+            // Use a configurable rolling window (see YT_ANALYTICS_DEFAULT_WINDOW_DAYS)
+            // so non-technical users can adjust how much history is considered.
+            const startDate = getDefaultAnalyticsStartDate();
+
+            const analytics = await getVideoAnalytics(
+              accessToken,
+              sub.video_id,
+              startDate
+            );
+
+            if (analytics) {
+              Object.assign(youtubeMetrics, {
+                estimated_minutes_watched: analytics.estimated_minutes_watched,
+                avg_view_duration_seconds: analytics.avg_view_duration_seconds,
+                avg_view_percentage: analytics.avg_view_percentage,
+                engaged_views: analytics.engaged_views,
+                // Override likes/comments from Analytics API (more accurate for the date range)
+                likes: analytics.likes || rawLikes,
+                dislikes: analytics.dislikes,
+                comments: analytics.comments || rawComments,
+                shares: analytics.shares,
+                subscribers_gained: analytics.subscribers_gained,
+                subscribers_lost: analytics.subscribers_lost,
+                videos_added_to_playlists: analytics.videos_added_to_playlists,
+                videos_removed_from_playlists: analytics.videos_removed_from_playlists,
+              });
+
+              // Compute bot score with core analytics (traffic sources added when fetched on-demand)
+              const { score, flags } = computeBotScore(
+                analytics,
+                rawViews,
+                youtubeMetrics.traffic_sources || null,
+                isYouTubeShort(sub.content_link || "")
+              );
+              youtubeMetrics.bot_score = score;
+              youtubeMetrics.bot_flags = flags;
+              youtubeMetrics.analytics_needs_reauth = false;
+            }
+          } catch (analyticsError: any) {
+            const code = analyticsError?.code ?? analyticsError?.status;
+            // 403 = insufficient scope, 401 = invalid/expired token missing scope
+            if (code === 403 || code === 401) {
+              youtubeMetrics.analytics_needs_reauth = true;
+              console.warn(
+                `Analytics API auth error (${code}) for creator ${creator.id} — ` +
+                `creator must reconnect YouTube account with yt-analytics.readonly scope`
+              );
+            } else {
+              console.error(
+                `Analytics API error for video ${sub.video_id}:`,
+                analyticsError?.message,
+                analyticsError?.errors
+              );
+            }
+          }
+
+          // Strip undefined keys to keep JSONB clean
+          const cleanMetrics = Object.fromEntries(
+            Object.entries(youtubeMetrics).filter(([, v]) => v !== undefined)
+          );
+
           updates.push({
             id: sub.id,
-            views: youtubeMetrics.views,
-            newOtherStats: { youtube: youtubeMetrics },
+            views: rawViews,
+            newOtherStats: { youtube: cleanMetrics },
           });
-        });
+        }
       }
     } catch (error: any) {
       console.error(
@@ -347,7 +432,7 @@ export async function GET(request: Request) {
     // Fetch submissions to update (only from active contests)
     let submissionsQuery = supabaseAdmin
       .from("submissions")
-      .select("id, creator_id, content_link, views, contest_id")
+      .select("id, creator_id, content_link, views, contest_id, created_at, other_stats")
       .in("status", ["verified", "pending"])
       .not("content_link", "is", null);
 

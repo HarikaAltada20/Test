@@ -57,9 +57,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const videos = await getUserVideos(accessToken);
+    const pageToken = request.nextUrl.searchParams.get('pageToken') || undefined;
+    const { videos, nextPageToken } = await getUserVideos(accessToken, pageToken);
     
-    return NextResponse.json({ videos });
+    return NextResponse.json({ videos, nextPageToken });
 
   } catch (error: any) {
     console.error('Error in YouTube videos endpoint:', error);
