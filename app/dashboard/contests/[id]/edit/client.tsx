@@ -333,6 +333,13 @@ export default function EditContestPage({
   // Common contest fields
   const [title, setTitle] = useState("");
   const [platform, setPlatform] = useState<string>("");
+  // YouTube analytics visibility (brand-side)
+  const [showBrandCoreAnalytics, setShowBrandCoreAnalytics] =
+    useState<boolean>(true);
+  const [showBrandTrafficSources, setShowBrandTrafficSources] =
+    useState<boolean>(true);
+  const [showBrandDemographics, setShowBrandDemographics] =
+    useState<boolean>(true);
   // Categories, subcategories, and interests state
   const [contestCategories, setContestCategories] = useState<string[]>([]);
   const [contestSubcategories, setContestSubcategories] = useState<
@@ -1053,6 +1060,20 @@ export default function EditContestPage({
                 // Note: This is loaded later when we process twitter_campaign data
               }
             }
+
+            // Load YouTube analytics visibility (brand-side) from contest_based_details
+            const ytVisibility =
+              (data.contest_based_details as any)?.youtube_analytics_visibility ||
+              {};
+            setShowBrandCoreAnalytics(
+              ytVisibility.show_core_to_brand ?? true,
+            );
+            setShowBrandTrafficSources(
+              ytVisibility.show_traffic_to_brand ?? true,
+            );
+            setShowBrandDemographics(
+              ytVisibility.show_demographics_to_brand ?? true,
+            );
 
             // Load existing resources (array format only)
             setResources(data.resources || []);
@@ -5320,6 +5341,15 @@ export default function EditContestPage({
       setIsSubmitting(false);
       if (submitTimeoutId) clearTimeout(submitTimeoutId);
       return;
+    }
+
+    // YouTube analytics visibility (brand side) — stored in contest_based_details.youtube_analytics_visibility
+    if (!datesOnly && platform?.toLowerCase() === "youtube") {
+      contestBasedDetails.youtube_analytics_visibility = {
+        show_core_to_brand: showBrandCoreAnalytics,
+        show_traffic_to_brand: showBrandTrafficSources,
+        show_demographics_to_brand: showBrandDemographics,
+      };
     }
     // Check if payment/refund processing is required
     const paid = isContestPaid();
@@ -11259,6 +11289,90 @@ export default function EditContestPage({
                   </p>
                 </div>
               </div>
+
+              {/* YouTube Analytics Visibility (Brand side) */}
+              {platform?.toLowerCase() === "youtube" && (
+                <div
+                  className={cn(
+                    "space-y-3 rounded-lg border p-4",
+                    isDark
+                      ? "border-slate-600 bg-slate-900/40"
+                      : "border-slate-200 bg-slate-50",
+                  )}
+                >
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-base font-medium">
+                      YouTube Analytics visibility (Brand view)
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Choose which advanced YouTube analytics are visible to the advertiser on
+                      this campaign. Admins always see everything.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2">
+                      <Checkbox
+                        id="yt-core-visibility"
+                        checked={showBrandCoreAnalytics}
+                        onCheckedChange={(checked) =>
+                          setShowBrandCoreAnalytics(!!checked)
+                        }
+                      />
+                      <div>
+                        <Label
+                          htmlFor="yt-core-visibility"
+                          className="text-sm font-medium"
+                        >
+                          Show Core Analytics
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Avg view %, watch time, engaged views, shares, subscribers, playlists and bot score.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Checkbox
+                        id="yt-traffic-visibility"
+                        checked={showBrandTrafficSources}
+                        onCheckedChange={(checked) =>
+                          setShowBrandTrafficSources(!!checked)
+                        }
+                      />
+                      <div>
+                        <Label
+                          htmlFor="yt-traffic-visibility"
+                          className="text-sm font-medium"
+                        >
+                          Show Traffic Sources
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Breakdown of Shorts feed, search, external links and other traffic sources.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Checkbox
+                        id="yt-demo-visibility"
+                        checked={showBrandDemographics}
+                        onCheckedChange={(checked) =>
+                          setShowBrandDemographics(!!checked)
+                        }
+                      />
+                      <div>
+                        <Label
+                          htmlFor="yt-demo-visibility"
+                          className="text-sm font-medium"
+                        >
+                          Show Demographics
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Age groups, gender split and top countries for each submission.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

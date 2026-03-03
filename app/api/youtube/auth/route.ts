@@ -1,4 +1,4 @@
-import { createOAuthClient } from '@/lib/youtube-api';
+import { createOAuthClient, getAuthUrl } from '@/lib/youtube-api';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto'; // Import crypto for generating random state
 
@@ -15,25 +15,10 @@ export async function GET(request: NextRequest) {
     // Generate a secure random state value
     const state = crypto.randomBytes(16).toString('hex');
 
-    // Define all required scopes for full YouTube integration
-    const scopes = [
-      'https://www.googleapis.com/auth/youtube.readonly',      // Read access to YouTube data
-    ];
-      // 'https://www.googleapis.com/auth/youtube.force-ssl',     // SSL access
-      // 'https://www.googleapis.com/auth/youtubepartner',        // Access to YouTube Content Owner features
-      // 'https://www.googleapis.com/auth/youtube.channel-memberships.creator', // Access to channel memberships
-      // 'https://www.googleapis.com/auth/youtube.upload'         // Upload access (if needed in future)
-
-    // Generate auth URL with explicit parameters to force consent screen
-    const authUrl = oauth2Client.generateAuthUrl({
-      access_type: 'offline',           // Get refresh token for long-term access
-      scope: scopes,
-      // Force consent screen - this ensures users see YouTube permission screen
-      // even if they've granted access before
-      prompt: 'consent',
-      // Don't include previously granted scopes - force fresh consent
+    // Generate auth URL — scopes are defined once in getAuthUrl (lib/youtube-api.ts)
+    const authUrl = await getAuthUrl(oauth2Client, {
+      state,
       include_granted_scopes: false,
-      state: state                      // Pass the RANDOM state value
     });
     
     // Log the generated URL for debugging

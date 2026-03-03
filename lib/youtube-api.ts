@@ -29,19 +29,29 @@ export async function createOAuthClient(
   return oauth2Client;
 }
 
-export async function getAuthUrl(oauth2Client: any) {
+export async function getAuthUrl(
+  oauth2Client: any,
+  extras?: { state?: string; include_granted_scopes?: boolean }
+) {
   if (!isNode) {
     throw new Error('This function can only be used in a server environment');
   }
-  
+
   return oauth2Client.generateAuthUrl({
     access_type: 'offline',
-    scope: ['https://www.googleapis.com/auth/youtube.readonly'],
-    prompt: 'consent' // Force consent screen to always get a refresh token
+    scope: [
+      'https://www.googleapis.com/auth/youtube.readonly',
+      'https://www.googleapis.com/auth/yt-analytics.readonly',
+    ],
+    prompt: 'consent',
+    ...extras,
   });
 }
 
-export async function getUserVideos(accessToken: string) {
+export async function getUserVideos(
+  accessToken: string,
+  pageToken?: string
+): Promise<{ videos: any[]; nextPageToken: string | null }> {
   if (!isNode) {
     throw new Error('This function can only be used in a server environment');
   }
@@ -63,35 +73,41 @@ export async function getUserVideos(accessToken: string) {
     throw new Error('No uploads playlist found for the channel.');
   }
 
-  // Get videos from the uploads playlist
-  const videosResponse = await youtube.playlistItems.list({
-    part: ['snippet', 'contentDetails'], // contentDetails contains videoId
+  // Fetch one page of 50 videos from the uploads playlist
+  const playlistParams: any = {
+    part: ['snippet', 'contentDetails'],
     playlistId: uploadsPlaylistId,
-    maxResults: 50, // Fetch up to 50 items for client-side pagination
-    access_token: accessToken
-  });
+    maxResults: 50,
+    access_token: accessToken,
+  };
+  if (pageToken) {
+    playlistParams.pageToken = pageToken;
+  }
 
+  const videosResponse = await youtube.playlistItems.list(playlistParams);
+
+  const nextPageToken = videosResponse.data.nextPageToken ?? null;
   const videoItems = videosResponse.data.items?.filter(item => item.contentDetails?.videoId);
 
   if (!videoItems || videoItems.length === 0) {
-    return []; // Return empty array if no video items found
+    return { videos: [], nextPageToken };
   }
   
   const videoIds = videoItems.map(item => item.contentDetails!.videoId) as string[];
 
   // Get detailed statistics and status for each video
   const videoDetailsResponse = await youtube.videos.list({
-    part: ['statistics', 'snippet', 'status'], // Ensure status is fetched
+    part: ['statistics', 'snippet', 'status'],
     id: videoIds,
     access_token: accessToken
   });
 
-  // Filter for public videos and then format the response
+  // Filter for public videos only
   const publicVideos = videoDetailsResponse.data.items?.filter(
     (video) => video.status?.privacyStatus === 'public'
   );
 
-  return publicVideos?.map((video) => ({
+  const videos = publicVideos?.map((video) => ({
     id: { videoId: video.id! }, 
     snippet: {
       title: video.snippet?.title || undefined,
@@ -105,6 +121,8 @@ export async function getUserVideos(accessToken: string) {
     },
     statistics: video.statistics 
   })) || [];
+
+  return { videos, nextPageToken };
 }
 
 export async function getVideoStats(videoId: string, accessToken: string) {

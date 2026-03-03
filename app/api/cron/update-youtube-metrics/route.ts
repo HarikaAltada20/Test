@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { google } from "googleapis";
 import { refreshAccessToken, extractYoutubeId } from "@/lib/youtube-api";
+import {
+  getVideoAnalytics,
+  computeBotScore,
+  isYouTubeShort,
+  getDefaultAnalyticsStartDate,
+} from "@/lib/youtube-analytics";
 
 // Type definition for the youtube_account JSON object
 type YouTubeAccount = {
@@ -209,7 +215,9 @@ async function handleTokenRefresh(
   }
 }
 
-// Fetch and process YouTube stats
+// Fetch and process YouTube stats (Data API v3 only — basic metrics).
+// Advanced analytics (watch time, demographics, traffic sources, bot score)
+// are fetched on-demand via /api/youtube/refresh-detailed-analytics.
 async function fetchYouTubeStats(
   creator: any,
   videoIds: string[],
@@ -219,6 +227,7 @@ async function fetchYouTubeStats(
   const updates: SubmissionUpdate[] = [];
   const youtube = google.youtube("v3");
   const chunks = chunkArray(videoIds, 50);
+  const now = new Date().toISOString();
 
   for (const chunk of chunks) {
     try {
@@ -232,23 +241,61 @@ async function fetchYouTubeStats(
 
       for (const video of videoStats) {
         const stats = video.statistics!;
-        const youtubeMetrics = {
-          views: parseInt(stats.viewCount || "0", 10),
-          likes: parseInt(stats.likeCount || "0", 10),
-          comments: parseInt(stats.commentCount || "0", 10),
-        };
+        const rawViews = parseInt(stats.viewCount || "0", 10);
+        const rawLikes = parseInt(stats.likeCount || "0", 10);
+        const rawComments = parseInt(stats.commentCount || "0", 10);
 
         const matchingSubmissions = submissionsByCreator[creator.id].filter(
           (s: any) => s.video_id === video.id
         );
 
-        matchingSubmissions.forEach((sub: any) => {
+        for (const sub of matchingSubmissions) {
+          // CRITICAL: Read existing other_stats.youtube so we never wipe on-demand data.
+          // Daily cron only updates views/likes/comments (Data API v3). Core analytics,
+          // traffic_sources, and demographics are fetched on-demand by admin; we must
+          // carry them forward so the daily run does not remove them.
+          const existingYT = (sub.other_stats?.youtube || sub.other_stats || {}) as Record<string, any>;
+
+          const youtubeMetrics: Record<string, any> = {
+            views: rawViews,
+            likes: rawLikes,
+            comments: rawComments,
+            // Carry forward previously fetched analytics data if it exists
+            estimated_minutes_watched:
+              existingYT.estimated_minutes_watched || undefined,
+            avg_view_duration_seconds:
+              existingYT.avg_view_duration_seconds || undefined,
+            avg_view_percentage: existingYT.avg_view_percentage || undefined,
+            engaged_views: existingYT.engaged_views || undefined,
+            dislikes: existingYT.dislikes || undefined,
+            shares: existingYT.shares || undefined,
+            subscribers_gained: existingYT.subscribers_gained || undefined,
+            subscribers_lost: existingYT.subscribers_lost || undefined,
+            videos_added_to_playlists:
+              existingYT.videos_added_to_playlists || undefined,
+            videos_removed_from_playlists:
+              existingYT.videos_removed_from_playlists || undefined,
+            traffic_sources: existingYT.traffic_sources || undefined,
+            last_traffic_update: existingYT.last_traffic_update || undefined,
+            demographics: existingYT.demographics || undefined,
+            last_demographics_update: existingYT.last_demographics_update || undefined,
+            bot_score: existingYT.bot_score ?? undefined,
+            bot_flags: existingYT.bot_flags || undefined,
+            analytics_needs_reauth: existingYT.analytics_needs_reauth || false,
+            last_basic_update: now,
+          };
+
+          // Strip undefined keys to keep JSONB clean
+          const cleanMetrics = Object.fromEntries(
+            Object.entries(youtubeMetrics).filter(([, v]) => v !== undefined)
+          );
+
           updates.push({
             id: sub.id,
-            views: youtubeMetrics.views,
-            newOtherStats: { youtube: youtubeMetrics },
+            views: rawViews,
+            newOtherStats: { youtube: cleanMetrics },
           });
-        });
+        }
       }
     } catch (error: any) {
       console.error(
@@ -347,7 +394,7 @@ export async function GET(request: Request) {
     // Fetch submissions to update (only from active contests)
     let submissionsQuery = supabaseAdmin
       .from("submissions")
-      .select("id, creator_id, content_link, views, contest_id")
+      .select("id, creator_id, content_link, views, contest_id, created_at, other_stats")
       .in("status", ["verified", "pending"])
       .not("content_link", "is", null);
 
