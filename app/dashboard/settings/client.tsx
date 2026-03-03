@@ -1966,7 +1966,7 @@ export default function SettingsPage({
             return true;
           })
           .map((item) => {
-            const Icon = item.icon;
+            const Icon = item.icon ?? FileText;
             if (item.isLink && item.href) {
               return (
                 <div
