@@ -59,8 +59,9 @@ import { cn } from "@/lib/utils";
 //   - 30 days: SUBMISSION_WINDOW_VALUE = 30, SUBMISSION_WINDOW_UNIT = 'day'
 //   - 48 hours: SUBMISSION_WINDOW_VALUE = 48, SUBMISSION_WINDOW_UNIT = 'hour'
 //   - 1 week: SUBMISSION_WINDOW_VALUE = 1, SUBMISSION_WINDOW_UNIT = 'week'
+// Adjust the submission window value
 const SUBMISSION_WINDOW_VALUE: number = 2;
-const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "day";
+const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "years";
 
 // Auto-generate display text and handle singular/plural forms
 const IS_SUBMISSION_WINDOW_SINGULAR: boolean = SUBMISSION_WINDOW_VALUE === 1;
@@ -201,6 +202,8 @@ export default function SubmitContentPage({
   const [youtubeAccount, setYoutubeAccount] = useState<any>(null);
   const [userVideos, setUserVideos] = useState<YouTubeVideo[]>([]);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
+  const [isLoadingMoreVideos, setIsLoadingMoreVideos] = useState(false);
+  const [youtubeNextPageToken, setYoutubeNextPageToken] = useState<string | null>(null);
 
   // Instagram specific state
   const [instagramAccount, setInstagramAccount] = useState<any>(null); // Holds creator_profiles.instagram_account
@@ -758,21 +761,19 @@ export default function SubmitContentPage({
   };
 
   const fetchYouTubeVideos = async () => {
-    // Removed pageToken parameter
     if (contestPlatform !== "youtube") return;
     setIsLoadingVideos(true);
     setError(null);
-    setLibraryMessage(null); // Clear previous library message
+    setLibraryMessage(null);
+    setYoutubeNextPageToken(null);
 
     const performFetch = async () => {
       try {
-        // Reverted: No longer sending pagination query parameters
         const response = await fetch(`/api/youtube/videos`);
-        const data = await response.json(); // Expects { videos: [...], nextPageToken?: string, prevPageToken?: string, totalResults?: number }
+        const data = await response.json();
 
         if (!response.ok) {
           if (response.status === 401) {
-            // Token expired - try automatic refresh
             const refreshSuccess = await autoRefreshYouTubeTokenAndRetry(
               performFetch
             );
@@ -781,24 +782,24 @@ export default function SubmitContentPage({
               setError(
                 "Your YouTube connection has expired. Please re-connect your YouTube account."
               );
-              setUserVideos([]); // Clear videos on error
-              setYoutubeCurrentPage(1); // Reset page
+              setUserVideos([]);
+              setYoutubeCurrentPage(1);
             }
             return;
           } else {
-            // Use error from response if available, otherwise a default
             throw new Error(data.error || "Failed to load videos");
           }
         }
 
-        const allFetchedVideos: YouTubeVideo[] = data.videos || []; // Ensure type
+        const allFetchedVideos: YouTubeVideo[] = data.videos || [];
         const filteredVideos = allFetchedVideos.filter(
           (video: YouTubeVideo) =>
             video.snippet?.publishedAt &&
             !isContentTooOld(video.snippet.publishedAt)
         );
-        setUserVideos(filteredVideos); // Set userVideos with the filtered list
-        setYoutubeCurrentPage(1); // Reset to first page on new data load
+        setUserVideos(filteredVideos);
+        setYoutubeCurrentPage(1);
+        setYoutubeNextPageToken(data.nextPageToken || null);
 
         if (
           data.videos &&
@@ -822,6 +823,46 @@ export default function SubmitContentPage({
     };
 
     await performFetch();
+  };
+
+  // Load next page of YouTube videos and append to existing list
+  const loadMoreYouTubeVideos = async () => {
+    if (!youtubeNextPageToken || isLoadingMoreVideos) return;
+    setIsLoadingMoreVideos(true);
+
+    try {
+      const response = await fetch(
+        `/api/youtube/videos?pageToken=${encodeURIComponent(youtubeNextPageToken)}`
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load more videos");
+      }
+
+      const newVideos: YouTubeVideo[] = (data.videos || []).filter(
+        (video: YouTubeVideo) =>
+          video.snippet?.publishedAt &&
+          !isContentTooOld(video.snippet.publishedAt)
+      );
+
+      setUserVideos((prev) => {
+        // Deduplicate by videoId in case of overlap
+        const existingIds = new Set(prev.map((v) => v.id.videoId));
+        const unique = newVideos.filter((v) => !existingIds.has(v.id.videoId));
+        return [...prev, ...unique];
+      });
+      setYoutubeNextPageToken(data.nextPageToken || null);
+    } catch (err: any) {
+      console.error("Error loading more YouTube videos:", err);
+      toast({
+        title: "Failed to load more videos",
+        description: err.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingMoreVideos(false);
+    }
   };
 
   // Handle YouTube reconnection
@@ -2207,7 +2248,7 @@ export default function SubmitContentPage({
 
             throw new Error(
               mediaData.error?.message ||
-                "Failed to fetch Instagram media IDs using Business Account ID"
+              "Failed to fetch Instagram media IDs using Business Account ID"
             );
           }
 
@@ -2991,6 +3032,35 @@ export default function SubmitContentPage({
                             );
                           })}
                         </div>
+
+                        {/* Load More button — only on last page, fetches next 50 from YouTube API */}
+                        {youtubeNextPageToken && youtubeCurrentPage === totalYoutubePages && (
+                          <div className="flex justify-center mt-4 pb-2">
+                            <Button
+                              variant="outline"
+                              onClick={loadMoreYouTubeVideos}
+                              disabled={isLoadingMoreVideos}
+                              className={cn(
+                                "px-6 py-2 font-medium border-2",
+                                isDark
+                                  ? "border-[#C9A7FF] text-[#C9A7FF] hover:bg-[#C9A7FF] hover:text-black"
+                                  : "border-[#7F39EC] text-[#7F39EC] hover:bg-[#7F39EC] hover:text-white"
+                              )}
+                            >
+                              {isLoadingMoreVideos ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                  Loading...
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  Load More Videos
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        )}
                       </>
                     )}
                   </TabsContent>
