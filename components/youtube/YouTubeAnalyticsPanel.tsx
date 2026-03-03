@@ -60,6 +60,9 @@ interface Props {
   metrics: YouTubeMetrics;
   isDark?: boolean;
   children: React.ReactNode; // the trigger element
+  showCore?: boolean;
+  showTraffic?: boolean;
+  showDemographics?: boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -222,7 +225,14 @@ function TrafficSourceBar({
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export function YouTubeAnalyticsPanel({ metrics, isDark, children }: Props) {
+export function YouTubeAnalyticsPanel({
+  metrics,
+  isDark,
+  children,
+  showCore = true,
+  showTraffic = true,
+  showDemographics = true,
+}: Props) {
   const hasCore =
     (metrics.estimated_minutes_watched ?? 0) > 0 ||
     (metrics.avg_view_percentage ?? 0) > 0 ||
@@ -292,15 +302,6 @@ export function YouTubeAnalyticsPanel({ metrics, isDark, children }: Props) {
           ) : null}
         </div>
 
-        <p
-          className={cn(
-            "mb-3 text-[10px]",
-            isDark ? "text-slate-500" : "text-slate-400"
-          )}
-        >
-          Analytics window: last {YT_ANALYTICS_DEFAULT_WINDOW_DAYS} days
-        </p>
-
         {/* Bot flags */}
         {(metrics.bot_flags?.length ?? 0) > 0 && (
           <div className="mb-3 rounded-md bg-red-50 border border-red-200 p-2 space-y-0.5">
@@ -314,7 +315,7 @@ export function YouTubeAnalyticsPanel({ metrics, isDark, children }: Props) {
         )}
 
         {/* ── Core Analytics ──────────────────────────────────── */}
-        {hasCore ? (
+        {hasCore && showCore ? (
           <div className="mb-4">
             <SectionHeader icon={<Eye className="h-3.5 w-3.5" />} title="Core Analytics" />
             <div className={cn("rounded-md border px-3 py-1 divide-y", isDark ? "border-slate-700 divide-slate-700" : "border-slate-100 divide-slate-100")}>
@@ -413,7 +414,7 @@ export function YouTubeAnalyticsPanel({ metrics, isDark, children }: Props) {
         {/* ── Traffic Sources ─────────────────────────────────── */}
         <div className="mb-4">
           <SectionHeader icon={<BarChart2 className="h-3.5 w-3.5" />} title="Traffic Sources" />
-          {hasTraffic ? (
+          {hasTraffic && showTraffic ? (
             <div>
               {sortedTraffic.map(([source, pct]) => (
                 <TrafficSourceBar key={source} source={source} pct={pct} />
@@ -432,7 +433,7 @@ export function YouTubeAnalyticsPanel({ metrics, isDark, children }: Props) {
         {/* ── Demographics ────────────────────────────────────── */}
         <div>
           <SectionHeader icon={<Users className="h-3.5 w-3.5" />} title="Demographics" />
-          {hasDemographics ? (
+          {hasDemographics && showDemographics ? (
             <div>
               {/* Gender */}
               {genders.length > 0 && (
@@ -512,6 +513,9 @@ export function YouTubeAnalyticsPanel({ metrics, isDark, children }: Props) {
           <span>Traffic: {timeAgo(metrics.last_traffic_update)}</span>
           <span>Demo: {timeAgo(metrics.last_demographics_update)}</span>
         </div>
+        <p className={cn("mt-2 text-[10px]", isDark ? "text-slate-500" : "text-slate-400")}>
+          Max. analytics window: last {YT_ANALYTICS_DEFAULT_WINDOW_DAYS} days
+        </p>
       </PopoverContent>
     </Popover>
   );

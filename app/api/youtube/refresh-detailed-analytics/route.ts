@@ -305,6 +305,29 @@ export async function POST(request: Request) {
     }
   }
 
+  // Update contest-level last-updated timestamps for contest-wide refreshes
+  if (contestId) {
+    const { data: contestRow } = await supabaseAdmin
+      .from("contests")
+      .select("contest_based_details")
+      .eq("id", contestId)
+      .maybeSingle();
+
+    const existing = (contestRow?.contest_based_details as Record<string, unknown>) || {};
+    const existingYt = (existing.youtube_metrics_last_updated as Record<string, string>) || {};
+    const now = new Date().toISOString();
+    const nextYt = { ...existingYt };
+    if (type === "core" || type === "all") nextYt.core = now;
+    if (type === "traffic" || type === "both" || type === "all") nextYt.traffic = now;
+    if (type === "demographics" || type === "both" || type === "all") nextYt.demographics = now;
+    await supabaseAdmin
+      .from("contests")
+      .update({
+        contest_based_details: { ...existing, youtube_metrics_last_updated: nextYt },
+      })
+      .eq("id", contestId);
+  }
+
   return NextResponse.json({
     success: true,
     updated,

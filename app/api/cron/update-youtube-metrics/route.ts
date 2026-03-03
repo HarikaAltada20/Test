@@ -215,7 +215,9 @@ async function handleTokenRefresh(
   }
 }
 
-// Fetch and process YouTube stats (Data API v3 + Analytics API)
+// Fetch and process YouTube stats (Data API v3 only — basic metrics).
+// Advanced analytics (watch time, demographics, traffic sources, bot score)
+// are fetched on-demand via /api/youtube/refresh-detailed-analytics.
 async function fetchYouTubeStats(
   creator: any,
   videoIds: string[],
@@ -248,80 +250,40 @@ async function fetchYouTubeStats(
         );
 
         for (const sub of matchingSubmissions) {
-          // Preserve previously fetched traffic/demographics data
+          // CRITICAL: Read existing other_stats.youtube so we never wipe on-demand data.
+          // Daily cron only updates views/likes/comments (Data API v3). Core analytics,
+          // traffic_sources, and demographics are fetched on-demand by admin; we must
+          // carry them forward so the daily run does not remove them.
           const existingYT = (sub.other_stats?.youtube || sub.other_stats || {}) as Record<string, any>;
 
-          // Start with the base Data API metrics
           const youtubeMetrics: Record<string, any> = {
             views: rawViews,
             likes: rawLikes,
             comments: rawComments,
-            // Carry forward on-demand data if it exists
+            // Carry forward previously fetched analytics data if it exists
+            estimated_minutes_watched:
+              existingYT.estimated_minutes_watched || undefined,
+            avg_view_duration_seconds:
+              existingYT.avg_view_duration_seconds || undefined,
+            avg_view_percentage: existingYT.avg_view_percentage || undefined,
+            engaged_views: existingYT.engaged_views || undefined,
+            dislikes: existingYT.dislikes || undefined,
+            shares: existingYT.shares || undefined,
+            subscribers_gained: existingYT.subscribers_gained || undefined,
+            subscribers_lost: existingYT.subscribers_lost || undefined,
+            videos_added_to_playlists:
+              existingYT.videos_added_to_playlists || undefined,
+            videos_removed_from_playlists:
+              existingYT.videos_removed_from_playlists || undefined,
             traffic_sources: existingYT.traffic_sources || undefined,
             last_traffic_update: existingYT.last_traffic_update || undefined,
             demographics: existingYT.demographics || undefined,
             last_demographics_update: existingYT.last_demographics_update || undefined,
+            bot_score: existingYT.bot_score ?? undefined,
+            bot_flags: existingYT.bot_flags || undefined,
             analytics_needs_reauth: existingYT.analytics_needs_reauth || false,
             last_basic_update: now,
           };
-
-          // --- Call 1: Core Analytics via YouTube Analytics API ---
-          try {
-            // Use a configurable rolling window (see YT_ANALYTICS_DEFAULT_WINDOW_DAYS)
-            // so non-technical users can adjust how much history is considered.
-            const startDate = getDefaultAnalyticsStartDate();
-
-            const analytics = await getVideoAnalytics(
-              accessToken,
-              sub.video_id,
-              startDate
-            );
-
-            if (analytics) {
-              Object.assign(youtubeMetrics, {
-                estimated_minutes_watched: analytics.estimated_minutes_watched,
-                avg_view_duration_seconds: analytics.avg_view_duration_seconds,
-                avg_view_percentage: analytics.avg_view_percentage,
-                engaged_views: analytics.engaged_views,
-                // Override likes/comments from Analytics API (more accurate for the date range)
-                likes: analytics.likes || rawLikes,
-                dislikes: analytics.dislikes,
-                comments: analytics.comments || rawComments,
-                shares: analytics.shares,
-                subscribers_gained: analytics.subscribers_gained,
-                subscribers_lost: analytics.subscribers_lost,
-                videos_added_to_playlists: analytics.videos_added_to_playlists,
-                videos_removed_from_playlists: analytics.videos_removed_from_playlists,
-              });
-
-              // Compute bot score with core analytics (traffic sources added when fetched on-demand)
-              const { score, flags } = computeBotScore(
-                analytics,
-                rawViews,
-                youtubeMetrics.traffic_sources || null,
-                isYouTubeShort(sub.content_link || "")
-              );
-              youtubeMetrics.bot_score = score;
-              youtubeMetrics.bot_flags = flags;
-              youtubeMetrics.analytics_needs_reauth = false;
-            }
-          } catch (analyticsError: any) {
-            const code = analyticsError?.code ?? analyticsError?.status;
-            // 403 = insufficient scope, 401 = invalid/expired token missing scope
-            if (code === 403 || code === 401) {
-              youtubeMetrics.analytics_needs_reauth = true;
-              console.warn(
-                `Analytics API auth error (${code}) for creator ${creator.id} — ` +
-                `creator must reconnect YouTube account with yt-analytics.readonly scope`
-              );
-            } else {
-              console.error(
-                `Analytics API error for video ${sub.video_id}:`,
-                analyticsError?.message,
-                analyticsError?.errors
-              );
-            }
-          }
 
           // Strip undefined keys to keep JSONB clean
           const cleanMetrics = Object.fromEntries(

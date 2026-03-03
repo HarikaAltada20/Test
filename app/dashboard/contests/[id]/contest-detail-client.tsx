@@ -63,6 +63,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
@@ -129,8 +131,44 @@ import {
   Tag,
   Star,
   Globe,
+  Columns2,
 } from "lucide-react";
 import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
+
+// YouTube submissions table: configurable column ids (for "Modify headers" feature)
+const YT_TABLE_COLUMNS = [
+  { id: "views", label: "Views" },
+  { id: "likes", label: "Likes" },
+  { id: "comments", label: "Comments" },
+  { id: "dislikes", label: "Dislikes" },
+  { id: "shares", label: "Shares" },
+  { id: "avg_view_pct", label: "Avg View %" },
+  { id: "watch_time", label: "Watch Time" },
+  { id: "avg_duration", label: "Avg Duration" },
+  { id: "engaged_views", label: "Engaged Views" },
+  { id: "subs_gained", label: "Subs Gained" },
+  { id: "bot_score", label: "Bot Score" },
+  { id: "analytics", label: "Analytics" },
+  { id: "top_traffic_source", label: "Top Traffic Source" },
+  { id: "expected_reward", label: "Expected Reward" },
+  { id: "reward_granted", label: "Reward Granted" },
+  { id: "status", label: "Status" },
+  { id: "submitted", label: "Submitted" },
+] as const;
+// Minimal labels for traffic source column (top source %)
+const YT_TRAFFIC_SOURCE_LABELS: Record<string, string> = {
+  SHORTS: "Shorts", YT_SEARCH: "YouTube Search", RELATED_VIDEO: "Related",
+  YT_CHANNEL: "Channel", SUBSCRIBER: "Subscriber", EXT_URL: "External",
+  NO_LINK_OTHER: "Direct", YT_OTHER_PAGE: "Other YT", PLAYLIST: "Playlist",
+  NOTIFICATION: "Notifications", END_SCREEN: "End Screen", HASHTAGS: "Hashtags",
+  SOUND_PAGE: "Sound", NO_LINK_EMBEDDED: "Embedded",
+};
+const YT_COLUMN_IDS = YT_TABLE_COLUMNS.map((c) => c.id);
+const YT_VISIBLE_COLUMNS_STORAGE_KEY = "goviral_yt_visible_columns";
+// Column ids that require "Show Core Analytics" (hidden in customize modal when brand doesn't have access)
+const YT_CORE_COLUMN_IDS = ["shares", "avg_view_pct", "watch_time", "avg_duration", "engaged_views", "dislikes", "subs_gained", "bot_score", "analytics"];
+// Column ids that require "Show Traffic Sources" (hidden in customize modal when brand doesn't have access)
+const YT_TRAFFIC_COLUMN_IDS = ["top_traffic_source"];
 
 // --- Local Type Definitions ---
 interface Contest {
@@ -384,6 +422,28 @@ export default function ContestDetailClient({
     isTwitterPlatform &&
     currentContest?.contest_format === "text_image";
 
+  // YouTube analytics visibility (brand-side per contest)
+  const ytVisibility =
+    (currentContest.contest_based_details as any)?.youtube_analytics_visibility ||
+    {};
+  const brandCoreAllowed = ytVisibility.show_core_to_brand ?? true;
+  const brandTrafficAllowed = ytVisibility.show_traffic_to_brand ?? true;
+  const brandDemoAllowed = ytVisibility.show_demographics_to_brand ?? true;
+
+  const canSeeCore = isAdminView || brandCoreAllowed;
+  const canSeeTraffic = isAdminView || brandTrafficAllowed;
+  const canSeeDemo = isAdminView || brandDemoAllowed;
+
+  // Columns shown in "Modify headers" modal: hide core/traffic options when brand doesn't have access
+  const ytColumnsAvailableInModal = useMemo(() => {
+    return YT_TABLE_COLUMNS.filter((col) => {
+      if (YT_CORE_COLUMN_IDS.includes(col.id)) return canSeeCore;
+      if (YT_TRAFFIC_COLUMN_IDS.includes(col.id)) return canSeeTraffic;
+      return true;
+    });
+  }, [canSeeCore, canSeeTraffic]);
+  const ytAvailableColumnIds = useMemo(() => ytColumnsAvailableInModal.map((c) => c.id), [ytColumnsAvailableInModal]);
+
   // Refresh metrics state
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
 
@@ -391,6 +451,28 @@ export default function ContestDetailClient({
   const [isRefreshingTraffic, setIsRefreshingTraffic] = useState(false);
   const [isRefreshingDemographics, setIsRefreshingDemographics] = useState(false);
   const [isRefreshingCore, setIsRefreshingCore] = useState(false);
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  // Admin controls modal (YouTube analytics visibility for brand)
+  const [adminControlsModalOpen, setAdminControlsModalOpen] = useState(false);
+  const [adminControlsSaving, setAdminControlsSaving] = useState(false);
+  const [modalShowCore, setModalShowCore] = useState(true);
+  const [modalShowTraffic, setModalShowTraffic] = useState(true);
+  const [modalShowDemo, setModalShowDemo] = useState(true);
+
+  // Sync admin controls modal state from contest when opening
+  useEffect(() => {
+    if (!adminControlsModalOpen || !currentContest) return;
+    const vis =
+      currentContest.contest_based_details as Record<string, unknown> | undefined;
+    const yt =
+      (vis?.youtube_analytics_visibility as
+        | { show_core_to_brand?: boolean; show_traffic_to_brand?: boolean; show_demographics_to_brand?: boolean }
+        | undefined);
+    setModalShowCore(yt?.show_core_to_brand !== false);
+    setModalShowTraffic(yt?.show_traffic_to_brand !== false);
+    setModalShowDemo(yt?.show_demographics_to_brand !== false);
+  }, [adminControlsModalOpen, currentContest?.id]);
+
   // Track per-submission loading state for detailed analytics
   const [loadingDetailedAnalytics, setLoadingDetailedAnalytics] = useState<
     Record<string, "core" | "traffic" | "demographics" | "both" | "all" | null>
@@ -519,6 +601,9 @@ export default function ContestDetailClient({
   const [selectedCreatorForModal, setSelectedCreatorForModal] = useState<
     string | null
   >(null);
+  // YouTube table: which columns are visible (admin/brand can customize)
+  const [ytVisibleColumns, setYtVisibleColumns] = useState<string[]>(YT_COLUMN_IDS as unknown as string[]);
+  const [ytColumnsModalOpen, setYtColumnsModalOpen] = useState(false);
   const [customizableHeaders, setCustomizableHeaders] = useState({
     averageViews: false,
     averageLikes: false,
@@ -550,6 +635,29 @@ export default function ContestDetailClient({
   const cooldownInfo = isAdminView
     ? getMetricsRefreshCooldownInfoAdmin(currentContest.last_metrics_updated)
     : getMetricsRefreshCooldownInfoBrand(currentContest.last_metrics_updated);
+
+  // Hydrate YouTube visible columns from localStorage (client-only)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(YT_VISIBLE_COLUMNS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as string[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const valid = parsed.filter((id) => YT_COLUMN_IDS.includes(id as any));
+          if (valid.length > 0) setYtVisibleColumns(valid);
+        }
+      }
+    } catch (_) {}
+  }, []);
+
+  const setYtVisibleColumnsAndPersist = useCallback((next: string[]) => {
+    setYtVisibleColumns(next);
+    try {
+      if (typeof window !== "undefined")
+        localStorage.setItem(YT_VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(next));
+    } catch (_) {}
+  }, []);
 
   // Helper function to get status for both Twitter tweets and regular submissions
   const getStatus = (submission: Submission) => {
@@ -3456,6 +3564,48 @@ export default function ContestDetailClient({
       } else {
         setLoadingDetailedAnalytics((prev) => ({ ...prev, [key]: null }));
       }
+    }
+  };
+
+  // YouTube admin: refresh basic + core + traffic + demographics in one go, then reload once
+  const handleRefreshAllMetrics = async () => {
+    if (
+      isRefreshingAll ||
+      isRefreshingMetrics ||
+      isRefreshingCore ||
+      isRefreshingTraffic ||
+      isRefreshingDemographics ||
+      !cooldownInfo.canRefresh
+    )
+      return;
+    setIsRefreshingAll(true);
+    try {
+      const res1 = await fetch(`/api/contests/${contestId}/refresh-metrics`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data1 = await res1.json();
+      if (!res1.ok) throw new Error(data1?.error || "Basic refresh failed");
+      const res2 = await fetch("/api/youtube/refresh-detailed-analytics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "all", contestId }),
+      });
+      const data2 = await res2.json();
+      if (!res2.ok) throw new Error(data2?.error || "Analytics refresh failed");
+      toast({
+        title: "All metrics updated",
+        description: data2?.message || "Basic and detailed analytics refreshed.",
+      });
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (e: any) {
+      toast({
+        title: "Refresh failed",
+        description: e?.message || "Could not refresh all metrics.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshingAll(false);
     }
   };
 
@@ -8903,112 +9053,334 @@ export default function ContestDetailClient({
                         {(() => {
                           const { isDisabled, disabledReason } =
                             getRefreshButtonState();
+                          const isYoutubeAdmin =
+                            isAdminView &&
+                            currentContest.platform?.toLowerCase() === "youtube";
+
+                          if (!isYoutubeAdmin) {
+                            return (
+                              <button
+                                onClick={handleRefreshMetrics}
+                                disabled={isDisabled}
+                                className={cn(
+                                  "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all",
+                                  isDisabled
+                                    ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
+                                    : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
+                                )}
+                                title={
+                                  disabledReason ||
+                                  "Refresh metrics and leaderboard"
+                                }
+                              >
+                                {isRefreshingMetrics ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="h-4 w-4" />
+                                )}
+                                {isRefreshingMetrics
+                                  ? "Updating..."
+                                  : !cooldownInfo.canRefresh
+                                    ? `Wait ${cooldownInfo.remainingMinutes}m`
+                                    : "Refresh Metrics"}
+                              </button>
+                            );
+                          }
+
+                          const ytLast = (currentContest.contest_based_details as Record<string, { core?: string; traffic?: string; demographics?: string }> | undefined)?.youtube_metrics_last_updated || {};
+                          const btnClass = "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm";
+                          const disabledDetail = isRefreshingCore || isRefreshingTraffic || isRefreshingDemographics || isRefreshingAll;
+                          const anyRefreshInProgress = isRefreshingMetrics || disabledDetail;
+                          const basicTs = currentContest.last_metrics_updated;
+                          const ts = [basicTs, ytLast.core, ytLast.traffic, ytLast.demographics].filter(Boolean) as string[];
+                          const oldest = ts.length ? ts.reduce((a, b) => (a < b ? a : b)) : null;
+                          const muteClass = cn("text-xs", isDark ? "text-slate-500" : "text-slate-500");
+
                           return (
-                            <button
-                              onClick={handleRefreshMetrics}
-                              disabled={isDisabled}
-                              className={cn(
-                                "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all",
-                                isDisabled
-                                  ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
-                                  : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
-                              )}
-                              title={
-                                disabledReason ||
-                                "Refresh metrics and leaderboard"
-                              }
-                            >
-                              {isRefreshingMetrics ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <RefreshCw className="h-4 w-4" />
-                              )}
-                              {isRefreshingMetrics
-                                ? "Updating..."
-                                : !cooldownInfo.canRefresh
-                                  ? `Wait ${cooldownInfo.remainingMinutes}m`
-                                  : "Refresh Metrics"}
-                            </button>
+                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-4 w-full">
+                              {/* Section A — Primary actions */}
+                              <div className="flex flex-wrap items-start gap-4">
+                                <div className="flex flex-col items-start gap-1">
+                                  <button
+                                    onClick={handleRefreshMetrics}
+                                    disabled={isDisabled || disabledDetail}
+                                    className={cn(
+                                      "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all",
+                                      isDisabled || disabledDetail
+                                        ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
+                                        : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
+                                    )}
+                                    title={
+                                      disabledReason ||
+                                      "Views, likes, comments from YouTube Data API"
+                                    }
+                                  >
+                                    {isRefreshingMetrics ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="h-4 w-4" />
+                                    )}
+                                    {isRefreshingMetrics
+                                      ? "Updating..."
+                                      : !cooldownInfo.canRefresh
+                                        ? `Wait ${cooldownInfo.remainingMinutes}m`
+                                        : "Refresh Basic Metrics"}
+                                  </button>
+                                  <span className={muteClass}>
+                                    Basic: {currentContest.last_metrics_updated ? formatTimeAgo(currentContest.last_metrics_updated) : "Never"}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col items-start gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={handleRefreshAllMetrics}
+                                    disabled={anyRefreshInProgress || !cooldownInfo.canRefresh}
+                                    className={cn(
+                                      btnClass,
+                                      "bg-[#5A35B8] text-white border-[#5A35B8] hover:bg-[#4a2d99]",
+                                      (anyRefreshInProgress || !cooldownInfo.canRefresh) && "opacity-60 cursor-not-allowed",
+                                    )}
+                                    title="Refresh basic metrics, core analytics, traffic sources, and demographics for all submissions"
+                                  >
+                                    {isRefreshingAll ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="h-3.5 w-3.5" />
+                                    )}
+                                    {isRefreshingAll ? "Refreshing all..." : "Refresh all metrics"}
+                                  </button>
+                                  <span className={muteClass}>
+                                    Last full: {oldest ? formatTimeAgo(oldest) : "Never"}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col items-start gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setAdminControlsModalOpen(true)}
+                                    disabled={anyRefreshInProgress}
+                                    className={cn(
+                                      "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm",
+                                      "border-slate-400 text-slate-600 hover:bg-slate-100 hover:border-slate-500",
+                                      isDark && "text-slate-400 border-slate-500 hover:bg-slate-800 hover:border-slate-400",
+                                      anyRefreshInProgress && "opacity-60 cursor-not-allowed",
+                                    )}
+                                    title="Choose what the brand sees for this campaign"
+                                  >
+                                    <Settings className="h-3.5 w-3.5" />
+                                    Admin controls
+                                  </button>
+                                </div>
+                              </div>
+                              {/* Section B — Detailed analytics */}
+                              <div>
+                                <p className={cn("text-xs font-medium mb-2", isDark ? "text-slate-400" : "text-slate-500")}>
+                                  Detailed analytics
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  <div className="flex flex-col items-start gap-1">
+                                    <button
+                                      onClick={() => handleRefreshDetailedAnalytics("core")}
+                                      disabled={anyRefreshInProgress}
+                                      className={cn(
+                                        btnClass,
+                                        anyRefreshInProgress ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60" : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
+                                      )}
+                                      title="Watch time, avg view %, shares, subscribers, bot score"
+                                    >
+                                      {isRefreshingCore ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BarChart2 className="h-3.5 w-3.5" />}
+                                      {isRefreshingCore ? "Fetching..." : "Refresh Core Analytics"}
+                                    </button>
+                                    <span className={muteClass}>
+                                      Core: {ytLast.core ? formatTimeAgo(ytLast.core) : "Never"}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col items-start gap-1">
+                                    <button
+                                      onClick={() => handleRefreshDetailedAnalytics("traffic")}
+                                      disabled={anyRefreshInProgress}
+                                      className={cn(
+                                        btnClass,
+                                        anyRefreshInProgress ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60" : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
+                                      )}
+                                      title="Traffic source breakdown (used for bot detection)"
+                                    >
+                                      {isRefreshingTraffic ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <TrendingUp className="h-3.5 w-3.5" />}
+                                      {isRefreshingTraffic ? "Fetching..." : "Refresh Traffic Sources"}
+                                    </button>
+                                    <span className={muteClass}>
+                                      Traffic: {ytLast.traffic ? formatTimeAgo(ytLast.traffic) : "Never"}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col items-start gap-1">
+                                    <button
+                                      onClick={() => handleRefreshDetailedAnalytics("demographics")}
+                                      disabled={anyRefreshInProgress}
+                                      className={cn(
+                                        btnClass,
+                                        anyRefreshInProgress ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60" : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
+                                      )}
+                                      title="Audience age/gender breakdown"
+                                    >
+                                      {isRefreshingDemographics ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users className="h-3.5 w-3.5" />}
+                                      {isRefreshingDemographics ? "Fetching..." : "Refresh Demographics data"}
+                                    </button>
+                                    <span className={muteClass}>
+                                      Demographics: {ytLast.demographics ? formatTimeAgo(ytLast.demographics) : "Never"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <p className={cn("mt-3 pt-3 border-t text-[10px]", isDark ? "text-slate-500 border-slate-700" : "text-slate-400 border-slate-200")}>
+                                Max. analytics window: last {YT_ANALYTICS_DEFAULT_WINDOW_DAYS} days
+                              </p>
+                            </div>
                           );
                         })()}
-                        {/* YouTube-only on-demand analytics buttons (admin only) */}
-                        {isAdminView &&
-                          currentContest.platform?.toLowerCase() === "youtube" && (
-                            <>
-                              <button
-                                onClick={() =>
-                                  handleRefreshDetailedAnalytics("core")
-                                }
-                                disabled={isRefreshingCore || isRefreshingTraffic || isRefreshingDemographics}
-                                className={cn(
-                                  "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm",
-                                  isRefreshingCore
-                                    ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
-                                    : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
-                                )}
-                                title="Fetch core analytics (watch time, shares, subscribers…) for all submissions"
-                              >
-                                {isRefreshingCore ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <BarChart2 className="h-3.5 w-3.5" />
-                                )}
-                                {isRefreshingCore ? "Fetching..." : "Core Analytics"}
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleRefreshDetailedAnalytics("traffic")
-                                }
-                                disabled={isRefreshingCore || isRefreshingTraffic || isRefreshingDemographics}
-                                className={cn(
-                                  "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm",
-                                  isRefreshingTraffic
-                                    ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
-                                    : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
-                                )}
-                                title="Fetch traffic source breakdown for all submissions (bot detection)"
-                              >
-                                {isRefreshingTraffic ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <TrendingUp className="h-3.5 w-3.5" />
-                                )}
-                                {isRefreshingTraffic ? "Fetching..." : "Traffic Sources"}
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleRefreshDetailedAnalytics("demographics")
-                                }
-                                disabled={isRefreshingCore || isRefreshingTraffic || isRefreshingDemographics}
-                                className={cn(
-                                  "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm",
-                                  isRefreshingDemographics
-                                    ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
-                                    : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
-                                )}
-                                title="Fetch audience demographics for all submissions (brand insights)"
-                              >
-                                {isRefreshingDemographics ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Users className="h-3.5 w-3.5" />
-                                )}
-                                {isRefreshingDemographics ? "Fetching..." : "Demographics"}
-                              </button>
-                              <span
-                                className={cn(
-                                  "text-[10px] text-slate-400",
-                                  isDark && "text-slate-500"
-                                )}
-                              >
-                                Analytics window: last {YT_ANALYTICS_DEFAULT_WINDOW_DAYS} days
-                              </span>
-                            </>
-                          )}
                       </div>
                     </div>
                   </CardContent>
                 </div>
+
+                {/* Admin controls modal: YouTube analytics visibility for brand */}
+                <Dialog
+                  open={adminControlsModalOpen}
+                  onOpenChange={setAdminControlsModalOpen}
+                >
+                  <DialogContent className="sm:max-w-[420px]">
+                    <DialogHeader>
+                      <DialogTitle>
+                        YouTube analytics visibility (Brand view)
+                      </DialogTitle>
+                      <DialogDescription>
+                        Choose which analytics sections the advertiser can see for this campaign.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="admin-show-core"
+                          checked={modalShowCore}
+                          onCheckedChange={(v) =>
+                            setModalShowCore(v === true)
+                          }
+                        />
+                        <Label
+                          htmlFor="admin-show-core"
+                          className="text-sm font-medium cursor-pointer"
+                        >
+                          Show Core Analytics to brand
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="admin-show-traffic"
+                          checked={modalShowTraffic}
+                          onCheckedChange={(v) =>
+                            setModalShowTraffic(v === true)
+                          }
+                        />
+                        <Label
+                          htmlFor="admin-show-traffic"
+                          className="text-sm font-medium cursor-pointer"
+                        >
+                          Show Traffic Sources to brand
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="admin-show-demo"
+                          checked={modalShowDemo}
+                          onCheckedChange={(v) =>
+                            setModalShowDemo(v === true)
+                          }
+                        />
+                        <Label
+                          htmlFor="admin-show-demo"
+                          className="text-sm font-medium cursor-pointer"
+                        >
+                          Show Demographics to brand
+                        </Label>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => setAdminControlsModalOpen(false)}
+                        disabled={adminControlsSaving}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          if (
+                            !currentContest?.id ||
+                            adminControlsSaving
+                          )
+                            return;
+                          setAdminControlsSaving(true);
+                          try {
+                            const existing =
+                              (currentContest.contest_based_details as Record<string, unknown>) || {};
+                            const res = await fetch(
+                              `/api/admin/contests/${currentContest.id}/update`,
+                              {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  contest_based_details: {
+                                    ...existing,
+                                    youtube_analytics_visibility: {
+                                      show_core_to_brand: modalShowCore,
+                                      show_traffic_to_brand: modalShowTraffic,
+                                      show_demographics_to_brand: modalShowDemo,
+                                    },
+                                  },
+                                }),
+                              }
+                            );
+                            if (!res.ok) {
+                              const err = await res.json().catch(() => ({}));
+                              throw new Error(err.error || "Update failed");
+                            }
+                            setCurrentContest((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    contest_based_details: {
+                                      ...(prev.contest_based_details as Record<string, unknown> || {}),
+                                      youtube_analytics_visibility: {
+                                        show_core_to_brand: modalShowCore,
+                                        show_traffic_to_brand: modalShowTraffic,
+                                        show_demographics_to_brand: modalShowDemo,
+                                      },
+                                    },
+                                  }
+                                : prev
+                            );
+                            setAdminControlsModalOpen(false);
+                          } catch (e) {
+                            console.error("Admin controls save failed:", e);
+                            alert(
+                              e instanceof Error ? e.message : "Failed to save visibility settings"
+                            );
+                          } finally {
+                            setAdminControlsSaving(false);
+                          }
+                        }}
+                        disabled={adminControlsSaving}
+                      >
+                        {adminControlsSaving ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Saving...
+                          </>
+                        ) : (
+                          "Save"
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
 
                 {/* Enhanced Status Filter Tabs */}
                 <div>
@@ -9414,6 +9786,96 @@ export default function ContestDetailClient({
                               </SelectContent>
                             </Select>
                           </div>
+                          {/* YouTube only: customize table columns */}
+                          {currentContest.platform
+                            ?.toLowerCase()
+                            .includes("youtube") && (
+                            <Dialog
+                              open={ytColumnsModalOpen}
+                              onOpenChange={setYtColumnsModalOpen}
+                            >
+                              <DialogTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className={cn(
+                                    "h-12 gap-2",
+                                    isDark
+                                      ? "border-slate-600 text-slate-300 hover:bg-slate-800"
+                                      : "border-slate-300 text-slate-700 hover:bg-slate-50",
+                                  )}
+                                  title="Choose which columns to show in the table"
+                                >
+                                  <Columns2 className="h-4 w-4" />
+                                  Modify headers
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent
+                                className={cn(
+                                  "max-w-[95vw] w-full sm:max-w-md max-h-[90vh] flex flex-col",
+                                  isDark ? "bg-[#1a0a2e] border-gray-600" : "bg-white",
+                                )}
+                              >
+                                <DialogHeader className="flex-shrink-0">
+                                  <DialogTitle>
+                                    Customize YouTube table columns
+                                  </DialogTitle>
+                                  <DialogDescription>
+                                    Show or hide columns in the submissions table. Changes apply to both Normal and Creator-wise views.
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="grid gap-3 py-4 overflow-y-auto min-h-0 max-h-[min(60vh,320px)] sm:max-h-[min(65vh,400px)] pr-1 -mr-1">
+                                  {ytColumnsAvailableInModal.map((col) => (
+                                    <div
+                                      key={col.id}
+                                      className="flex items-center space-x-2"
+                                    >
+                                      <Checkbox
+                                        id={`yt-col-${col.id}`}
+                                        checked={ytVisibleColumns.includes(col.id)}
+                                        onCheckedChange={(checked) => {
+                                          if (checked) {
+                                            setYtVisibleColumnsAndPersist([
+                                              ...ytVisibleColumns,
+                                              col.id,
+                                            ]);
+                                          } else {
+                                            setYtVisibleColumnsAndPersist(
+                                              ytVisibleColumns.filter((c) => c !== col.id),
+                                            );
+                                          }
+                                        }}
+                                      />
+                                      <Label
+                                        htmlFor={`yt-col-${col.id}`}
+                                        className={cn(
+                                          "text-sm font-medium cursor-pointer",
+                                          isDark ? "text-slate-200" : "text-slate-800",
+                                        )}
+                                      >
+                                        {col.label}
+                                      </Label>
+                                    </div>
+                                  ))}
+                                </div>
+                                <DialogFooter className="flex-shrink-0 border-t pt-4 mt-2">
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                      setYtVisibleColumnsAndPersist([...ytAvailableColumnIds]);
+                                    }}
+                                  >
+                                    Show all
+                                  </Button>
+                                  <Button
+                                    onClick={() => setYtColumnsModalOpen(false)}
+                                  >
+                                    Done
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+                          )}
                         </div>
                       </div>
                       {viewMode === "normal" && (
@@ -9477,15 +9939,32 @@ export default function ContestDetailClient({
                                 </>
                               ) : (
                                 <>
-                                  <TableHead className="text-center">
-                                    Views
-                                  </TableHead>
-                                  <TableHead className="text-center">
-                                    Likes
-                                  </TableHead>
-                                  <TableHead className="text-center">
-                                    Comments
-                                  </TableHead>
+                                  {(currentContest.platform?.toLowerCase().includes("youtube")
+                                    ? ytVisibleColumns.includes("views")
+                                    : true) && (
+                                    <TableHead className="text-center">
+                                      Views
+                                    </TableHead>
+                                  )}
+                                  {(currentContest.platform?.toLowerCase().includes("youtube")
+                                    ? ytVisibleColumns.includes("likes")
+                                    : true) && (
+                                    <TableHead className="text-center">
+                                      Likes
+                                    </TableHead>
+                                  )}
+                                  {(currentContest.platform?.toLowerCase().includes("youtube")
+                                    ? ytVisibleColumns.includes("comments")
+                                    : true) && (
+                                    <TableHead className="text-center">
+                                      Comments
+                                    </TableHead>
+                                  )}
+                                  {currentContest.platform?.toLowerCase().includes("youtube") && canSeeCore && ytVisibleColumns.includes("dislikes") && (
+                                    <TableHead className="text-center">
+                                      Dislikes
+                                    </TableHead>
+                                  )}
                                 </>
                               )}
                               {/* Dynamic headers based on contest platform */}
@@ -9517,21 +9996,51 @@ export default function ContestDetailClient({
                                 ?.toLowerCase()
                                 .includes("youtube") && (
                                 <>
-                                  <TableHead className="text-center">
-                                    Shares
-                                  </TableHead>
-                                  <TableHead className="text-center">
-                                    Avg View %
-                                  </TableHead>
-                                  <TableHead className="text-center">
-                                    Watch Time
-                                  </TableHead>
-                                  <TableHead className="text-center">
-                                    Bot Score
-                                  </TableHead>
-                                  <TableHead className="text-center">
-                                    Analytics
-                                  </TableHead>
+                                  {canSeeCore && ytVisibleColumns.includes("shares") && (
+                                    <TableHead className="text-center">
+                                      Shares
+                                    </TableHead>
+                                  )}
+                                  {canSeeCore && ytVisibleColumns.includes("avg_view_pct") && (
+                                    <TableHead className="text-center">
+                                      Avg View %
+                                    </TableHead>
+                                  )}
+                                  {canSeeCore && ytVisibleColumns.includes("watch_time") && (
+                                    <TableHead className="text-center">
+                                      Watch Time
+                                    </TableHead>
+                                  )}
+                                  {canSeeCore && ytVisibleColumns.includes("avg_duration") && (
+                                    <TableHead className="text-center">
+                                      Avg Duration
+                                    </TableHead>
+                                  )}
+                                  {canSeeCore && ytVisibleColumns.includes("engaged_views") && (
+                                    <TableHead className="text-center">
+                                      Engaged Views
+                                    </TableHead>
+                                  )}
+                                  {canSeeCore && ytVisibleColumns.includes("subs_gained") && (
+                                    <TableHead className="text-center">
+                                      Subs Gained
+                                    </TableHead>
+                                  )}
+                                  {canSeeCore && ytVisibleColumns.includes("bot_score") && (
+                                    <TableHead className="text-center">
+                                      Bot Score
+                                    </TableHead>
+                                  )}
+                                  {canSeeCore && ytVisibleColumns.includes("analytics") && (
+                                    <TableHead className="text-center">
+                                      Analytics
+                                    </TableHead>
+                                  )}
+                                  {canSeeTraffic && ytVisibleColumns.includes("top_traffic_source") && (
+                                    <TableHead className="text-center">
+                                      Top Traffic Source
+                                    </TableHead>
+                                  )}
                                 </>
                               )}
                               {/* Show reward columns for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
@@ -9551,20 +10060,36 @@ export default function ContestDetailClient({
                                   "text_image") ||
                               currentContest.contest_type === "cpm" ? (
                                 <>
-                                  <TableHead className="text-center">
-                                    Expected Reward
-                                  </TableHead>
-                                  <TableHead className="text-center">
-                                    Reward Granted
-                                  </TableHead>
+                                  {(currentContest.platform?.toLowerCase().includes("youtube")
+                                    ? ytVisibleColumns.includes("expected_reward")
+                                    : true) && (
+                                    <TableHead className="text-center">
+                                      Expected Reward
+                                    </TableHead>
+                                  )}
+                                  {(currentContest.platform?.toLowerCase().includes("youtube")
+                                    ? ytVisibleColumns.includes("reward_granted")
+                                    : true) && (
+                                    <TableHead className="text-center">
+                                      Reward Granted
+                                    </TableHead>
+                                  )}
                                 </>
                               ) : null}
-                              <TableHead className="text-center">
-                                Status
-                              </TableHead>
-                              <TableHead className="text-center">
-                                Submitted
-                              </TableHead>
+                              {(currentContest.platform?.toLowerCase().includes("youtube")
+                                ? ytVisibleColumns.includes("status")
+                                : true) && (
+                                <TableHead className="text-center">
+                                  Status
+                                </TableHead>
+                              )}
+                              {(currentContest.platform?.toLowerCase().includes("youtube")
+                                ? ytVisibleColumns.includes("submitted")
+                                : true) && (
+                                <TableHead className="text-center">
+                                  Submitted
+                                </TableHead>
+                              )}
                               <TableHead className="text-center">
                                 Actions
                               </TableHead>
@@ -10369,86 +10894,108 @@ export default function ContestDetailClient({
                                   ) : (
                                     <>
                                       {/* Regular submissions (YouTube/Instagram) */}
-                                      <TableCell className="text-center">
-                                        <div className="flex flex-col items-center">
-                                          <span
-                                            className={cn(
-                                              "font-bold  text-sm",
-                                              isDark
-                                                ? "text-white"
-                                                : "text-slate-900",
-                                            )}
-                                          >
-                                            {formatMetricValue(metrics.views)}
-                                          </span>
-                                          <span
-                                            className={cn(
-                                              "text-xs ",
-                                              isDark
-                                                ? "text-white"
-                                                : "text-slate-500",
-                                            )}
-                                          >
-                                            views
-                                          </span>
-                                        </div>
-                                      </TableCell>
-                                      <TableCell className="text-center">
-                                        <div className="flex flex-col items-center">
-                                          <div className="flex items-center gap-1">
-                                            <ThumbsUp className="h-3 w-3 text-purple-400" />
+                                      {(currentContest.platform?.toLowerCase().includes("youtube")
+                                        ? ytVisibleColumns.includes("views")
+                                        : true) && (
+                                        <TableCell className="text-center">
+                                          <div className="flex flex-col items-center">
                                             <span
                                               className={cn(
-                                                "font-bold text-sm",
+                                                "font-bold  text-sm",
                                                 isDark
                                                   ? "text-white"
                                                   : "text-slate-900",
                                               )}
                                             >
-                                              {formatMetricValue(metrics.likes)}
+                                              {formatMetricValue(metrics.views)}
                                             </span>
-                                          </div>
-                                          <span
-                                            className={cn(
-                                              "text-xs ",
-                                              isDark
-                                                ? "text-white"
-                                                : "text-slate-500",
-                                            )}
-                                          >
-                                            likes
-                                          </span>
-                                        </div>
-                                      </TableCell>
-                                      <TableCell className="text-center">
-                                        <div className="flex flex-col items-center">
-                                          <div className="flex items-center gap-1">
-                                            <MessageCircle className="h-3 w-3 text-purple-400" />
                                             <span
                                               className={cn(
-                                                "font-bold text-sm",
+                                                "text-xs ",
                                                 isDark
                                                   ? "text-white"
-                                                  : "text-slate-900 dark:text-slate-100",
+                                                  : "text-slate-500",
                                               )}
                                             >
-                                              {formatMetricValue(
-                                                metrics.comments,
-                                              )}
+                                              views
                                             </span>
                                           </div>
-                                          <span
-                                            className={cn(
-                                              "text-xs ",
-                                              isDark
-                                                ? "text-white"
-                                                : "text-slate-500",
-                                            )}
-                                          >
-                                            comments
-                                          </span>
-                                        </div>
-                                      </TableCell>
+                                        </TableCell>
+                                      )}
+                                      {(currentContest.platform?.toLowerCase().includes("youtube")
+                                        ? ytVisibleColumns.includes("likes")
+                                        : true) && (
+                                        <TableCell className="text-center">
+                                          <div className="flex flex-col items-center">
+                                            <div className="flex items-center gap-1">
+                                              <ThumbsUp className="h-3 w-3 text-purple-400" />
+                                              <span
+                                                className={cn(
+                                                  "font-bold text-sm",
+                                                  isDark
+                                                    ? "text-white"
+                                                    : "text-slate-900",
+                                                )}
+                                              >
+                                                {formatMetricValue(metrics.likes)}
+                                              </span>
+                                            </div>
+                                            <span
+                                              className={cn(
+                                                "text-xs ",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-500",
+                                              )}
+                                            >
+                                              likes
+                                            </span>
+                                          </div>
+                                        </TableCell>
+                                      )}
+                                      {(currentContest.platform?.toLowerCase().includes("youtube")
+                                        ? ytVisibleColumns.includes("comments")
+                                        : true) && (
+                                        <TableCell className="text-center">
+                                          <div className="flex flex-col items-center">
+                                            <div className="flex items-center gap-1">
+                                              <MessageCircle className="h-3 w-3 text-purple-400" />
+                                              <span
+                                                className={cn(
+                                                  "font-bold text-sm",
+                                                  isDark
+                                                    ? "text-white"
+                                                    : "text-slate-900 dark:text-slate-100",
+                                                )}
+                                              >
+                                                {formatMetricValue(
+                                                  metrics.comments,
+                                                )}
+                                              </span>
+                                            </div>
+                                            <span
+                                              className={cn(
+                                                "text-xs ",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-500",
+                                              )}
+                                            >
+                                              comments
+                                            </span>
+                                          </div>
+                                        </TableCell>
+                                      )}
+                                      {currentContest.platform?.toLowerCase().includes("youtube") && canSeeCore && ytVisibleColumns.includes("dislikes") && (
+                                        <TableCell className="text-center">
+                                          <div className="flex flex-col items-center">
+                                            <ThumbsDown className="h-3 w-3 text-red-400" />
+                                            <span className={cn("font-bold text-sm", isDark ? "text-white" : "text-slate-900")}>
+                                              {formatMetricValue((metrics as any).dislikes ?? 0)}
+                                            </span>
+                                          </div>
+                                        </TableCell>
+                                      )}
                                     </>
                                   )}
                                   {/* Dynamic data cells based on contest platform */}
@@ -10524,131 +11071,190 @@ export default function ContestDetailClient({
                                     ?.toLowerCase()
                                     .includes("youtube") && (
                                     <>
-                                      {/* Shares */}
-                                      <TableCell className="text-center font-mono text-sm">
-                                        <div className="flex items-center justify-center gap-1">
-                                          <Share2 className="h-3 w-3 text-purple-500" />
-                                          {(metrics as any).shares > 0
-                                            ? formatMetricValue((metrics as any).shares)
-                                            : <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>—</span>}
-                                        </div>
-                                      </TableCell>
-                                      {/* Avg View % */}
-                                      <TableCell className="text-center font-mono text-sm">
-                                        {(metrics as any).avg_view_percentage > 0 ? (
-                                          <div className="flex flex-col items-center">
-                                            <span className={cn(
-                                              "font-bold",
-                                              (metrics as any).avg_view_percentage < 10
-                                                ? "text-red-500"
-                                                : (metrics as any).avg_view_percentage < 30
-                                                  ? "text-yellow-500"
-                                                  : "text-green-500"
-                                            )}>
-                                              {((metrics as any).avg_view_percentage as number).toFixed(1)}%
-                                            </span>
-                                            <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
-                                              watched
-                                            </span>
+                                      {canSeeCore && ytVisibleColumns.includes("shares") && (
+                                        <TableCell className="text-center font-mono text-sm">
+                                          <div className="flex items-center justify-center gap-1">
+                                            <Share2 className="h-3 w-3 text-purple-500" />
+                                            {(metrics as any).shares > 0
+                                              ? formatMetricValue((metrics as any).shares)
+                                              : <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>—</span>}
                                           </div>
-                                        ) : (
-                                          <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>—</span>
-                                        )}
-                                      </TableCell>
-                                      {/* Total Watch Time */}
-                                      <TableCell className="text-center font-mono text-sm">
-                                        {(metrics as any).estimated_minutes_watched > 0 ? (
-                                          <div className="flex flex-col items-center">
-                                            <span className="font-bold">
-                                              {formatWatchTime((metrics as any).estimated_minutes_watched * 60 * 1000)}
-                                            </span>
-                                            <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
-                                              total
-                                            </span>
-                                          </div>
-                                        ) : (
-                                          <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>—</span>
-                                        )}
-                                      </TableCell>
-                                      {/* Bot Score */}
-                                      <TableCell className="text-center">
-                                        {(metrics as any).analytics_needs_reauth ? (
-                                          <span
-                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 border border-yellow-300"
-                                            title="Creator needs to reconnect YouTube for analytics"
-                                          >
-                                            <AlertTriangle className="h-3 w-3" />
-                                            Reauth
-                                          </span>
-                                        ) : (metrics as any).bot_score !== null && (metrics as any).bot_score !== undefined ? (
-                                          <div className="flex flex-col items-center gap-0.5">
-                                            <span className={cn(
-                                              "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
-                                              (metrics as any).bot_score >= 60
-                                                ? "bg-red-100 text-red-700 border-red-300"
-                                                : (metrics as any).bot_score >= 30
-                                                  ? "bg-yellow-100 text-yellow-700 border-yellow-300"
-                                                  : "bg-green-100 text-green-600 border-green-300"
+                                        </TableCell>
+                                      )}
+                                      {canSeeCore && ytVisibleColumns.includes("avg_view_pct") && (
+                                        <TableCell className="text-center font-mono text-sm">
+                                            {(metrics as any).avg_view_percentage > 0 ? (
+                                              <div className="flex flex-col items-center">
+                                                <span className={cn(
+                                                  "font-bold",
+                                                  (metrics as any).avg_view_percentage < 10
+                                                    ? "text-red-500"
+                                                    : (metrics as any).avg_view_percentage < 30
+                                                      ? "text-yellow-500"
+                                                      : "text-green-500"
+                                                )}>
+                                                  {((metrics as any).avg_view_percentage as number).toFixed(1)}%
+                                                </span>
+                                                <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                                  watched
+                                                </span>
+                                              </div>
+                                            ) : (
+                                              <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>—</span>
                                             )}
-                                              title={(metrics as any).bot_flags?.join("\n") || "No flags"}
-                                            >
-                                              {(metrics as any).bot_score >= 60 ? "⚠ " : ""}
-                                              {(metrics as any).bot_score}/100
-                                            </span>
-                                            {(metrics as any).bot_flags?.length > 0 && (
-                                              <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
-                                                {(metrics as any).bot_flags.length} flag{(metrics as any).bot_flags.length !== 1 ? "s" : ""}
+                                          </TableCell>
+                                      )}
+                                      {canSeeCore && ytVisibleColumns.includes("watch_time") && (
+                                          <TableCell className="text-center font-mono text-sm">
+                                            {(metrics as any).estimated_minutes_watched > 0 ? (
+                                              <div className="flex flex-col items-center">
+                                                <span className="font-bold">
+                                                  {formatWatchTime((metrics as any).estimated_minutes_watched * 60 * 1000)}
+                                                </span>
+                                                <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                                  total
+                                                </span>
+                                              </div>
+                                            ) : (
+                                              <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>—</span>
+                                            )}
+                                          </TableCell>
+                                      )}
+                                      {canSeeCore && ytVisibleColumns.includes("avg_duration") && (
+                                          <TableCell className="text-center font-mono text-sm">
+                                            {(metrics as any).avg_view_duration_seconds != null && (metrics as any).avg_view_duration_seconds > 0 ? (
+                                              <span className="font-bold">{(metrics as any).avg_view_duration_seconds}s</span>
+                                            ) : (
+                                              <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>—</span>
+                                            )}
+                                          </TableCell>
+                                      )}
+                                      {canSeeCore && ytVisibleColumns.includes("engaged_views") && (
+                                          <TableCell className="text-center font-mono text-sm">
+                                            {(metrics as any).engaged_views != null ? (
+                                              <div className="flex flex-col items-center">
+                                                <span className="font-bold">{formatMetricValue((metrics as any).engaged_views)}</span>
+                                                {(metrics as any).views > 0 && (
+                                                  <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                                    {(((metrics as any).engaged_views / (metrics as any).views) * 100).toFixed(1)}%
+                                                  </span>
+                                                )}
+                                              </div>
+                                            ) : (
+                                              <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>—</span>
+                                            )}
+                                          </TableCell>
+                                      )}
+                                      {canSeeCore && ytVisibleColumns.includes("subs_gained") && (
+                                          <TableCell className="text-center font-mono text-sm">
+                                            {(metrics as any).subscribers_gained != null ? (
+                                              <span className={cn("font-bold", (metrics as any).subscribers_gained > 0 ? "text-green-600" : isDark ? "text-slate-400" : "text-slate-600")}>
+                                                {(metrics as any).subscribers_gained > 0 ? "+" : ""}{(metrics as any).subscribers_gained}
+                                              </span>
+                                            ) : (
+                                              <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>—</span>
+                                            )}
+                                          </TableCell>
+                                      )}
+                                      {canSeeCore && ytVisibleColumns.includes("bot_score") && (
+                                          <TableCell className="text-center">
+                                            {(metrics as any).analytics_needs_reauth ? (
+                                              <span
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 border border-yellow-300"
+                                                title="Creator needs to reconnect YouTube for analytics"
+                                              >
+                                                <AlertTriangle className="h-3 w-3" />
+                                                Reauth
+                                              </span>
+                                            ) : (metrics as any).bot_score !== null && (metrics as any).bot_score !== undefined ? (
+                                              <div className="flex flex-col items-center gap-0.5">
+                                                <span className={cn(
+                                                  "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
+                                                  (metrics as any).bot_score >= 60
+                                                    ? "bg-red-100 text-red-700 border-red-300"
+                                                    : (metrics as any).bot_score >= 30
+                                                      ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                                      : "bg-green-100 text-green-600 border-green-300"
+                                                )}
+                                                  title={(metrics as any).bot_flags?.join("\n") || "No flags"}
+                                                >
+                                                  {(metrics as any).bot_score >= 60 ? "⚠ " : ""}
+                                                  {(metrics as any).bot_score}/100
+                                                </span>
+                                                {(metrics as any).bot_flags?.length > 0 && (
+                                                  <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                                                    {(metrics as any).bot_flags.length} flag{(metrics as any).bot_flags.length !== 1 ? "s" : ""}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            ) : (
+                                              <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>
+                                                No data
                                               </span>
                                             )}
-                                          </div>
-                                        ) : (
-                                          <span className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}>
-                                            No data
-                                          </span>
-                                        )}
-                                      </TableCell>
-                                      {/* Analytics Details — full breakdown in popover */}
-                                      <TableCell className="text-center">
-                                        <YouTubeAnalyticsPanel
-                                          metrics={{
-                                            views: (metrics as any).views,
-                                            likes: (metrics as any).likes,
-                                            dislikes: (metrics as any).dislikes,
-                                            comments: (metrics as any).comments,
-                                            shares: (metrics as any).shares,
-                                            subscribers_gained: (metrics as any).subscribers_gained,
-                                            subscribers_lost: (metrics as any).subscribers_lost,
-                                            videos_added_to_playlists: (metrics as any).videos_added_to_playlists,
-                                            videos_removed_from_playlists: (metrics as any).videos_removed_from_playlists,
-                                            estimated_minutes_watched: (metrics as any).estimated_minutes_watched,
-                                            avg_view_duration_seconds: (metrics as any).avg_view_duration_seconds,
-                                            avg_view_percentage: (metrics as any).avg_view_percentage,
-                                            engaged_views: (metrics as any).engaged_views,
-                                            traffic_sources: (metrics as any).traffic_sources,
-                                            demographics: (metrics as any).demographics,
-                                            bot_score: (metrics as any).bot_score,
-                                            bot_flags: (metrics as any).bot_flags,
-                                            analytics_needs_reauth: (metrics as any).analytics_needs_reauth,
-                                            last_basic_update: (metrics as any).last_basic_update,
-                                            last_traffic_update: (metrics as any).last_traffic_update,
-                                            last_demographics_update: (metrics as any).last_demographics_update,
-                                          }}
-                                          isDark={isDark}
-                                        >
-                                          <button
-                                            className={cn(
-                                              "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
-                                              isDark
-                                                ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                                                : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700"
-                                            )}
-                                            title="View full analytics breakdown"
-                                          >
-                                            <BarChart2 className="h-3 w-3" />
-                                            Details
-                                          </button>
-                                        </YouTubeAnalyticsPanel>
-                                      </TableCell>
+                                          </TableCell>
+                                      )}
+                                      {canSeeCore && ytVisibleColumns.includes("analytics") && (
+                                          <TableCell className="text-center">
+                                            <YouTubeAnalyticsPanel
+                                              metrics={{
+                                                views: (metrics as any).views,
+                                                likes: (metrics as any).likes,
+                                                dislikes: (metrics as any).dislikes,
+                                                comments: (metrics as any).comments,
+                                                shares: (metrics as any).shares,
+                                                subscribers_gained: (metrics as any).subscribers_gained,
+                                                subscribers_lost: (metrics as any).subscribers_lost,
+                                                videos_added_to_playlists: (metrics as any).videos_added_to_playlists,
+                                                videos_removed_from_playlists: (metrics as any).videos_removed_from_playlists,
+                                                estimated_minutes_watched: (metrics as any).estimated_minutes_watched,
+                                                avg_view_duration_seconds: (metrics as any).avg_view_duration_seconds,
+                                                avg_view_percentage: (metrics as any).avg_view_percentage,
+                                                engaged_views: (metrics as any).engaged_views,
+                                                traffic_sources: (metrics as any).traffic_sources,
+                                                demographics: (metrics as any).demographics,
+                                                bot_score: (metrics as any).bot_score,
+                                                bot_flags: (metrics as any).bot_flags,
+                                                analytics_needs_reauth: (metrics as any).analytics_needs_reauth,
+                                                last_basic_update: (metrics as any).last_basic_update,
+                                                last_traffic_update: (metrics as any).last_traffic_update,
+                                                last_demographics_update: (metrics as any).last_demographics_update,
+                                              }}
+                                              isDark={isDark}
+                                              showCore={canSeeCore}
+                                              showTraffic={canSeeTraffic}
+                                              showDemographics={canSeeDemo}
+                                            >
+                                              <button
+                                                className={cn(
+                                                  "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
+                                                  isDark
+                                                    ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                                    : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700"
+                                                )}
+                                                title="View full analytics breakdown"
+                                              >
+                                                <BarChart2 className="h-3 w-3" />
+                                                Details
+                                              </button>
+                                            </YouTubeAnalyticsPanel>
+                                          </TableCell>
+                                      )}
+                                      {canSeeTraffic && ytVisibleColumns.includes("top_traffic_source") && (() => {
+                                        const ts = (metrics as any).traffic_sources as Record<string, number> | null | undefined;
+                                        if (!ts || typeof ts !== "object" || Object.keys(ts).length === 0) {
+                                          return <TableCell className="text-center text-xs font-mono"><span className={cn(isDark ? "text-slate-500" : "text-slate-400")}>—</span></TableCell>;
+                                        }
+                                        const entries = Object.entries(ts);
+                                        const top = entries.reduce((best, [k, v]) => (v > best.pct ? { key: k, pct: v } : best), { key: entries[0][0], pct: entries[0][1] });
+                                        const label = YT_TRAFFIC_SOURCE_LABELS[top.key] || top.key;
+                                        return (
+                                          <TableCell className="text-center text-xs font-mono">
+                                            <span className="font-medium">{label}</span>
+                                            <span className={cn("ml-1", isDark ? "text-slate-400" : "text-slate-500")}>{top.pct.toFixed(1)}%</span>
+                                          </TableCell>
+                                        );
+                                      })()}
                                     </>
                                   )}
                                   {/* Show reward cells for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
@@ -10670,46 +11276,53 @@ export default function ContestDetailClient({
                                       "text_image") ||
                                   currentContest.contest_type === "cpm" ? (
                                     <>
-                                      <TableCell className="text-center">
-                                        <div className="flex flex-col items-center">
+                                      {(currentContest.platform?.toLowerCase().includes("youtube")
+                                        ? ytVisibleColumns.includes("expected_reward")
+                                        : true) && (
+                                        <TableCell className="text-center">
                                           <div className="flex flex-col items-center">
-                                            <span
-                                              className={cn(
-                                                "text-lg font-bold tracking-wide",
-                                                expectedInfo.className.includes(
-                                                  "text-slate-500",
-                                                )
-                                                  ? isDark
-                                                    ? "text-slate-400"
-                                                    : "text-slate-500"
-                                                  : expectedInfo.className.includes(
-                                                        "text-slate-700",
-                                                      )
+                                            <div className="flex flex-col items-center">
+                                              <span
+                                                className={cn(
+                                                  "text-lg font-bold tracking-wide",
+                                                  expectedInfo.className.includes(
+                                                    "text-slate-500",
+                                                  )
                                                     ? isDark
-                                                      ? "text-slate-200"
-                                                      : "text-slate-700"
-                                                    : isDark
-                                                      ? "text-white"
-                                                      : "text-slate-900",
-                                              )}
-                                            >
-                                              ${expectedInfo.amount.toFixed(2)}
-                                            </span>
-                                            <span
-                                              className={cn(
-                                                "text-xs uppercase tracking-wide",
-                                                isDark
-                                                  ? "text-white"
-                                                  : "text-slate-800",
-                                              )}
-                                            >
-                                              {expectedInfo.label}
-                                            </span>
+                                                      ? "text-slate-400"
+                                                      : "text-slate-500"
+                                                    : expectedInfo.className.includes(
+                                                          "text-slate-700",
+                                                        )
+                                                      ? isDark
+                                                        ? "text-slate-200"
+                                                        : "text-slate-700"
+                                                      : isDark
+                                                        ? "text-white"
+                                                        : "text-slate-900",
+                                                )}
+                                              >
+                                                ${expectedInfo.amount.toFixed(2)}
+                                              </span>
+                                              <span
+                                                className={cn(
+                                                  "text-xs uppercase tracking-wide",
+                                                  isDark
+                                                    ? "text-white"
+                                                    : "text-slate-800",
+                                                )}
+                                              >
+                                                {expectedInfo.label}
+                                              </span>
+                                            </div>
                                           </div>
-                                        </div>
-                                      </TableCell>
-                                      <TableCell className="text-center">
-                                        <div className="flex flex-col items-center">
+                                        </TableCell>
+                                      )}
+                                      {(currentContest.platform?.toLowerCase().includes("youtube")
+                                        ? ytVisibleColumns.includes("reward_granted")
+                                        : true) && (
+                                        <TableCell className="text-center">
+                                          <div className="flex flex-col items-center">
                                           {grantedInfo.amount > 0 ? (
                                             <div className="flex flex-col items-center">
                                               <span
@@ -10797,43 +11410,52 @@ export default function ContestDetailClient({
                                           )}
                                         </div>
                                       </TableCell>
+                                      )}
                                     </>
                                   ) : null}
-                                  <TableCell className="text-center">
-                                    <div className="flex flex-col items-center">
-                                      <Badge
-                                        variant="outline"
-                                        className={cn(
-                                          "text-xs inline-flex items-center gap-1 px-3 py-1 font-medium",
-                                          submissionStatus.className,
-                                        )}
-                                      >
-                                        {submissionStatus.icon}{" "}
-                                        {submissionStatus.text}
-                                      </Badge>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell
-                                    className={cn(
-                                      "text-center text-xs",
-                                      isDark ? "text-white" : "text-slate-700",
-                                    )}
-                                  >
-                                    <div className="flex flex-col">
-                                      <span>
-                                        {formatLocalDateTime(
-                                          submission.created_at,
-                                          { dateStyle: "short" },
-                                        )}
-                                      </span>
-                                      <span className="text-xs">
-                                        {formatLocalDateTime(
-                                          submission.created_at,
-                                          { timeStyle: "short" },
-                                        )}
-                                      </span>
-                                    </div>
-                                  </TableCell>
+                                  {(currentContest.platform?.toLowerCase().includes("youtube")
+                                    ? ytVisibleColumns.includes("status")
+                                    : true) && (
+                                    <TableCell className="text-center">
+                                      <div className="flex flex-col items-center">
+                                        <Badge
+                                          variant="outline"
+                                          className={cn(
+                                            "text-xs inline-flex items-center gap-1 px-3 py-1 font-medium",
+                                            submissionStatus.className,
+                                          )}
+                                        >
+                                          {submissionStatus.icon}{" "}
+                                          {submissionStatus.text}
+                                        </Badge>
+                                      </div>
+                                    </TableCell>
+                                  )}
+                                  {(currentContest.platform?.toLowerCase().includes("youtube")
+                                    ? ytVisibleColumns.includes("submitted")
+                                    : true) && (
+                                    <TableCell
+                                      className={cn(
+                                        "text-center text-xs",
+                                        isDark ? "text-white" : "text-slate-700",
+                                      )}
+                                    >
+                                      <div className="flex flex-col">
+                                        <span>
+                                          {formatLocalDateTime(
+                                            submission.created_at,
+                                            { dateStyle: "short" },
+                                          )}
+                                        </span>
+                                        <span className="text-xs">
+                                          {formatLocalDateTime(
+                                            submission.created_at,
+                                            { timeStyle: "short" },
+                                          )}
+                                        </span>
+                                      </div>
+                                    </TableCell>
+                                  )}
                                   <TableCell className="text-center">
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild>
@@ -11290,9 +11912,13 @@ export default function ContestDetailClient({
                                   <TableHead className="text-center">
                                     Total Submissions
                                   </TableHead>
-                                  <TableHead className="text-center">
-                                    Status
-                                  </TableHead>
+                                  {(currentContest.platform?.toLowerCase().includes("youtube")
+                                    ? ytVisibleColumns.includes("status")
+                                    : true) && (
+                                    <TableHead className="text-center">
+                                      Status
+                                    </TableHead>
+                                  )}
                                   {/* For Twitter campaigns, show Twitter-specific metrics */}
                                   {(currentContest.platform?.toLowerCase() ===
                                     "twitter" ||
@@ -11328,18 +11954,32 @@ export default function ContestDetailClient({
                                     </>
                                   ) : (
                                     <>
-                                      <TableHead className="text-center">
-                                        Views
-                                      </TableHead>
-                                      <TableHead className="text-center">
-                                        Likes
-                                      </TableHead>
-                                      <TableHead className="text-center">
-                                        Comments
-                                      </TableHead>
-                                      <TableHead className="text-center">
-                                        Shares
-                                      </TableHead>
+                                      {(currentContest.platform?.toLowerCase().includes("youtube")
+                                        ? ytVisibleColumns.includes("views")
+                                        : true) && (
+                                        <TableHead className="text-center">
+                                          Views
+                                        </TableHead>
+                                      )}
+                                      {(currentContest.platform?.toLowerCase().includes("youtube")
+                                        ? ytVisibleColumns.includes("likes")
+                                        : true) && (
+                                        <TableHead className="text-center">
+                                          Likes
+                                        </TableHead>
+                                      )}
+                                      {(currentContest.platform?.toLowerCase().includes("youtube")
+                                        ? ytVisibleColumns.includes("comments")
+                                        : true) && (
+                                        <TableHead className="text-center">
+                                          Comments
+                                        </TableHead>
+                                      )}
+                                      {(currentContest.platform?.toLowerCase().includes("instagram") || (canSeeCore && (currentContest.platform?.toLowerCase().includes("youtube") ? ytVisibleColumns.includes("shares") : true))) && (
+                                        <TableHead className="text-center">
+                                          Shares
+                                        </TableHead>
+                                      )}
                                       {/* Instagram-specific metrics */}
                                       {currentContest.platform
                                         ?.toLowerCase()
@@ -11378,17 +12018,25 @@ export default function ContestDetailClient({
                                     currentContest.contest_type === "cpm") &&
                                     (currentContest.platform?.toLowerCase() ===
                                       "twitter" ||
-                                      currentContest.platform?.toLowerCase() ===
-                                        "x") &&
+                                    currentContest.platform?.toLowerCase() ===
+                                      "x") &&
                                     currentContest.contest_format ===
                                       "text_image") ? (
                                     <>
-                                      <TableHead className="text-center">
-                                        Expected Reward
-                                      </TableHead>
-                                      <TableHead className="text-center">
-                                        Reward Granted
-                                      </TableHead>
+                                      {(currentContest.platform?.toLowerCase().includes("youtube")
+                                        ? ytVisibleColumns.includes("expected_reward")
+                                        : true) && (
+                                        <TableHead className="text-center">
+                                          Expected Reward
+                                        </TableHead>
+                                      )}
+                                      {(currentContest.platform?.toLowerCase().includes("youtube")
+                                        ? ytVisibleColumns.includes("reward_granted")
+                                        : true) && (
+                                        <TableHead className="text-center">
+                                          Reward Granted
+                                        </TableHead>
+                                      )}
                                     </>
                                   ) : null}
                                   {(() => {
@@ -11438,9 +12086,13 @@ export default function ContestDetailClient({
                                       Rejection Reason
                                     </TableHead>
                                   )}
-                                  <TableHead className="text-center">
-                                    First Submitted
-                                  </TableHead>
+                                  {(currentContest.platform?.toLowerCase().includes("youtube")
+                                    ? ytVisibleColumns.includes("submitted")
+                                    : true) && (
+                                    <TableHead className="text-center">
+                                      First Submitted
+                                    </TableHead>
+                                  )}
                                   <TableHead className="text-center">
                                     Actions
                                   </TableHead>
@@ -11519,6 +12171,9 @@ export default function ContestDetailClient({
                                           <TableCell className="text-center font-semibold">
                                             {group.totalCount}
                                           </TableCell>
+                                          {(currentContest.platform?.toLowerCase().includes("youtube")
+                                            ? ytVisibleColumns.includes("status")
+                                            : true) && (
                                           <TableCell>
                                             <div className="flex flex-col items-center gap-1">
                                               {/* Creator-level moderation status for Twitter campaigns */}
@@ -11617,6 +12272,7 @@ export default function ContestDetailClient({
                                               )}
                                             </div>
                                           </TableCell>
+                                          )}
                                           {/* For Twitter campaigns, show Twitter-specific metrics */}
                                           {(currentContest.platform?.toLowerCase() ===
                                             "twitter" ||
@@ -11757,23 +12413,37 @@ export default function ContestDetailClient({
                                             </>
                                           ) : (
                                             <>
-                                              <TableCell className="text-center">
-                                                {group.metrics.views.toLocaleString()}
-                                              </TableCell>
-                                              <TableCell className="text-center">
-                                                {group.metrics.likes.toLocaleString()}
-                                              </TableCell>
-                                              <TableCell className="text-center">
-                                                {group.metrics.comments.toLocaleString()}
-                                              </TableCell>
-                                              <TableCell className="text-center font-mono text-sm">
-                                                <div className="flex items-center justify-center gap-1">
-                                                  <Share2 className="h-3 w-3 text-purple-500" />
-                                                  {formatMetricValue(
-                                                    group.metrics.shares || 0,
-                                                  )}
-                                                </div>
-                                              </TableCell>
+                                              {(currentContest.platform?.toLowerCase().includes("youtube")
+                                                ? ytVisibleColumns.includes("views")
+                                                : true) && (
+                                                <TableCell className="text-center">
+                                                  {group.metrics.views.toLocaleString()}
+                                                </TableCell>
+                                              )}
+                                              {(currentContest.platform?.toLowerCase().includes("youtube")
+                                                ? ytVisibleColumns.includes("likes")
+                                                : true) && (
+                                                <TableCell className="text-center">
+                                                  {group.metrics.likes.toLocaleString()}
+                                                </TableCell>
+                                              )}
+                                              {(currentContest.platform?.toLowerCase().includes("youtube")
+                                                ? ytVisibleColumns.includes("comments")
+                                                : true) && (
+                                                <TableCell className="text-center">
+                                                  {group.metrics.comments.toLocaleString()}
+                                                </TableCell>
+                                              )}
+                                              {(currentContest.platform?.toLowerCase().includes("instagram") || (canSeeCore && (currentContest.platform?.toLowerCase().includes("youtube") ? ytVisibleColumns.includes("shares") : true))) && (
+                                                <TableCell className="text-center font-mono text-sm">
+                                                  <div className="flex items-center justify-center gap-1">
+                                                    <Share2 className="h-3 w-3 text-purple-500" />
+                                                    {formatMetricValue(
+                                                      group.metrics.shares || 0,
+                                                    )}
+                                                  </div>
+                                                </TableCell>
+                                              )}
                                               {/* Instagram-specific metrics */}
                                               {currentContest.platform
                                                 ?.toLowerCase()
@@ -11856,30 +12526,38 @@ export default function ContestDetailClient({
                                             currentContest.contest_type ===
                                               "cpm") && (
                                             <>
-                                              <TableCell className="text-center font-medium">
-                                                <div className="flex items-center justify-center gap-1">
+                                              {(currentContest.platform?.toLowerCase().includes("youtube")
+                                                ? ytVisibleColumns.includes("expected_reward")
+                                                : true) && (
+                                                <TableCell className="text-center font-medium">
+                                                  <div className="flex items-center justify-center gap-1">
+                                                    {formatMoney(
+                                                      group.earnings.expected,
+                                                    )}
+                                                    {group.isCapped && (
+                                                      <span
+                                                        className="text-amber-600 cursor-help"
+                                                        title={`Capped at ${formatMoney(
+                                                          currentContest.max_earnings_per_creator,
+                                                        )}. Original: ${formatMoney(
+                                                          group.earningsBeforeCap,
+                                                        )}`}
+                                                      >
+                                                        ⚠️
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                </TableCell>
+                                              )}
+                                              {(currentContest.platform?.toLowerCase().includes("youtube")
+                                                ? ytVisibleColumns.includes("reward_granted")
+                                                : true) && (
+                                                <TableCell className="text-center font-medium text-green-600">
                                                   {formatMoney(
-                                                    group.earnings.expected,
+                                                    group.earnings.granted,
                                                   )}
-                                                  {group.isCapped && (
-                                                    <span
-                                                      className="text-amber-600 cursor-help"
-                                                      title={`Capped at ${formatMoney(
-                                                        currentContest.max_earnings_per_creator,
-                                                      )}. Original: ${formatMoney(
-                                                        group.earningsBeforeCap,
-                                                      )}`}
-                                                    >
-                                                      ⚠️
-                                                    </span>
-                                                  )}
-                                                </div>
-                                              </TableCell>
-                                              <TableCell className="text-center font-medium text-green-600">
-                                                {formatMoney(
-                                                  group.earnings.granted,
-                                                )}
-                                              </TableCell>
+                                                </TableCell>
+                                              )}
                                             </>
                                           )}
                                           {(() => {
@@ -12033,11 +12711,15 @@ export default function ContestDetailClient({
                                               )}
                                             </TableCell>
                                           )}
-                                          <TableCell className="text-center text-sm">
-                                            {formatLocalDateTime(
-                                              group.firstSubmittedAt,
-                                            )}
-                                          </TableCell>
+                                          {(currentContest.platform?.toLowerCase().includes("youtube")
+                                            ? ytVisibleColumns.includes("submitted")
+                                            : true) && (
+                                            <TableCell className="text-center text-sm">
+                                              {formatLocalDateTime(
+                                                group.firstSubmittedAt,
+                                              )}
+                                            </TableCell>
+                                          )}
                                           <TableCell className="text-center">
                                             <div className="flex flex-col items-center gap-2">
                                               <div className="flex items-center gap-2">
