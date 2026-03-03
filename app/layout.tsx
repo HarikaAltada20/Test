@@ -163,6 +163,7 @@ export default async function RootLayout({
     <html lang="en" data-theme={initialMode} suppressHydrationWarning>
       <head>
         <style
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
             __html: `
               html{background:${
