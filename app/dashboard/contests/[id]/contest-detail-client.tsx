@@ -426,13 +426,20 @@ export default function ContestDetailClient({
   const ytVisibility =
     (currentContest.contest_based_details as any)?.youtube_analytics_visibility ||
     {};
-  const brandCoreAllowed = ytVisibility.show_core_to_brand ?? true;
-  const brandTrafficAllowed = ytVisibility.show_traffic_to_brand ?? true;
-  const brandDemoAllowed = ytVisibility.show_demographics_to_brand ?? true;
+  // Brand-side: default to disabled (admin can enable per contest)
+  const brandCoreAllowed = ytVisibility.show_core_to_brand ?? false;
+  const brandTrafficAllowed = ytVisibility.show_traffic_to_brand ?? false;
+  const brandDemoAllowed = ytVisibility.show_demographics_to_brand ?? false;
 
   const canSeeCore = isAdminView || brandCoreAllowed;
   const canSeeTraffic = isAdminView || brandTrafficAllowed;
   const canSeeDemo = isAdminView || brandDemoAllowed;
+
+  // Lock YouTube metrics/refresh/modify headers from in_review onward (pending_review still allows refresh before review)
+  const ytPostContestLocked =
+    currentContest.post_contest_status === "in_review" ||
+    currentContest.post_contest_status === "verification_complete" ||
+    currentContest.post_contest_status === "payouts_processed";
 
   // Columns shown in "Modify headers" modal: hide core/traffic options when brand doesn't have access
   const ytColumnsAvailableInModal = useMemo(() => {
@@ -452,14 +459,20 @@ export default function ContestDetailClient({
   const [isRefreshingDemographics, setIsRefreshingDemographics] = useState(false);
   const [isRefreshingCore, setIsRefreshingCore] = useState(false);
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  const anyYtRefreshInProgress =
+    isRefreshingMetrics ||
+    isRefreshingCore ||
+    isRefreshingTraffic ||
+    isRefreshingDemographics ||
+    isRefreshingAll;
   // Admin controls modal (YouTube analytics visibility for brand)
   const [adminControlsModalOpen, setAdminControlsModalOpen] = useState(false);
   const [adminControlsSaving, setAdminControlsSaving] = useState(false);
-  const [modalShowCore, setModalShowCore] = useState(true);
-  const [modalShowTraffic, setModalShowTraffic] = useState(true);
-  const [modalShowDemo, setModalShowDemo] = useState(true);
+  const [modalShowCore, setModalShowCore] = useState(false);
+  const [modalShowTraffic, setModalShowTraffic] = useState(false);
+  const [modalShowDemo, setModalShowDemo] = useState(false);
 
-  // Sync admin controls modal state from contest when opening
+  // Sync admin controls modal state from contest when opening (defaults: false for brand)
   useEffect(() => {
     if (!adminControlsModalOpen || !currentContest) return;
     const vis =
@@ -468,9 +481,9 @@ export default function ContestDetailClient({
       (vis?.youtube_analytics_visibility as
         | { show_core_to_brand?: boolean; show_traffic_to_brand?: boolean; show_demographics_to_brand?: boolean }
         | undefined);
-    setModalShowCore(yt?.show_core_to_brand !== false);
-    setModalShowTraffic(yt?.show_traffic_to_brand !== false);
-    setModalShowDemo(yt?.show_demographics_to_brand !== false);
+    setModalShowCore(yt?.show_core_to_brand === true);
+    setModalShowTraffic(yt?.show_traffic_to_brand === true);
+    setModalShowDemo(yt?.show_demographics_to_brand === true);
   }, [adminControlsModalOpen, currentContest?.id]);
 
   // Track per-submission loading state for detailed analytics
@@ -3611,10 +3624,7 @@ export default function ContestDetailClient({
 
   // Helper function to determine if refresh should be disabled and why
   const getRefreshButtonState = () => {
-    const isLocked =
-      currentContest.post_contest_status === "in_review" ||
-      currentContest.post_contest_status === "verification_complete" ||
-      currentContest.post_contest_status === "payouts_processed";
+    const isLocked = ytPostContestLocked;
 
     const isDisabled =
       isRefreshingMetrics || !cooldownInfo.canRefresh || isLocked;
@@ -9134,13 +9144,13 @@ export default function ContestDetailClient({
                                   <button
                                     type="button"
                                     onClick={handleRefreshAllMetrics}
-                                    disabled={anyRefreshInProgress || !cooldownInfo.canRefresh}
+                                    disabled={anyRefreshInProgress || !cooldownInfo.canRefresh || ytPostContestLocked}
                                     className={cn(
                                       btnClass,
                                       "bg-[#5A35B8] text-white border-[#5A35B8] hover:bg-[#4a2d99]",
-                                      (anyRefreshInProgress || !cooldownInfo.canRefresh) && "opacity-60 cursor-not-allowed",
+                                      (anyRefreshInProgress || !cooldownInfo.canRefresh || ytPostContestLocked) && "opacity-60 cursor-not-allowed",
                                     )}
-                                    title="Refresh basic metrics, core analytics, traffic sources, and demographics for all submissions"
+                                    title={ytPostContestLocked ? "Metrics are locked after contest review begins" : "Refresh basic metrics, core analytics, traffic sources, and demographics for all submissions"}
                                   >
                                     {isRefreshingAll ? (
                                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -9180,12 +9190,12 @@ export default function ContestDetailClient({
                                   <div className="flex flex-col items-start gap-1">
                                     <button
                                       onClick={() => handleRefreshDetailedAnalytics("core")}
-                                      disabled={anyRefreshInProgress}
+                                      disabled={anyRefreshInProgress || ytPostContestLocked}
                                       className={cn(
                                         btnClass,
-                                        anyRefreshInProgress ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60" : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
+                                        (anyRefreshInProgress || ytPostContestLocked) ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60" : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
                                       )}
-                                      title="Watch time, avg view %, shares, subscribers, bot score"
+                                      title={ytPostContestLocked ? "Locked after contest review begins" : "Watch time, avg view %, shares, subscribers, bot score"}
                                     >
                                       {isRefreshingCore ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BarChart2 className="h-3.5 w-3.5" />}
                                       {isRefreshingCore ? "Fetching..." : "Refresh Core Analytics"}
@@ -9197,12 +9207,12 @@ export default function ContestDetailClient({
                                   <div className="flex flex-col items-start gap-1">
                                     <button
                                       onClick={() => handleRefreshDetailedAnalytics("traffic")}
-                                      disabled={anyRefreshInProgress}
+                                      disabled={anyRefreshInProgress || ytPostContestLocked}
                                       className={cn(
                                         btnClass,
-                                        anyRefreshInProgress ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60" : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
+                                        (anyRefreshInProgress || ytPostContestLocked) ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60" : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
                                       )}
-                                      title="Traffic source breakdown (used for bot detection)"
+                                      title={ytPostContestLocked ? "Locked after contest review begins" : "Traffic source breakdown (used for bot detection)"}
                                     >
                                       {isRefreshingTraffic ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <TrendingUp className="h-3.5 w-3.5" />}
                                       {isRefreshingTraffic ? "Fetching..." : "Refresh Traffic Sources"}
@@ -9214,12 +9224,12 @@ export default function ContestDetailClient({
                                   <div className="flex flex-col items-start gap-1">
                                     <button
                                       onClick={() => handleRefreshDetailedAnalytics("demographics")}
-                                      disabled={anyRefreshInProgress}
+                                      disabled={anyRefreshInProgress || ytPostContestLocked}
                                       className={cn(
                                         btnClass,
-                                        anyRefreshInProgress ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60" : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
+                                        (anyRefreshInProgress || ytPostContestLocked) ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60" : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
                                       )}
-                                      title="Audience age/gender breakdown"
+                                      title={ytPostContestLocked ? "Locked after contest review begins" : "Audience age/gender breakdown"}
                                     >
                                       {isRefreshingDemographics ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users className="h-3.5 w-3.5" />}
                                       {isRefreshingDemographics ? "Fetching..." : "Refresh Demographics data"}
@@ -9798,13 +9808,15 @@ export default function ContestDetailClient({
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  disabled={anyYtRefreshInProgress}
                                   className={cn(
                                     "h-12 gap-2",
                                     isDark
                                       ? "border-slate-600 text-slate-300 hover:bg-slate-800"
                                       : "border-slate-300 text-slate-700 hover:bg-slate-50",
+                                    anyYtRefreshInProgress && "opacity-60 cursor-not-allowed",
                                   )}
-                                  title="Choose which columns to show in the table"
+                                  title={anyYtRefreshInProgress ? "Unavailable while metrics are refreshing" : "Choose which columns to show in the table"}
                                 >
                                   <Columns2 className="h-4 w-4" />
                                   Modify headers
@@ -11158,15 +11170,7 @@ export default function ContestDetailClient({
                                       )}
                                       {canSeeCore && ytVisibleColumns.includes("bot_score") && (
                                           <TableCell className="text-center">
-                                            {(metrics as any).analytics_needs_reauth ? (
-                                              <span
-                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 border border-yellow-300"
-                                                title="Creator needs to reconnect YouTube for analytics"
-                                              >
-                                                <AlertTriangle className="h-3 w-3" />
-                                                Reauth
-                                              </span>
-                                            ) : (metrics as any).bot_score !== null && (metrics as any).bot_score !== undefined ? (
+                                            {(metrics as any).bot_score !== null && (metrics as any).bot_score !== undefined ? (
                                               <div className="flex flex-col items-center gap-0.5">
                                                 <span className={cn(
                                                   "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
@@ -11694,8 +11698,9 @@ export default function ContestDetailClient({
                                               </DropdownMenuLabel>
                                               <DropdownMenuItem
                                                 disabled={
-                                                  loadingDetailedAnalytics[submission.id] !== undefined &&
-                                                  loadingDetailedAnalytics[submission.id] !== null
+                                                  ytPostContestLocked ||
+                                                  (loadingDetailedAnalytics[submission.id] !== undefined &&
+                                                    loadingDetailedAnalytics[submission.id] !== null)
                                                 }
                                                 onClick={() =>
                                                   handleRefreshDetailedAnalytics("core", {
@@ -11723,8 +11728,9 @@ export default function ContestDetailClient({
                                               </DropdownMenuItem>
                                               <DropdownMenuItem
                                                 disabled={
-                                                  loadingDetailedAnalytics[submission.id] !== undefined &&
-                                                  loadingDetailedAnalytics[submission.id] !== null
+                                                  ytPostContestLocked ||
+                                                  (loadingDetailedAnalytics[submission.id] !== undefined &&
+                                                    loadingDetailedAnalytics[submission.id] !== null)
                                                 }
                                                 onClick={() =>
                                                   handleRefreshDetailedAnalytics("traffic", {
@@ -11752,8 +11758,9 @@ export default function ContestDetailClient({
                                               </DropdownMenuItem>
                                               <DropdownMenuItem
                                                 disabled={
-                                                  loadingDetailedAnalytics[submission.id] !== undefined &&
-                                                  loadingDetailedAnalytics[submission.id] !== null
+                                                  ytPostContestLocked ||
+                                                  (loadingDetailedAnalytics[submission.id] !== undefined &&
+                                                    loadingDetailedAnalytics[submission.id] !== null)
                                                 }
                                                 onClick={() =>
                                                   handleRefreshDetailedAnalytics("demographics", {
@@ -12763,7 +12770,7 @@ export default function ContestDetailClient({
                                                         </DropdownMenuLabel>
                                                         <DropdownMenuSeparator />
                                                         <DropdownMenuItem
-                                                          disabled={!!loadingDetailedAnalytics[group.creator.id]}
+                                                          disabled={ytPostContestLocked || !!loadingDetailedAnalytics[group.creator.id]}
                                                           onClick={() =>
                                                             handleRefreshDetailedAnalytics("core", {
                                                               creatorId: group.creator.id,
@@ -12774,7 +12781,7 @@ export default function ContestDetailClient({
                                                           Refresh Core Analytics
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
-                                                          disabled={!!loadingDetailedAnalytics[group.creator.id]}
+                                                          disabled={ytPostContestLocked || !!loadingDetailedAnalytics[group.creator.id]}
                                                           onClick={() =>
                                                             handleRefreshDetailedAnalytics("traffic", {
                                                               creatorId: group.creator.id,
@@ -12785,7 +12792,7 @@ export default function ContestDetailClient({
                                                           Refresh Traffic Sources
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
-                                                          disabled={!!loadingDetailedAnalytics[group.creator.id]}
+                                                          disabled={ytPostContestLocked || !!loadingDetailedAnalytics[group.creator.id]}
                                                           onClick={() =>
                                                             handleRefreshDetailedAnalytics("demographics", {
                                                               creatorId: group.creator.id,
@@ -12796,7 +12803,7 @@ export default function ContestDetailClient({
                                                           Refresh Demographics
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
-                                                          disabled={!!loadingDetailedAnalytics[group.creator.id]}
+                                                          disabled={ytPostContestLocked || !!loadingDetailedAnalytics[group.creator.id]}
                                                           onClick={() =>
                                                             handleRefreshDetailedAnalytics("both", {
                                                               creatorId: group.creator.id,
@@ -12807,7 +12814,7 @@ export default function ContestDetailClient({
                                                           Refresh Traffic + Demo
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
-                                                          disabled={!!loadingDetailedAnalytics[group.creator.id]}
+                                                          disabled={ytPostContestLocked || !!loadingDetailedAnalytics[group.creator.id]}
                                                           onClick={() =>
                                                             handleRefreshDetailedAnalytics("all", {
                                                               creatorId: group.creator.id,
