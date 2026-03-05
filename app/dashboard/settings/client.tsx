@@ -47,8 +47,8 @@ import {
 } from "@/components/ui/dialog";
 import { useEffect, useState, useCallback } from "react";
 import { FaXTwitter } from "react-icons/fa6";
-import { FaDiscord, FaWhatsapp } from "react-icons/fa";
-import { SiInstagram, SiYoutube, SiLinkedin } from "react-icons/si";
+import { FaDiscord, FaWhatsapp, FaLinkedin } from "react-icons/fa";
+import { SiInstagram, SiYoutube } from "react-icons/si";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
 import dayjs from "dayjs";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -2400,7 +2400,7 @@ export default function SettingsPage({
                       : "bg-white border-gray-300 hover:border-blue-400 hover:bg-blue-50"
                   )}
                 >
-                  <SiLinkedin className="h-5 w-5 text-blue-600" />
+                  <FaLinkedin className="h-5 w-5 text-blue-600" />
                   <span
                     className={cn(
                       "font-medium",
