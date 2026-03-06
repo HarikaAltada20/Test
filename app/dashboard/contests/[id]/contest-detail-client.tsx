@@ -3444,7 +3444,8 @@ export default function ContestDetailClient({
       }
 
       if (result?.queued) {
-        // Poll until refresh completes; keep "Updating..." state, then reload the page
+        // Poll until refresh completes; for Instagram use run status, for Twitter use last-metrics-updated
+        const isInstagram = currentContest.platform?.toLowerCase() === "instagram";
         const previousUpdated = currentContest.last_metrics_updated ?? null;
         const pollIntervalMs = 3000;
         const pollMaxMs = 120000; // 2 min
@@ -3456,17 +3457,32 @@ export default function ContestDetailClient({
             return;
           }
           try {
-            const res = await fetch(
-              `/api/contests/${contestId}/last-metrics-updated`,
-            );
-            if (!res.ok) return;
-            const data = await res.json();
-            const newUpdated = data.last_metrics_updated ?? null;
-            if (newUpdated && newUpdated !== previousUpdated) {
-              clearInterval(pollTimer);
-              setIsRefreshingMetrics(false);
-              window.location.reload();
-              return;
+            if (isInstagram) {
+              const res = await fetch(
+                `/api/contests/${contestId}/instagram-insights-refresh/status`,
+              );
+              if (!res.ok) return;
+              const data = await res.json();
+              const status = data?.run?.status;
+              if (status === "completed" || status === "failed" || status === "cancelled") {
+                clearInterval(pollTimer);
+                setIsRefreshingMetrics(false);
+                window.location.reload();
+                return;
+              }
+            } else {
+              const res = await fetch(
+                `/api/contests/${contestId}/last-metrics-updated`,
+              );
+              if (!res.ok) return;
+              const data = await res.json();
+              const newUpdated = data.last_metrics_updated ?? null;
+              if (newUpdated && newUpdated !== previousUpdated) {
+                clearInterval(pollTimer);
+                setIsRefreshingMetrics(false);
+                window.location.reload();
+                return;
+              }
             }
           } catch {
             // ignore

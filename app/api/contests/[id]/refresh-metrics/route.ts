@@ -13,8 +13,12 @@ import {
   enqueueMetricsRefreshJob,
 } from "@/lib/queue/metrics-refresh-queue";
 import {
+  isInstagramInsightsQueueEnabled,
+} from "@/lib/queue/instagram-insights-queue";
+import {
   isQStashEnabled,
   triggerProcessMetricsQueue,
+  triggerProcessInstagramInsightsQueue,
 } from "@/lib/qstash";
 
 export async function POST(
@@ -145,9 +149,12 @@ export async function POST(
         );
     }
 
-    // Twitter: use Upstash Redis 
+    // Twitter: use Upstash Redis; Instagram: use Instagram insights queue when enabled
     const queueEnabled = isMetricsQueueEnabled();
+    const instagramQueueEnabled = isInstagramInsightsQueueEnabled();
     const useQueue = isTwitter && queueEnabled;
+    const useInstagramQueue = !isTwitter && (contest.platform?.toLowerCase() === "instagram") && instagramQueueEnabled;
+
     if (isTwitter) {
       const why = queueEnabled
         ? "using queue (background refresh)"
@@ -158,13 +165,76 @@ export async function POST(
         `[metrics-refresh-queue] Twitter refresh for contest ${contestId}: ${why}`
       );
     }
+
+    if (useInstagramQueue) {
+      const protocol = request.headers.get("x-forwarded-proto") || "http";
+      const host = request.headers.get("host");
+      const baseUrl = host
+        ? `${protocol}://${host}`
+        : process.env.NEXT_PUBLIC_APP_URL
+          ? `https://${process.env.NEXT_PUBLIC_APP_URL}`
+          : "";
+      const enqueueUrl = `${baseUrl.replace(/\/$/, "")}/api/contests/${contestId}/instagram-insights-refresh/enqueue`;
+      const cookieHeader = request.headers.get("cookie");
+      const enqueueRes = await fetch(enqueueUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        },
+        credentials: "include",
+      });
+      const enqueueData = await enqueueRes.json().catch(() => ({}));
+      if (!enqueueRes.ok) {
+        return NextResponse.json(
+          { error: enqueueData?.error ?? "Failed to start Instagram refresh" },
+          { status: enqueueRes.status }
+        );
+      }
+      if (enqueueData.alreadyActive) {
+        return NextResponse.json({
+          success: true,
+          queued: true,
+          message: "Refresh already in progress.",
+          contestId,
+          runId: enqueueData.runId,
+          nextRefreshAvailable: new Date(now.getTime() + cooldownMs).toISOString(),
+        });
+      }
+      const processUrl = `${baseUrl}/api/cron/process-instagram-insights-queue`;
+      const doFetch = () =>
+        fetch(processUrl, {
+          method: "POST",
+          headers: process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : {},
+        }).catch((e) =>
+          console.warn("[refresh-metrics] Trigger Instagram processor failed:", e)
+        );
+      if (isQStashEnabled()) {
+        triggerProcessInstagramInsightsQueue(baseUrl).then((res) => {
+          if (res?.error) doFetch();
+        }).catch(() => doFetch());
+      } else {
+        doFetch();
+      }
+      return NextResponse.json({
+        success: true,
+        queued: true,
+        message: "Instagram refresh started in background. Metrics will update shortly.",
+        contestId,
+        contestTitle: contest.title,
+        platform: contest.platform,
+        runId: enqueueData.runId,
+        nextRefreshAvailable: new Date(now.getTime() + cooldownMs).toISOString(),
+      });
+    }
+
     if (useQueue) {
       const protocol = request.headers.get("x-forwarded-proto") || "http";
       const host = request.headers.get("host");
       const baseUrl = host
         ? `${protocol}://${host}`
-        : process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
+        : process.env.NEXT_PUBLIC_APP_URL
+        ? `https://${process.env.NEXT_PUBLIC_APP_URL}`
         : "";
 
       const platform = (contest?.platform ?? "").toString().toLowerCase();

@@ -3,10 +3,6 @@
     {
       "path": "/api/cron/update-youtube-metrics",
       "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/api/cron/update-instagram-insights",
-      "schedule": "0 2 * * *"
     }
   ]
 }

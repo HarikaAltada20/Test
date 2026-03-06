@@ -213,11 +213,7 @@ export default async function AdminContestDetailPage({
             : "No tweets found"
         );
       }
-    } else {
-      console.log(
-        `[Admin page.tsx] Not a Twitter campaign - skipping Twitter tweets fetch`
-      );
-    }
+    } 
 
     // For Twitter campaigns, fetch creator-level leaderboard data from twitter_campaign_leaderboard
     let creatorModerationData: Record<
@@ -646,19 +642,7 @@ export default async function AdminContestDetailPage({
     // Combine regular submissions and Twitter tweets
     const allSubmissions: any[] = [...submissions, ...twitterSubmissions];
 
-    console.log(
-      `[Admin page.tsx] Mapped submissions for contest ${contestId}:`,
-      {
-        regular: submissions.length,
-        twitter: twitterSubmissions.length,
-        total: allSubmissions.length,
-        isTwitterCampaign,
-        platform: contestData.platform,
-        contest_format: contestData.contest_format,
-        sampleTwitterSubmission:
-          twitterSubmissions.length > 0 ? twitterSubmissions[0] : null,
-      }
-    );
+
 
     return (
       <>
