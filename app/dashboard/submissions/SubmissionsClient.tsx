@@ -213,6 +213,8 @@ export default function SubmissionsClient({
   const [brokenThumbs, setBrokenThumbs] = useState<Record<string, boolean>>({});
   const [selectedContestGroup, setSelectedContestGroup] = useState<any>(null);
   const [expandedCaptions, setExpandedCaptions] = useState<Record<string, boolean>>({});
+  const [expandedReasons, setExpandedReasons] = useState<Record<string, boolean>>({});
+  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
 
   // Contest Status Multi-select State
   const [contestStatusFilter, setContestStatusFilter] = useState<string[]>([
@@ -400,6 +402,14 @@ export default function SubmissionsClient({
 
   const toggleCaption = (id: string) => {
     setExpandedCaptions(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleReason = (id: string) => {
+    setExpandedReasons(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleNote = (id: string) => {
+    setExpandedNotes(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   // Read mode from data attribute
@@ -731,16 +741,18 @@ export default function SubmissionsClient({
       groups[contestId].totalViews += sub.views || 0;
 
       // Logic for contest group summaries (cards):
-      // 1. Never count rejected submissions
-      const isRejected = (sub.status as string || "").toLowerCase() === "rejected";
-      if (!isRejected) {
+      // Only count submissions with status: pending, verified, or paid (explicitly whitelist valid statuses)
+      // Rejected (and any other unexpected status) are strictly excluded
+      const subStatus = (sub.status as string || "").toLowerCase();
+      const isCountableStatus = subStatus === "pending" || subStatus === "verified" || subStatus === "paid";
+
+      if (isCountableStatus) {
         const isPostProcessed = contest?.post_contest_status === "payouts_processed";
-        const subStatus = (sub.status as string || "").toLowerCase();
         const isActuallyPaid = subStatus === "paid";
         const isBonusPaid = (sub as any).bonus_paid === true;
 
         if (isPostProcessed) {
-          // If processed, only sum if officially PAID
+          // Payouts processed: only count if submission is officially PAID
           if (isActuallyPaid) {
             groups[contestId].totalEarnings += getSubmissionEarningsAmount(sub);
             if (isBonusPaid) {
@@ -748,19 +760,24 @@ export default function SubmissionsClient({
             }
           }
         } else {
+          // Live / In Review / Verification Complete: count pending + verified earnings
           groups[contestId].totalEarnings += getSubmissionEarningsAmount(sub);
 
-          const contestDetails = contest?.contest_based_details as any;
-          const bonusDetails = contest?.bonus_details as any;
-          const flatFeeBonus =
-            contestDetails?.cpm_contest?.flat_fee_bonus ||
-            contestDetails?.leaderboard_contest?.flat_fee_bonus ||
-            bonusDetails?.flat_fee_bonus || 0;
-
-          // If a specific bonus amount is already assigned to the submission, use it.
-          // Otherwise, fall back to the participation/flat-fee bonus from the contest config.
           const subBonus = (sub as any).bonus_amount || 0;
-          groups[contestId].totalBonus += subBonus > 0 ? subBonus : flatFeeBonus;
+          if (subBonus > 0) {
+            // Submission has its own assigned bonus amount
+            groups[contestId].totalBonus += subBonus;
+          } else if (!groups[contestId]._bonusAdded) {
+            // Add flat_fee_bonus only ONCE per contest group
+            const contestDetails = contest?.contest_based_details as any;
+            const bonusDetails = contest?.bonus_details as any;
+            const flatFeeBonus =
+              contestDetails?.cpm_contest?.flat_fee_bonus ||
+              contestDetails?.leaderboard_contest?.flat_fee_bonus ||
+              bonusDetails?.flat_fee_bonus || 0;
+            groups[contestId].totalBonus += flatFeeBonus;
+            groups[contestId]._bonusAdded = true;
+          }
         }
       }
     });
@@ -803,12 +820,9 @@ export default function SubmissionsClient({
     const totalEarnings = filteredSubmissions.reduce((sum, s) => {
       const contest = s.contests;
       if (!contest) return sum;
-
       const isPostProcessed = contest.post_contest_status === "payouts_processed";
       const subStatus = (s.status as string || "").toLowerCase();
       const isActuallyPaid = subStatus === "paid";
-
-      // If payouts are processed, we ONLY add if the status is explicitly 'paid'
       if (isPostProcessed && isActuallyPaid) {
         return sum + getSubmissionEarningsAmount(s);
       }
@@ -819,25 +833,56 @@ export default function SubmissionsClient({
     const totalBonus = filteredSubmissions.reduce((sum, s) => {
       const contest = s.contests;
       if (!contest) return sum;
-
       const isPostProcessed = contest.post_contest_status === "payouts_processed";
       const subStatus = (s.status as string || "").toLowerCase();
       const isActuallyPaid = subStatus === "paid";
       const isBonusPaid = (s as any).bonus_paid === true;
-
-      // Only sum if official payout is done AND submission is paid AND bonus is paid
       if (isPostProcessed && isActuallyPaid && isBonusPaid) {
-        // Bonus amount is already in cents
         return sum + ((s as any).bonus_amount || 0);
       }
       return sum;
+    }, 0);
+
+    // Estimated earnings: for submissions NOT in payouts_processed contests
+    // (live, pending_review, in_review, verification_complete)
+    const estimatedEarnings = filteredSubmissions.reduce((sum, s) => {
+      const contest = s.contests;
+      if (!contest) return sum;
+      const isPayoutsProcessed = contest.post_contest_status === "payouts_processed";
+      // If payouts already processed, this is no longer "estimated" — show $0
+      if (isPayoutsProcessed) return sum;
+      const isRejected = (s.status as string || "").toLowerCase() === "rejected";
+      if (isRejected) return sum;
+      return sum + getSubmissionEarningsAmount(s);
+    }, 0);
+
+    // Estimated bonus: for submissions NOT in payouts_processed contests
+    const estimatedBonus = filteredSubmissions.reduce((sum, s) => {
+      const contest = s.contests;
+      if (!contest) return sum;
+      const isPayoutsProcessed = contest.post_contest_status === "payouts_processed";
+      if (isPayoutsProcessed) return sum;
+      const isRejected = (s.status as string || "").toLowerCase() === "rejected";
+      if (isRejected) return sum;
+      // Use already-assigned bonus_amount, or fall back to flat_fee_bonus from contest config
+      const subBonus = (s as any).bonus_amount || 0;
+      if (subBonus > 0) return sum + subBonus;
+      const contestDetails = contest?.contest_based_details as any;
+      const bonusDetails = contest?.bonus_details as any;
+      const flatFeeBonus =
+        contestDetails?.cpm_contest?.flat_fee_bonus ||
+        contestDetails?.leaderboard_contest?.flat_fee_bonus ||
+        bonusDetails?.flat_fee_bonus || 0;
+      return sum + flatFeeBonus;
     }, 0);
 
     return {
       contests: contests.size,
       views: totalViews,
       earnings: totalEarnings,
-      bonus: totalBonus
+      bonus: totalBonus,
+      estimatedEarnings,
+      estimatedBonus,
     };
   }, [filteredSubmissions]);
 
@@ -970,10 +1015,19 @@ export default function SubmissionsClient({
       meta?.candidates?.[0]?.url ||
       meta?.video_details?.thumbnail_url;
 
-    // Diagnostic check for development
-    if (!bestThumbnail && meta) {
-      console.log(`[SUBMISSION-DEBUG] No thumbnail for ${submission.id}. Keys:`, Object.keys(meta));
-    }
+    // Extract video title using exact logic from the View Submission modal
+    const videoTitle = submission.video_title ||
+      meta?.video_title ||
+      meta?.title ||
+      meta?.video_details?.title ||
+      meta?.edge_media_to_caption?.edges?.[0]?.node?.text ||
+      meta?.caption ||
+      meta?.description ||
+      meta?.desc ||
+      meta?.text ||
+      meta?.video?.description ||
+      meta?.video?.desc ||
+      "Untitled Submission";
 
     return (
       <div
@@ -1044,7 +1098,7 @@ export default function SubmissionsClient({
 
         {/* Column 2: Info */}
         <div className="flex flex-col gap-2 min-w-0">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h3
               className={cn(
                 "text-[20px] font-bold transition-all duration-300 cursor-default self-start",
@@ -1068,6 +1122,33 @@ export default function SubmissionsClient({
                 </div>
               );
             })()}
+          </div>
+
+          <div className="flex items-center gap-2 mt-[-6px]">
+            <p
+              className={cn(
+                "text-[13px] font-medium transition-all duration-300",
+                isDark ? "text-slate-400" : "text-slate-500",
+                "truncate max-w-[300px] lg:max-w-[500px]"
+              )}
+            >
+              {videoTitle}
+            </p>
+            {videoTitle.length > 60 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedContestGroup({
+                    contest: submission.contests,
+                    submissions: [submission],
+                    isSingleSubmission: true
+                  });
+                }}
+                className="text-[11px] font-bold text-indigo-500 hover:text-indigo-600 shrink-0 transition-colors"
+              >
+                View More
+              </button>
+            )}
           </div>
 
           <div className={cn("flex items-center gap-1.5 text-[13px] font-medium", isDark ? "text-slate-300" : "text-slate-500")}>
@@ -1120,23 +1201,59 @@ export default function SubmissionsClient({
           </div>
 
           {submission.status === "rejected" && rejectionDetails && (
-            <div className="mt-3 p-3 bg-red-500/5 border-l-4 border-red-500 rounded-r-lg flex flex-col gap-1.5 overflow-hidden">
-              <div className="flex items-center gap-2 min-w-0">
+            <div className="mt-3 p-3 bg-red-500/5 border-l-4 border-red-500 rounded-r-lg flex flex-col gap-2 overflow-hidden">
+              <div className="flex flex-col gap-1 min-w-0">
                 <span className="text-[11px] font-black text-red-600 uppercase tracking-widest shrink-0">Rejection Reason:</span>
-                <span
-                  className="text-[14px] font-bold text-red-700 dark:text-red-300 whitespace-normal overflow-visible lg:truncate lg:hover:whitespace-normal lg:hover:overflow-visible transition-all duration-300 cursor-default"
-                >
-                  {rejectionDetails.reason}
-                </span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <p className={cn(
+                    "text-[14px] font-bold text-red-700 dark:text-red-300 transition-all duration-300 min-w-0 flex-1",
+                    "truncate"
+                  )}>
+                    {rejectionDetails.reason}
+                  </p>
+                  {rejectionDetails.reason.length > 60 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedContestGroup({
+                          contest: submission.contests,
+                          submissions: [submission],
+                          isSingleSubmission: true
+                        });
+                      }}
+                      className="text-[11px] font-bold text-red-600 hover:text-red-700 shrink-0 transition-colors"
+                    >
+                      View More
+                    </button>
+                  )}
+                </div>
               </div>
               {displayNote && (
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex flex-col gap-1 min-w-0">
                   <span className="text-[11px] font-black text-red-600 uppercase tracking-widest shrink-0">Note:</span>
-                  <span
-                    className="text-[14px] font-medium text-red-600/80 dark:text-red-400/80 italic whitespace-normal overflow-visible lg:truncate lg:hover:whitespace-normal lg:hover:overflow-visible transition-all duration-300 cursor-default"
-                  >
-                    {displayNote}
-                  </span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className={cn(
+                      "text-[14px] font-medium text-red-600/80 dark:text-red-400/80 italic transition-all duration-300 min-w-0 flex-1",
+                      "truncate"
+                    )}>
+                      {displayNote}
+                    </p>
+                    {displayNote.length > 60 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedContestGroup({
+                            contest: submission.contests,
+                            submissions: [submission],
+                            isSingleSubmission: true
+                          });
+                        }}
+                        className="text-[11px] font-bold text-red-600 hover:text-red-700 shrink-0 transition-colors"
+                      >
+                        View More
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -1378,12 +1495,14 @@ export default function SubmissionsClient({
       </div>
 
       {/* Quick Stats Summary */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {[
           { label: "Submitted to", value: stats.contests, sub: "Contests", icon: Trophy, color: "text-blue-500" },
           { label: "Viral Views", value: stats.views.toLocaleString(), sub: "Total", icon: TrendingUp, color: "text-indigo-500" },
           { label: "Cash Earned", value: `$${centsToDollars(stats.earnings)}`, sub: "USD", icon: DollarSign, color: "text-green-500" },
           { label: "Extra Bonus", value: `$${centsToDollars(stats.bonus)}`, sub: "USD", icon: Coins, color: "text-purple-500" },
+          { label: "Est. Earning", value: `$${centsToDollars(stats.estimatedEarnings)}`, sub: "USD", icon: TrendingUp, color: "text-blue-400" },
+          { label: "Est. Bonus", value: `$${centsToDollars(stats.estimatedBonus)}`, sub: "USD", icon: Coins, color: "text-orange-400" },
         ].map((item, idx) => (
           <Card key={idx} className={cn("border shadow-none rounded-[16px]", isDark ? "bg-[#1e293b] border-slate-800" : "bg-white border-slate-100")}>
             <CardContent className="p-4 flex items-center gap-4">
@@ -1914,10 +2033,12 @@ export default function SubmissionsClient({
             <DialogTitle
               className={cn("text-xl font-black break-words leading-tight", isDark ? "text-white" : "text-slate-900")}
             >
-              {selectedContestGroup?.contest?.title || "Contest Submissions"}
+              {selectedContestGroup?.isSingleSubmission ? "Submission Details" : (selectedContestGroup?.contest?.title || "Contest Submissions")}
             </DialogTitle>
             <DialogDescription className={cn("text-[13px]", isDark ? "text-slate-400" : "text-slate-500")}>
-              Showing all {selectedContestGroup?.submissions?.length} submissions for this contest.
+              {selectedContestGroup?.isSingleSubmission
+                ? "Full details for this specific submission."
+                : `Showing all ${selectedContestGroup?.submissions?.length} submissions for this contest.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -2087,7 +2208,7 @@ export default function SubmissionsClient({
                       {submission.platform || "Video"}
                     </div>
                     {/* Status badges – top right */}
-                    <div className="absolute top-3 right-3 flex items-center gap-2">
+                    <div className="absolute top-3 right-3 flex items-center gap-2 flex-wrap justify-end max-w-[calc(100%-80px)]">
                       <span className={cn(
                         "inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-sm",
                         statusStyles.bg, statusStyles.text, statusStyles.border
@@ -2111,10 +2232,8 @@ export default function SubmissionsClient({
                   {/* ── SECTION 2: Title row ── */}
                   <div className={cn("px-4 pt-3 pb-3 border-b max-w-full overflow-hidden min-w-0 flex-shrink-0", isDark ? "border-slate-700" : "border-slate-100")}>
                     <h4
-                      onClick={() => toggleCaption(submission.id)}
                       className={cn(
-                        "text-[15px] font-bold leading-snug transition-all duration-300 cursor-pointer hover:opacity-80 w-full truncate block",
-                        expandedCaptions[submission.id] ? "whitespace-normal break-words" : "",
+                        "text-[15px] font-bold leading-snug transition-all duration-300 w-full whitespace-normal break-words",
                         isDark ? "text-white" : "text-slate-900"
                       )}
                     >
@@ -2188,19 +2307,51 @@ export default function SubmissionsClient({
                   {
                     submission.status === "rejected" && rejectionDetails && (
                       <div className={cn("px-4 py-3 border-b", isDark ? "border-slate-700" : "border-slate-100")}>
-                        <div className="rounded-[10px] border-l-4 border-red-500 bg-red-500/5 px-3 py-2.5 flex flex-col gap-2">
-                          <div>
-                            <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-0.5">Rejection Reason</p>
-                            <p className="text-[13px] font-bold text-red-700 dark:text-red-300 break-words">
-                              {rejectionDetails.reason}
-                            </p>
+                        <div className="rounded-[10px] border-l-4 border-red-500 bg-red-500/5 px-3 py-2.5 flex flex-col gap-3">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Rejection Reason</p>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <p className={cn(
+                                "text-[13px] font-bold text-red-700 dark:text-red-300 transition-all duration-300 min-w-0 flex-1",
+                                expandedReasons[submission.id] ? "whitespace-normal break-words" : "truncate"
+                              )}>
+                                {rejectionDetails.reason}
+                              </p>
+                              {(rejectionDetails.reason.length > 60 || expandedReasons[submission.id]) && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleReason(submission.id);
+                                  }}
+                                  className="text-[11px] font-bold text-red-600 hover:text-red-700 shrink-0 transition-colors"
+                                >
+                                  {expandedReasons[submission.id] ? "(Show Less)" : "View More"}
+                                </button>
+                              )}
+                            </div>
                           </div>
                           {displayNote && (
-                            <div>
-                              <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-0.5">Note</p>
-                              <p className="text-[13px] font-medium text-red-600/80 dark:text-red-400/80 italic break-words">
-                                {displayNote}
-                              </p>
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Note</p>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <p className={cn(
+                                  "text-[13px] font-medium text-red-600/80 dark:text-red-400/80 italic transition-all duration-300 min-w-0 flex-1",
+                                  expandedNotes[submission.id] ? "whitespace-normal break-words" : "truncate"
+                                )}>
+                                  {displayNote}
+                                </p>
+                                {(displayNote.length > 60 || expandedNotes[submission.id]) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleNote(submission.id);
+                                    }}
+                                    className="text-[11px] font-bold text-red-600 hover:text-red-700 shrink-0 transition-colors"
+                                  >
+                                    {expandedNotes[submission.id] ? "(Show Less)" : "View More"}
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
