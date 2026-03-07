@@ -96,6 +96,7 @@ export default async function SubmissionsPage() {
     contestsMap.set(contest.id, contest);
   });
 
+
   const formattedSubmissions = submissionsToFormat.map(sub => ({
     ...sub,
     contests: sub.contest_id ? contestsMap.get(sub.contest_id) || null : null,
