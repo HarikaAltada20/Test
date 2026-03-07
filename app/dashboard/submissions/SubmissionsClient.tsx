@@ -1465,17 +1465,6 @@ export default function SubmissionsClient({
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto mt-2 md:mt-0">
-          <Button asChild className="h-10 flex-1 sm:flex-none px-[18px] rounded-[10px] bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0 transition-all">
-            <Link href="/dashboard/opportunities">Find Opportunities</Link>
-          </Button>
-
-          <Button
-            onClick={handleSearch}
-            className="h-10 flex-1 sm:flex-none px-4 rounded-lg bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0"
-          >
-            Search
-          </Button>
-
           <div className="relative flex-1 min-w-[200px] md:w-[320px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" strokeWidth={3} />
             <Input
@@ -1491,6 +1480,17 @@ export default function SubmissionsClient({
               )}
             />
           </div>
+
+          <Button
+            onClick={handleSearch}
+            className="h-10 flex-1 sm:flex-none px-4 rounded-lg bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0"
+          >
+            Search
+          </Button>
+
+          <Button asChild className="h-10 flex-1 sm:flex-none px-[18px] rounded-[10px] bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0 transition-all">
+            <Link href="/dashboard/opportunities">Find Opportunities</Link>
+          </Button>
         </div>
       </div>
 
