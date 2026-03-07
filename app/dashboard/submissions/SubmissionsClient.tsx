@@ -198,9 +198,11 @@ export default function SubmissionsClient({
     useState<SubmissionWithContest[]>(initialSubmissions);
 
   const [contestTypeFilter, setContestTypeFilter] =
-    useState<ContestTypeFilter>("all");
+    useState<string[]>(["leaderboard", "cpm"]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
+  const [platformFilter, setPlatformFilter] = useState<string[]>([
+    "youtube", "instagram", "tiktok"
+  ]);
   const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
@@ -453,7 +455,7 @@ export default function SubmissionsClient({
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [contestTypeFilter, statusFilter, platformFilter, activeSearch, dateFilter, dateRange, itemsPerPage]);
+  }, [contestTypeFilter, statusFilter, platformFilter, activeSearch, dateFilter, dateRange, itemsPerPage, contestStatusFilter]);
 
   const isDark = mode === "dark";
   // Helper for dynamic card titles and descriptions
@@ -494,16 +496,16 @@ export default function SubmissionsClient({
     let submissions = [...allSubmissions];
 
     // Filter by contest type
-    if (contestTypeFilter !== "all") {
+    if (contestTypeFilter.length < 2) {
       submissions = submissions.filter(
-        (sub) => sub.contests?.contest_type === contestTypeFilter
+        (sub) => sub.contests?.contest_type && contestTypeFilter.includes(sub.contests.contest_type)
       );
     }
 
     // Filter by platform
-    if (platformFilter !== "all") {
+    if (platformFilter.length < 3) {
       submissions = submissions.filter(
-        (sub) => sub.platform?.toLowerCase() === platformFilter
+        (sub) => sub.platform?.toLowerCase() && platformFilter.includes(sub.platform.toLowerCase())
       );
     }
 
@@ -517,7 +519,24 @@ export default function SubmissionsClient({
       );
     }
 
-    // Filter by status
+    // Filter by Search or Status
+    submissions = submissions.filter((sub) => {
+      const contestEndDate = sub.contests?.end_date
+        ? new Date(sub.contests.end_date)
+        : null;
+      const isEnded = contestEndDate ? contestEndDate < new Date() : false;
+
+      // 1. ALWAYS Filter by Contest Status (Live/Ended subcategories)
+      const contestPostStatus = sub.contests?.post_contest_status || "pending_review";
+      if (isEnded) {
+        if (!contestStatusFilter.includes(contestPostStatus)) return false;
+      } else {
+        if (!contestStatusFilter.includes("live")) return false;
+      }
+      return true;
+    });
+
+    // Filter by status tab (Pending, Verified, etc.)
     if (statusFilter !== "all") {
       console.log("🔍 Filtering submissions by status:", statusFilter);
       console.log(
@@ -540,14 +559,6 @@ export default function SubmissionsClient({
           ? new Date(sub.contests.end_date)
           : null;
         const isEnded = contestEndDate ? contestEndDate < new Date() : false;
-
-        // Filter by Contest Status
-        const contestPostStatus = sub.contests?.post_contest_status || "pending_review";
-        if (isEnded) {
-          if (!contestStatusFilter.includes(contestPostStatus)) return false;
-        } else {
-          if (!contestStatusFilter.includes("live")) return false;
-        }
 
         let shouldInclude = false;
         switch (statusFilter) {
@@ -1528,30 +1539,108 @@ export default function SubmissionsClient({
           </PopoverContent>
         </Popover>
 
-        <Select value={contestTypeFilter} onValueChange={(v) => setContestTypeFilter(v as ContestTypeFilter)}>
-          <SelectTrigger className={cn(
-            "w-full lg:w-[180px] h-10 rounded-lg transition-none shadow-none",
-            isDark ? "border-slate-700 bg-[#1e293b] text-slate-100" : "border-slate-200 bg-white text-slate-900"
-          )}><SelectValue placeholder="All Types" /></SelectTrigger>
-          <SelectContent isDark={isDark}>
-            <SelectItem isDark={isDark} value="all">All Types</SelectItem>
-            <SelectItem isDark={isDark} value="leaderboard">Leaderboard</SelectItem>
-            <SelectItem isDark={isDark} value="cpm">CPM</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Contest Type Multi-select Filter */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-full lg:w-[180px] h-10 rounded-lg justify-start text-left font-normal border-slate-200 dark:border-slate-700 shadow-none",
+                isDark ? "bg-[#1e293b] text-slate-100 hover:bg-slate-800" : "bg-white text-slate-900 hover:bg-slate-50"
+              )}
+            >
+              <Trophy className="mr-2 h-4 w-4 opacity-70" />
+              <span className="truncate">
+                {contestTypeFilter.length === 2 ? "All Types" :
+                  contestTypeFilter.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(", ")}
+              </span>
+              <ChevronRight className="ml-auto h-4 w-4 opacity-50 rotate-90" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className={cn("w-[200px] p-2 rounded-xl border-slate-200 dark:border-slate-800", isDark ? "bg-[#0f172a]" : "bg-white")} align="start">
+            <div className="flex flex-col gap-1">
+              {[
+                { id: "leaderboard", label: "Leaderboard" },
+                { id: "cpm", label: "CPM" }
+              ].map(type => (
+                <div
+                  key={type.id}
+                  className={cn(
+                    "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                    isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                  )}
+                  onClick={() => {
+                    setContestTypeFilter(prev =>
+                      prev.includes(type.id) ? prev.filter(t => t !== type.id) : [...prev, type.id]
+                    );
+                  }}
+                >
+                  <div className={cn(
+                    "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                    contestTypeFilter.includes(type.id)
+                      ? "bg-[#4211a1] border-[#4211a1]"
+                      : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
+                  )}>
+                    {contestTypeFilter.includes(type.id) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
+                  </div>
+                  <span className={cn("text-[13px] font-medium", isDark ? "text-slate-300" : "text-slate-600")}>{type.label}</span>
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
 
-        <Select value={platformFilter} onValueChange={(v) => setPlatformFilter(v as PlatformFilter)}>
-          <SelectTrigger className={cn(
-            "w-full lg:w-[180px] h-10 rounded-lg transition-none shadow-none",
-            isDark ? "border-slate-700 bg-[#1e293b] text-slate-100" : "border-slate-200 bg-white text-slate-900"
-          )}><SelectValue placeholder="All Platforms" /></SelectTrigger>
-          <SelectContent isDark={isDark}>
-            <SelectItem isDark={isDark} value="all">All Platforms</SelectItem>
-            <SelectItem isDark={isDark} value="youtube">YouTube</SelectItem>
-            <SelectItem isDark={isDark} value="instagram">Instagram</SelectItem>
-            <SelectItem isDark={isDark} value="tiktok">TikTok</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Platform Multi-select Filter */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-full lg:w-[180px] h-10 rounded-lg justify-start text-left font-normal border-slate-200 dark:border-slate-700 shadow-none",
+                isDark ? "bg-[#1e293b] text-slate-100 hover:bg-slate-800" : "bg-white text-slate-900 hover:bg-slate-50"
+              )}
+            >
+              <Video className="mr-2 h-4 w-4 opacity-70" />
+              <span className="truncate">
+                {platformFilter.length === 3 ? "All Platforms" :
+                  platformFilter.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(", ")}
+              </span>
+              <ChevronRight className="ml-auto h-4 w-4 opacity-50 rotate-90" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className={cn("w-[200px] p-2 rounded-xl border-slate-200 dark:border-slate-800", isDark ? "bg-[#0f172a]" : "bg-white")} align="start">
+            <div className="flex flex-col gap-1">
+              {[
+                { id: "youtube", label: "YouTube" },
+                { id: "instagram", label: "Instagram" },
+                { id: "tiktok", label: "TikTok" }
+              ].map(platform => (
+                <div
+                  key={platform.id}
+                  className={cn(
+                    "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                    isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                  )}
+                  onClick={() => {
+                    setPlatformFilter(prev =>
+                      prev.includes(platform.id) ? prev.filter(p => p !== platform.id) : [...prev, platform.id]
+                    );
+                  }}
+                >
+                  <div className={cn(
+                    "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                    platformFilter.includes(platform.id)
+                      ? "bg-[#4211a1] border-[#4211a1]"
+                      : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
+                  )}>
+                    {platformFilter.includes(platform.id) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
+                  </div>
+                  <span className={cn("text-[13px] font-medium", isDark ? "text-slate-300" : "text-slate-600")}>{platform.label}</span>
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
 
         <Select value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
           <SelectTrigger className={cn(
