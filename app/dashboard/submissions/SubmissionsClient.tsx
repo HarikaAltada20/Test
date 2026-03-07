@@ -13,7 +13,13 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Filter, Video, AlertCircle, Info } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -27,11 +33,25 @@ import {
   EnhancedTabsList as TabsList,
   EnhancedTabsTrigger as TabsTrigger,
 } from "@/components/ui/enhanced-tabs";
+import { ExternalLink, Filter, Video, AlertCircle, Info, ArrowRight, Search, Layers, Clock, CheckCircle2, XCircle, History, DollarSign, Menu, MoreVertical, Eye, Trophy, TrendingUp, Coins, CalendarDays, Tag, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import Image from "next/image";
 import React from "react";
 import { centsToDollars } from "@/lib/currency-utils";
 import { getFullRejectionDetails } from "@/lib/submission-metadata";
 import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Calendar } from "@/components/ui/calendar";
+import { CalendarIcon } from "lucide-react";
+import { subDays, subWeeks, subMonths, subYears, startOfToday, format } from "date-fns";
+import { DateRange } from "react-day-picker";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 // Map human-readable rejection reason labels to their descriptions (new canonical set only)
 const REJECTION_REASON_DESCRIPTIONS: Record<string, string> = {
@@ -62,13 +82,111 @@ interface SubmissionsClientProps {
 type ContestTypeFilter = "all" | "leaderboard" | "cpm";
 type StatusFilter =
   | "all"
-  | "active"
   | "pending"
   | "verified"
   | "rejected"
-  | "ended"
   | "paid";
-type PlatformFilter = "all" | "youtube" | "instagram" | "twitter" | "other";
+type PlatformFilter = "all" | "youtube" | "instagram" | "tiktok" | "twitter" | "other";
+type ViewMode = "all" | "contest";
+type SortOrder = "normal" | "newest" | "oldest" | "views_high" | "views_low" | "earnings_high" | "earnings_low" | "submissions_high" | "submissions_low";
+type DateFilter = "all" | "today" | "3days" | "1week" | "1month" | "1year" | "custom";
+
+/**
+ * Smart Lock Action Buttons - Enterprise Interaction
+ * - Expands on hover (160px)
+ * - Neighbor shrinks (36px)
+ * - 3s delay before closing on leave
+ * - ESC or Click Outside to close
+ */
+const SubmissionActionButtons = ({ contentLink, contestId }: { contentLink: string; contestId: string | null | undefined }) => {
+  const [activeButton, setActiveButton] = useState<"content" | "contest" | null>(null);
+  const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const clearTimer = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  };
+
+  const handleHover = (type: "content" | "contest") => {
+    clearTimer();
+    setActiveButton(type);
+  };
+
+  const handleLeave = () => {
+    clearTimer();
+    timeoutRef.current = setTimeout(() => {
+      setActiveButton(null);
+    }, 3000);
+  };
+
+  // Keyboard and Click Outside handling
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActiveButton(null);
+    };
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setActiveButton(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("mousedown", handleClickOutside);
+      clearTimer();
+    };
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex flex-col lg:flex-row items-center gap-[10px] w-full lg:w-auto lg:justify-self-end self-end lg:mb-1"
+    >
+      <div className="flex flex-col lg:flex-row gap-[10px] items-center w-full lg:w-auto">
+        {/* View Content Button */}
+        <Button
+          asChild
+          onMouseEnter={() => handleHover("content")}
+          onMouseLeave={handleLeave}
+          className={cn(
+            "relative flex items-center justify-center h-[42px] rounded-[10px] transition-all duration-300 ease-in-out p-0 overflow-hidden shadow-sm",
+            "bg-[#4211a1] hover:bg-[#350d81] border-none text-white",
+            "w-full lg:w-[42px]",
+            activeButton === "content" && "lg:!w-[160px]",
+            activeButton === "contest" && "lg:!w-[36px]"
+          )}
+        >
+          <Link href={contentLink || "#"} target="_blank" rel="noopener noreferrer" className="w-full h-full flex items-center justify-center">
+            <Video className="w-[18px] h-[18px] text-white shrink-0" strokeWidth={3} />
+          </Link>
+        </Button>
+
+        {/* View Contest Button */}
+        <Button
+          asChild
+          onMouseEnter={() => handleHover("contest")}
+          onMouseLeave={handleLeave}
+          className={cn(
+            "relative flex items-center justify-center h-[42px] rounded-[10px] transition-all duration-300 ease-in-out p-0 overflow-hidden shadow-sm",
+            "bg-[#4211a1] hover:bg-[#350d81] border-none text-white",
+            "w-full lg:w-[42px]",
+            activeButton === "contest" && "lg:!w-[160px]",
+            activeButton === "content" && "lg:!w-[36px]"
+          )}
+        >
+          <Link href={contestId ? `/dashboard/opportunities/${contestId}` : "#"} className="w-full h-full flex items-center justify-center">
+            <Info className="w-[18px] h-[18px] text-white shrink-0" strokeWidth={3} />
+          </Link>
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 export default function SubmissionsClient({
   initialSubmissions,
@@ -83,8 +201,204 @@ export default function SubmissionsClient({
     useState<ContestTypeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeSearch, setActiveSearch] = useState("");
   const [mode, setMode] = useState<"light" | "dark">("light");
   const [brokenThumbs, setBrokenThumbs] = useState<Record<string, boolean>>({});
+  const [selectedContestGroup, setSelectedContestGroup] = useState<any>(null);
+  const [expandedCaptions, setExpandedCaptions] = useState<Record<string, boolean>>({});
+
+  // Contest Status Multi-select State
+  const [contestStatusFilter, setContestStatusFilter] = useState<string[]>([
+    "live",
+    "pending_review",
+    "in_review",
+    "verification_complete",
+    "payouts_processed",
+  ]);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+
+  const handleSearch = () => {
+    setActiveSearch(searchTerm);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSearch();
+    }
+  };
+
+  const getStatusBadgeStyles = (
+    status: SubmissionWithContest["status"] | null,
+    contestEndDate?: string | null,
+    postContestStatus?: string | null
+  ): { bg: string; text: string; border: string } => {
+    // If status is "paid", but payouts aren't processed, fallback to "verified" styling
+    const effectiveStatus = (status === "paid" && postContestStatus !== "payouts_processed")
+      ? "verified"
+      : status;
+
+    if (effectiveStatus === "rejected")
+      return { bg: "bg-red-500/15", text: "text-red-500", border: "border-red-500/40" };
+    if (effectiveStatus === "paid")
+      return { bg: "bg-green-500/15", text: "text-green-500", border: "border-green-500/40" };
+    if (effectiveStatus === "active" as any)
+      return { bg: "bg-[#7F39EC]/20", text: "text-[#a855f7]", border: "border-[#7F39EC]/40" };
+    if (effectiveStatus === "verified")
+      return { bg: "bg-blue-500/15", text: "text-blue-400", border: "border-blue-500/40" };
+    if (effectiveStatus === "pending")
+      return { bg: "bg-yellow-500/15", text: "text-yellow-400", border: "border-yellow-500/40" };
+    if (contestEndDate && new Date(contestEndDate) < new Date())
+      return { bg: "bg-gray-500/15", text: "text-gray-400", border: "border-gray-500/40" };
+    return { bg: "bg-gray-500/15", text: "text-gray-400", border: "border-gray-500/40" };
+  };
+
+  const getContestStatusDisplay = (contest: any): { label: string; styles: { bg: string; text: string; border: string } } => {
+    if (!contest) return { label: "Unknown", styles: { bg: "bg-gray-500/15", text: "text-gray-400", border: "border-gray-500/40" } };
+
+    const isEnded = contest.end_date ? new Date(contest.end_date) < new Date() : false;
+    const isLive = !isEnded;
+    const postContestStatus = contest.post_contest_status;
+
+    // 1. If payouts are processed, it's COMPLETELY done
+    if (postContestStatus === "payouts_processed") {
+      return { label: "Completed / Payouts processed", styles: { bg: "bg-green-500/15", text: "text-green-500", border: "border-green-500/40" } };
+    }
+
+    // 2. If verification is done
+    if (postContestStatus === "verification_complete") {
+      return { label: "Verification completed", styles: { bg: "bg-blue-500/15", text: "text-blue-400", border: "border-blue-500/40" } };
+    }
+
+    // 3. If it's in review
+    if (postContestStatus === "in_review") {
+      return { label: "In Review", styles: { bg: "bg-yellow-500/15", text: "text-yellow-400", border: "border-yellow-500/40" } };
+    }
+
+    // 3.5 If it's pending review
+    if (postContestStatus === "pending_review") {
+      return { label: "Pending Review", styles: { bg: "bg-orange-500/15", text: "text-orange-400", border: "border-orange-500/40" } };
+    }
+
+    // 4. If contest is still running (Active)
+    if (isLive) {
+      return { label: "Live", styles: { bg: "bg-[#7F39EC]/20", text: "text-[#a855f7]", border: "border-[#7F39EC]/40" } };
+    }
+
+    // 5. Fallback for ended contests before review starts
+    return { label: "Pending Review", styles: { bg: "bg-gray-500/15", text: "text-gray-400", border: "border-gray-500/40" } };
+  };
+
+  const calculateLeaderboardEarnings = (
+    submission: SubmissionWithContest,
+    contest: any
+  ) => {
+    if (!contest?.contest_based_details) {
+      return { amount: 0, label: "Earnings" };
+    }
+
+    try {
+      const contestDetails = contest.contest_based_details as any;
+      const leaderboardConfig = contestDetails.leaderboard_contest;
+
+      if (!leaderboardConfig || !leaderboardConfig.prizes) {
+        return { amount: 0, label: "Estimated Earnings" };
+      }
+
+      const postContestStatus = contest.post_contest_status;
+      const isPayoutsProcessed = postContestStatus === "payouts_processed";
+      const isVerificationComplete = postContestStatus === "verification_complete";
+      const isRejected = submission.status === "rejected";
+
+      // 4. Rejected
+      if (isRejected) {
+        return { amount: 0, label: "Earnings", isRejected: true };
+      }
+
+      // 3. Paid (Payouts Processed)
+      if (isPayoutsProcessed) {
+        const subStatus = (submission.status as string || "").toLowerCase();
+        const isPaid = subStatus === "paid";
+        return {
+          amount: isPaid ? (submission.earnings || 0) : 0,
+          label: "Amount Earned"
+        };
+      }
+
+      // 2. Finalized (Verification Completed)
+      if (isVerificationComplete) {
+        return {
+          amount: submission.earnings || 0,
+          label: "Final Earnings"
+        };
+      }
+
+      // 1. Estimated (Live, Pending Review, In Review)
+      return { amount: submission.earnings || 0, label: "Estimated Earnings" };
+    } catch (error) {
+      console.warn("Error calculating leaderboard earnings:", error);
+      return { amount: 0, label: "Estimated Earnings" };
+    }
+  };
+
+  const getSubmissionEarningsAmount = (submission: SubmissionWithContest) => {
+    const contest = submission.contests;
+    const isPayoutsProcessed = contest?.post_contest_status === "payouts_processed";
+    const subStatus = (submission.status as string || "").toLowerCase();
+    const isPaid = subStatus === "paid";
+
+    // If payouts processed but entry not officially "paid", show $0
+    if (isPayoutsProcessed && !isPaid) {
+      return 0;
+    }
+
+    if (contest?.contest_type === "cpm") {
+      const cpmConfig =
+        contest.contest_based_details &&
+          typeof contest.contest_based_details === "object" &&
+          "cpm_contest" in (contest.contest_based_details as any)
+          ? ((contest.contest_based_details as any).cpm_contest as unknown as CpmContestDetails)
+          : null;
+      const views = submission.views ?? 0;
+      let effectiveViews = views;
+      if (cpmConfig?.min_views != null && views < cpmConfig.min_views) effectiveViews = 0;
+      else if (cpmConfig?.max_views != null && views > cpmConfig.max_views) effectiveViews = cpmConfig.max_views;
+      // Return in CENTS
+      return (effectiveViews * (cpmConfig?.cpm_rate_usd || 0)) / 10;
+    } else {
+      // calculateLeaderboardEarnings already handles the payout processed check
+      const data = calculateLeaderboardEarnings(submission, contest);
+      return data.amount;
+    }
+  };
+
+  const getDisplayStatus = (submission: SubmissionWithContest): string => {
+    if (!submission.status) return "Unknown";
+    if (submission.status === "paid" && submission.contests?.post_contest_status !== "payouts_processed") {
+      return "Verified";
+    }
+    return (
+      submission.status.charAt(0).toUpperCase() + submission.status.slice(1)
+    );
+  };
+
+  const postContestStatusMap: Record<string, string> = {
+    pending_review: "Pending Review",
+    in_review: "In Review",
+    verification_complete: "Verification Complete",
+    payouts_processed: "Payouts Processed",
+  };
+
+  const toggleCaption = (id: string) => {
+    setExpandedCaptions(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   // Read mode from data attribute
   useEffect(() => {
@@ -115,6 +429,32 @@ export default function SubmissionsClient({
     return () => observer.disconnect();
   }, []);
 
+  // Handle desktop/mobile calendar months
+  const [calendarMonths, setCalendarMonths] = useState(2);
+  useEffect(() => {
+    const handleResize = () => {
+      setCalendarMonths(window.innerWidth < 640 ? 1 : 2);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Reset sort order if current sort order is not available in the new view mode
+  useEffect(() => {
+    setCurrentPage(1); // Reset to first page on view mode change
+    if (viewMode !== "contest") {
+      if (sortOrder === "submissions_high" || sortOrder === "submissions_low") {
+        setSortOrder("newest");
+      }
+    }
+  }, [viewMode, sortOrder]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [contestTypeFilter, statusFilter, platformFilter, activeSearch, dateFilter, dateRange, itemsPerPage]);
+
   const isDark = mode === "dark";
   // Helper for dynamic card titles and descriptions
   const filterDisplayInfo: Record<
@@ -122,13 +462,8 @@ export default function SubmissionsClient({
     { title: string; description: string }
   > = {
     all: {
-      title: "All Submissions",
+      title: "Submission view",
       description: "Showing all your submissions across different statuses.",
-    },
-    active: {
-      title: "Active Submissions",
-      description:
-        "Submissions for ongoing contests with 'pending' or 'verified' status.",
     },
     pending: {
       title: "Pending Submissions",
@@ -142,10 +477,6 @@ export default function SubmissionsClient({
       title: "Rejected Submissions",
       description: "Submissions that have been rejected.",
     },
-    ended: {
-      title: "Ended Submissions",
-      description: "Submissions for contests that have already ended.",
-    },
     paid: {
       title: "Paid Submissions",
       description: "Submissions for which earnings have been paid out.",
@@ -156,6 +487,8 @@ export default function SubmissionsClient({
     setAllSubmissions(initialSubmissions);
     setFilteredSubmissions(initialSubmissions);
   }, [initialSubmissions]);
+
+
 
   useEffect(() => {
     let submissions = [...allSubmissions];
@@ -171,6 +504,16 @@ export default function SubmissionsClient({
     if (platformFilter !== "all") {
       submissions = submissions.filter(
         (sub) => sub.platform?.toLowerCase() === platformFilter
+      );
+    }
+
+    // Filter by search query (URL or Title)
+    if (activeSearch.trim() !== "") {
+      const query = activeSearch.toLowerCase();
+      submissions = submissions.filter(
+        (sub) =>
+          sub.content_link?.toLowerCase().includes(query) ||
+          sub.contests?.title?.toLowerCase().includes(query)
       );
     }
 
@@ -198,13 +541,16 @@ export default function SubmissionsClient({
           : null;
         const isEnded = contestEndDate ? contestEndDate < new Date() : false;
 
+        // Filter by Contest Status
+        const contestPostStatus = sub.contests?.post_contest_status || "pending_review";
+        if (isEnded) {
+          if (!contestStatusFilter.includes(contestPostStatus)) return false;
+        } else {
+          if (!contestStatusFilter.includes("live")) return false;
+        }
+
         let shouldInclude = false;
         switch (statusFilter) {
-          case "active":
-            shouldInclude =
-              !isEnded &&
-              (sub.status === "pending" || sub.status === "verified");
-            break;
           case "pending":
             shouldInclude = sub.status === "pending";
             break;
@@ -213,9 +559,6 @@ export default function SubmissionsClient({
             break;
           case "rejected":
             shouldInclude = sub.status === "rejected";
-            break;
-          case "ended":
-            shouldInclude = isEnded;
             break;
           case "paid":
             // Check if submission should be considered "paid" based on earnings and contest status
@@ -264,160 +607,706 @@ export default function SubmissionsClient({
       );
     }
 
-    setFilteredSubmissions(submissions);
-  }, [allSubmissions, contestTypeFilter, statusFilter, platformFilter]);
+    // Filter by Date
+    if (dateFilter !== "all") {
+      const now = new Date();
+      let start: Date | null = null;
+      let end = now;
 
-  const getStatusBadgeColor = (
-    status: SubmissionWithContest["status"] | null,
-    contestEndDate?: string | null
-  ) => {
-    if (contestEndDate && new Date(contestEndDate) < new Date())
-      return "bg-gray-500"; // Ended
-    if (status === "verified") return "bg-green-500";
-    if (status === "pending") return "bg-yellow-500";
-    if (status === "rejected") return "bg-red-500";
-    if (status === "paid") return "bg-blue-500";
-    return "bg-gray-400"; // Default or unknown
-  };
+      switch (dateFilter) {
+        case "today":
+          start = startOfToday();
+          break;
+        case "3days":
+          start = subDays(now, 3);
+          break;
+        case "1week":
+          start = subWeeks(now, 1);
+          break;
+        case "1month":
+          start = subMonths(now, 1);
+          break;
+        case "1year":
+          start = subYears(now, 1);
+          break;
+        case "custom":
+          if (dateRange?.from) {
+            start = dateRange.from;
+            if (dateRange.to) {
+              const endOfDay = new Date(dateRange.to);
+              endOfDay.setHours(23, 59, 59, 999);
+              end = endOfDay;
+            } else {
+              const endOfFromDay = new Date(dateRange.from);
+              endOfFromDay.setHours(23, 59, 59, 999);
+              end = endOfFromDay;
+            }
+          }
+          break;
+      }
 
-  // Helper function to calculate leaderboard earnings
-  const calculateLeaderboardEarnings = (
-    submission: SubmissionWithContest,
-    contest: any
-  ) => {
-    console.log("🔍 calculateLeaderboardEarnings called with:", {
-      submissionId: submission.id,
-      submissionStatus: submission.status,
-      submissionEarnings: submission.earnings, // This is in cents
-      submissionEarningsInDollars: submission.earnings
-        ? centsToDollars(submission.earnings)
-        : null,
-      contestType: contest?.contest_type,
-      contestEndDate: contest?.end_date,
-      postContestStatus: contest?.post_contest_status,
-      hasContestDetails: !!contest?.contest_based_details,
+      if (start) {
+        submissions = submissions.filter((sub) => {
+          const createdAt = new Date(sub.created_at);
+          return createdAt >= start! && createdAt <= end;
+        });
+      }
+    }
+
+    // Sort submissions
+    submissions.sort((a, b) => {
+      if (sortOrder === "normal" || sortOrder === "newest") {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      if (sortOrder === "oldest") {
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+      if (sortOrder === "views_high") {
+        return (b.views || 0) - (a.views || 0);
+      }
+      if (sortOrder === "views_low") {
+        return (a.views || 0) - (b.views || 0);
+      }
+      if (sortOrder === "earnings_high") {
+        const earningsA = getSubmissionEarningsAmount(a);
+        const earningsB = getSubmissionEarningsAmount(b);
+        return earningsB - earningsA;
+      }
+      if (sortOrder === "earnings_low") {
+        const earningsA = getSubmissionEarningsAmount(a);
+        const earningsB = getSubmissionEarningsAmount(b);
+        return earningsA - earningsB;
+      }
+      if (sortOrder === "submissions_high" || sortOrder === "submissions_low") {
+        // Fallback to newest for individual submissions view
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      return 0;
     });
 
-    if (!contest?.contest_based_details) {
-      console.log("❌ No contest details found, returning default");
-      return { amount: 0, label: "Earnings" };
-    }
+    setFilteredSubmissions(submissions);
+  }, [allSubmissions, contestTypeFilter, statusFilter, platformFilter, activeSearch, sortOrder, dateFilter, dateRange, contestStatusFilter]);
 
-    try {
-      const contestDetails = contest.contest_based_details as any;
-      const leaderboardConfig = contestDetails.leaderboard_contest;
+  const groupedContests = useMemo(() => {
+    const groups: Record<string, {
+      id: string;
+      contest: any;
+      submissions: SubmissionWithContest[];
+      totalViews: number;
+      totalEarnings: number;
+      totalBonus: number;
+      videoCount: number;
+      _bonusAdded?: boolean;
+    }> = {};
 
-      console.log("🔍 Contest details structure:", {
-        contestDetails,
-        leaderboardConfig,
-        hasLeaderboardConfig: !!leaderboardConfig,
-        prizes: leaderboardConfig?.prizes,
-        totalPrize: leaderboardConfig?.total_prize,
-      });
-
-      if (!leaderboardConfig || !leaderboardConfig.prizes) {
-        console.log("❌ No leaderboard config or prizes found");
-        return { amount: 0, label: "Earnings" };
+    console.log("DEBUG: groupedContests computing with", filteredSubmissions.length, "submissions");
+    filteredSubmissions.forEach((sub, idx) => {
+      if (idx === 0) console.log("DEBUG: Sample submission:", sub);
+      const contestId = sub.contest_id || "unknown";
+      const contest = sub.contests;
+      if (!groups[contestId]) {
+        groups[contestId] = {
+          id: contestId,
+          contest: contest,
+          submissions: [],
+          totalViews: 0,
+          totalEarnings: 0,
+          totalBonus: 0,
+          videoCount: 0,
+        };
       }
+      groups[contestId].submissions.push(sub);
+      groups[contestId].videoCount += 1;
+      groups[contestId].totalViews += sub.views || 0;
 
-      const postContestStatus = contest.post_contest_status;
-      const isContestCompleted =
-        postContestStatus === "verification_complete" ||
-        postContestStatus === "payouts_processed";
+      // Logic for contest group summaries (cards):
+      // 1. Never count rejected submissions
+      const isRejected = (sub.status as string || "").toLowerCase() === "rejected";
+      if (!isRejected) {
+        const isPostProcessed = contest?.post_contest_status === "payouts_processed";
+        const subStatus = (sub.status as string || "").toLowerCase();
+        const isActuallyPaid = subStatus === "paid";
+        const isBonusPaid = (sub as any).bonus_paid === true;
 
-      console.log("📊 Contest state analysis:", {
-        postContestStatus,
-        isContestCompleted,
-        submissionStatus: submission.status,
-        submissionEarnings: submission.earnings, // in cents
-        submissionEarningsInDollars: submission.earnings
-          ? centsToDollars(submission.earnings)
-          : null,
-      });
-
-      // For rejected submissions
-      if (submission.status === "rejected") {
-        console.log("🚫 Submission rejected, returning appropriate message");
-        if (isContestCompleted) {
-          return { amount: 0, label: "No Prize Won" };
-        } else {
-          return { amount: 0, label: "Submission Rejected" };
-        }
-      }
-
-      // For paid submissions
-      if (submission.status === "paid") {
-        console.log("💰 Submission paid, returning paid amount");
-        // Convert cents to dollars for display
-        const earningsInDollars = submission.earnings
-          ? centsToDollars(submission.earnings)
-          : 0;
-        return { amount: earningsInDollars, label: "Paid" };
-      }
-
-      // For leaderboard contests - simplified logic
-      if (contest.contest_type === "leaderboard") {
-        console.log("🏆 Processing leaderboard contest logic");
-
-        // If contest is not completed (earnings not calculated yet)
-        if (!isContestCompleted) {
-          console.log("⏳ Contest not completed yet");
-          if (submission.earnings === null) {
-            console.log("📋 Earnings is null, showing check leaderboard link");
-            return { amount: -1, label: "check_leaderboard" };
-          } else {
-            console.log("💰 Earnings calculated, showing estimated amount");
-            // Convert cents to dollars for display
-            const earningsInDollars = centsToDollars(submission.earnings);
-            return { amount: earningsInDollars, label: "Estimated Earnings" };
+        if (isPostProcessed) {
+          // If processed, only sum if officially PAID
+          if (isActuallyPaid) {
+            groups[contestId].totalEarnings += getSubmissionEarningsAmount(sub);
+            if (isBonusPaid) {
+              groups[contestId].totalBonus += ((sub as any).bonus_amount || 0);
+            }
           }
-        }
-
-        // If contest is completed (earnings have been calculated)
-        console.log("✅ Contest completed, checking final earnings");
-        if (submission.earnings === null) {
-          console.log(
-            "❌ Earnings still null for completed contest, showing no prize won"
-          );
-          // Shouldn't happen for completed contests, but fallback
-          return { amount: 0, label: "No Prize Won" };
-        } else if (submission.earnings > 0) {
-          console.log("🏆 Winner! Showing final earnings");
-          // Convert cents to dollars for display
-          const earningsInDollars = centsToDollars(submission.earnings);
-          return { amount: earningsInDollars, label: "Final Earnings" };
         } else {
-          console.log("😔 No prize won, showing zero earnings");
-          return { amount: 0, label: "No Prize Won" };
+          groups[contestId].totalEarnings += getSubmissionEarningsAmount(sub);
+
+          const contestDetails = contest?.contest_based_details as any;
+          const bonusDetails = contest?.bonus_details as any;
+          const flatFeeBonus =
+            contestDetails?.cpm_contest?.flat_fee_bonus ||
+            contestDetails?.leaderboard_contest?.flat_fee_bonus ||
+            bonusDetails?.flat_fee_bonus || 0;
+
+          // If a specific bonus amount is already assigned to the submission, use it.
+          // Otherwise, fall back to the participation/flat-fee bonus from the contest config.
+          const subBonus = (sub as any).bonus_amount || 0;
+          groups[contestId].totalBonus += subBonus > 0 ? subBonus : flatFeeBonus;
         }
       }
+    });
 
-      // For non-leaderboard contests, use default logic
-      console.log("🔄 Using default fallback for non-leaderboard contest");
-      // Convert cents to dollars for display
-      const earningsInDollars = submission.earnings
-        ? centsToDollars(submission.earnings)
-        : 0;
-      return { amount: earningsInDollars, label: "Earnings" };
-    } catch (error) {
-      console.warn("❌ Error calculating leaderboard earnings:", error);
-      return { amount: 0, label: "Earnings" };
+    return Object.values(groups).sort((a, b) => {
+      switch (sortOrder) {
+        case "submissions_high":
+          return b.videoCount - a.videoCount;
+        case "submissions_low":
+          return a.videoCount - b.videoCount;
+        case "earnings_high":
+          return b.totalEarnings - a.totalEarnings;
+        case "earnings_low":
+          return a.totalEarnings - b.totalEarnings;
+        case "views_high":
+          return b.totalViews - a.totalViews;
+        case "views_low":
+          return a.totalViews - b.totalViews;
+        case "oldest": {
+          const earliestA = Math.min(...a.submissions.map((s) => new Date(s.created_at).getTime()));
+          const earliestB = Math.min(...b.submissions.map((s) => new Date(s.created_at).getTime()));
+          return earliestA - earliestB;
+        }
+        case "newest":
+        case "normal":
+        default: {
+          const latestA = Math.max(...a.submissions.map((s) => new Date(s.created_at).getTime()));
+          const latestB = Math.max(...b.submissions.map((s) => new Date(s.created_at).getTime()));
+          return latestB - latestA;
+        }
+      }
+    });
+  }, [filteredSubmissions, sortOrder]);
+
+  const stats = useMemo(() => {
+    const contests = new Set(filteredSubmissions.map(s => s.contest_id).filter(Boolean));
+    const totalViews = filteredSubmissions.reduce((sum, s) => sum + (s.views || 0), 0);
+
+    // Only count confirmed earnings (Payouts Processed + Status 'Paid')
+    const totalEarnings = filteredSubmissions.reduce((sum, s) => {
+      const contest = s.contests;
+      if (!contest) return sum;
+
+      const isPostProcessed = contest.post_contest_status === "payouts_processed";
+      const subStatus = (s.status as string || "").toLowerCase();
+      const isActuallyPaid = subStatus === "paid";
+
+      // If payouts are processed, we ONLY add if the status is explicitly 'paid'
+      if (isPostProcessed && isActuallyPaid) {
+        return sum + getSubmissionEarningsAmount(s);
+      }
+      return sum;
+    }, 0);
+
+    // Only count confirmed bonuses (Payouts Processed + bonus_paid + Status 'Paid')
+    const totalBonus = filteredSubmissions.reduce((sum, s) => {
+      const contest = s.contests;
+      if (!contest) return sum;
+
+      const isPostProcessed = contest.post_contest_status === "payouts_processed";
+      const subStatus = (s.status as string || "").toLowerCase();
+      const isActuallyPaid = subStatus === "paid";
+      const isBonusPaid = (s as any).bonus_paid === true;
+
+      // Only sum if official payout is done AND submission is paid AND bonus is paid
+      if (isPostProcessed && isActuallyPaid && isBonusPaid) {
+        // Bonus amount is already in cents
+        return sum + ((s as any).bonus_amount || 0);
+      }
+      return sum;
+    }, 0);
+
+    return {
+      contests: contests.size,
+      views: totalViews,
+      earnings: totalEarnings,
+      bonus: totalBonus
+    };
+  }, [filteredSubmissions]);
+
+  const renderSubmissionCard = (submission: SubmissionWithContest) => {
+    const contest = submission.contests;
+    const cpmConfig =
+      contest?.contest_type === "cpm" &&
+        contest.contest_based_details &&
+        typeof contest.contest_based_details === "object" &&
+        contest.contest_based_details !== null &&
+        "cpm_contest" in contest.contest_based_details
+        ? (contest.contest_based_details.cpm_contest as unknown as CpmContestDetails)
+        : null;
+
+    const displayStatus = getDisplayStatus(submission);
+    const views = submission.views ?? 0;
+    const contestId = contest?.id;
+    const isEnded = contest?.end_date ? new Date(contest.end_date) < new Date() : false;
+    const rejectionDetails = submission.status === "rejected" ? getFullRejectionDetails(submission.metadata) : null;
+    const systemNote = rejectionDetails?.reason ? REJECTION_REASON_DESCRIPTIONS[rejectionDetails.reason] : null;
+    const displayNote = rejectionDetails?.additionalNotes || systemNote;
+
+    const isPayoutsProcessed = contest?.post_contest_status === "payouts_processed";
+    const isVerificationComplete = contest?.post_contest_status === "verification_complete";
+    const isRejected = submission.status === "rejected";
+
+    const totalEarningsCents = getSubmissionEarningsAmount(submission);
+    const earningsInDollars = centsToDollars(totalEarningsCents);
+
+    let earningsDisplay: { label: string; amount: string; color: string; isRejected?: boolean } | null = null;
+
+    if (isRejected) {
+      earningsDisplay = { label: "Earnings", amount: "Not Eligible", color: "text-red-500", isRejected: true };
+    } else if (contest?.contest_type === "cpm") {
+      const subStatusForLabel = (submission.status as string || "").toLowerCase();
+      const isSubPaidForLabel = subStatusForLabel === "paid" || (submission as any).paid === true;
+      const label = isPayoutsProcessed
+        ? "Amount Earned"
+        : isVerificationComplete ? "Final Earnings" : "Estimated Earnings";
+      earningsDisplay = {
+        label,
+        amount: earningsInDollars.toFixed(2),
+        color: isPayoutsProcessed ? "text-green-500" : isVerificationComplete ? (isDark ? "text-emerald-400" : "text-emerald-600") : isDark ? "text-blue-400" : "text-blue-600",
+      };
+    } else {
+      const data = calculateLeaderboardEarnings(submission, contest);
+      let color = isDark ? "text-emerald-400" : "text-emerald-600";
+      if (data.isRejected) color = "text-red-500";
+      else if (data.label === "Amount Earned") color = "text-green-500";
+      else if (data.label === "Final Earnings") color = isDark ? "text-emerald-400" : "text-emerald-600";
+      else if (data.label === "Estimated Earnings") color = isDark ? "text-blue-400" : "text-blue-600";
+
+      earningsDisplay = {
+        label: data.label,
+        amount: data.isRejected ? "Not Eligible" : earningsInDollars.toFixed(2),
+        color
+      };
     }
-  };
 
-  const getDisplayStatus = (submission: SubmissionWithContest): string => {
-    if (!submission.status) return "Unknown"; // Fallback for missing status
-    // Capitalize first letter of submission.status for display
+    // Bonus display — only verified/paid submissions qualify for the flat_fee_bonus
+    const bonusPaid = (submission as any).bonus_paid === true;
+    const isVerifiedOrPaid = submission.status === "verified" || (submission.status as string) === "paid" || bonusPaid;
+    const contestDetailsForBonus = contest?.contest_based_details as any;
+    const bonusDetailsForCard = contest?.bonus_details as any;
+    const flatFeeBonusForCard =
+      contestDetailsForBonus?.cpm_contest?.flat_fee_bonus ||
+      contestDetailsForBonus?.leaderboard_contest?.flat_fee_bonus ||
+      bonusDetailsForCard?.flat_fee_bonus ||
+      0;
+
+    // Bonus logic: If not rejected and not paid out, show potential/estimated bonus
+    let bonusAmountCents = 0;
+    const isActuallyPaidStatus = (submission.status as string || "").toLowerCase() === "paid";
+
+    if (bonusPaid && isActuallyPaidStatus) {
+      bonusAmountCents = ((submission as any).bonus_amount || 0);
+    } else if (!isRejected) {
+      if (isPayoutsProcessed) {
+        // Payouts processed but either bonus not paid or status not "paid"
+        bonusAmountCents = 0;
+      } else {
+        // Show potential/estimated bonus (Estimated or Final)
+        bonusAmountCents = flatFeeBonusForCard;
+      }
+    }
+
+    const bonusAmountDollars = centsToDollars(bonusAmountCents).toFixed(2);
+
+    // Bonus Label logic
+    let bonusLabel = "Estimated Bonus";
+    const subStatusForBonus = (submission.status as string || "").toLowerCase();
+    const isSubPaidForBonus = subStatusForBonus === "paid" || (submission as any).paid === true;
+
+    if (isRejected) {
+      bonusLabel = "Bonus Won"; // Will show $0.00 (hidden in UI)
+    } else {
+      if (isPayoutsProcessed) {
+        bonusLabel = "Bonus Earned";
+      } else if (isVerificationComplete) {
+        bonusLabel = "Final Bonus";
+      } else {
+        bonusLabel = "Estimated Bonus";
+      }
+    }
+    const bonusColor = (bonusLabel === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
+
+    // Massively expanded thumbnail detection for all social platforms (IG, TikTok, YT, Twitter)
+    const meta = submission.metadata as any;
+
+    // Log keys for the first submission to help diagnose field mismatches if any
+    if (submission === filteredSubmissions[0]) {
+      console.log("DEBUG: First submission fields:", Object.keys(submission));
+    }
+
+    // Capture the primary DB column and every possible variation from metadata (IG/TikTok/YT)
+    const bestThumbnail = submission.video_thumbnail_url ||
+      (submission as any).thumbnail_url ||
+      (submission as any).thumbnail ||
+      meta?.video_thumbnail_url ||
+      meta?.thumbnail_url ||
+      meta?.thumbnail ||
+      meta?.display_url ||
+      meta?.thumbnail_src ||
+      meta?.image_url ||
+      meta?.cover_image_url ||
+      meta?.cover ||
+      meta?.video?.cover ||
+      meta?.shortcode_media?.display_url ||
+      meta?.image_versions2?.candidates?.[0]?.url ||
+      meta?.candidates?.[0]?.url ||
+      meta?.video_details?.thumbnail_url;
+
+    // Diagnostic check for development
+    if (!bestThumbnail && meta) {
+      console.log(`[SUBMISSION-DEBUG] No thumbnail for ${submission.id}. Keys:`, Object.keys(meta));
+    }
+
     return (
-      submission.status.charAt(0).toUpperCase() + submission.status.slice(1)
+      <div
+        key={submission.id}
+        className={cn(
+          "relative grid grid-cols-1 md:grid-cols-[280px_1fr] lg:grid-cols-[280px_1fr_220px] gap-6 p-6 rounded-[16px] border shadow-sm transition-none overflow-hidden",
+          isDark ? "bg-[#0f172a] border-slate-800" : "bg-white border-slate-200"
+        )}
+      >
+        {/* Contest Status Badge - Absolute Positioned at Top Right */}
+        <div className="absolute top-4 right-4 z-10 flex flex-row gap-2">
+          {(() => {
+            const contestStatusInfo = getContestStatusDisplay(contest);
+            return (
+              <span className={cn(
+                "inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border shadow-sm",
+                contestStatusInfo.styles.bg, contestStatusInfo.styles.text, contestStatusInfo.styles.border
+              )}>
+                {contestStatusInfo.label}
+              </span>
+            );
+          })()}
+        </div>
+
+        {/* Column 1: Thumbnail */}
+        <div className="relative w-[280px] aspect-[4/3] rounded-[12px] overflow-hidden border border-slate-200 dark:border-slate-800 shrink-0 bg-slate-100 dark:bg-slate-900 group/thumb">
+          {(() => {
+            const isInstagram = (submission.platform || "").toLowerCase() === "instagram";
+            const isBroken = !!brokenThumbs[submission.id];
+            const hasThumb = !!bestThumbnail;
+            const shouldShowIgPoster = isInstagram && (!hasThumb || isBroken);
+
+            if (shouldShowIgPoster) {
+              return (
+                <img
+                  src="/instagram-poster.svg"
+                  alt="Instagram content"
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              );
+            }
+
+            if (hasThumb && !isBroken) {
+              return (
+                <img
+                  src={bestThumbnail}
+                  alt="Thumbnail"
+                  referrerPolicy="no-referrer"
+                  className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+                  onError={() => setBrokenThumbs((prev) => ({ ...prev, [submission.id]: true }))}
+                />
+              );
+            }
+
+            return (
+              <div className="flex flex-col items-center justify-center h-full bg-slate-50 dark:bg-slate-800/20 gap-2">
+                <Video className="h-12 w-12 text-slate-300 dark:text-slate-700" />
+                {isBroken && (
+                  <span className="text-[10px] font-black uppercase tracking-tighter text-red-500/80">Link Expired</span>
+                )}
+              </div>
+            );
+          })()}
+          <div className="absolute top-2 left-2 px-2 py-1 bg-black/80 rounded text-[10px] font-bold text-white uppercase tracking-wider">
+            {submission.platform || "Video"}
+          </div>
+        </div>
+
+        {/* Column 2: Info */}
+        <div className="flex flex-col gap-2 min-w-0">
+          <div className="flex items-center gap-3">
+            <h3
+              className={cn(
+                "text-[20px] font-bold transition-all duration-300 cursor-default self-start",
+                isDark ? "text-white" : "text-slate-900",
+                "whitespace-normal overflow-visible lg:truncate lg:hover:whitespace-normal lg:hover:overflow-visible"
+              )}
+            >
+              {contest?.title || "Untitled Contest"}
+            </h3>
+            {(() => {
+              const styles = getStatusBadgeStyles(submission.status, contest?.end_date, contest?.post_contest_status);
+
+              return (
+                <div className="flex items-center gap-2">
+                  <span className={cn(
+                    "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border",
+                    styles.bg, styles.text, styles.border
+                  )}>
+                    {displayStatus}
+                  </span>
+                </div>
+              );
+            })()}
+          </div>
+
+          <div className={cn("flex items-center gap-1.5 text-[13px] font-medium", isDark ? "text-slate-300" : "text-slate-500")}>
+            <span className="flex items-center gap-1">
+              <History className="w-3 h-3 opacity-60" />
+              Submitted: {submission.formatted_created_at || "Date N/A"}
+            </span>
+            <span className="opacity-40">•</span>
+            <span className="uppercase">{contest?.contest_type || "N/A"}</span>
+            <span className="opacity-40">•</span>
+            <span>{views.toLocaleString()} Views</span>
+          </div>
+
+          <div className="flex flex-col gap-1 mt-1">
+            {earningsDisplay && (
+              <div className="flex items-center gap-2">
+                <p className={cn("text-[15px] font-semibold", earningsDisplay.color)}>
+                  {earningsDisplay.label}: {earningsDisplay.amount === "Check Ranking" ? (
+                    <Link href={`/dashboard/leaderboard?contestId=${contestId}`} className="underline hover:opacity-80 transition-opacity">
+                      Check Ranking <ExternalLink className="inline h-3 w-3 ml-1" />
+                    </Link>
+                  ) : earningsDisplay.amount === "Not Eligible" ? (
+                    "Not Eligible"
+                  ) : `$${earningsDisplay.amount} USD`}
+                </p>
+                {isPayoutsProcessed && (submission as any).paid_at && (
+                  <span className="text-[12px] font-medium text-slate-400">
+                    (Paid on: {format(new Date((submission as any).paid_at), "MMM d, yyyy")})
+                  </span>
+                )}
+              </div>
+            )}
+            {!earningsDisplay && submission.status === "rejected" && (
+              <p className="text-[15px] font-semibold text-red-500">
+                No Prize Won: $0.00 USD
+              </p>
+            )}
+            {!isRejected && (
+              <div className="flex items-center gap-2">
+                <p className={cn("text-[15px] font-medium", bonusColor)}>
+                  {bonusLabel}: ${bonusAmountDollars} USD
+                </p>
+                {isPayoutsProcessed && (submission as any).bonus_paid_at && (
+                  <span className="text-[12px] font-medium text-slate-400">
+                    (Paid on: {format(new Date((submission as any).bonus_paid_at), "MMM d, yyyy")})
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {submission.status === "rejected" && rejectionDetails && (
+            <div className="mt-3 p-3 bg-red-500/5 border-l-4 border-red-500 rounded-r-lg flex flex-col gap-1.5 overflow-hidden">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[11px] font-black text-red-600 uppercase tracking-widest shrink-0">Rejection Reason:</span>
+                <span
+                  className="text-[14px] font-bold text-red-700 dark:text-red-300 whitespace-normal overflow-visible lg:truncate lg:hover:whitespace-normal lg:hover:overflow-visible transition-all duration-300 cursor-default"
+                >
+                  {rejectionDetails.reason}
+                </span>
+              </div>
+              {displayNote && (
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[11px] font-black text-red-600 uppercase tracking-widest shrink-0">Note:</span>
+                  <span
+                    className="text-[14px] font-medium text-red-600/80 dark:text-red-400/80 italic whitespace-normal overflow-visible lg:truncate lg:hover:whitespace-normal lg:hover:overflow-visible transition-all duration-300 cursor-default"
+                  >
+                    {displayNote}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Column 3: Actions - Professional Enterprise Interaction */}
+        <SubmissionActionButtons
+          contentLink={submission.content_link || "#"}
+          contestId={contestId}
+        />
+      </div>
     );
   };
 
-  const postContestStatusMap: Record<string, string> = {
-    pending_review: "Pending Review",
-    in_review: "In Review",
-    verification_complete: "Verification Complete",
-    payouts_processed: "Payouts Processed",
+  const renderContestGroupCard = (group: {
+    id: string;
+    contest: any;
+    submissions: SubmissionWithContest[];
+    totalViews: number;
+    totalEarnings: number;
+    totalBonus: number;
+    videoCount: number;
+  }) => {
+    const { contest, totalViews, totalEarnings, totalBonus, videoCount } = group;
+    const isEnded = contest?.end_date ? new Date(contest.end_date) < new Date() : false;
+    const isPaidOut = contest?.post_contest_status === "payouts_processed";
+    const isVerificationComplete = contest?.post_contest_status === "verification_complete";
+
+    return (
+      <Card
+        key={group.id}
+        className={cn(
+          "overflow-hidden rounded-[16px] shadow-sm transition-all duration-300 border flex flex-col md:flex-row group w-full relative",
+          isDark ? "bg-[#0f172a] border-slate-800" : "bg-white border-slate-200"
+        )}
+      >
+        {/* Status Badge - Aligned with the status logic in modal */}
+        <div className="absolute top-4 right-4 z-10 flex flex-row gap-2">
+          {(() => {
+            const statusInfo = getContestStatusDisplay(contest);
+            return (
+              <Badge
+                className={cn(
+                  "capitalize text-[11px] px-3 py-1 font-bold tracking-wider border rounded-full",
+                  statusInfo.styles.bg,
+                  statusInfo.styles.text,
+                  statusInfo.styles.border
+                )}
+              >
+                {statusInfo.label}
+              </Badge>
+            );
+          })()}
+        </div>
+
+        {/* Thumbnail Section - Corrected logic for Thumbnail vs Logo */}
+        <div className="w-full md:w-[280px] aspect-[16/9] md:aspect-square flex-shrink-0 overflow-hidden bg-slate-100 dark:bg-slate-900 border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-800 relative">
+          {contest?.thumbnail_url ? (
+            <img
+              src={contest.thumbnail_url}
+              alt={contest?.title || "Contest Thumbnail"}
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full bg-slate-50 dark:bg-slate-800/20 relative group-hover:bg-slate-100 dark:group-hover:bg-slate-800/40 transition-colors duration-300">
+              <Avatar className="h-24 w-24 border-4 border-white dark:border-slate-700 shadow-xl transition-transform duration-300 group-hover:scale-110">
+                {/* Fallback to advertiser logo if contest thumbnail is missing */}
+                <AvatarImage src={contest?.users?.profile_picture_url || contest?.advertiser_profiles?.users?.profile_picture_url} className="object-cover" referrerPolicy="no-referrer" />
+                <AvatarFallback className="bg-slate-200 dark:bg-slate-800 text-2xl font-black text-slate-400">
+                  {contest?.title?.[0]?.toUpperCase() || group.submissions?.[0]?.platform?.[0]?.toUpperCase() || <Trophy className="h-10 w-10 text-slate-300" />}
+                </AvatarFallback>
+              </Avatar>
+            </div>
+          )}
+        </div>
+
+        {/* Content Section */}
+        <div className="flex-1 p-6 flex flex-col justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              {contest?.advertiser_profiles?.company_name && (
+                <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-indigo-50/50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-900/50">
+                  {contest.advertiser_profiles.company_name}
+                </Badge>
+              )}
+              <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border-slate-200 dark:border-slate-800">
+                {contest?.platform || "Platform"}
+              </Badge>
+              <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border-slate-200 dark:border-slate-800">
+                {contest?.contest_type || "Type"}
+              </Badge>
+            </div>
+
+            <h3
+              className={cn(
+                "text-[22px] md:text-[26px] font-black leading-tight mb-2 tracking-tight transition-all duration-300",
+                "flex flex-wrap line-clamp-2 group-hover:line-clamp-none break-words",
+                isDark ? "text-white group-hover:text-indigo-400" : "text-slate-900 group-hover:text-[#4211a1]"
+              )}
+            >
+              {contest?.title || (contest?.platform || group.submissions[0]?.platform || "Contest").replace(/_/g, " ").toUpperCase()}
+            </h3>
+
+            <div className="flex items-center gap-4 flex-wrap">
+              <p className={cn("text-[13px] font-semibold flex items-center gap-1.5", isDark ? "text-slate-400" : "text-slate-500")}>
+                <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                {contest?.end_date
+                  ? `${isEnded ? 'Ended' : 'Deadline'}: ${format(new Date(contest.end_date), "MMM d, yyyy")}`
+                  : 'Deadline: No deadline'}
+              </p>
+              {contest?.advertiser_profiles?.company_name && (
+                <p className={cn("text-[13px] font-medium flex items-center gap-1.5", isDark ? "text-slate-500" : "text-slate-400")}>
+                  <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-700" />
+                  by <span className="font-bold text-indigo-500">{contest.advertiser_profiles.company_name}</span>
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Stats Grid */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <Video className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Videos</span>
+              </div>
+              <p className={cn("text-[16px] font-black", isDark ? "text-white" : "text-slate-900")}>
+                {videoCount}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <DollarSign className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-bold uppercase tracking-wider">
+                  {isPaidOut ? "Amount Earned" : isVerificationComplete ? "Final Earnings" : "Estimated Earnings"}
+                </span>
+              </div>
+              <p className={cn("text-[16px] font-black text-green-500")}>
+                ${centsToDollars(totalEarnings)}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <Coins className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-bold uppercase tracking-wider">
+                  {isPaidOut ? "Bonus Earned" : isVerificationComplete ? "Final Bonus" : "Estimated Bonus"}
+                </span>
+              </div>
+              <p className={cn("text-[16px] font-black text-purple-500")}>
+                ${centsToDollars(totalBonus)}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <TrendingUp className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Views</span>
+              </div>
+              <p className={cn("text-[16px] font-black", isDark ? "text-white" : "text-slate-900")}>
+                {totalViews.toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-full h-8 px-4 text-[12px] font-bold border-slate-200 dark:border-slate-700 transition-all hover:bg-slate-100 dark:hover:bg-slate-800"
+              onClick={() => setSelectedContestGroup(group)}
+            >
+              View Submission
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
   };
 
   if (fetchError) {
@@ -439,517 +1328,836 @@ export default function SubmissionsClient({
   }
 
   return (
-    <div>
-      <div className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4">
-        <h1 className="text-2xl font-bold">My Submissions</h1>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <Button asChild className="w-full text-md py-3 sm:w-auto">
+    <div className="max-w-[1280px] mx-auto py-[24px] px-[16px] flex flex-col gap-[24px]">
+      {/* Page Header */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <h1 className={cn("text-[24px] font-semibold leading-tight", isDark ? "text-white" : "text-slate-900")}>Submission view</h1>
+          <p className={cn("text-[14px] mt-1", isDark ? "text-slate-400" : "text-slate-500")}>Showing your submission view across different statuses</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto mt-2 md:mt-0">
+          <Button asChild className="h-10 flex-1 sm:flex-none px-[18px] rounded-[10px] bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0 transition-all">
             <Link href="/dashboard/opportunities">Find Opportunities</Link>
           </Button>
+
+          <Button
+            onClick={handleSearch}
+            className="h-10 flex-1 sm:flex-none px-4 rounded-lg bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0"
+          >
+            Search
+          </Button>
+
+          <div className="relative flex-1 min-w-[200px] md:w-[320px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" strokeWidth={3} />
+            <Input
+              placeholder="Search by URL or Title..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className={cn(
+                "pl-10 h-10 rounded-lg transition-all shadow-none w-full",
+                isDark
+                  ? "border-slate-700 bg-[#1e293b] text-slate-100 placeholder:text-slate-500 focus:border-[#6366f1]"
+                  : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:border-[#4211a1]"
+              )}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-center gap-4 mb-3">
-        <Select
-          value={contestTypeFilter}
-          onValueChange={(value) =>
-            setContestTypeFilter(value as ContestTypeFilter)
-          }
-        >
-          <SelectTrigger className="w-full sm:w-[180px]">
-            <SelectValue placeholder="Filter by Type" />
-          </SelectTrigger>
+      {/* Quick Stats Summary */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: "Submitted to", value: stats.contests, sub: "Contests", icon: Trophy, color: "text-blue-500" },
+          { label: "Viral Views", value: stats.views.toLocaleString(), sub: "Total", icon: TrendingUp, color: "text-indigo-500" },
+          { label: "Cash Earned", value: `$${centsToDollars(stats.earnings)}`, sub: "USD", icon: DollarSign, color: "text-green-500" },
+          { label: "Extra Bonus", value: `$${centsToDollars(stats.bonus)}`, sub: "USD", icon: Coins, color: "text-purple-500" },
+        ].map((item, idx) => (
+          <Card key={idx} className={cn("border shadow-none rounded-[16px]", isDark ? "bg-[#1e293b] border-slate-800" : "bg-white border-slate-100")}>
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className={cn("p-2.5 rounded-xl shadow-sm", isDark ? "bg-slate-800" : "bg-slate-50")}>
+                <item.icon className={cn("w-5 h-5", item.color)} strokeWidth={2.5} />
+              </div>
+              <div>
+                <p className={cn("text-[10px] font-bold uppercase tracking-wider", isDark ? "text-slate-500" : "text-slate-400")}>{item.label}</p>
+                <div className="flex items-baseline gap-1.5 leading-none mt-0.5">
+                  <h3 className={cn("text-[18px] font-black", isDark ? "text-white" : "text-slate-900")}>{item.value}</h3>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">{item.sub}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Filters Row (Restored to Top) */}
+      <div className="flex flex-wrap items-center gap-3 md:gap-4 mt-6">
+        {/* Contest Status Multi-select Filter */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-full lg:w-[220px] h-10 rounded-lg justify-start text-left font-normal border-slate-200 dark:border-slate-700 shadow-none",
+                isDark ? "bg-[#1e293b] text-slate-100 hover:bg-slate-800" : "bg-white text-slate-900 hover:bg-slate-50"
+              )}
+            >
+              <Filter className="mr-2 h-4 w-4 opacity-70" />
+              <span className="truncate">
+                {(() => {
+                  const statusMap: Record<string, string> = {
+                    live: "Live",
+                    pending_review: "Review Pending",
+                    in_review: "In Review",
+                    verification_complete: "Verification Completed",
+                    payouts_processed: "Payouts Processed"
+                  };
+                  const endedStatuses = ["pending_review", "in_review", "verification_complete", "payouts_processed"];
+                  const allEndedSelected = endedStatuses.every(s => contestStatusFilter.includes(s));
+
+                  if (contestStatusFilter.length === 5) return "All Contest Status";
+                  if (contestStatusFilter.length === 0) return "No Status Selected";
+
+                  const parts: string[] = [];
+                  if (contestStatusFilter.includes("live")) parts.push("Live");
+                  if (allEndedSelected) {
+                    parts.push("Ended");
+                  } else {
+                    contestStatusFilter.forEach(s => {
+                      if (s !== "live" && statusMap[s]) parts.push(statusMap[s]);
+                    });
+                  }
+
+                  const label = parts.join(", ");
+                  return label.length > 20 ? `${parts.length} Selected` : label;
+                })()}
+              </span>
+              <ChevronRight className="ml-auto h-4 w-4 opacity-50 rotate-90" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className={cn("w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800", isDark ? "bg-[#0f172a]" : "bg-white")} align="start">
+            <div className="flex flex-col gap-1">
+              {/* LIVE option */}
+              <div
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                  isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                )}
+                onClick={() => {
+                  setContestStatusFilter(prev =>
+                    prev.includes("live") ? prev.filter(s => s !== "live") : [...prev, "live"]
+                  );
+                }}
+              >
+                <div className={cn(
+                  "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                  contestStatusFilter.includes("live")
+                    ? "bg-[#4211a1] border-[#4211a1]"
+                    : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
+                )}>
+                  {contestStatusFilter.includes("live") && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
+                </div>
+                <span className={cn("text-[13px] font-bold", isDark ? "text-slate-200" : "text-slate-700")}>Live</span>
+              </div>
+
+              <div className={cn("h-[1px] my-1", isDark ? "bg-slate-800" : "bg-slate-100")} />
+
+              {/* ENDED group */}
+              <div
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                  isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                )}
+                onClick={() => {
+                  const endedStatuses = ["pending_review", "in_review", "verification_complete", "payouts_processed"];
+                  const allEndedSelected = endedStatuses.every(s => contestStatusFilter.includes(s));
+                  if (allEndedSelected) {
+                    setContestStatusFilter(prev => prev.filter(s => !endedStatuses.includes(s)));
+                  } else {
+                    setContestStatusFilter(prev => Array.from(new Set([...prev, ...endedStatuses])));
+                  }
+                }}
+              >
+                <div className={cn(
+                  "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                  ["pending_review", "in_review", "verification_complete", "payouts_processed"].every(s => contestStatusFilter.includes(s))
+                    ? "bg-[#4211a1] border-[#4211a1]"
+                    : ["pending_review", "in_review", "verification_complete", "payouts_processed"].some(s => contestStatusFilter.includes(s))
+                      ? "bg-[#4211a1]/50 border-[#4211a1]"
+                      : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
+                )}>
+                  {["pending_review", "in_review", "verification_complete", "payouts_processed"].every(s => contestStatusFilter.includes(s)) && (
+                    <Check className="w-3 h-3 text-white" strokeWidth={4} />
+                  )}
+                </div>
+                <span className={cn("text-[13px] font-black uppercase tracking-wider", isDark ? "text-slate-400" : "text-slate-500")}>Ended</span>
+              </div>
+
+              {/* ENDED children */}
+              {[
+                { id: "pending_review", label: "Review Pending" },
+                { id: "in_review", label: "In Review" },
+                { id: "verification_complete", label: "Verification Completed" },
+                { id: "payouts_processed", label: "Payouts Processed" },
+              ].map(child => (
+                <div
+                  key={child.id}
+                  className={cn(
+                    "flex items-center gap-2 pl-7 pr-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                    isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                  )}
+                  onClick={() => {
+                    setContestStatusFilter(prev =>
+                      prev.includes(child.id) ? prev.filter(s => s !== child.id) : [...prev, child.id]
+                    );
+                  }}
+                >
+                  <div className={cn(
+                    "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                    contestStatusFilter.includes(child.id)
+                      ? "bg-[#4211a1] border-[#4211a1]"
+                      : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
+                  )}>
+                    {contestStatusFilter.includes(child.id) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
+                  </div>
+                  <span className={cn("text-[13px] font-medium", isDark ? "text-slate-300" : "text-slate-600")}>{child.label}</span>
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        <Select value={contestTypeFilter} onValueChange={(v) => setContestTypeFilter(v as ContestTypeFilter)}>
+          <SelectTrigger className={cn(
+            "w-full lg:w-[180px] h-10 rounded-lg transition-none shadow-none",
+            isDark ? "border-slate-700 bg-[#1e293b] text-slate-100" : "border-slate-200 bg-white text-slate-900"
+          )}><SelectValue placeholder="All Types" /></SelectTrigger>
           <SelectContent isDark={isDark}>
-            <SelectItem isDark={isDark} value="all">All Types of Contests</SelectItem>
+            <SelectItem isDark={isDark} value="all">All Types</SelectItem>
             <SelectItem isDark={isDark} value="leaderboard">Leaderboard</SelectItem>
             <SelectItem isDark={isDark} value="cpm">CPM</SelectItem>
           </SelectContent>
         </Select>
-        <Select
-          value={platformFilter}
-          onValueChange={(value) => setPlatformFilter(value as PlatformFilter)}
-        >
-          <SelectTrigger className="w-full sm:w-[180px]">
-            <SelectValue placeholder="Filter by Platform" />
-          </SelectTrigger>
+
+        <Select value={platformFilter} onValueChange={(v) => setPlatformFilter(v as PlatformFilter)}>
+          <SelectTrigger className={cn(
+            "w-full lg:w-[180px] h-10 rounded-lg transition-none shadow-none",
+            isDark ? "border-slate-700 bg-[#1e293b] text-slate-100" : "border-slate-200 bg-white text-slate-900"
+          )}><SelectValue placeholder="All Platforms" /></SelectTrigger>
           <SelectContent isDark={isDark}>
             <SelectItem isDark={isDark} value="all">All Platforms</SelectItem>
             <SelectItem isDark={isDark} value="youtube">YouTube</SelectItem>
             <SelectItem isDark={isDark} value="instagram">Instagram</SelectItem>
+            <SelectItem isDark={isDark} value="tiktok">TikTok</SelectItem>
           </SelectContent>
         </Select>
-        {/* Consider replacing Button with Tabs for status filters for better UX */}
-        <button className="w-full sm:w-auto py-2.5 px-4 border rounded-md flex items-center">
-          <Filter className="h-4 w-4 mr-2" />
-          <span>Filter by Status (Soon)</span>
-        </button>
+
+        <Select value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
+          <SelectTrigger className={cn(
+            "w-full lg:w-[180px] h-10 rounded-lg transition-none shadow-none",
+            isDark ? "border-slate-700 bg-[#1e293b] text-slate-100" : "border-slate-200 bg-white text-slate-900"
+          )}><SelectValue placeholder="View Mode" /></SelectTrigger>
+          <SelectContent isDark={isDark}>
+            <SelectItem isDark={isDark} value="all">Submission view</SelectItem>
+            <SelectItem isDark={isDark} value="contest">Contest View</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as SortOrder)}>
+          <SelectTrigger className={cn(
+            "w-full lg:w-[180px] h-10 rounded-lg transition-none shadow-none",
+            isDark ? "border-slate-700 bg-[#1e293b] text-slate-100" : "border-slate-200 bg-white text-slate-900"
+          )}><SelectValue placeholder="Sort By" /></SelectTrigger>
+          <SelectContent isDark={isDark}>
+            <SelectItem isDark={isDark} value="newest">Newest to Oldest</SelectItem>
+            <SelectItem isDark={isDark} value="oldest">Oldest to Newest</SelectItem>
+            <SelectItem isDark={isDark} value="views_high">Highest to Lowest Views</SelectItem>
+            <SelectItem isDark={isDark} value="views_low">Lowest to Highest Views</SelectItem>
+            <SelectItem isDark={isDark} value="earnings_high">Most Earnings</SelectItem>
+            <SelectItem isDark={isDark} value="earnings_low">Lowest Earnings</SelectItem>
+            {viewMode === "contest" && (
+              <>
+                <SelectItem isDark={isDark} value="submissions_high">Most Submissions</SelectItem>
+                <SelectItem isDark={isDark} value="submissions_low">Least Submissions</SelectItem>
+              </>
+            )}
+          </SelectContent>
+        </Select>
+
+        <div className="flex items-center gap-2">
+          <Select
+            value={dateFilter}
+            onValueChange={(value) => setDateFilter(value as DateFilter)}
+          >
+            <SelectTrigger className={cn(
+              "w-full lg:w-[150px] h-10 rounded-lg transition-none shadow-none",
+              isDark ? "border-slate-700 bg-[#1e293b] text-slate-100" : "border-slate-200 bg-white text-slate-900"
+            )}>
+              <SelectValue placeholder="Date" />
+            </SelectTrigger>
+            <SelectContent isDark={isDark}>
+              <SelectItem isDark={isDark} value="all">Anytime</SelectItem>
+              <SelectItem isDark={isDark} value="today">Today</SelectItem>
+              <SelectItem isDark={isDark} value="3days">Last 3 Days</SelectItem>
+              <SelectItem isDark={isDark} value="1week">Last 1 Week</SelectItem>
+              <SelectItem isDark={isDark} value="1month">Last 1 Month</SelectItem>
+              <SelectItem isDark={isDark} value="1year">Last 1 Year</SelectItem>
+              <SelectItem isDark={isDark} value="custom">Custom Range</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {dateFilter === "custom" && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full sm:w-[240px] justify-start text-left font-normal h-10 rounded-lg",
+                    !dateRange && "text-muted-foreground",
+                    isDark ? "bg-[#1e293b] border-slate-700 text-white hover:bg-slate-800" : "bg-white border-slate-200"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4 opacity-70" strokeWidth={3} />
+                  {dateRange?.from ? (
+                    dateRange?.to ? (
+                      <span className="truncate">
+                        {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
+                      </span>
+                    ) : (
+                      format(dateRange.from, "LLL dd, y")
+                    )
+                  ) : (
+                    <span>Pick a date</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-min max-w-[calc(100vw-32px)] p-0 rounded-xl overflow-hidden shadow-2xl border-slate-200 dark:border-slate-800 z-[100]"
+                align={calendarMonths === 1 ? "center" : "start"}
+                sideOffset={4}
+              >
+                <Calendar
+                  initialFocus
+                  mode="range"
+                  defaultMonth={dateRange?.from}
+                  selected={dateRange}
+                  onSelect={setDateRange}
+                  numberOfMonths={calendarMonths}
+                  className={isDark ? "bg-[#0f172a] text-white" : "bg-white"}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
       </div>
-      {/* Enhanced Tabs with better visual distinction and responsive design */}
-      <Tabs
-        defaultValue="all"
-        value={statusFilter}
-        onValueChange={(value) => setStatusFilter(value as StatusFilter)}
-        className="mb-8"
-      >
-        <TabsList className="flex gap-4">
-          <TabsTrigger
-            value="all"
-            className={cn(
-              "border text-md",
-              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
-            )}
-          >
-            All
-          </TabsTrigger>
-          <TabsTrigger
-            value="active"
-            className={cn(
-              "border text-md",
-              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
-            )}
-          >
-            Active
-          </TabsTrigger>
-          <TabsTrigger
-            value="pending"
-            className={cn(
-              "border text-md",
-              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
-            )}
-          >
-            Pending
-          </TabsTrigger>
-          <TabsTrigger
-            value="verified"
-            className={cn(
-              "border text-md",
-              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
-            )}
-          >
-            Verified
-          </TabsTrigger>
-          <TabsTrigger
-            value="rejected"
-            className={cn(
-              "border text-md",
-              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
-            )}
-          >
-            Rejected
-          </TabsTrigger>
-          <TabsTrigger
-            value="ended"
-            className={cn(
-              "border text-md",
-              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
-            )}
-          >
-            Ended
-          </TabsTrigger>
-          <TabsTrigger
-            value="paid"
-            className={cn(
-              "border text-md",
-              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
-            )}
-          >
-            Paid
-          </TabsTrigger>
+
+
+      {/* Status Tabs */}
+      <Tabs defaultValue="all" value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)} className="w-full">
+        <TabsList className="flex gap-2 bg-transparent p-0 h-auto w-full justify-start overflow-x-auto pb-2 scrollbar-hide">
+          {[
+            { id: "all", icon: Layers },
+            { id: "pending", icon: Clock },
+            { id: "verified", icon: CheckCircle2 },
+            { id: "rejected", icon: XCircle },
+            { id: "paid", icon: DollarSign },
+          ].map(({ id, icon: Icon }) => (
+            <TabsTrigger
+              key={id}
+              value={id}
+              className={cn(
+                "h-[36px] px-4 rounded-[8px] text-[14px] font-bold uppercase tracking-wider border shadow-none transition-all duration-200",
+                isDark ? (
+                  statusFilter === id
+                    ? "data-[state=active]:bg-[#4211a1] data-[state=active]:text-white data-[state=active]:border-[#4211a1] bg-[#4211a1] text-white shadow-sm"
+                    : "bg-transparent border-slate-800 text-white/70 hover:bg-slate-800/50 hover:text-white"
+                ) : (
+                  statusFilter === id
+                    ? "data-[state=active]:bg-[#4211a1] data-[state=active]:text-white data-[state=active]:border-[#4211a1] bg-[#4211a1] text-white border-transparent shadow-sm"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                )
+              )}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Icon className="w-4 h-4 shrink-0" strokeWidth={3} />
+                <span className="font-bold">{id}</span>
+              </div>
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        <TabsContent value={statusFilter} className="space-y-4">
-          <div>
-            <div className="py-4 md:px-4">
-              <div className="flex items-start justify-between flex-wrap gap-2">
-                <div className="flex-1 min-w-0">
-                  <CardTitle className="text-xl md:text-2xl font-bold truncate">
-                    {filterDisplayInfo[statusFilter].title}
-                  </CardTitle>
-                  <p className="mt-1 text-sm md:text-[14px] text-muted-foreground">
-                    {filterDisplayInfo[statusFilter].description}
-                  </p>
-                </div>
-                <Badge
-                  variant="secondary"
-                  className="px-3 py-1 text-sm md:text-md font-medium flex-shrink-0"
-                >
-                  {filteredSubmissions.length} submission
-                  {filteredSubmissions.length !== 1 ? "s" : ""}
-                </Badge>
-              </div>
-            </div>
-            <CardContent>
-              <div className="grid gap-6">
-                {filteredSubmissions.map((submission) => {
-                  const contest = submission.contests;
-                  // Correctly extract the nested cpm_contest object and type it
-                  const cpmConfig =
-                    contest?.contest_type === "cpm" &&
-                      contest.contest_based_details &&
-                      typeof contest.contest_based_details === "object" &&
-                      contest.contest_based_details !== null &&
-                      "cpm_contest" in contest.contest_based_details
-                      ? (contest.contest_based_details
-                        .cpm_contest as unknown as CpmContestDetails)
-                      : null;
-
-                  const displayStatus = getDisplayStatus(submission);
-                  const views = submission.views ?? 0;
-                  const contestId = submission.contests?.id;
-                  const isEnded = contest?.end_date
-                    ? new Date(contest.end_date) < new Date()
-                    : false;
-                  const rejectionDetails =
-                    submission.status === "rejected"
-                      ? getFullRejectionDetails(submission.metadata)
-                      : null;
-
-                  let primaryEarningsDisplay: React.ReactNode | null = null;
-
-                  if (contest?.contest_type === "cpm") {
-                    let cpmLabel = "";
-                    let cpmAmount: string | number = "0.00";
-
-                    if (submission.status === "paid") {
-                      cpmLabel = "Paid";
-                      // Convert cents to dollars for display
-                      const earningsInDollars = submission.earnings
-                        ? centsToDollars(submission.earnings)
-                        : 0;
-                      cpmAmount = earningsInDollars.toFixed(2);
-                    } else if (submission.status === "rejected") {
-                      cpmLabel = isEnded ? "Earnings" : "Est. Earnings";
-                      cpmAmount = "0.00";
-                    } else {
-                      // pending or verified
-                      let effectiveViews = views;
-                      if (
-                        cpmConfig?.min_views != null &&
-                        views < cpmConfig.min_views
-                      ) {
-                        effectiveViews = 0;
-                      } else if (
-                        cpmConfig?.max_views != null &&
-                        views > cpmConfig.max_views
-                      ) {
-                        effectiveViews = cpmConfig.max_views;
-                      }
-                      const calculatedEarnings =
-                        (effectiveViews * (cpmConfig?.cpm_rate_usd || 0)) /
-                        1000;
-                      cpmAmount = calculatedEarnings.toFixed(2);
-                      if (isEnded) {
-                        cpmLabel = "Final Earnings";
-                      } else {
-                        cpmLabel = "Est. Earnings";
-                      }
-                    }
-                    primaryEarningsDisplay = (
-                      <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                        {cpmLabel}:{" "}
-                        <span className="text-base">${cpmAmount}</span> USD
-                      </p>
-                    );
-                  } else if (contest?.contest_type === "leaderboard") {
-                    // Simplified leaderboard logic using calculateLeaderboardEarnings function
-                    console.log("🏆 Processing leaderboard contest:", {
-                      submissionId: submission.id,
-                      contestId: contestId,
-                      isEnded,
-                      status: submission.status,
-                      hasContestDetails: !!contest?.contest_based_details,
-                      contestBasedDetails: contest?.contest_based_details,
-                      postContestStatus: contest?.post_contest_status,
-                    });
-
-                    // Use the simplified earnings calculation for all cases
-                    const earningsData = calculateLeaderboardEarnings(
-                      submission,
-                      contest
-                    );
-
-                    console.log("🎯 Earnings data result:", earningsData);
-
-                    if (earningsData.label === "check_leaderboard") {
-                      console.log("🔗 Setting leaderboard link display");
-                      primaryEarningsDisplay = (
-                        <Link
-                          href={`/dashboard/opportunities/${contestId}#leaderboard`}
-                          className="text-xs text-sky-600 dark:text-sky-400 hover:underline mt-0.5 block"
-                        >
-                          Check your ranking and earnings in the leaderboard.
-                        </Link>
-                      );
-                    } else if (earningsData.label === "No Prize Won") {
-                      console.log("❌ Setting no prize won display");
-                      primaryEarningsDisplay = (
-                        <div className="mt-0.5">
-                          <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">
-                            No Prize Won:{" "}
-                            <span className="text-base">$0.00</span> USD
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
-                            Keep creating amazing content! 🎬
-                          </p>
-                        </div>
-                      );
-                    } else if (earningsData.label === "Submission Rejected") {
-                      console.log("🚫 Setting rejected display");
-                      primaryEarningsDisplay = (
-                        <div className="mt-0.5">
-                          <p className="text-xs font-semibold text-red-600 dark:text-red-400">
-                            Submission Rejected:{" "}
-                            <span className="text-base">$0.00</span> USD
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
-                            Check contest guidelines for next time.
-                          </p>
-                        </div>
-                      );
-                    } else {
-                      console.log("💰 Setting earnings display:", earningsData);
-                      primaryEarningsDisplay = (
-                        <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                          {earningsData.label}:{" "}
-                          <span className="text-base">
-                            ${earningsData.amount.toFixed(2)}
-                          </span>{" "}
-                          USD
-                        </p>
-                      );
-                    }
-                  }
-                  // If contest_type is other than 'cpm' or 'leaderboard', primaryEarningsDisplay remains null.
-
-                  return (
-                    <div
-                      key={submission.id}
-
-                      className={cn(
-                        "rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:shadow-md transition-shadow",
-                        isDark ? "border border-gray-600" : "border border-[#D1B7F9] bg-white "
-                      )}
-                    >
-                      <div className="flex items-center space-x-4 flex-grow">
-                        {(() => {
-                          const isInstagram =
-                            (submission.platform || "").toLowerCase() === "instagram";
-                          const isBroken = !!brokenThumbs[submission.id];
-                          const hasThumb = !!submission.video_thumbnail_url;
-                          const shouldShowIgPoster = isInstagram && (!hasThumb || isBroken);
-
-                          if (shouldShowIgPoster) {
-                            return (
-                              <Image
-                                src="/instagram-poster.svg"
-                                alt="Instagram content"
-                                width={120}
-                                height={90}
-                                className="rounded object-cover aspect-video"
-                                priority={false}
-                              />
-                            );
-                          }
-
-                          if (hasThumb) {
-                            return (
-                              <Image
-                                src={submission.video_thumbnail_url as string}
-                                alt={submission.video_title || "Video thumbnail"}
-                                width={120}
-                                height={90}
-                                className="rounded object-cover aspect-video"
-                                onError={() =>
-                                  setBrokenThumbs((prev) => ({
-                                    ...prev,
-                                    [submission.id]: true,
-                                  }))
-                                }
-                              />
-                            );
-                          }
-
-                          return (
-                            <div className="w-[80px] h-[45px] rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                              <Video className="h-6 w-6 text-gray-400 dark:text-gray-500" />
-                            </div>
-                          );
-                        })()}
-                        <div className="flex-grow">
-                          {contestId ? (
-                            <Link
-                              href={`/dashboard/opportunities/${contestId}`}
-                              className="hover:underline"
-                            >
-                              <p className={cn(
-                                "text-xl font-semibold",
-                                isDark ? "text-white" : "text-black"
-                              )}>
-                                {contest?.title || "Contest Title N/A"}
-                              </p>
-                            </Link>
-                          ) : (
-                            <p className={cn(
-                              "text-xl font-semibold",
-                              isDark ? "text-white" : "text-black"
-                            )}>
-                              {contest?.title || "Contest Title N/A"}
-                            </p>
-                          )}
-                          <div className="text-sm text-muted-foreground mt-2">
-                            <span>
-                              Submitted on{" "}
-                              {submission.formatted_created_at || "Date N/A"} |{" "}
-                            </span>
-                            <Badge variant="outline" className="ml-1 text-xs">
-                              {submission.platform
-                                ? submission.platform.charAt(0).toUpperCase() +
-                                submission.platform.slice(1)
-                                : "N/A"}
-                            </Badge>
-                            {contest?.contest_type && (
-                              <Badge
-                                variant={
-                                  contest.contest_type === "cpm"
-                                    ? "secondary"
-                                    : "default"
-                                }
-                                className="ml-1 text-xs"
-                              >
-                                {contest.contest_type.toUpperCase()}
-                              </Badge>
-                            )}
-                            {isEnded &&
-                              submission.contests?.post_contest_status &&
-                              postContestStatusMap[
-                              submission.contests.post_contest_status
-                              ] && (
-                                <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                                  Contest Stage:{" "}
-                                  <span className="font-medium">
-                                    {
-                                      postContestStatusMap[
-                                      submission.contests.post_contest_status
-                                      ]
-                                    }
-                                  </span>
-                                </div>
-                              )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col sm:items-end gap-3 w-full sm:w-auto">
-                        <div className="text-sm text-left sm:text-right p-3 rounded-md min-w-[200px]">
-                          <p className={cn(
-                            "font-medium",
-                            isDark ? "text-slate-300" : "text-slate-700"
-                          )}>
-                            {views.toLocaleString()} views
-                          </p>
-
-                          {primaryEarningsDisplay}
-
-                          <Badge
-                            className={`mt-2 text-xs ${getStatusBadgeColor(
-                              submission.status,
-                              contest?.end_date
-                            )}`}
-                          >
-                            {displayStatus}
-                          </Badge>
-                          {submission.status === "rejected" &&
-                            rejectionDetails && (
-                              <div className="mt-2 rounded-md border border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-950/40 p-2 text-xs text-red-700 dark:text-red-300">
-                                <div className="flex items-start gap-2">
-                                  <AlertCircle className="h-4 w-4 mt-0.5" />
-                                  <div>
-                                    <p className="font-semibold">
-                                      Rejection Reason
-                                    </p>
-                                    <p className="mt-0.5">
-                                      {rejectionDetails.reason}
-                                    </p>
-                                    {!rejectionDetails.additionalNotes && REJECTION_REASON_DESCRIPTIONS[
-                                      rejectionDetails.reason
-                                    ] && (
-                                        <p className="mt-0.5 text-[11px] opacity-90">
-                                          {REJECTION_REASON_DESCRIPTIONS[
-                                            rejectionDetails.reason
-                                          ]}
-                                        </p>
-                                      )}
-                                    {rejectionDetails.additionalNotes && (
-                                      <p className="mt-0.5">
-                                        Notes:{" "}
-                                        {rejectionDetails.additionalNotes}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                          <Button
-                            size="sm"
-                            asChild
-                            className="w-full bg-[#4A00BE] text-white px-3 sm:w-auto"
-                          >
-                            <Link
-                              href={submission.content_link || "#"}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`flex items-center justify-center ${!submission.content_link
-                                ? "pointer-events-none opacity-50"
-                                : ""
-                                }`}
-                            >
-                              <ExternalLink className="h-4 w-4 mr-1.5" /> View
-                              Content
-                            </Link>
-                          </Button>
-                          {contestId && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              asChild
-                              className="w-full bg-[#4A00BE] text-white  px-3 sm:w-auto"
-                            >
-                              <Link
-                                href={`/dashboard/opportunities/${contestId}`}
-                                className="flex items-center justify-center"
-                              >
-                                <Info className="h-4 w-4 mr-1.5" /> View Contest
-                              </Link>
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
+        <TabsContent value={statusFilter} className="mt-0">
+          {/* Submission List Content */}
+          <div className="flex flex-col gap-4">
+            {viewMode === "contest" ? (
+              <>
+                {groupedContests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((group) => renderContestGroupCard(group))}
+                {groupedContests.length === 0 && (
+                  <div className={cn("py-12 text-center rounded-xl border-2 border-dashed", isDark ? "bg-slate-800/20 border-slate-800" : "bg-slate-50 border-slate-200")}>
+                    <p className={isDark ? "text-slate-400" : "text-slate-500"}>No submissions found matching the criteria.</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {filteredSubmissions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((sub) => renderSubmissionCard(sub))}
+                {filteredSubmissions.length === 0 && (
+                  <div className={cn("py-12 text-center rounded-xl border-2 border-dashed", isDark ? "bg-slate-800/20 border-slate-800" : "bg-slate-50 border-slate-200")}>
+                    <p className={isDark ? "text-slate-400" : "text-slate-500"}>No submissions found matching the criteria.</p>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
-          {filteredSubmissions.length === 0 && (
-            <div className="col-span-full text-center py-12">
-              <Video className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-              <h2 className="text-xl font-medium mb-2">No submissions found</h2>
-              <p className="text-muted-foreground mb-4">
-                You haven't submitted any content for contests matching the
-                current filter criteria.
-              </p>
-              <Button asChild>
-                <Link href="/dashboard/opportunities">
-                  Browse Opportunities
-                </Link>
-              </Button>
+          {/* Pagination Bar - Moved down as requested */}
+          {(viewMode === "contest" ? groupedContests.length : filteredSubmissions.length) > 0 && (
+            <div className={cn(
+              "flex flex-col md:flex-row items-center justify-between gap-4 py-4 px-2 transition-all duration-300 mt-4",
+              isDark ? "text-slate-400" : "text-slate-500"
+            )}>
+              {/* Left Side: Stats and Show per page */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-8">
+                <div className="text-[14px] font-medium whitespace-nowrap">
+                  Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, viewMode === "contest" ? groupedContests.length : filteredSubmissions.length)} of {viewMode === "contest" ? groupedContests.length : filteredSubmissions.length} submissions
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-[14px] font-medium">Show:</span>
+                  <Select value={itemsPerPage.toString()} onValueChange={(v) => {
+                    setItemsPerPage(parseInt(v));
+                    setCurrentPage(1);
+                  }}>
+                    <SelectTrigger className={cn(
+                      "h-10 w-[80px] rounded-lg border shadow-none text-sm font-bold",
+                      isDark ? "bg-[#1e293b] border-slate-700" : "bg-white border-slate-200"
+                    )}>
+                      <SelectValue placeholder="25" />
+                    </SelectTrigger>
+                    <SelectContent className={cn(
+                      "min-w-0 w-[80px]",
+                      isDark ? "bg-[#0f172a] border-slate-800" : "bg-white border-slate-200"
+                    )}>
+                      <SelectItem value="25" isDark={isDark}>25</SelectItem>
+                      <SelectItem value="50" isDark={isDark}>50</SelectItem>
+                      <SelectItem value="100" isDark={isDark}>100</SelectItem>
+                      <SelectItem value="200" isDark={isDark}>200</SelectItem>
+                      <SelectItem value="500" isDark={isDark}>500</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-[14px] font-medium">per page</span>
+                </div>
+              </div>
+
+              {/* Right Side: Navigation */}
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className={cn(
+                    "h-9 w-9 rounded-md border shadow-none transition-colors",
+                    isDark ? "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-400" : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
+                  )}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+
+                <div className="flex items-center gap-1.5">
+                  {[...Array(Math.ceil((viewMode === "contest" ? groupedContests.length : filteredSubmissions.length) / itemsPerPage))].map((_, i) => {
+                    const pageNum = i + 1;
+                    const totalPages = Math.ceil((viewMode === "contest" ? groupedContests.length : filteredSubmissions.length) / itemsPerPage);
+
+                    if (
+                      pageNum === 1 ||
+                      pageNum === totalPages ||
+                      (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                    ) {
+                      const isActive = currentPage === pageNum;
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={isActive ? "default" : "outline"}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={cn(
+                            "h-9 w-9 rounded-md border text-[13px] font-bold shadow-none transition-all",
+                            isActive
+                              ? "bg-[#4211a1] text-white border-[#4211a1] hover:bg-[#350d81]"
+                              : isDark
+                                ? "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300"
+                                : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
+                          )}
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    } else if (pageNum === currentPage - 2 || pageNum === currentPage + 2) {
+                      return <span key={pageNum} className="px-1 text-slate-400 font-bold">...</span>;
+                    }
+                    return null;
+                  })}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil((viewMode === "contest" ? groupedContests.length : filteredSubmissions.length) / itemsPerPage), p + 1))}
+                  disabled={currentPage === Math.ceil((viewMode === "contest" ? groupedContests.length : filteredSubmissions.length) / itemsPerPage)}
+                  className={cn(
+                    "h-9 w-9 rounded-md border shadow-none transition-colors",
+                    isDark ? "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-400" : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
+                  )}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
         </TabsContent>
       </Tabs>
-    </div>
+
+      {/* Contest Submissions Modal */}
+      <Dialog open={!!selectedContestGroup} onOpenChange={(open) => !open && setSelectedContestGroup(null)} isdark={isDark}>
+        <DialogContent className={cn("w-[95vw] sm:max-w-2xl max-h-[85vh] overflow-y-auto scrollbar-thin rounded-[20px]", isDark ? "bg-[#0f172a] border-slate-800" : "bg-white border-slate-200")}>
+          <DialogHeader>
+            <DialogTitle
+              className={cn("text-xl font-black break-words leading-tight", isDark ? "text-white" : "text-slate-900")}
+            >
+              {selectedContestGroup?.contest?.title || "Contest Submissions"}
+            </DialogTitle>
+            <DialogDescription className={cn("text-[13px]", isDark ? "text-slate-400" : "text-slate-500")}>
+              Showing all {selectedContestGroup?.submissions?.length} submissions for this contest.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 mt-4 w-full min-w-0">
+            {selectedContestGroup?.submissions?.map((submission: SubmissionWithContest) => {
+              const contest = submission.contests;
+              const cpmConfig =
+                contest?.contest_type === "cpm" &&
+                  contest.contest_based_details &&
+                  typeof contest.contest_based_details === "object" &&
+                  contest.contest_based_details !== null &&
+                  "cpm_contest" in contest.contest_based_details
+                  ? (contest.contest_based_details.cpm_contest as unknown as CpmContestDetails)
+                  : null;
+              const views = submission.views ?? 0;
+              const contestId = contest?.id;
+              const isEnded = contest?.end_date ? new Date(contest.end_date) < new Date() : false;
+              const isLive = !isEnded;
+              const postContestStatus = contest?.post_contest_status;
+              const isPayoutsProcessed = postContestStatus === "payouts_processed";
+
+              const displayStatus = getDisplayStatus(submission);
+
+              const statusStyles = getStatusBadgeStyles(
+                isLive
+                  ? "active" as any
+                  : ((submission.status as string) === "paid" && !isPayoutsProcessed)
+                    ? "verified"
+                    : submission.status,
+                contest?.end_date,
+                postContestStatus
+              );
+              const rejectionDetails = submission.status === "rejected" ? getFullRejectionDetails(submission.metadata) : null;
+              const systemNote = rejectionDetails?.reason ? REJECTION_REASON_DESCRIPTIONS[rejectionDetails.reason] : null;
+              const displayNote = rejectionDetails?.additionalNotes || systemNote;
+
+              // Thumbnail
+              const meta = submission.metadata as any;
+              const bestThumbnail = submission.video_thumbnail_url ||
+                (submission as any).thumbnail_url ||
+                (submission as any).thumbnail ||
+                meta?.video_thumbnail_url ||
+                meta?.thumbnail_url ||
+                meta?.thumbnail ||
+                meta?.display_url ||
+                meta?.thumbnail_src ||
+                meta?.image_url ||
+                meta?.cover_image_url ||
+                meta?.cover ||
+                meta?.video?.cover ||
+                meta?.shortcode_media?.display_url ||
+                meta?.image_versions2?.candidates?.[0]?.url ||
+                meta?.candidates?.[0]?.url ||
+                meta?.video_details?.thumbnail_url;
+              // Final Status Flags
+              const isVerificationComplete = contest?.post_contest_status === "verification_complete";
+              const isRejectedModal = submission.status === "rejected";
+              const isVerifiedOrPaidModal = submission.status === "verified" || (submission.status as string) === "paid" || ((submission as any).bonus_paid === true);
+
+              // Earnings calculation
+              const totalEarningsCents = getSubmissionEarningsAmount(submission);
+              const earningsInDollars = centsToDollars(totalEarningsCents);
+
+              // Bonus calculation
+              const bonusPaidModal = (submission as any).bonus_paid === true;
+              const isActuallyPaidModal = (submission.status as string || "").toLowerCase() === "paid";
+              const contestDetailsForBonus = contest?.contest_based_details as any;
+              const bonusDetails = contest?.bonus_details as any;
+              const flatFeeBonus =
+                contestDetailsForBonus?.cpm_contest?.flat_fee_bonus ||
+                contestDetailsForBonus?.leaderboard_contest?.flat_fee_bonus ||
+                bonusDetails?.flat_fee_bonus ||
+                0;
+
+              let bonusAmountCents = 0;
+              if (bonusPaidModal && isActuallyPaidModal) {
+                bonusAmountCents = ((submission as any).bonus_amount || 0);
+              } else if (!isRejectedModal) {
+                if (isPayoutsProcessed) {
+                  bonusAmountCents = 0;
+                } else {
+                  bonusAmountCents = flatFeeBonus;
+                }
+              }
+              const bonusAmountDollars = centsToDollars(bonusAmountCents).toFixed(2);
+
+              let earningsDisplay: { label: string; amount: string; color: string; isRejected?: boolean } | null = null;
+              if (isRejectedModal) {
+                earningsDisplay = { label: "Earnings", amount: "Not Eligible", color: "text-red-500", isRejected: true };
+              } else if (contest?.contest_type === "cpm") {
+                const subStatusModal = (submission.status as string || "").toLowerCase();
+                const isSubPaidModal = subStatusModal === "paid" || (submission as any).paid === true;
+                const label = isPayoutsProcessed
+                  ? "Amount Earned"
+                  : isVerificationComplete ? "Final Earnings" : "Estimated Earnings";
+                earningsDisplay = {
+                  label,
+                  amount: earningsInDollars.toFixed(2),
+                  color: isPayoutsProcessed ? "text-green-500" : isVerificationComplete ? (isDark ? "text-emerald-400" : "text-emerald-600") : isDark ? "text-blue-400" : "text-blue-600",
+                };
+              } else {
+                const data = calculateLeaderboardEarnings(submission, contest);
+                let color = isDark ? "text-emerald-400" : "text-emerald-600";
+                if (data.isRejected) color = "text-red-500";
+                else if (data.label === "Amount Earned") color = "text-green-500";
+                else if (data.label === "Final Earnings") color = isDark ? "text-emerald-400" : "text-emerald-600";
+                else if (data.label === "Estimated Earnings") color = isDark ? "text-blue-400" : "text-blue-600";
+
+                earningsDisplay = {
+                  label: data.label,
+                  amount: data.isRejected ? "Not Eligible" : earningsInDollars.toFixed(2),
+                  color
+                };
+              }
+
+              // Bonus Label for modal
+              let bonusLabelModal = "Estimated Bonus";
+              const subStatusModalForBonus = (submission.status as string || "").toLowerCase();
+              const isSubPaidModalForBonus = subStatusModalForBonus === "paid" || (submission as any).paid === true;
+
+              if (isRejectedModal) {
+                bonusLabelModal = "Bonus Won";
+              } else {
+                if (isPayoutsProcessed) {
+                  bonusLabelModal = "Bonus Earned";
+                } else if (isVerificationComplete) {
+                  bonusLabelModal = "Final Bonus";
+                } else {
+                  bonusLabelModal = "Estimated Bonus";
+                }
+              }
+              const bonusColorModal = (bonusLabelModal === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
+
+              const isInstagram = (submission.platform || "").toLowerCase() === "instagram";
+              const isBroken = !!brokenThumbs[submission.id];
+              const hasThumb = !!bestThumbnail;
+
+              return (
+                <div
+                  key={submission.id}
+                  className={cn(
+                    "rounded-[14px] border overflow-hidden transition-all duration-300 group/item hover:shadow-lg min-w-0 w-full",
+                    isDark ? "bg-[#1e293b] border-slate-700 hover:border-indigo-500/50" : "bg-white border-slate-200 hover:border-[#4211a1]/30"
+                  )}
+                >
+                  {/* ── SECTION 1: Thumbnail banner ── */}
+                  <div className="relative w-full h-[160px] bg-slate-100 dark:bg-slate-900">
+                    {isInstagram && (!hasThumb || isBroken) ? (
+                      <img src="/instagram-poster.svg" alt="Instagram content" className="absolute inset-0 w-full h-full object-cover" />
+                    ) : hasThumb && !isBroken ? (
+                      <img
+                        src={bestThumbnail}
+                        alt="Thumbnail"
+                        referrerPolicy="no-referrer"
+                        className="absolute inset-0 w-full h-full object-cover"
+                        onError={() => setBrokenThumbs((prev) => ({ ...prev, [submission.id]: true }))}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800/30">
+                        <Video className="h-12 w-12 text-slate-300 dark:text-slate-600" />
+                      </div>
+                    )}
+                    {/* Gradient overlay for readability */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                    {/* Platform badge – top left */}
+                    <div className="absolute top-3 left-3 px-2 py-1 bg-black/75 backdrop-blur-sm rounded text-[10px] font-bold text-white uppercase tracking-wider">
+                      {submission.platform || "Video"}
+                    </div>
+                    {/* Status badges – top right */}
+                    <div className="absolute top-3 right-3 flex items-center gap-2">
+                      <span className={cn(
+                        "inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-sm",
+                        statusStyles.bg, statusStyles.text, statusStyles.border
+                      )}>
+                        {displayStatus}
+                      </span>
+                      {(() => {
+                        const contestStatusInfo = getContestStatusDisplay(contest);
+                        return (
+                          <span className={cn(
+                            "inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-sm",
+                            contestStatusInfo.styles.bg, contestStatusInfo.styles.text, contestStatusInfo.styles.border
+                          )}>
+                            {contestStatusInfo.label}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* ── SECTION 2: Title row ── */}
+                  <div className={cn("px-4 pt-3 pb-3 border-b max-w-full overflow-hidden min-w-0 flex-shrink-0", isDark ? "border-slate-700" : "border-slate-100")}>
+                    <h4
+                      onClick={() => toggleCaption(submission.id)}
+                      className={cn(
+                        "text-[15px] font-bold leading-snug transition-all duration-300 cursor-pointer hover:opacity-80 w-full truncate block",
+                        expandedCaptions[submission.id] ? "whitespace-normal break-words" : "",
+                        isDark ? "text-white" : "text-slate-900"
+                      )}
+                    >
+                      {submission.video_title ||
+                        meta?.video_title ||
+                        meta?.title ||
+                        meta?.video_details?.title ||
+                        meta?.edge_media_to_caption?.edges?.[0]?.node?.text ||
+                        meta?.caption ||
+                        meta?.description ||
+                        meta?.desc ||
+                        meta?.text ||
+                        meta?.video?.description ||
+                        meta?.video?.desc ||
+                        "Untitled Submission"}
+                    </h4>
+                  </div>
+
+                  {/* ── SECTION 3: Meta chips row ── */}
+                  <div className={cn("px-4 py-3 flex items-center gap-2 flex-wrap border-b", isDark ? "border-slate-700" : "border-slate-100")}>
+                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
+                      <CalendarDays className="w-3 h-3 shrink-0" /> Submitted: {submission.formatted_created_at || "Date N/A"}
+                    </span>
+                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
+                      <Tag className="w-3 h-3 shrink-0" /> {contest?.contest_type || "N/A"}
+                    </span>
+                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
+                      <Eye className="w-3 h-3 shrink-0" /> {views.toLocaleString()} Views
+                    </span>
+                  </div>
+
+                  {/* ── SECTION 4: Earnings grid ── */}
+                  <div className={cn("px-4 py-3 grid gap-3 border-b", isRejectedModal ? "grid-cols-1" : "grid-cols-2", isDark ? "border-slate-700" : "border-slate-100")}>
+                    <div className={cn("rounded-[10px] p-3", isDark ? "bg-slate-800/60" : "bg-slate-50")}>
+                      <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isDark ? "text-slate-500" : "text-slate-400")}>
+                        {earningsDisplay?.label || "Estimated Earnings"}
+                      </p>
+                      <p className={cn("text-[16px] font-black", earningsDisplay?.color || (isDark ? "text-emerald-400" : "text-emerald-600"))}>
+                        {earningsDisplay?.amount === "Check Ranking" ? (
+                          <Link href={`/dashboard/leaderboard?contestId=${contestId}`} className="underline hover:opacity-80 transition-opacity text-[13px]">
+                            Check Ranking <ExternalLink className="inline h-3 w-3 ml-1" />
+                          </Link>
+                        ) : earningsDisplay?.amount === "Not Eligible" ? (
+                          "Not Eligible"
+                        ) : `$${earningsDisplay?.amount || "0.00"} USD`}
+                      </p>
+                      {isPayoutsProcessed && (submission as any).paid_at && (
+                        <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">
+                          Paid on: {format(new Date((submission as any).paid_at), "MMM d, yyyy")}
+                        </p>
+                      )}
+                    </div>
+                    {!isRejectedModal && (
+                      <div className={cn("rounded-[10px] p-3", isDark ? "bg-slate-800/60" : "bg-slate-50")}>
+                        <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isDark ? "text-slate-500" : "text-slate-400")}>
+                          {bonusLabelModal}
+                        </p>
+                        <p className={cn("text-[16px] font-black", bonusColorModal)}>
+                          {bonusAmountDollars === "Not Eligible" ? "Not Eligible" : `$${bonusAmountDollars} USD`}
+                        </p>
+                        {isPayoutsProcessed && (submission as any).bonus_paid_at && (
+                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">
+                            Paid on: {format(new Date((submission as any).bonus_paid_at), "MMM d, yyyy")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── SECTION 5: Rejection block (only if rejected) ── */}
+                  {
+                    submission.status === "rejected" && rejectionDetails && (
+                      <div className={cn("px-4 py-3 border-b", isDark ? "border-slate-700" : "border-slate-100")}>
+                        <div className="rounded-[10px] border-l-4 border-red-500 bg-red-500/5 px-3 py-2.5 flex flex-col gap-2">
+                          <div>
+                            <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-0.5">Rejection Reason</p>
+                            <p className="text-[13px] font-bold text-red-700 dark:text-red-300 break-words">
+                              {rejectionDetails.reason}
+                            </p>
+                          </div>
+                          {displayNote && (
+                            <div>
+                              <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-0.5">Note</p>
+                              <p className="text-[13px] font-medium text-red-600/80 dark:text-red-400/80 italic break-words">
+                                {displayNote}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  {/* ── SECTION 6: Action buttons ── */}
+                  <div className="px-4 py-3 flex items-center gap-2">
+                    <Button
+                      asChild
+                      size="sm"
+                      className="h-9 p-0 rounded-[8px] bg-[#4211a1] hover:bg-[#350d81] text-white text-[12px] font-bold overflow-hidden flex-1 shadow-sm"
+                    >
+                      <Link href={submission.content_link || "#"} target="_blank" rel="noopener noreferrer" className="w-full h-full flex items-center justify-center">
+                        <Video className="w-3.5 h-3.5 shrink-0" strokeWidth={3} />
+                      </Link>
+                    </Button>
+                    {contestId && (
+                      <Button
+                        asChild
+                        size="sm"
+                        className="h-9 p-0 rounded-[8px] bg-[#4211a1] hover:bg-[#350d81] text-white text-[12px] font-bold overflow-hidden flex-1 shadow-sm"
+                      >
+                        <Link href={`/dashboard/opportunities/${contestId}`} className="w-full h-full flex items-center justify-center">
+                          <Info className="w-3.5 h-3.5 shrink-0" strokeWidth={3} />
+                        </Link>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end mt-4">
+            <Button
+              variant="ghost"
+              className={cn("rounded-full font-bold", isDark ? "text-white hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100")}
+              onClick={() => setSelectedContestGroup(null)}
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div >
   );
 }
