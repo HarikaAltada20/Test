@@ -432,37 +432,6 @@ export default function ContestDetailClient({
   const [showInstagramRunPopup, setShowInstagramRunPopup] = useState(false);
   const [instagramRunCompleted, setInstagramRunCompleted] = useState(false);
 
-  const overallInsightsCounts = useMemo(() => {
-    const isInstagram =
-      currentContest.platform?.toLowerCase().includes("instagram") ?? false;
-    if (!isInstagram) {
-      return {
-        success: 0,
-        temporary_failure: 0,
-        permanent_failure: 0,
-        never: 0,
-      };
-    }
-    let success = 0;
-    let temporary_failure = 0;
-    let permanent_failure = 0;
-    let never = 0;
-    for (const sub of currentSubmissions) {
-      const status = sub.insights_status as
-        | "ok"
-        | "temporary_failure"
-        | "permanent_failure"
-        | null
-        | undefined
-        | string;
-      if (status === "ok") success++;
-      else if (status === "temporary_failure") temporary_failure++;
-      else if (status === "permanent_failure") permanent_failure++;
-      else never++;
-    }
-    return { success, temporary_failure, permanent_failure, never };
-  }, [currentContest.platform, currentSubmissions]);
-
   // Status update states
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [statusUpdateDialog, setStatusUpdateDialog] = useState(false);
@@ -9691,9 +9660,6 @@ export default function ContestDetailClient({
                                 </span>
                               </div>
                               <div className="flex flex-col gap-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
-                                <span className="font-semibold">
-                                  This run:
-                                </span>
                                 <span>
                                   Success:{" "}
                                   <strong>{instagramRun.success_count}</strong>
@@ -9715,31 +9681,6 @@ export default function ContestDetailClient({
                                   <strong>
                                     {instagramRun.skipped_recent_count}
                                   </strong>
-                                </span>
-                                <span className="mt-1 font-semibold">
-                                  Overall (all runs):
-                                </span>
-                                <span>
-                                  Success:{" "}
-                                  <strong>
-                                    {overallInsightsCounts.success}
-                                  </strong>
-                                </span>
-                                <span>
-                                  Temporary failure:{" "}
-                                  <strong>
-                                    {overallInsightsCounts.temporary_failure}
-                                  </strong>
-                                </span>
-                                <span>
-                                  Permanent failure:{" "}
-                                  <strong>
-                                    {overallInsightsCounts.permanent_failure}
-                                  </strong>
-                                </span>
-                                <span>
-                                  Never refreshed:{" "}
-                                  <strong>{overallInsightsCounts.never}</strong>
                                 </span>
                               </div>
                             </div>
@@ -10304,7 +10245,6 @@ export default function ContestDetailClient({
                             <Dialog
                               open={ytColumnsModalOpen}
                               onOpenChange={setYtColumnsModalOpen}
-                              isdark={isDark}
                             >
                               <DialogTrigger asChild>
                                 <Button
@@ -10332,11 +10272,13 @@ export default function ContestDetailClient({
                               <DialogContent
                                 className={cn(
                                   "max-w-[95vw] w-full sm:max-w-md max-h-[90vh] flex flex-col",
-                                  
+                                  isDark
+                                    ? "bg-[#1a0a2e] border-gray-600"
+                                    : "bg-white",
                                 )}
                               >
                                 <DialogHeader className="flex-shrink-0">
-                                <DialogTitle className={cn(isDark ? "text-white" : "text-gray-900")}>
+                                  <DialogTitle>
                                     Customize YouTube table columns
                                   </DialogTitle>
                                   <DialogDescription>
@@ -10388,10 +10330,6 @@ export default function ContestDetailClient({
                                 <DialogFooter className="flex-shrink-0 border-t pt-4 mt-2">
                                   <Button
                                     variant="outline"
-                                    className={cn(
-                                     
-                                      isDark ? "text-white" : "text-gray-900",
-                                    )}
                                     onClick={() => {
                                       setYtVisibleColumnsAndPersist([
                                         ...ytAvailableColumnIds,
