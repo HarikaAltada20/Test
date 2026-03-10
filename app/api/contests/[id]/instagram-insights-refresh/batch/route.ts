@@ -244,6 +244,16 @@ export async function POST(
         if (!newToken) {
           creatorNeedsReconnect.add(creatorId);
           temporaryFailureCount += submissionsByCreator[creatorId].length;
+          // Add submissions to updates array with temporary_failure status
+          submissionsByCreator[creatorId].forEach((sub) => {
+            submissionUpdates.push({
+              id: sub.id,
+              views: sub.views || 0,
+              other_stats: sub.other_stats || {},
+              last_insights_update: now,
+              insights_status: "temporary_failure",
+            });
+          });
           return;
         }
         accessToken = newToken;
