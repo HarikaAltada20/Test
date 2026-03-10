@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import dayjs from "dayjs";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
+import { isInstagramInsightsQueueEnabled } from "@/lib/queue/instagram-insights-queue";
 
 // 🎯 Types
 interface InstagramAccount {
@@ -356,6 +357,35 @@ export async function GET(request: Request) {
         contestId ? ` for contest ${contestId}` : ""
       }`
     );
+
+    if (isInstagramInsightsQueueEnabled()) {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
+      const contestIdsToEnqueue = contestId ? [contestId] : activeIds ?? [];
+      const results: Array<{ id: string; runId?: string; alreadyActive?: boolean }> = [];
+      for (const cid of contestIdsToEnqueue) {
+        try {
+          const res = await fetch(
+            `${baseUrl.replace(/\/$/, "")}/api/contests/${cid}/instagram-insights-refresh/enqueue`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : {}),
+              },
+            }
+          );
+          const data = await res.json().catch(() => ({}));
+          results.push({ id: cid, runId: data.runId, alreadyActive: data.alreadyActive });
+        } catch (e) {
+          console.warn(`[update-instagram-insights] Enqueue for ${cid} failed:`, e);
+        }
+      }
+      return NextResponse.json({
+        message: "Instagram insights refresh enqueued for contest(s)",
+        queueEnabled: true,
+        results,
+      });
+    }
 
     // 📥 Fetch submissions (only from active contests)
     let submissionsQuery = supabaseAdmin

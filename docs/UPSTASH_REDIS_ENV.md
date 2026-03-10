@@ -1,10 +1,13 @@
 # Upstash Redis — Environment Variables
 
-This doc lists what to add to your `.env` (and Vercel Environment Variables) so the **metrics refresh queue** works. The queue uses **Upstash Redis** to run Twitter metrics refresh in the background and avoid Vercel timeouts.
+This doc lists what to add to your `.env` (and Vercel Environment Variables) so the background queues work. The app uses **Upstash Redis** for:
+
+- Twitter metrics refresh queue
+- Instagram insights refresh queue (recommended to use a separate Redis DB)
 
 ---
 
-## Required for the queue
+## Required for Twitter metrics queue
 
 | Variable                   | Description                             | Example (do not commit real values) |
 | -------------------------- | --------------------------------------- | ----------------------------------- |
@@ -12,6 +15,17 @@ This doc lists what to add to your `.env` (and Vercel Environment Variables) so 
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST API token (password) | `AXxxxx...`                         |
 
 **If either is missing:** the app falls back to **sync** refresh (no queue). Large Twitter campaigns may hit Vercel timeouts.
+
+---
+
+## Required for Instagram insights queue (recommended: separate Redis DB)
+
+| Variable                             | Description                             | Example (do not commit real values) |
+| ------------------------------------ | --------------------------------------- | ----------------------------------- |
+| `UPSTASH_REDIS_INSTAGRAM_REST_URL`   | Upstash Redis REST API URL (Instagram)  | `https://xxx.upstash.io`            |
+| `UPSTASH_REDIS_INSTAGRAM_REST_TOKEN` | Upstash Redis REST API token (Instagram) | `AXxxxx...`                        |
+
+**Fallback behavior:** If Instagram-specific vars are not set, the Instagram queue will fall back to `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
 
 ---
 
@@ -24,7 +38,10 @@ This doc lists what to add to your `.env` (and Vercel Environment Variables) so 
    - **UPSTASH_REDIS_REST_URL** — the REST URL (e.g. `https://xxx-xxx.upstash.io`).
    - **UPSTASH_REDIS_REST_TOKEN** — the token shown there (sometimes labeled as password).
 
-Use the same names in your env: `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
+Use the same names in your env:
+
+- Twitter: `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`
+- Instagram: `UPSTASH_REDIS_INSTAGRAM_REST_URL` and `UPSTASH_REDIS_INSTAGRAM_REST_TOKEN`
 
 ---
 
@@ -61,9 +78,13 @@ You usually **don’t need to set these manually** on Vercel; `VERCEL_URL` is pr
 ## Example `.env` (local)
 
 ```env
-# Upstash Redis (required for metrics queue)
+# Upstash Redis (required for Twitter metrics queue)
 UPSTASH_REDIS_REST_URL=https://xxx-xxx.upstash.io
 UPSTASH_REDIS_REST_TOKEN=your_token_here
+
+# Upstash Redis (recommended for Instagram insights queue)
+UPSTASH_REDIS_INSTAGRAM_REST_URL=https://yyy-yyy.upstash.io
+UPSTASH_REDIS_INSTAGRAM_REST_TOKEN=your_instagram_token_here
 
 # Cron auth (recommended)
 CRON_SECRET=your_long_random_secret
@@ -97,6 +118,17 @@ The queue uses these keys only (see `lib/queue/metrics-refresh-queue.ts`):
 | `metrics_refresh:state:{contestId}` | string (JSON) | Batch state for a contest (e.g. `freshTweetIds`, `fetchedCreatorIds`). TTL 2 hours.                                           |
 
 There is **no** key named `twitter-refresh:jobs` in this app. If you see that in the Data Browser, it is from an older implementation or a different project. The current code only reads/writes the `metrics_refresh:*` keys above.
+
+---
+
+## Redis keys used by the Instagram insights queue
+
+The Instagram queue uses these keys only (see `lib/queue/instagram-insights-queue.ts`):
+
+| Key                                 | Type | Description |
+| ----------------------------------- | ---- | ----------- |
+| `instagram_insights_refresh:queue`  | list | Pending Instagram insights jobs |
+| `instagram_insights_refresh:processing` | list | In-progress jobs (crash-safe pop) |
 
 **Why you might not see updates in the Data Browser:**
 

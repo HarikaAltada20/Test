@@ -433,6 +433,7 @@ export interface Database {
           status: "pending" | "verified" | "rejected" | "paid";
           earnings: number | null;
           last_insights_update: string | null;
+          insights_status: string | null;
           platform: string | null;
           video_id: string | null;
           video_title: string | null;
@@ -455,6 +456,7 @@ export interface Database {
           status?: "pending" | "verified" | "rejected" | "paid";
           earnings?: number | null;
           last_insights_update?: string | null;
+          insights_status?: string | null;
           platform?: string | null;
           video_id?: string | null;
           video_title?: string | null;
@@ -477,6 +479,7 @@ export interface Database {
           status?: "pending" | "verified" | "rejected" | "paid";
           earnings?: number | null;
           last_insights_update?: string | null;
+          insights_status?: string | null;
           platform?: string | null;
           video_id?: string | null;
           video_title?: string | null;
@@ -486,6 +489,62 @@ export interface Database {
           bonus_paid?: boolean;
           bonus_paid_at?: string | null;
           bonus_amount?: number;
+        };
+      };
+      instagram_insights_refresh_runs: {
+        Row: {
+          id: string;
+          contest_id: string;
+          status: "pending" | "running" | "completed" | "failed" | "cancelled";
+          total_submissions: number;
+          processed_submissions: number;
+          success_count: number;
+          permanent_failure_count: number;
+          temporary_failure_count: number;
+          skipped_recent_count: number;
+          reviewed_count: number;
+          current_batch_index: number;
+          total_batches: number;
+          started_at: string;
+          finished_at: string | null;
+          last_batch_completed_at: string | null;
+          error_message: string | null;
+        };
+        Insert: {
+          id?: string;
+          contest_id: string;
+          status?: "pending" | "running" | "completed" | "failed" | "cancelled";
+          total_submissions?: number;
+          processed_submissions?: number;
+          success_count?: number;
+          permanent_failure_count?: number;
+          temporary_failure_count?: number;
+          skipped_recent_count?: number;
+          reviewed_count?: number;
+          current_batch_index?: number;
+          total_batches?: number;
+          started_at?: string;
+          finished_at?: string | null;
+          last_batch_completed_at?: string | null;
+          error_message?: string | null;
+        };
+        Update: {
+          id?: string;
+          contest_id?: string;
+          status?: "pending" | "running" | "completed" | "failed" | "cancelled";
+          total_submissions?: number;
+          processed_submissions?: number;
+          success_count?: number;
+          permanent_failure_count?: number;
+          temporary_failure_count?: number;
+          skipped_recent_count?: number;
+          reviewed_count?: number;
+          current_batch_index?: number;
+          total_batches?: number;
+          started_at?: string;
+          finished_at?: string | null;
+          last_batch_completed_at?: string | null;
+          error_message?: string | null;
         };
       };
       money_transactions: {

@@ -10,8 +10,47 @@
 import { Client, Receiver } from "@upstash/qstash";
 
 function getBaseUrl(): string {
-  const url = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
+  const url =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
   return url.replace(/\/$/, "");
+}
+
+function getForwardedOrigin(request: Request): string | null {
+  const proto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const host = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim()
+    ?? request.headers.get("host")?.split(",")[0]?.trim();
+  if (!proto || !host) return null;
+  return `${proto}://${host}`;
+}
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const v of values) {
+    if (!v) continue;
+    const s = v.trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+async function verifyQStashAgainstUrls(
+  receiver: Receiver,
+  signature: string,
+  rawBody: string,
+  urls: string[],
+): Promise<boolean> {
+  for (const url of urls) {
+    try {
+      await receiver.verify({ signature, body: rawBody, url });
+      return true;
+    } catch {
+      // try next url
+    }
+  }
+  return false;
 }
 
 /** QStash cannot deliver to localhost; detect loopback so callers can fall back to direct POST. */
@@ -49,7 +88,7 @@ function getQStashClient(): Client | null {
  * Call after enqueueing a job (or after enqueueing the next batch in the processor).
  */
 export async function triggerProcessMetricsQueue(
-  baseUrl?: string
+  baseUrl?: string,
 ): Promise<{ messageId?: string; error?: string }> {
   const client = getQStashClient();
   if (!client) {
@@ -75,11 +114,15 @@ export async function triggerProcessMetricsQueue(
 
 /**
  * Canonical URL for the process-metrics-queue endpoint (used when publishing and when verifying).
-
- * public URL, so we verify with this canonical URL so signature verification succeeds.
+ * Public URL, so we verify with this canonical URL so signature verification succeeds.
  */
 function getProcessMetricsQueueUrl(): string {
   return `${getBaseUrl()}/api/cron/process-metrics-queue`;
+}
+
+/** Canonical URL for the Instagram insights queue processor. */
+function getProcessInstagramInsightsQueueUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-instagram-insights-queue`;
 }
 
 /**
@@ -89,7 +132,7 @@ function getProcessMetricsQueueUrl(): string {
  */
 export async function verifyQStashSignature(
   request: Request,
-  rawBody: string
+  rawBody: string,
 ): Promise<boolean> {
   const signature = request.headers.get("Upstash-Signature");
   if (!signature || typeof signature !== "string") return false;
@@ -101,14 +144,23 @@ export async function verifyQStashSignature(
       currentSigningKey: currentKey,
       nextSigningKey: nextKey,
     });
-    // Use canonical URL so verification works when request.url is localhost (e.g. ngrok → localhost)
-    const url = getProcessMetricsQueueUrl();
-    await receiver.verify({
-      signature,
-      body: rawBody,
-      url,
-    });
-    return true;
+    // Prefer verifying against the *public* URL QStash called.
+    // This supports Cloudflare Tunnel / proxies where request.url and NEXT_PUBLIC_APP_URL can differ.
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessMetricsQueueUrl(),
+      forwardedOrigin ? `${forwardedOrigin}/api/cron/process-metrics-queue` : null,
+      requestUrl ? `${requestUrl.origin}/api/cron/process-metrics-queue` : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
   } catch {
     return false;
   }
@@ -120,7 +172,7 @@ export async function verifyQStashSignature(
  */
 export async function authorizeProcessMetricsQueue(
   request: Request,
-  rawBody: string
+  rawBody: string,
 ): Promise<boolean> {
   if (request.headers.get("Upstash-Signature")) {
     return verifyQStashSignature(request, rawBody);
@@ -131,5 +183,86 @@ export async function authorizeProcessMetricsQueue(
     return auth === `Bearer ${cronSecret}`;
   }
   // No CRON_SECRET and no QStash: allow for local dev (same as current behavior when secret unset)
+  return true;
+}
+
+/**
+ * Trigger the process-instagram-insights-queue endpoint via QStash.
+ */
+export async function triggerProcessInstagramInsightsQueue(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-instagram-insights-queue`;
+  if (isLoopbackUrl(url))
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  try {
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] triggerProcessInstagramInsightsQueue failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+/**
+ * Verify QStash signature for the Instagram processor URL (for use when request is to that endpoint).
+ */
+async function verifyQStashSignatureInstagram(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessInstagramInsightsQueueUrl(),
+      forwardedOrigin ? `${forwardedOrigin}/api/cron/process-instagram-insights-queue` : null,
+      requestUrl ? `${requestUrl.origin}/api/cron/process-instagram-insights-queue` : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize process-instagram-insights-queue: QStash signature (Instagram URL) or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessInstagramInsightsQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureInstagram(request, rawBody);
+  }
+  const cronSecret = process.env.CRON_SECRET;
+  const auth = request.headers.get("Authorization");
+  if (cronSecret) return auth === `Bearer ${cronSecret}`;
   return true;
 }

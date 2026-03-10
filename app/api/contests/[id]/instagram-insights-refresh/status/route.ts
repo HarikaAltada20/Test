@@ -1,0 +1,94 @@
+/**
+ * GET: Return latest Instagram insights refresh run for the contest (for admin polling).
+ */
+
+import { NextResponse } from "next/server";
+import { createClient } from "@/utils/supabase/server";
+import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id: contestId } = await params;
+    if (!contestId) {
+      return NextResponse.json({ error: "Contest ID required" }, { status: 400 });
+    }
+
+    const supabaseAdmin = createAdminSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { data: contest } = await supabaseAdmin
+      .from("contests")
+      .select("id, advertiser_id")
+      .eq("id", contestId)
+      .maybeSingle();
+
+    if (!contest) {
+      return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+    }
+
+    const isOwner = contest.advertiser_id === user.id;
+    const { data: userData } = await supabase
+      .from("users")
+      .select("user_type")
+      .eq("id", user.id)
+      .single();
+    const isAdmin = userData?.user_type === "admin";
+    if (!isOwner && !isAdmin) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { data: run, error } = await supabaseAdmin
+      .from("instagram_insights_refresh_runs")
+      .select(
+        "id, status, total_submissions, processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count, reviewed_count, current_batch_index, total_batches, started_at, last_batch_completed_at, finished_at"
+      )
+      .eq("contest_id", contestId)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[instagram-insights-refresh status]", error);
+      return NextResponse.json({ error: "Failed to load run" }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      contestId,
+      run: run
+        ? {
+            id: run.id,
+            status: run.status,
+            total_submissions: run.total_submissions,
+            processed_submissions: run.processed_submissions,
+            success_count: run.success_count,
+            permanent_failure_count: run.permanent_failure_count,
+            temporary_failure_count: run.temporary_failure_count,
+            skipped_recent_count: run.skipped_recent_count,
+            reviewed_count: run.reviewed_count ?? 0,
+            current_batch_index: run.current_batch_index,
+            total_batches: run.total_batches,
+            started_at: run.started_at,
+            last_batch_completed_at: run.last_batch_completed_at,
+            finished_at: run.finished_at,
+          }
+        : null,
+    });
+  } catch (e) {
+    console.error("[instagram-insights-refresh status]", e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Server error" },
+      { status: 500 }
+    );
+  }
+}
