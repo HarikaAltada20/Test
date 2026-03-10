@@ -17,7 +17,7 @@ import {
   triggerProcessInstagramInsightsQueue,
 } from "@/lib/qstash";
 
-const BATCH_SIZE = 120;
+const BATCH_SIZE = 100;
 
 export async function POST(
   request: Request,

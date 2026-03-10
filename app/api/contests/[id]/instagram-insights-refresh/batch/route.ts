@@ -55,7 +55,7 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     const runId = body.runId as string | undefined;
     const batchIndex = typeof body.batchIndex === "number" ? body.batchIndex : 0;
-    const batchSize = typeof body.batchSize === "number" ? body.batchSize : 120;
+    const batchSize = typeof body.batchSize === "number" ? body.batchSize : 100;
     const cursor = body.cursor as { last_insights_update: string | null; id: string } | undefined;
 
     if (!runId) {
@@ -195,8 +195,47 @@ export async function POST(
         return;
       }
       if (account.needs_reconnect) {
-        skippedRecentCount += submissionsByCreator[creatorId].length;
-        return;
+        const allSubs = submissionsByCreator[creatorId] as Array<{
+          id: string;
+          creator_id: string;
+          video_id: string | null;
+          views: number | null;
+          other_stats: Record<string, unknown> | null;
+          last_insights_update: string | null;
+        }>;
+
+        // Only skip "recent" submissions; if last_insights_update is older than 1 day before the run started,
+        // allow them to be retried even when needs_reconnect is true.
+        const oneDayBeforeRun = dayjs(runStartedAt).subtract(1, "day");
+        const eligibleSubs: typeof allSubs = [];
+        let skippedForCreator = 0;
+
+        for (const sub of allSubs) {
+          if (!sub.last_insights_update) {
+            // Never refreshed or unknown timestamp: treat as eligible to retry.
+            eligibleSubs.push(sub);
+            continue;
+          }
+          const last = dayjs(sub.last_insights_update);
+          const olderThanOneDayBeforeRun = last.isBefore(oneDayBeforeRun);
+          if (olderThanOneDayBeforeRun) {
+            eligibleSubs.push(sub);
+          } else {
+            skippedForCreator += 1;
+          }
+        }
+
+        if (skippedForCreator > 0) {
+          skippedRecentCount += skippedForCreator;
+        }
+
+        if (eligibleSubs.length === 0) {
+          // Nothing old enough to retry for this creator
+          return;
+        }
+
+        // Replace with the filtered list so the rest of the pipeline only processes eligible submissions.
+        submissionsByCreator[creatorId] = eligibleSubs as BatchRow[];
       }
 
       let accessToken = account.access_token;

@@ -3,6 +3,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
 import { redirect } from "next/navigation";
 import ContestDetailClient from "./contest-detail-client"; // Import the new client component
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 export default async function ContestDetailPage({
   params,
@@ -853,14 +854,16 @@ export default async function ContestDetailPage({
   });
 
   return (
-    <ContestDetailClient
-      contest={contest}
-      initialSubmissions={allSubmissions}
-      durationDays={durationDays}
-      contestId={contestId}
-      isAdminView={isAdmin}
-      user={user}
-      creatorModerationData={creatorModerationData}
-    />
+    <TooltipProvider>
+      <ContestDetailClient
+        contest={contest}
+        initialSubmissions={allSubmissions}
+        durationDays={durationDays}
+        contestId={contestId}
+        isAdminView={isAdmin}
+        user={user}
+        creatorModerationData={creatorModerationData}
+      />
+    </TooltipProvider>
   );
 }
