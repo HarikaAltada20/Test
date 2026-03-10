@@ -171,17 +171,11 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     // Budget rollup can be expensive; do it once per run, after completion.
     await updateCpmContestBudgets(supabaseAdmin, job.contestId);
 
-    const { data: contest } = await supabaseAdmin
+    // Always bump contest last_metrics_updated on run completion to avoid instant repeated refresh calls (cooldown).
+    await supabaseAdmin
       .from("contests")
-      .select("id")
-      .eq("id", job.contestId)
-      .single();
-    if (contest) {
-      await supabaseAdmin
-        .from("contests")
-        .update({ last_metrics_updated: now })
-        .eq("id", job.contestId);
-    }
+      .update({ last_metrics_updated: now })
+      .eq("id", job.contestId);
   }
 
   return NextResponse.json({

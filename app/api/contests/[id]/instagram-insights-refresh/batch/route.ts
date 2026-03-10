@@ -10,7 +10,6 @@ import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js
 import {
   refreshToken,
   fetchInsights,
-  hasStatsChanged,
   isTokenExpiring,
   type InstagramAccount,
   type SubmissionForInsights,
@@ -91,6 +90,7 @@ export async function POST(
       .select("id, creator_id, video_id, views, other_stats, last_insights_update, insights_status")
       .eq("contest_id", contestId)
       .eq("platform", "instagram")
+      .neq("status", "rejected")
       .not("video_id", "is", null)
       .or("insights_status.is.null,insights_status.neq.permanent_failure")
       .or(`last_insights_update.is.null,last_insights_update.lt.${runStartedAt}`)
@@ -137,6 +137,8 @@ export async function POST(
       return NextResponse.json({
         hasMore: false,
         nextCursor: undefined,
+        reviewedCount: 0,
+        processedCount: 0,
         successCount: 0,
         permanentFailureCount: 0,
         temporaryFailureCount: 0,
@@ -166,9 +168,6 @@ export async function POST(
       return acc;
     }, {});
 
-    let successCount = 0;
-    let permanentFailureCount = 0;
-    let temporaryFailureCount = 0;
     let skippedRecentCount = 0;
     const now = new Date().toISOString();
     const tokenUpdatesByCreator = new Map<string, InstagramAccount>();
@@ -178,6 +177,7 @@ export async function POST(
       other_stats: Record<string, unknown>;
       last_insights_update: string;
       insights_status: string;
+      previous_insights_status: string | null;
     }> = [];
     const creatorNeedsReconnect = new Set<string>();
 
@@ -185,82 +185,89 @@ export async function POST(
 
     await mapLimit(creatorIdList, 3, async (creatorId) => {
       const creator = creatorsById.get(creatorId);
-      if (!creator) return;
+      const allSubsForCreator = submissionsByCreator[creatorId] as BatchRow[];
+
+      // Creator has no valid Instagram account: mark all their submissions as temporary_failure (no API calls).
+      if (!creator) {
+        allSubsForCreator.forEach((sub) => {
+          submissionUpdates.push({
+            id: sub.id,
+            views: sub.views ?? 0,
+            other_stats: (sub.other_stats as Record<string, unknown>) || {},
+            last_insights_update: now,
+            insights_status: "temporary_failure",
+            previous_insights_status: sub.insights_status ?? null,
+          });
+        });
+        return;
+      }
+
       const account = creator.instagram_account;
       if (
         !account?.access_token ||
         (account.account_type !== "BUSINESS" &&
           account.account_type !== "MEDIA_CREATOR")
       ) {
+        allSubsForCreator.forEach((sub) => {
+          submissionUpdates.push({
+            id: sub.id,
+            views: sub.views ?? 0,
+            other_stats: (sub.other_stats as Record<string, unknown>) || {},
+            last_insights_update: now,
+            insights_status: "temporary_failure",
+            previous_insights_status: sub.insights_status ?? null,
+          });
+        });
         return;
       }
+
+      // needs_reconnect: skip if last attempt was < 1 day ago; else attempt again. Set last_connection_check_at on attempt.
       if (account.needs_reconnect) {
-        const allSubs = submissionsByCreator[creatorId] as Array<{
-          id: string;
-          creator_id: string;
-          video_id: string | null;
-          views: number | null;
-          other_stats: Record<string, unknown> | null;
-          last_insights_update: string | null;
-        }>;
-
-        // Only skip "recent" submissions; if last_insights_update is older than 1 day before the run started,
-        // allow them to be retried even when needs_reconnect is true.
-        const oneDayBeforeRun = dayjs(runStartedAt).subtract(1, "day");
-        const eligibleSubs: typeof allSubs = [];
-        let skippedForCreator = 0;
-
-        for (const sub of allSubs) {
-          if (!sub.last_insights_update) {
-            // Never refreshed or unknown timestamp: treat as eligible to retry.
-            eligibleSubs.push(sub);
-            continue;
-          }
-          const last = dayjs(sub.last_insights_update);
-          const olderThanOneDayBeforeRun = last.isBefore(oneDayBeforeRun);
-          if (olderThanOneDayBeforeRun) {
-            eligibleSubs.push(sub);
-          } else {
-            skippedForCreator += 1;
-          }
-        }
-
-        if (skippedForCreator > 0) {
-          skippedRecentCount += skippedForCreator;
-        }
-
-        if (eligibleSubs.length === 0) {
-          // Nothing old enough to retry for this creator
-          return;
-        }
-
-        // Replace with the filtered list so the rest of the pipeline only processes eligible submissions.
-        submissionsByCreator[creatorId] = eligibleSubs as BatchRow[];
-      }
-
-      let accessToken = account.access_token;
-      if (account.token_expiry && isTokenExpiring(account.token_expiry)) {
-        const newToken = await refreshToken(creatorId, accessToken);
-        if (!newToken) {
-          creatorNeedsReconnect.add(creatorId);
-          temporaryFailureCount += submissionsByCreator[creatorId].length;
-          // Add submissions to updates array with temporary_failure status
-          submissionsByCreator[creatorId].forEach((sub) => {
+        const lastCheck = account.last_connection_check_at
+          ? dayjs(account.last_connection_check_at)
+          : null;
+        const oneDayAgo = dayjs().subtract(1, "day");
+        if (lastCheck && lastCheck.isAfter(oneDayAgo)) {
+          // Skip: mark all their submissions as temporary_failure without calling API.
+          skippedRecentCount += allSubsForCreator.length;
+          allSubsForCreator.forEach((sub) => {
             submissionUpdates.push({
               id: sub.id,
-              views: sub.views || 0,
-              other_stats: sub.other_stats || {},
+              views: sub.views ?? 0,
+              other_stats: (sub.other_stats as Record<string, unknown>) || {},
               last_insights_update: now,
               insights_status: "temporary_failure",
+              previous_insights_status: sub.insights_status ?? null,
             });
           });
           return;
         }
-        accessToken = newToken;
+      }
+
+      let accessToken = account.access_token;
+      if (account.token_expiry && isTokenExpiring(account.token_expiry)) {
+        const refreshResult = await refreshToken(creatorId, accessToken);
+        if (!refreshResult) {
+          creatorNeedsReconnect.add(creatorId);
+          allSubsForCreator.forEach((sub) => {
+            submissionUpdates.push({
+              id: sub.id,
+              views: sub.views ?? 0,
+              other_stats: (sub.other_stats as Record<string, unknown>) || {},
+              last_insights_update: now,
+              insights_status: "temporary_failure",
+              previous_insights_status: sub.insights_status ?? null,
+            });
+          });
+          return;
+        }
+        accessToken = refreshResult.access_token;
+        const expirySeconds = refreshResult.expires_in ?? 3600;
         tokenUpdatesByCreator.set(creatorId, {
           ...account,
-          access_token: newToken,
-          token_expiry: dayjs().add(3600, "second").toISOString(),
+          access_token: refreshResult.access_token,
+          token_expiry: dayjs().add(expirySeconds, "second").toISOString(),
+          last_connection_check_at: now,
         });
       }
 
@@ -271,6 +278,7 @@ export async function POST(
         views: number | null;
         other_stats: Record<string, unknown> | null;
         last_insights_update: string | null;
+        insights_status: string | null;
       }>;
 
       await mapLimit(subs, 4, async (sub) => {
@@ -285,16 +293,10 @@ export async function POST(
           submission,
           accessToken
         );
+        const previousStatus = sub.insights_status ?? null;
 
         if (result.kind === "success") {
           const { views, stats } = result;
-          const oldStats =
-            sub.other_stats &&
-            typeof sub.other_stats === "object" &&
-            "instagram" in sub.other_stats
-              ? (sub.other_stats as { instagram?: Record<string, number> })
-                  .instagram
-              : undefined;
           submissionUpdates.push({
             id: sub.id,
             views,
@@ -307,47 +309,47 @@ export async function POST(
             },
             last_insights_update: now,
             insights_status: "ok",
+            previous_insights_status: previousStatus,
           });
-          successCount += hasStatsChanged(sub.views, views, oldStats, stats)
-            ? 1
-            : 1;
         } else {
           if (result.classification === "permanent_media") {
-            permanentFailureCount++;
             submissionUpdates.push({
               id: sub.id,
               views: sub.views ?? 0,
               other_stats: (sub.other_stats as Record<string, unknown>) || {},
               last_insights_update: now,
               insights_status: "permanent_failure",
+              previous_insights_status: previousStatus,
             });
           } else if (result.classification === "account_token") {
             creatorNeedsReconnect.add(creatorId);
-            temporaryFailureCount++;
             submissionUpdates.push({
               id: sub.id,
               views: sub.views ?? 0,
               other_stats: (sub.other_stats as Record<string, unknown>) || {},
               last_insights_update: now,
               insights_status: "temporary_failure",
+              previous_insights_status: previousStatus,
             });
           } else {
-            temporaryFailureCount++;
             submissionUpdates.push({
               id: sub.id,
               views: sub.views ?? 0,
               other_stats: (sub.other_stats as Record<string, unknown>) || {},
               last_insights_update: now,
               insights_status: "temporary_failure",
+              previous_insights_status: previousStatus,
             });
           }
         }
       });
     });
 
-    // Write submission updates with bounded concurrency (avoid 120 sequential HTTP calls to Supabase).
-    await mapLimit(submissionUpdates, 10, async (up) => {
-      await supabaseAdmin
+    // Write submission updates; only count as processed when a row was actually updated. Count transitions for success/permanent/temporary.
+    // We update by id only: the batch was already selected with last_insights_update < runStartedAt (or null), and we have one active run per contest, so no need to re-check last_insights_update here (that check was causing 0 rows updated when timestamps or concurrency made the condition fail).
+    type UpdateResult = { updated: boolean; newStatus: string; previousStatus: string | null };
+    const updateResults: UpdateResult[] = await mapLimit(submissionUpdates, 10, async (up) => {
+      const { data, error } = await supabaseAdmin
         .from("submissions")
         .update({
           views: up.views,
@@ -357,8 +359,26 @@ export async function POST(
           updated_at: now,
         })
         .eq("id", up.id)
-        .or(`last_insights_update.is.null,last_insights_update.lt.${runStartedAt}`);
+        .select("id")
+        .maybeSingle();
+      return {
+        updated: !error && data != null,
+        newStatus: up.insights_status,
+        previousStatus: up.previous_insights_status,
+      };
     });
+
+    let processedInBatch = 0;
+    let successTransitions = 0;
+    let permanentTransitions = 0;
+    let temporaryTransitions = 0;
+    for (const r of updateResults) {
+      if (!r.updated) continue;
+      processedInBatch += 1;
+      if (r.newStatus === "ok" && r.previousStatus !== "ok") successTransitions += 1;
+      else if (r.newStatus === "permanent_failure" && r.previousStatus !== "permanent_failure") permanentTransitions += 1;
+      else if (r.newStatus === "temporary_failure" && r.previousStatus !== "temporary_failure") temporaryTransitions += 1;
+    }
 
     await mapLimit([...tokenUpdatesByCreator.entries()], 5, async ([creatorId, newAccount]) => {
       await supabaseAdmin
@@ -373,17 +393,21 @@ export async function POST(
     await mapLimit([...creatorNeedsReconnect.values()], 5, async (creatorId) => {
       const creator = creatorsById.get(creatorId);
       if (!creator) return;
-      const acc = { ...creator.instagram_account, needs_reconnect: true };
+      const acc = {
+        ...creator.instagram_account,
+        needs_reconnect: true,
+        last_connection_check_at: now,
+      };
       await supabaseAdmin
         .from("creator_profiles")
         .update({ instagram_account: acc, updated_at: now })
         .eq("id", creatorId);
     });
 
-    const processedInBatch = submissionUpdates.length;
+    const reviewedInBatch = batch.length;
     const { data: runRow } = await supabaseAdmin
       .from("instagram_insights_refresh_runs")
-      .select("processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count")
+      .select("processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count, reviewed_count")
       .eq("id", runId)
       .eq("current_batch_index", batchIndex)
       .single();
@@ -392,10 +416,11 @@ export async function POST(
       await supabaseAdmin
         .from("instagram_insights_refresh_runs")
         .update({
+          reviewed_count: (runRow.reviewed_count ?? 0) + reviewedInBatch,
           processed_submissions: (runRow.processed_submissions ?? 0) + processedInBatch,
-          success_count: (runRow.success_count ?? 0) + successCount,
-          permanent_failure_count: (runRow.permanent_failure_count ?? 0) + permanentFailureCount,
-          temporary_failure_count: (runRow.temporary_failure_count ?? 0) + temporaryFailureCount,
+          success_count: (runRow.success_count ?? 0) + successTransitions,
+          permanent_failure_count: (runRow.permanent_failure_count ?? 0) + permanentTransitions,
+          temporary_failure_count: (runRow.temporary_failure_count ?? 0) + temporaryTransitions,
           skipped_recent_count: (runRow.skipped_recent_count ?? 0) + skippedRecentCount,
           current_batch_index: batchIndex + 1,
           last_batch_completed_at: now,
@@ -407,9 +432,11 @@ export async function POST(
     return NextResponse.json({
       hasMore,
       nextCursor,
-      successCount,
-      permanentFailureCount,
-      temporaryFailureCount,
+      reviewedCount: reviewedInBatch,
+      processedCount: processedInBatch,
+      successCount: successTransitions,
+      permanentFailureCount: permanentTransitions,
+      temporaryFailureCount: temporaryTransitions,
       skippedRecentCount,
     });
   } catch (e) {

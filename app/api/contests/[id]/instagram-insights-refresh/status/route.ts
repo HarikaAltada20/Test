@@ -51,7 +51,7 @@ export async function GET(
     const { data: run, error } = await supabaseAdmin
       .from("instagram_insights_refresh_runs")
       .select(
-        "id, status, total_submissions, processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count, current_batch_index, total_batches, started_at, last_batch_completed_at, finished_at"
+        "id, status, total_submissions, processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count, reviewed_count, current_batch_index, total_batches, started_at, last_batch_completed_at, finished_at"
       )
       .eq("contest_id", contestId)
       .order("started_at", { ascending: false })
@@ -75,6 +75,7 @@ export async function GET(
             permanent_failure_count: run.permanent_failure_count,
             temporary_failure_count: run.temporary_failure_count,
             skipped_recent_count: run.skipped_recent_count,
+            reviewed_count: run.reviewed_count ?? 0,
             current_batch_index: run.current_batch_index,
             total_batches: run.total_batches,
             started_at: run.started_at,

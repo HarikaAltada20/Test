@@ -502,6 +502,7 @@ export interface Database {
           permanent_failure_count: number;
           temporary_failure_count: number;
           skipped_recent_count: number;
+          reviewed_count: number;
           current_batch_index: number;
           total_batches: number;
           started_at: string;
@@ -519,6 +520,7 @@ export interface Database {
           permanent_failure_count?: number;
           temporary_failure_count?: number;
           skipped_recent_count?: number;
+          reviewed_count?: number;
           current_batch_index?: number;
           total_batches?: number;
           started_at?: string;
@@ -536,6 +538,7 @@ export interface Database {
           permanent_failure_count?: number;
           temporary_failure_count?: number;
           skipped_recent_count?: number;
+          reviewed_count?: number;
           current_batch_index?: number;
           total_batches?: number;
           started_at?: string;

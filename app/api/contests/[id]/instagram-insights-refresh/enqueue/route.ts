@@ -100,12 +100,13 @@ export async function POST(
       });
     }
 
-    // Count eligible submissions (instagram, has video_id, not permanent_failure)
+    // Count eligible submissions (instagram, has video_id, not rejected, not permanent_failure)
     const { count: eligibleCount } = await supabaseAdmin
       .from("submissions")
       .select("*", { count: "exact", head: true })
       .eq("contest_id", contestId)
       .eq("platform", "instagram")
+      .neq("status", "rejected")
       .not("video_id", "is", null)
       .or("insights_status.is.null,insights_status.neq.permanent_failure");
 

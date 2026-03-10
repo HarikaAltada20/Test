@@ -26,6 +26,7 @@ export interface InstagramAccount {
   app_scoped_user_id: string;
   account_type?: "BUSINESS" | "MEDIA_CREATOR" | "PERSONAL";
   needs_reconnect?: boolean;
+  last_connection_check_at?: string;
 }
 
 export interface SubmissionForInsights {
@@ -83,11 +84,11 @@ export function hasStatsChanged(
   );
 }
 
-/** Refresh Instagram access token. Returns new token or null. */
+/** Refresh Instagram access token. Returns { access_token, expires_in? } or null. */
 export async function refreshToken(
   creatorId: string,
   accessToken: string
-): Promise<string | null> {
+): Promise<{ access_token: string; expires_in?: number } | null> {
   try {
     const refreshUrl = `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${accessToken}`;
     const response = await fetch(refreshUrl);
@@ -100,7 +101,10 @@ export async function refreshToken(
       );
       return null;
     }
-    return data.access_token;
+    return {
+      access_token: data.access_token,
+      expires_in: typeof data.expires_in === "number" ? data.expires_in : undefined,
+    };
   } catch (error: unknown) {
     console.error(
       `[instagram-insights] Token refresh exception for creator ${creatorId}:`,

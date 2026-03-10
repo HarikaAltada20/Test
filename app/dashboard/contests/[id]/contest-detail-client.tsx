@@ -315,6 +315,7 @@ type InstagramInsightsRefreshRunSummary = {
   permanent_failure_count: number;
   temporary_failure_count: number;
   skipped_recent_count: number;
+  reviewed_count: number;
   current_batch_index: number;
   total_batches: number;
   started_at: string;
@@ -358,6 +359,16 @@ const sanitizeTwitterList = (value: unknown): string[] => {
     (item): item is string => typeof item === "string" && item.trim() !== "",
   );
 };
+
+function formatDurationSeconds(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m < 60) return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return mm > 0 ? `${h}h ${mm}m` : `${h}h`;
+}
 
 export default function ContestDetailClient({
   contest,
@@ -431,6 +442,9 @@ export default function ContestDetailClient({
     useState<InstagramInsightsRefreshRunSummary | null>(null);
   const [showInstagramRunPopup, setShowInstagramRunPopup] = useState(false);
   const [instagramRunCompleted, setInstagramRunCompleted] = useState(false);
+  const [refreshElapsedSeconds, setRefreshElapsedSeconds] = useState<
+    number | null
+  >(null);
 
   // Status update states
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -504,6 +518,34 @@ export default function ContestDetailClient({
     () => ytColumnsAvailableInModal.map((c) => c.id),
     [ytColumnsAvailableInModal],
   );
+
+  // Elapsed time for Instagram insights refresh (live while running, final duration when done)
+  useEffect(() => {
+    if (!instagramRun?.started_at) {
+      setRefreshElapsedSeconds(null);
+      return;
+    }
+    const started = new Date(instagramRun.started_at).getTime();
+    const isRunning = instagramRun.status === "running";
+
+    if (isRunning) {
+      const tick = () =>
+        setRefreshElapsedSeconds(
+          Math.max(0, Math.floor((Date.now() - started) / 1000)),
+        );
+      tick();
+      const interval = setInterval(tick, 1000);
+      return () => clearInterval(interval);
+    }
+
+    const finished = instagramRun.finished_at
+      ? new Date(instagramRun.finished_at).getTime()
+      : Date.now();
+    setRefreshElapsedSeconds(
+      Math.max(0, Math.floor((finished - started) / 1000)),
+    );
+    return () => {};
+  }, [instagramRun?.id, instagramRun?.started_at, instagramRun?.status, instagramRun?.finished_at]);
 
   // Refresh metrics state
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
@@ -3590,6 +3632,13 @@ export default function ContestDetailClient({
                 if (isInstagramAdmin && run) {
                   setInstagramRun(run);
                   setInstagramRunCompleted(true);
+                  if (status === "completed") {
+                    toast({
+                      title: "Instagram insights refresh completed",
+                      description: `Reviewed ${run.reviewed_count ?? 0}, Processed ${run.processed_submissions ?? 0}. Success: ${run.success_count ?? 0}, Permanent failure: ${run.permanent_failure_count ?? 0}, Temporary failure: ${run.temporary_failure_count ?? 0}, Skipped: ${run.skipped_recent_count ?? 0}.`,
+                      duration: 10000,
+                    });
+                  }
                   // Keep popup visible for 10 seconds, then hide and reload
                   setTimeout(() => {
                     setShowInstagramRunPopup(false);
@@ -9615,23 +9664,22 @@ export default function ContestDetailClient({
                                 {(() => {
                                   const totalSubs =
                                     instagramRun.total_submissions ?? 0;
-                                  const processed =
-                                    (instagramRun.processed_submissions ?? 0) +
-                                    (instagramRun.skipped_recent_count ?? 0);
+                                  const reviewed =
+                                    instagramRun.reviewed_count ?? 0;
                                   const totalBatches =
                                     instagramRun.total_batches ?? 0;
                                   const batchIndex =
                                     instagramRun.current_batch_index ?? 0;
 
-                                  const bySubs =
-                                    totalSubs > 0
-                                      ? (processed / totalSubs) * 100
+                                  const byReviewed =
+                                    totalSubs > 0 && reviewed > 0
+                                      ? (reviewed / totalSubs) * 100
                                       : 0;
                                   const byBatches =
                                     totalBatches > 0
                                       ? (batchIndex / totalBatches) * 100
                                       : 0;
-                                  const pct = Math.max(bySubs, byBatches);
+                                  const pct = Math.max(byReviewed, byBatches);
 
                                   return (
                                     <div
@@ -9648,10 +9696,14 @@ export default function ContestDetailClient({
                               </div>
                               <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 dark:text-slate-300">
                                 <span>
+                                  Reviewed{" "}
+                                  <strong>
+                                    {instagramRun.reviewed_count ?? 0}
+                                  </strong>
+                                  {" · "}
                                   Processed{" "}
                                   <strong>
-                                    {(instagramRun.processed_submissions ?? 0) +
-                                      (instagramRun.skipped_recent_count ?? 0)}
+                                    {instagramRun.processed_submissions ?? 0}
                                   </strong>{" "}
                                   / {instagramRun.total_submissions}
                                 </span>
@@ -9683,6 +9735,25 @@ export default function ContestDetailClient({
                                   </strong>
                                 </span>
                               </div>
+                              {refreshElapsedSeconds != null && (
+                                <>
+                                  <div className="my-1 border-t border-slate-200 dark:border-slate-600" />
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
+                                    <Clock className="h-3 w-3 shrink-0" />
+                                    <span>
+                                      {instagramRun.status === "running"
+                                        ? "Elapsed"
+                                        : "Duration"}
+                                      :{" "}
+                                      <strong className="text-slate-700 dark:text-slate-300">
+                                        {formatDurationSeconds(
+                                          refreshElapsedSeconds,
+                                        )}
+                                      </strong>
+                                    </span>
+                                  </div>
+                                </>
+                              )}
                             </div>
                           )}
                       </div>
