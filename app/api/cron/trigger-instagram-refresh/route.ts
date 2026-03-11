@@ -7,7 +7,7 @@ export async function GET() {
     });
 
     await client.publishJSON({
-      url: `${process.env.NEXT_PUBLIC_APP_URL}/api/refresh-metrics`,
+      url: `${process.env.NEXT_PUBLIC_APP_URL}/api/cron/process-instagram-insights-queue`,
       body: {},
     });
 
