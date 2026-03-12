@@ -33,10 +33,10 @@ import {
   EnhancedTabsList as TabsList,
   EnhancedTabsTrigger as TabsTrigger,
 } from "@/components/ui/enhanced-tabs";
-import { ExternalLink, Filter, Video, AlertCircle, Info, ArrowRight, Search, Layers, Clock, CheckCircle2, XCircle, History, DollarSign, Menu, MoreVertical, Eye, Trophy, TrendingUp, Coins, CalendarDays, Tag, ChevronLeft, ChevronRight, Check, ListOrdered } from "lucide-react";
+import { ExternalLink, Filter, Video, AlertCircle, Info, ArrowRight, Search, Layers, Clock, CheckCircle2, XCircle, History, DollarSign, Menu, MoreVertical, Eye, Trophy, TrendingUp, Coins, CalendarDays, Tag, ChevronLeft, ChevronRight, Check, ListOrdered, Gift, CheckCheck, Loader2 } from "lucide-react";
 import Image from "next/image";
 import React from "react";
-import { centsToDollars } from "@/lib/currency-utils";
+import { centsToDollars, formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { getFullRejectionDetails } from "@/lib/submission-metadata";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -174,15 +174,15 @@ const SubmissionActionButtons = ({
     <div
       ref={containerRef}
       className={cn(
-        "flex items-center gap-[10px]",
-        isFullWidth ? "w-full" : "w-auto sm:justify-self-end self-end sm:mb-1"
+        "flex items-center gap-2",
+        isFullWidth ? "w-full" : "w-auto justify-end md:justify-self-end self-center md:self-end"
       )}
     >
       <div className={cn(
-        "flex flex-row gap-[10px] items-center",
+        "flex flex-row gap-2 items-center shrink-0",
         isFullWidth ? "w-full" : "w-auto"
       )}>
-        {/* Main Action Button (Content or Group) */}
+        {/* Main Action Button (Content or Group) — square icon button */}
         <Button
           asChild={!onAction}
           onMouseEnter={() => handleHover("content")}
@@ -192,45 +192,45 @@ const SubmissionActionButtons = ({
             onAction();
           } : undefined}
           className={cn(
-            "relative flex items-center justify-center h-[42px] rounded-[10px] transition-all duration-300 ease-in-out p-0 overflow-hidden shadow-sm",
+            "relative flex items-center justify-center h-10 w-10 min-h-10 min-w-10 rounded-lg transition-all duration-300 ease-in-out p-0 overflow-hidden shadow-sm",
             "bg-[#4211a1] hover:bg-[#350d81] border-none text-white",
             isFullWidth ? (
-              (!disableAnimation && activeButton === "content") ? "flex-[2]" : (!disableAnimation && activeButton === "contest" ? "flex-[0.5]" : "flex-1")
+              (!disableAnimation && activeButton === "content") ? "flex-[2] min-w-0" : (!disableAnimation && activeButton === "contest" ? "flex-[0.5] min-w-0" : "flex-1 min-w-0")
             ) : (
-              (!disableAnimation && activeButton === "content") ? "sm:w-[160px] z-10 shadow-lg" : "sm:w-[42px]"
+              (!disableAnimation && activeButton === "content") ? "sm:w-[160px] sm:min-w-[160px] z-10 shadow-lg rounded-lg" : "sm:w-10 sm:min-w-10"
             ),
-            (!disableAnimation && !isFullWidth && activeButton === "contest") ? "sm:w-[36px] opacity-50" : "opacity-100"
+            (!disableAnimation && !isFullWidth && activeButton === "contest") ? "sm:w-9 sm:min-w-9 opacity-60" : "opacity-100"
           )}
         >
           {onAction ? (
             <div className="w-full h-full flex items-center justify-center" title={actionLabel}>
-              <ActionIcon className="w-[18px] h-[18px] text-white shrink-0" strokeWidth={3} />
+              <ActionIcon className="w-5 h-5 text-white shrink-0" strokeWidth={2.5} />
             </div>
           ) : (
             <Link href={contentLink || "#"} target="_blank" rel="noopener noreferrer" className="w-full h-full flex items-center justify-center" title={actionLabel}>
-              <ActionIcon className="w-[18px] h-[18px] text-white shrink-0" strokeWidth={3} />
+              <ActionIcon className="w-5 h-5 text-white shrink-0" strokeWidth={2.5} />
             </Link>
           )}
         </Button>
 
-        {/* View Contest / Leaderboard Button */}
+        {/* View Contest / Leaderboard Button — square icon button */}
         <Button
           asChild
           onMouseEnter={() => handleHover("contest")}
           onMouseLeave={handleLeave}
           className={cn(
-            "relative flex items-center justify-center h-[42px] rounded-[10px] transition-all duration-300 ease-in-out p-0 overflow-hidden shadow-sm",
+            "relative flex items-center justify-center h-10 w-10 min-h-10 min-w-10 rounded-lg transition-all duration-300 ease-in-out p-0 overflow-hidden shadow-sm",
             "bg-[#4211a1] hover:bg-[#350d81] border-none text-white",
             isFullWidth ? (
-              (!disableAnimation && activeButton === "contest") ? "flex-[2]" : (!disableAnimation && activeButton === "content" ? "flex-[0.5]" : "flex-1")
+              (!disableAnimation && activeButton === "contest") ? "flex-[2] min-w-0" : (!disableAnimation && activeButton === "content" ? "flex-[0.5] min-w-0" : "flex-1 min-w-0")
             ) : (
-              (!disableAnimation && activeButton === "contest") ? "sm:w-[180px] z-10 shadow-lg" : "sm:w-[42px]"
+              (!disableAnimation && activeButton === "contest") ? "sm:w-[180px] sm:min-w-[180px] z-10 shadow-lg rounded-lg" : "sm:w-10 sm:min-w-10"
             ),
-            (!disableAnimation && !isFullWidth && activeButton === "content") ? "sm:w-[36px] opacity-50" : "opacity-100"
+            (!disableAnimation && !isFullWidth && activeButton === "content") ? "sm:w-9 sm:min-w-9 opacity-60" : "opacity-100"
           )}
         >
           <Link href={contestLink} className="w-full h-full flex items-center justify-center" title={contestLabel}>
-            <ContestIcon className="w-[18px] h-[18px] text-white shrink-0" strokeWidth={3} />
+            <ContestIcon className="w-5 h-5 text-white shrink-0" strokeWidth={2.5} />
           </Link>
         </Button>
       </div>
@@ -259,6 +259,7 @@ export default function SubmissionsClient({
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
   const [mode, setMode] = useState<"light" | "dark">("light");
   const [brokenThumbs, setBrokenThumbs] = useState<Record<string, boolean>>({});
   const [selectedContestGroup, setSelectedContestGroup] = useState<any>(null);
@@ -279,21 +280,27 @@ export default function SubmissionsClient({
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
 
+  // Payout semantics helpers (centralized)
+  const isPayoutsProcessed = (c: any) => c?.post_contest_status === "payouts_processed";
+  const isSubmissionPaid = (s: SubmissionWithContest) =>
+    (s.status as string || "").toLowerCase() === "paid" || (s as any).paid === true;
+
   const getSubmissionEarningsAmount = (submission: SubmissionWithContest) => {
     const contest = submission.contests;
-    const isPayoutsProcessed = contest?.post_contest_status === "payouts_processed";
     const subStatus = (submission.status as string || "").toLowerCase();
-    const isPaid = subStatus === "paid";
+    const paid = isSubmissionPaid(submission);
 
-    // If payouts processed but entry not officially "paid", show $0
-    if (isPayoutsProcessed && !isPaid) {
-      return 0;
+    // Paid: always use DB values (all contests, all platforms)
+    if (paid) {
+      return submission.earnings ?? 0;
     }
+    if (isPayoutsProcessed(contest)) return 0;
 
     if (contest?.contest_type === "cpm") {
-      const isVerified = subStatus === "verified" || subStatus === "paid";
-      // CPM Earnings only unlock after verification
-      if (!isVerified) return 0;
+      // For CPM, treat all non-rejected submissions as having estimated earnings
+      // while the contest is still in review. Once payouts are processed, we
+      // already short-circuit to 0 above.
+      if (subStatus === "rejected") return 0;
 
       const cpmConfig =
         contest.contest_based_details &&
@@ -305,16 +312,70 @@ export default function SubmissionsClient({
       let effectiveViews = views;
       if (cpmConfig?.min_views != null && views < cpmConfig.min_views) effectiveViews = 0;
       else if (cpmConfig?.max_views != null && views > cpmConfig.max_views) effectiveViews = cpmConfig.max_views;
-      // Return in CENTS
-      return (effectiveViews * (cpmConfig?.cpm_rate_usd || 0)) / 10;
-    } else {
-      // calculateLeaderboardEarnings already handles the payout processed check
-      const data = calculateLeaderboardEarnings(submission, contest);
-      return data.amount;
+      const rateUsd = cpmConfig?.cpm_rate_usd ?? 0;
+      return Math.round((effectiveViews * rateUsd) / 10);
     }
+    const data = calculateLeaderboardEarnings(submission, contest);
+    return data.amount;
+  };
+
+  // For UI display only (cards/modals). This can show CPM estimates for
+  // pending/verified submissions, but DOES NOT affect budget/confirmed stats.
+  const getSubmissionDisplayEarningsAmount = (submission: SubmissionWithContest) => {
+    const contest = submission.contests;
+    const subStatus = (submission.status as string || "").toLowerCase();
+    const paid = isSubmissionPaid(submission);
+
+    // Paid: always use DB values (all contests, all platforms)
+    if (paid) {
+      return submission.earnings ?? 0;
+    }
+
+    const postContestStatus = contest?.post_contest_status;
+
+    // If contest payouts are fully processed, and this submission isn't paid,
+    // there's nothing more to earn.
+    if (isPayoutsProcessed(contest)) return 0;
+
+    if (contest?.contest_type === "cpm") {
+      // For display, show estimates for any non-rejected CPM submission
+      // while the contest is still in review. Once verification is complete,
+      // only verified/paid submissions should show earnings; pending ones
+      // should be treated as 0.
+      if (subStatus === "rejected") return 0;
+
+      const isVerificationComplete = postContestStatus === "verification_complete";
+      if (isVerificationComplete) {
+        const isConfirmed =
+          subStatus === "verified" ||
+          subStatus === "paid" ||
+          (submission as any).paid === true;
+        if (!isConfirmed) return 0;
+      }
+
+      const cpmConfig =
+        contest.contest_based_details &&
+          typeof contest.contest_based_details === "object" &&
+          "cpm_contest" in (contest.contest_based_details as any)
+          ? ((contest.contest_based_details as any).cpm_contest as unknown as CpmContestDetails)
+          : null;
+      const views = submission.views ?? 0;
+      let effectiveViews = views;
+      if (cpmConfig?.min_views != null && views < cpmConfig.min_views) effectiveViews = 0;
+      else if (cpmConfig?.max_views != null && views > cpmConfig.max_views) effectiveViews = cpmConfig.max_views;
+      const rateUsd = cpmConfig?.cpm_rate_usd ?? 0;
+      return Math.round((effectiveViews * rateUsd) / 10);
+    }
+
+    // Non-CPM: share the same logic as stats helper.
+    const data = calculateLeaderboardEarnings(submission, contest);
+    return data.amount;
   };
 
   const getSubmissionBonusAmount = (submission: SubmissionWithContest) => {
+    if (isSubmissionPaid(submission)) {
+      return (submission as any).bonus_amount ?? 0;
+    }
     const contest = submission.contests;
     const subStatus = (submission.status as string || "").toLowerCase();
     const isVerified = subStatus === "verified" || subStatus === "paid";
@@ -355,9 +416,23 @@ export default function SubmissionsClient({
     return flatFeeBonus;
   };
 
+  const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const handleSearch = () => {
+    if (isSearching) return;
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    setIsSearching(true);
     setActiveSearch(searchTerm);
+    searchTimeoutRef.current = setTimeout(() => {
+      setIsSearching(false);
+      searchTimeoutRef.current = null;
+    }, 450);
   };
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
@@ -395,7 +470,7 @@ export default function SubmissionsClient({
 
     const isEnded = contest.end_date ? new Date(contest.end_date) < new Date() : false;
     const currentStatus = contest.status || contest.moderation_status;
-    const isLive = !isEnded || currentStatus === "active" || currentStatus === "published" || currentStatus == null;
+    const isLive = !isEnded && (currentStatus === "active" || currentStatus === "published" || currentStatus == null);
     const postContestStatus = contest.post_contest_status;
 
     // 1. If payouts are processed, it's COMPLETELY done
@@ -463,13 +538,15 @@ export default function SubmissionsClient({
         return { amount: isPaid ? amount : 0, label: "Amount Earned" };
       }
       if (isVerificationComplete) {
-        return { amount, label: "Final Earnings" };
+        if (isPaid && amount > 0) return { amount, label: "Amount Earned" };
+        return { amount: 0, label: "Check your rank" };
       }
       if (isLive) {
-        return { amount, label: "Winning Zone" };
+        if (amount > 0) return { amount, label: "Winning Zone" };
+        return { amount: 0, label: "Check your rank" };
       }
 
-      return { amount, label: "Estimated Earnings" };
+      return { amount: 0, label: "Check your rank" };
     } catch (error) {
       console.warn("Error calculating leaderboard earnings:", error);
       return { amount: 0, label: "Estimated Earnings" };
@@ -480,12 +557,8 @@ export default function SubmissionsClient({
 
   const getDisplayStatus = (submission: SubmissionWithContest): string => {
     if (!submission.status) return "Unknown";
-    if (submission.status === "paid" && submission.contests?.post_contest_status !== "payouts_processed") {
-      return "Verified";
-    }
-    return (
-      submission.status.charAt(0).toUpperCase() + submission.status.slice(1)
-    );
+    if (submission.status === "paid") return "Paid";
+    return submission.status.charAt(0).toUpperCase() + submission.status.slice(1);
   };
 
   const postContestStatusMap: Record<string, string> = {
@@ -814,9 +887,7 @@ export default function SubmissionsClient({
       videoCount: number;
     }> = {};
 
-    console.log("DEBUG: groupedContests computing with", filteredSubmissions.length, "submissions");
     filteredSubmissions.forEach((sub, idx) => {
-      if (idx === 0) console.log("DEBUG: Sample submission:", sub);
       const contestId = sub.contest_id || "unknown";
       const contest = sub.contests;
       if (!groups[contestId]) {
@@ -835,17 +906,33 @@ export default function SubmissionsClient({
 
       const subStatus = (sub.status as string || "").toLowerCase();
       const isRejected = subStatus === "rejected";
+      const postContestStatus = contest?.post_contest_status;
+      const isVerificationComplete = postContestStatus === "verification_complete";
 
       // 1. EXCLUDE Rejected submissions from all totals
       if (!isRejected) {
         // Only count views of valid submissions in the card total
         groups[contestId].totalViews += sub.views || 0;
 
-        // Add Earnings
-        groups[contestId].totalEarnings += getSubmissionEarningsAmount(sub);
+        // For earnings/bonus in Verification Complete, only count confirmed
+        // submissions (verified/paid). Pending items should no longer be
+        // treated as having estimated earnings once verification is done.
+        let includeForTotals = true;
+        if (isVerificationComplete) {
+          const isConfirmed =
+            subStatus === "verified" ||
+            subStatus === "paid" ||
+            (sub as any).paid === true;
+          if (!isConfirmed) includeForTotals = false;
+        }
 
-        // Add Bonus using unified logic
-        groups[contestId].totalBonus += getSubmissionBonusAmount(sub);
+        if (includeForTotals) {
+          // Add Earnings
+          groups[contestId].totalEarnings += getSubmissionEarningsAmount(sub);
+
+          // Add Bonus using unified logic
+          groups[contestId].totalBonus += getSubmissionBonusAmount(sub);
+        }
       }
     });
 
@@ -883,36 +970,24 @@ export default function SubmissionsClient({
     const contests = new Set(filteredSubmissions.map(s => s.contest_id).filter(Boolean));
     const totalViews = filteredSubmissions.reduce((sum, s) => sum + (s.views || 0), 0);
 
-    // Only count confirmed earnings (Payouts Processed + Status 'Paid')
+    // Cash Earned: only submissions with status "paid"; use submission.earnings (cents).
+    // post_contest_status may be verification_complete or payouts_processed — both allowed.
     const totalEarnings = filteredSubmissions.reduce((sum, s) => {
-      const contest = s.contests;
-      if (!contest) return sum;
-      const isPostProcessed = contest.post_contest_status === "payouts_processed";
       const subStatus = (s.status as string || "").toLowerCase();
-      const isActuallyPaid = subStatus === "paid";
-      if (isPostProcessed && isActuallyPaid) {
-        return sum + getSubmissionEarningsAmount(s);
-      }
-      return sum;
+      if (subStatus !== "paid") return sum;
+      return sum + (Number((s as any).earnings) || 0);
     }, 0);
 
-    // Only count confirmed bonuses (Payouts Processed + bonus_paid + Status 'Paid')
+    // Bonus Earned: only submissions with status "paid"; use submission.bonus_amount (cents).
+    // post_contest_status may be verification_complete or payouts_processed — both allowed.
     const totalBonus = filteredSubmissions.reduce((sum, s) => {
-      const contest = s.contests;
-      if (!contest) return sum;
-      const isPostProcessed = contest.post_contest_status === "payouts_processed";
       const subStatus = (s.status as string || "").toLowerCase();
-      const isActuallyPaid = subStatus === "paid";
-      const isBonusPaid = (s as any).bonus_paid === true;
-      if (isPostProcessed && isActuallyPaid && isBonusPaid) {
-        return sum + ((s as any).bonus_amount || 0);
-      }
-      return sum;
+      if (subStatus !== "paid") return sum;
+      return sum + (Number((s as any).bonus_amount) || 0);
     }, 0);
 
-    // Estimated earnings: for submissions NOT in payouts_processed contests
-    // (Live, Pending Review, In Review, Verification Complete)
-    // EXCLUDES rejected items
+    // Estimated earnings: for submissions NOT paid and NOT in payouts_processed contests.
+    // EXCLUDES rejected and paid — only pending/verified (not yet paid) count as "estimated".
     const estimatedEarnings = filteredSubmissions.reduce((sum, s) => {
       const contest = s.contests;
       if (!contest) return sum;
@@ -921,23 +996,27 @@ export default function SubmissionsClient({
 
       const subStatus = (s.status as string || "").toLowerCase();
       if (subStatus === "rejected") return sum;
+      if (subStatus === "paid" || (s as any).paid === true) return sum;
 
       const isVerificationComplete = contest.post_contest_status === "verification_complete";
       if (isVerificationComplete) {
-        // If final, only count verified/paid for the estimate
-        const isConfirmed = subStatus === "verified" || subStatus === "paid" || (s as any).paid === true;
+        const isConfirmed = subStatus === "verified";
         if (!isConfirmed) return sum;
       }
 
       return sum + getSubmissionEarningsAmount(s);
     }, 0);
 
-    // Estimated bonus: for submissions NOT in payouts_processed contests
+    // Estimated bonus: for submissions NOT paid and NOT in payouts_processed contests.
+    // EXCLUDES paid — only pending/verified (not yet paid) count as "estimated".
     const estimatedBonus = filteredSubmissions.reduce((sum, s) => {
       const contest = s.contests;
       if (!contest) return sum;
       const isPayoutsProcessed = contest.post_contest_status === "payouts_processed";
       if (isPayoutsProcessed) return sum;
+
+      const subStatus = (s.status as string || "").toLowerCase();
+      if (subStatus === "paid" || (s as any).paid === true) return sum;
 
       return sum + getSubmissionBonusAmount(s);
     }, 0);
@@ -973,48 +1052,76 @@ export default function SubmissionsClient({
     const systemNote = rejectionDetails?.reason ? REJECTION_REASON_DESCRIPTIONS[rejectionDetails.reason] : null;
     const displayNote = rejectionDetails?.additionalNotes || systemNote;
 
-    const isPayoutsProcessed = contest?.post_contest_status === "payouts_processed";
+    const isPayoutsProcessedVal = isPayoutsProcessed(contest);
     const isVerificationComplete = contest?.post_contest_status === "verification_complete";
     const isRejected = submission.status === "rejected";
+    const isPaidCard = isSubmissionPaid(submission);
+    const subStatusLower = (submission.status as string || "").toLowerCase();
+    const isPendingLike =
+      !isPaidCard &&
+      !isRejected &&
+      contest?.post_contest_status !== "verification_complete" &&
+      contest?.post_contest_status !== "payouts_processed" &&
+      (subStatusLower === "pending" ||
+        subStatusLower === "pending_review" ||
+        subStatusLower === "submitted" ||
+        subStatusLower === "in_review");
 
-    const totalEarningsCents = getSubmissionEarningsAmount(submission);
+    const totalEarningsCents = getSubmissionDisplayEarningsAmount(submission);
     const earningsInDollars = centsToDollars(totalEarningsCents);
 
     let earningsDisplay: { label: string; amount: string; color: string; isRejected?: boolean } | null = null;
 
     if (isRejected) {
       earningsDisplay = { label: "Earnings", amount: "Not Eligible", color: "text-red-500", isRejected: true };
+    } else if (isPaidCard) {
+      earningsDisplay = {
+        label: "Amount Earned",
+        amount: centsToDollars(submission.earnings ?? 0).toFixed(2),
+        // Finalized, fully earned amount in dark green
+        color: "text-green-700",
+      };
     } else if (contest?.contest_type === "cpm") {
-      const subStatusForLabel = (submission.status as string || "").toLowerCase();
-      const isSubPaidForLabel = subStatusForLabel === "paid" || (submission as any).paid === true;
-      const label = isPayoutsProcessed
+      const label = isPayoutsProcessedVal
         ? "Amount Earned"
-        : isVerificationComplete ? "Final Earnings" : "Estimated Earnings";
+        : "Estimated Earnings";
       earningsDisplay = {
         label,
         amount: earningsInDollars.toFixed(2),
-        color: isPayoutsProcessed ? "text-green-500" : isVerificationComplete ? (isDark ? "text-emerald-400" : "text-emerald-600") : isDark ? "text-blue-400" : "text-blue-600",
+        // Base color; will be overridden below by status-based scheme
+        color: isPayoutsProcessedVal ? "text-green-700" : isDark ? "text-blue-300" : "text-blue-600",
       };
     } else {
       const data = calculateLeaderboardEarnings(submission, contest) as any;
+      const isCheckRank = data.label === "Check your rank";
       let color = isDark ? "text-emerald-400" : "text-emerald-600";
       if (data.isRejected) color = "text-red-500";
       else if (data.label === "Amount Earned") color = "text-green-500";
       else if (data.label === "Winning Zone") color = "text-purple-500";
-      else if (data.label === "View Leaderboard") color = "text-[#7F39EC]";
-      else if (data.label === "Final Earnings") color = isDark ? "text-emerald-400" : "text-emerald-600";
+      else if (data.label === "View Leaderboard" || data.label === "Check your rank") color = "text-[#7F39EC]";
       else if (data.label === "Estimated Earnings") color = isDark ? "text-blue-400" : "text-blue-600";
 
       earningsDisplay = {
-        label: data.label,
-        amount: data.isRejected ? "Not Eligible" : earningsInDollars.toFixed(2),
+        label: isCheckRank ? "Estimated Earnings" : data.label,
+        amount: data.isRejected ? "Not Eligible" : isCheckRank ? "Check Ranking" : earningsInDollars.toFixed(2),
         color
       };
     }
 
-    // Bonus display — only verified/paid submissions qualify for the flat_fee_bonus
-    const bonusPaid = (submission as any).bonus_paid === true;
-    const isVerifiedOrPaid = submission.status === "verified" || (submission.status as string) === "paid" || bonusPaid;
+    // Status-based color overrides for CPM submissions
+    if (earningsDisplay && contest?.contest_type === "cpm") {
+      if (isPaidCard && isPayoutsProcessedVal) {
+        // Fully finalized
+        earningsDisplay.color = "text-green-700";
+      } else if (subStatusLower === "verified") {
+        // Verified estimated earnings in blue
+        earningsDisplay.color = isDark ? "text-blue-300" : "text-blue-600";
+      } else if (isPendingLike) {
+        // Pending estimated earnings in yellow
+        earningsDisplay.color = isDark ? "text-yellow-300" : "text-yellow-500";
+      }
+    }
+
     const contestDetailsForBonus = contest?.contest_based_details as any;
     const bonusDetailsForCard = contest?.bonus_details as any;
     const flatFeeBonusForCard =
@@ -1023,27 +1130,25 @@ export default function SubmissionsClient({
       bonusDetailsForCard?.flat_fee_bonus ||
       0;
 
-    // Bonus calculation using unified helper
     const bonusAmountCents = getSubmissionBonusAmount(submission);
     const bonusAmountDollars = centsToDollars(bonusAmountCents).toFixed(2);
+    const isVerifiedForBonus = submission.status === "verified";
+    const showEstimatedBonus = !isPaidCard && (isVerifiedForBonus || flatFeeBonusForCard > 0);
 
-    // Bonus Label logic
     let bonusLabel = "Estimated Bonus";
-    const subStatusForBonus = (submission.status as string || "").toLowerCase();
-    const isSubPaidForBonus = subStatusForBonus === "paid" || (submission as any).paid === true;
-
     if (isRejected) {
-      bonusLabel = "Bonus Won"; // Will show $0.00 (hidden in UI)
+      bonusLabel = "Bonus Won";
+    } else if (isPaidCard) {
+      bonusLabel = "Bonus Earned";
+    } else if (isPayoutsProcessedVal) {
+      bonusLabel = "Bonus Earned";
+    } else if (isVerificationComplete) {
+      bonusLabel = "Estimated Bonus";
     } else {
-      if (isPayoutsProcessed) {
-        bonusLabel = "Bonus Earned";
-      } else if (isVerificationComplete) {
-        bonusLabel = "Final Bonus";
-      } else {
-        bonusLabel = "Estimated Bonus";
-      }
+      bonusLabel = "Estimated Bonus";
     }
     const bonusColor = (bonusLabel === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
+    const showBonusRow = bonusAmountCents > 0 && (bonusLabel !== "Estimated Bonus" || showEstimatedBonus);
 
     // Massively expanded thumbnail detection for all social platforms (IG, TikTok, YT, Twitter)
     const meta = submission.metadata as any;
@@ -1208,7 +1313,7 @@ export default function SubmissionsClient({
             )}
           </div>
 
-          <div className={cn("flex items-center gap-1.5 text-[13px] font-medium whitespace-nowrap overflow-hidden", isDark ? "text-slate-300" : "text-slate-500")}>
+          <div className={cn("flex items-center gap-1.5 text-[13px] font-medium whitespace-nowrap overflow-hidden flex-wrap", isDark ? "text-slate-300" : "text-slate-500")}>
             <span className="flex items-center gap-1 flex-shrink-0">
               <History className="w-3 h-3 opacity-60" />
               {submission.formatted_created_at?.split(',')[0] || "Date N/A"}
@@ -1218,78 +1323,11 @@ export default function SubmissionsClient({
               <Eye className="w-3 h-3 opacity-60" />
               {views.toLocaleString()}
             </span>
-            {(() => {
-              const amount = centsToDollars(submission.earnings || 0);
-              const subStatus = (submission.status as string || "").toLowerCase();
-              const isPaid = subStatus === "paid" || (submission as any).paid === true;
-              const postContestStatus = contest?.post_contest_status;
-              const isPayoutsProcessed = postContestStatus === "payouts_processed";
-
-              const isEnded = contest?.end_date ? new Date(contest.end_date) < new Date() : false;
-              const currentStatus = contest?.status || contest?.moderation_status;
-              const isActuallyLive = !isEnded && (currentStatus === "active" || currentStatus === "published" || currentStatus == null);
-
-              const isLeaderboard = contest?.contest_type === "leaderboard";
-
-              // 1. Payouts processed: hierarchy first
-              if (isPayoutsProcessed) {
-                if (isPaid && amount > 0) {
-                  return (
-                    <>
-                      <span className="opacity-40 flex-shrink-0">•</span>
-                      <Link href={`/dashboard/opportunities/${contestId}?tab=leaderboard`} className="font-bold text-green-500 whitespace-nowrap hover:opacity-80 transition-opacity flex-shrink-0">
-                        View Leaderboard
-                      </Link>
-                    </>
-                  );
-                }
-                return (
-                  <>
-                    <span className="opacity-40 flex-shrink-0">•</span>
-                    <Link href={`/dashboard/opportunities/${contestId}?tab=leaderboard`} className="text-slate-400 hover:text-slate-600 transition-colors whitespace-nowrap flex-shrink-0">
-                      View Leaderboard
-                    </Link>
-                  </>
-                );
-              }
-
-              // 2. All other post-contest states (Review, Verification, or just plain Ended)
-              if (isEnded || postContestStatus) {
-                return (
-                  <>
-                    <span className="opacity-40 flex-shrink-0">•</span>
-                    <Link href={`/dashboard/opportunities/${contestId}?tab=leaderboard`} className="text-slate-400 hover:text-slate-600 transition-colors whitespace-nowrap flex-shrink-0">
-                      View Leaderboard
-                    </Link>
-                  </>
-                );
-              }
-
-              // 3. Live Leaderboard: Winning Zone for top makers ONLY (amount > 0)
-              if (isActuallyLive && isLeaderboard && amount > 0) {
-                return (
-                  <>
-                    <span className="opacity-40 flex-shrink-0">•</span>
-                    <Link
-                      href={`/dashboard/opportunities/${contestId}?tab=leaderboard`}
-                      className="flex items-center gap-1 font-bold text-purple-500 whitespace-nowrap hover:opacity-80 transition-all px-2 py-0.5 rounded-full bg-purple-500/5 border border-purple-500/10 flex-shrink-0"
-                    >
-                      <Trophy className="w-3.5 h-3.5 flex-shrink-0" /> Winning Zone: ${amount.toFixed(2)}
-                    </Link>
-                  </>
-                );
-              }
-
-              // Default standard View Leaderboard
-              return (
-                <>
-                  <span className="opacity-40 flex-shrink-0">•</span>
-                  <Link href={`/dashboard/opportunities/${contestId}?tab=leaderboard`} className="text-slate-400 hover:text-slate-600 transition-colors whitespace-nowrap flex-shrink-0">
-                    View Leaderboard
-                  </Link>
-                </>
-              );
-            })()}
+            <span className="opacity-40 flex-shrink-0">•</span>
+            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider px-2 py-0 rounded-full border-slate-300 dark:border-slate-600">
+              {contest?.contest_type === "leaderboard" ? "Leaderboard" : contest?.contest_type === "cpm" ? "CPM" : contest?.contest_type || "—"}
+            </Badge>
+            {contest?.contest_type === "leaderboard" && null}
           </div>
 
           <div className="flex flex-col gap-1 mt-1">
@@ -1297,32 +1335,39 @@ export default function SubmissionsClient({
               <div className="flex items-center gap-2">
                 <p className={cn("text-[15px] font-semibold flex items-center gap-1.5", earningsDisplay.color)}>
                   {earningsDisplay.label === "Winning Zone" && <Trophy className="h-4 w-4" />}
-                  {earningsDisplay.label}: {earningsDisplay.amount === "Check Ranking" ? (
-                    <Link href={`/dashboard/opportunities/${contestId}?tab=leaderboard`} className="underline hover:opacity-80 transition-opacity">
-                      Check Ranking <ExternalLink className="inline h-3 w-3 ml-1" />
+                  {earningsDisplay.label}:{" "}
+                  {earningsDisplay.amount === "Check Ranking" ? (
+                    <Link
+                      href={`/dashboard/opportunities/${contestId}?tab=leaderboard`}
+                      className="underline hover:opacity-80 transition-opacity"
+                    >
+                      Check your rank <ExternalLink className="inline h-3 w-3 ml-1" />
                     </Link>
                   ) : earningsDisplay.amount === "Not Eligible" ? (
                     "Not Eligible"
-                  ) : `$${earningsDisplay.amount} USD`}
+                  ) : (
+                    `$${earningsDisplay.amount} USD`
+                  )}
                 </p>
-                {isPayoutsProcessed && (submission as any).paid_at && (
+                {isPayoutsProcessedVal && (submission as any).paid_at && (
                   <span className="text-[12px] font-medium text-slate-400">
                     (Paid on: {format(new Date((submission as any).paid_at), "MMM d, yyyy")})
                   </span>
                 )}
               </div>
             )}
+            {/* Detailed helper text replaced by tooltip on the label */}
             {!earningsDisplay && submission.status === "rejected" && (
               <p className="text-[15px] font-semibold text-red-500">
                 No Prize Won: $0.00 USD
               </p>
             )}
-            {!isRejected && (
+            {!isRejected && showBonusRow && (
               <div className="flex items-center gap-2">
                 <p className={cn("text-[15px] font-medium", bonusColor)}>
                   {bonusLabel}: ${bonusAmountDollars} USD
                 </p>
-                {isPayoutsProcessed && (submission as any).bonus_paid_at && (
+                {isPayoutsProcessedVal && (submission as any).bonus_paid_at && (
                   <span className="text-[12px] font-medium text-slate-400">
                     (Paid on: {format(new Date((submission as any).bonus_paid_at), "MMM d, yyyy")})
                   </span>
@@ -1414,6 +1459,19 @@ export default function SubmissionsClient({
     const isEnded = contest?.end_date ? new Date(contest.end_date) < new Date() : false;
     const isPaidOut = contest?.post_contest_status === "payouts_processed";
     const isVerificationComplete = contest?.post_contest_status === "verification_complete";
+    const contestId = contest?.id;
+
+    const contestDetailsForBonus = contest?.contest_based_details as any;
+    const bonusDetailsForContest = contest?.bonus_details as any;
+    const flatFeeBonusForContest =
+      contestDetailsForBonus?.cpm_contest?.flat_fee_bonus ||
+      contestDetailsForBonus?.leaderboard_contest?.flat_fee_bonus ||
+      bonusDetailsForContest?.flat_fee_bonus ||
+      0;
+    const hasFlatFeeBonus = flatFeeBonusForContest > 0;
+    const cpmRateUsd =
+      contest?.contest_based_details?.cpm_contest?.cpm_rate_usd ?? null;
+    const maxSubmissions = contest?.max_submissions_per_creator ?? 1;
 
     return (
       <Card
@@ -1505,6 +1563,71 @@ export default function SubmissionsClient({
                 </p>
               )}
             </div>
+
+            {/* Contest meta: CPM rate, bonus availability, submissions allowed */}
+            <div className="mt-2 flex flex-wrap gap-2">
+              {contest?.contest_type === "cpm" &&
+                cpmRateUsd != null &&
+                !Number.isNaN(cpmRateUsd) &&
+                cpmRateUsd > 0 && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[11px] font-semibold flex items-center gap-1.5 rounded-full",
+                      isDark
+                        ? "bg-slate-800/70 text-slate-100 border-slate-700"
+                        : "bg-slate-50 text-slate-700 border-slate-200"
+                    )}
+                  >
+                    <DollarSign className="w-3 h-3" />
+                    <span>
+                      CPM:{" "}
+                      <span className="font-bold">
+                        {formatMoney(Math.round(cpmRateUsd * 100))} / 1k views
+                      </span>
+                    </span>
+                  </Badge>
+                )}
+
+              {hasFlatFeeBonus && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[11px] font-semibold flex items-center gap-1.5 rounded-full",
+                    isDark
+                      ? "bg-green-900/30 text-green-300 border-green-700/50"
+                      : "bg-green-50 text-green-700 border-green-200"
+                  )}
+                >
+                  <Gift className="w-3 h-3" />
+                  <span>
+                    Bonus available:{" "}
+                    <span className="font-bold">
+                      {formatMoney(flatFeeBonusForContest)} / submission
+                    </span>
+                  </span>
+                </Badge>
+              )}
+
+              {maxSubmissions > 1 && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[11px] font-semibold flex items-center gap-1.5 rounded-full",
+                    isDark
+                      ? "bg-purple-900/30 text-purple-200 border-purple-700/50"
+                      : "bg-purple-50 text-purple-700 border-purple-200"
+                  )}
+                >
+                  <CheckCheck className="w-3 h-3" />
+                  <span>
+                    {(maxSubmissions ?? 1) > 1
+                      ? `${maxSubmissions} submissions allowed`
+                      : "Multiple entries allowed"}
+                  </span>
+                </Badge>
+              )}
+            </div>
           </div>
 
           {/* Stats Grid */}
@@ -1524,41 +1647,69 @@ export default function SubmissionsClient({
                 <DollarSign className="w-3.5 h-3.5" />
                 <span className="text-[10px] font-bold uppercase tracking-wider">
                   {(() => {
-                    if (isPaidOut) return "Amount Earned";
-                    if (isVerificationComplete) return "Final Earnings";
-                    const isLive = contest?.status === "active";
-                    const isLeaderboard = contest?.contest_type === "leaderboard";
-                    if (isLive && isLeaderboard) return "Winning Zone";
+                    if (statusFilter === "rejected") return "Estimated Earnings";
+                    // Paid tab or contest payouts done: show Amount Earned (including leaderboard paid)
+                    if (statusFilter === "paid" || isPaidOut) return "Amount Earned";
                     return "Estimated Earnings";
                   })()}
                 </span>
               </div>
-              <p className={cn("text-[16px] font-black", (contest?.status === "active" && contest?.contest_type === "leaderboard" && totalEarnings > 0) ? "text-purple-500" : "text-green-500")}>
-                ${centsToDollars(totalEarnings).toFixed(2)}
+              <p
+                className={cn(
+                  "text-[16px] font-black",
+                  (() => {
+                    if (statusFilter === "pending") return "text-yellow-500";
+                    if (statusFilter === "verified") return "text-blue-600";
+                    if (statusFilter === "rejected") return "text-red-500";
+                    if (statusFilter === "paid" || isPaidOut) return "text-green-700";
+                    // Leaderboard when not paid: "Check your rank" link in purple
+                    if (contest?.contest_type === "leaderboard") return "text-[#7F39EC]";
+                    return "text-[#7F39EC]";
+                  })()
+                )}
+              >
+                {statusFilter === "rejected" ? (
+                  "Not Eligible"
+                ) : (statusFilter === "paid" || isPaidOut) ? (
+                  <>${centsToDollars(totalEarnings).toFixed(2)}</>
+                ) : contest?.contest_type === "leaderboard" ? (
+                  <Link
+                    href={contestId ? `/dashboard/opportunities/${contestId}?tab=leaderboard` : "#"}
+                    className="underline hover:opacity-80 transition-opacity"
+                  >
+                    Check your rank
+                  </Link>
+                ) : (
+                  <>${centsToDollars(totalEarnings).toFixed(2)}</>
+                )}
               </p>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-1.5 text-slate-400">
-                <Coins className="w-3.5 h-3.5" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">
-                  {isPaidOut ? "Bonus Earned" : isVerificationComplete ? "Final Bonus" : "Estimated Bonus"}
-                </span>
+            {statusFilter !== "rejected" && statusFilter !== "pending" && (hasFlatFeeBonus || totalBonus > 0) && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5 text-slate-400">
+                  <Coins className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">
+                    {(statusFilter === "paid" || isPaidOut) ? "Bonus Earned" : "Estimated Bonus"}
+                  </span>
+                </div>
+                <p className={cn("text-[16px] font-black text-purple-500")}>
+                  ${centsToDollars(totalBonus).toFixed(2)}
+                </p>
               </div>
-              <p className={cn("text-[16px] font-black text-purple-500")}>
-                ${centsToDollars(totalBonus).toFixed(2)}
-              </p>
-            </div>
+            )}
 
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-1.5 text-slate-400">
-                <TrendingUp className="w-3.5 h-3.5" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Views</span>
+            {statusFilter !== "rejected" && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5 text-slate-400">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Views</span>
+                </div>
+                <p className={cn("text-[16px] font-black", isDark ? "text-white" : "text-slate-900")}>
+                  {totalViews.toLocaleString()}
+                </p>
               </div>
-              <p className={cn("text-[16px] font-black", isDark ? "text-white" : "text-slate-900")}>
-                {totalViews.toLocaleString()}
-              </p>
-            </div>
+            )}
           </div>
 
           <div className="flex justify-end pt-2">
@@ -1568,7 +1719,7 @@ export default function SubmissionsClient({
               className="rounded-full h-8 px-4 text-[12px] font-bold border-slate-200 dark:border-slate-700 transition-all hover:bg-slate-100 dark:hover:bg-slate-800"
               onClick={() => setSelectedContestGroup(group)}
             >
-              View Submission
+              View Submissions
             </Button>
           </div>
         </div>
@@ -1597,14 +1748,28 @@ export default function SubmissionsClient({
   return (
     <div className="max-w-[1280px] mx-auto py-[24px] px-[16px] flex flex-col gap-[24px]">
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <h1 className={cn("text-[24px] font-semibold leading-tight", isDark ? "text-white" : "text-slate-900")}>Views</h1>
-          <p className={cn("text-[14px] mt-1", isDark ? "text-slate-400" : "text-slate-500")}>Showing your submissions and analytics across different statuses</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
+        <div className="max-w-[360px]">
+          <h1
+            className={cn(
+              "text-[24px] font-semibold leading-tight",
+              isDark ? "text-white" : "text-slate-900"
+            )}
+          >
+            My Submissions & Earnings
+          </h1>
+          <p
+            className={cn(
+              "text-[14px] mt-1 leading-snug",
+              isDark ? "text-slate-400" : "text-slate-500"
+            )}
+          >
+            Showing your submissions and analytics across different statuses
+          </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto mt-2 md:mt-0">
-          <div className="relative w-full sm:w-[280px] md:w-[320px]">
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:max-w-[520px] mt-3 md:mt-0 md:justify-end">
+          <div className="relative w-full sm:flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" strokeWidth={3} />
             <Input
               placeholder="Search by URL or Title..."
@@ -1620,12 +1785,23 @@ export default function SubmissionsClient({
             />
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-none">
             <Button
               onClick={handleSearch}
-              className="h-10 flex-1 sm:flex-none px-6 rounded-lg bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0"
+              disabled={isSearching}
+              className={cn(
+                "h-10 flex-1 sm:flex-none px-6 rounded-lg bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0 transition-all duration-200",
+                isSearching && "opacity-90 cursor-wait"
+              )}
             >
-              Search
+              {isSearching ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                  <span>Searching...</span>
+                </>
+              ) : (
+                "Search"
+              )}
             </Button>
 
             <Button asChild className="h-10 flex-1 sm:flex-none px-[18px] rounded-[10px] bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0 transition-all">
@@ -1635,26 +1811,32 @@ export default function SubmissionsClient({
         </div>
       </div>
 
-      {/* Quick Stats Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* Quick Stats Summary — wider cards, consistent height and alignment */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-3 md:gap-4 items-stretch">
         {[
           { label: "Submitted to", value: stats.contests, sub: "Contests", icon: Trophy, color: "text-blue-500" },
-          { label: "Views", value: stats.views.toLocaleString(), sub: "Total", icon: TrendingUp, color: "text-indigo-500" },
-          { label: "Cash Earned", value: `$${centsToDollars(stats.earnings)}`, sub: "USD", icon: DollarSign, color: "text-green-500" },
-          { label: "Extra Bonus Earned", value: `$${centsToDollars(stats.bonus)}`, sub: "USD", icon: Coins, color: "text-purple-500" },
-          { label: "Est. Earning", value: `$${centsToDollars(stats.estimatedEarnings)}`, sub: "USD", icon: TrendingUp, color: "text-blue-400" },
-          { label: "Est. Bonus", value: `$${centsToDollars(stats.estimatedBonus)}`, sub: "USD", icon: Coins, color: "text-orange-400" },
+          { label: "Total Views", value: stats.views.toLocaleString(), sub: "", icon: TrendingUp, color: "text-indigo-500" },
+          { label: "Cash Earned", value: `$${centsToDollars(stats.earnings).toFixed(2)}`, sub: "USD", icon: DollarSign, color: "text-green-500" },
+          { label: "Bonus Earned", value: `$${centsToDollars(stats.bonus).toFixed(2)}`, sub: "USD", icon: Coins, color: "text-purple-500" },
+          { label: "Estimated Cash", value: `$${centsToDollars(stats.estimatedEarnings).toFixed(2)}`, sub: "USD", icon: TrendingUp, color: "text-blue-400" },
+          { label: "Estimated Bonus", value: `$${centsToDollars(stats.estimatedBonus).toFixed(2)}`, sub: "USD", icon: Coins, color: "text-orange-400" },
         ].map((item, idx) => (
-          <Card key={idx} className={cn("border shadow-none rounded-[16px]", isDark ? "bg-[#1e293b] border-slate-800" : "bg-white border-slate-100")}>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className={cn("p-2.5 rounded-xl shadow-sm", isDark ? "bg-slate-800" : "bg-slate-50")}>
+          <Card
+            key={idx}
+            className={cn(
+              "border shadow-none rounded-[16px] w-full min-h-[96px] flex",
+              isDark ? "bg-[#1e293b] border-slate-800" : "bg-white border-slate-100"
+            )}
+          >
+            <CardContent className="p-4 flex flex-1 items-center gap-4 min-w-0">
+              <div className={cn("p-2.5 rounded-xl shadow-sm shrink-0", isDark ? "bg-slate-800" : "bg-slate-50")}>
                 <item.icon className={cn("w-5 h-5", item.color)} strokeWidth={2.5} />
               </div>
-              <div>
-                <p className={cn("text-[10px] font-bold uppercase tracking-wider", isDark ? "text-slate-500" : "text-slate-400")}>{item.label}</p>
-                <div className="flex items-baseline gap-1.5 leading-none mt-0.5">
-                  <h3 className={cn("text-[18px] font-black", isDark ? "text-white" : "text-slate-900")}>{item.value}</h3>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">{item.sub}</span>
+              <div className="min-w-0 flex-1">
+                <p className={cn("text-[10px] font-bold uppercase tracking-wider truncate", isDark ? "text-slate-500" : "text-slate-400")}>{item.label}</p>
+                <div className="flex items-baseline gap-1.5 leading-tight mt-0.5 flex-wrap">
+                  <h3 className={cn("text-[18px] font-black break-words", isDark ? "text-white" : "text-slate-900")}>{item.value}</h3>
+                  {item.sub ? <span className="text-[10px] text-slate-400 font-bold uppercase shrink-0">{item.sub}</span> : null}
                 </div>
               </div>
             </CardContent>
@@ -2239,62 +2421,86 @@ export default function SubmissionsClient({
               const isRejectedModal = submission.status === "rejected";
               const isVerifiedOrPaidModal = submission.status === "verified" || (submission.status as string) === "paid" || ((submission as any).bonus_paid === true);
 
-              // Earnings calculation
-              const totalEarningsCents = getSubmissionEarningsAmount(submission);
+              const isPaidModal = isSubmissionPaid(submission);
+              const subStatusLowerModal = (submission.status as string || "").toLowerCase();
+              const isPendingLikeModal =
+                !isPaidModal &&
+                !isRejectedModal &&
+                contest?.post_contest_status !== "verification_complete" &&
+                contest?.post_contest_status !== "payouts_processed" &&
+                (subStatusLowerModal === "pending" ||
+                  subStatusLowerModal === "pending_review" ||
+                  subStatusLowerModal === "submitted" ||
+                  subStatusLowerModal === "in_review");
+
+              const totalEarningsCents = getSubmissionDisplayEarningsAmount(submission);
               const earningsInDollars = centsToDollars(totalEarningsCents);
 
-              // Bonus calculation using unified helper
-              const bonusAmountCents = getSubmissionBonusAmount(submission);
-              const bonusAmountDollars = centsToDollars(bonusAmountCents).toFixed(2);
+              const bonusAmountCentsModal = getSubmissionBonusAmount(submission);
+              const bonusAmountDollarsModal = centsToDollars(bonusAmountCentsModal).toFixed(2);
+              const contestDetailsModal = contest?.contest_based_details as any;
+              const bonusDetailsModal = contest?.bonus_details as any;
+              const flatFeeBonusModal =
+                contestDetailsModal?.cpm_contest?.flat_fee_bonus ||
+                contestDetailsModal?.leaderboard_contest?.flat_fee_bonus ||
+                bonusDetailsModal?.flat_fee_bonus ||
+                0;
+              const showEstimatedBonusModal = !isPaidModal && (submission.status === "verified" || flatFeeBonusModal > 0);
+              let bonusLabelModal = "Estimated Bonus";
+              if (isRejectedModal) bonusLabelModal = "Bonus Won";
+              else if (isPaidModal) bonusLabelModal = "Bonus Earned";
+              else if (isPayoutsProcessed) bonusLabelModal = "Bonus Earned";
+              else if (isVerificationComplete) bonusLabelModal = "Estimated Bonus";
+              else bonusLabelModal = "Estimated Bonus";
+              const showBonusRowModal = bonusAmountCentsModal > 0 && (bonusLabelModal !== "Estimated Bonus" || showEstimatedBonusModal);
+              const bonusColorModal = (bonusLabelModal === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
 
               let earningsDisplay: { label: string; amount: string; color: string; isRejected?: boolean } | null = null;
               if (isRejectedModal) {
                 earningsDisplay = { label: "Earnings", amount: "Not Eligible", color: "text-red-500", isRejected: true };
+              } else if (isPaidModal) {
+                earningsDisplay = {
+                  label: "Amount Earned",
+                  amount: centsToDollars(submission.earnings ?? 0).toFixed(2),
+                  color: "text-green-700",
+                };
               } else if (contest?.contest_type === "cpm") {
-                const subStatusModal = (submission.status as string || "").toLowerCase();
-                const isSubPaidModal = subStatusModal === "paid" || (submission as any).paid === true;
                 const label = isPayoutsProcessed
                   ? "Amount Earned"
-                  : isVerificationComplete ? "Final Earnings" : "Estimated Earnings";
+                  : "Estimated Earnings";
                 earningsDisplay = {
                   label,
                   amount: earningsInDollars.toFixed(2),
-                  color: isPayoutsProcessed ? "text-green-500" : isVerificationComplete ? (isDark ? "text-emerald-400" : "text-emerald-600") : isDark ? "text-blue-400" : "text-blue-600",
+                  // Base color; will be overridden below by status-based scheme
+                  color: isPayoutsProcessed ? "text-green-700" : isDark ? "text-blue-300" : "text-blue-600",
                 };
               } else {
                 const data = calculateLeaderboardEarnings(submission, contest) as any;
+                const isCheckRank = data.label === "Check your rank";
                 let color = isDark ? "text-emerald-400" : "text-emerald-600";
                 if (data.isRejected) color = "text-red-500";
                 else if (data.label === "Amount Earned") color = "text-green-500";
                 else if (data.label === "Winning Zone") color = "text-purple-500";
-                else if (data.label === "View Leaderboard") color = "text-[#7F39EC]";
-                else if (data.label === "Final Earnings") color = isDark ? "text-emerald-400" : "text-emerald-600";
+                else if (data.label === "View Leaderboard" || data.label === "Check your rank") color = "text-[#7F39EC]";
                 else if (data.label === "Estimated Earnings") color = isDark ? "text-blue-400" : "text-blue-600";
 
                 earningsDisplay = {
-                  label: data.label,
-                  amount: data.isRejected ? "Not Eligible" : earningsInDollars.toFixed(2),
+                  label: isCheckRank ? "Estimated Earnings" : data.label,
+                  amount: data.isRejected ? "Not Eligible" : isCheckRank ? "Check Ranking" : earningsInDollars.toFixed(2),
                   color
                 };
               }
 
-              // Bonus Label for modal
-              let bonusLabelModal = "Estimated Bonus";
-              const subStatusModalForBonus = (submission.status as string || "").toLowerCase();
-              const isSubPaidModalForBonus = subStatusModalForBonus === "paid" || (submission as any).paid === true;
-
-              if (isRejectedModal) {
-                bonusLabelModal = "Bonus Won";
-              } else {
-                if (isPayoutsProcessed) {
-                  bonusLabelModal = "Bonus Earned";
-                } else if (isVerificationComplete) {
-                  bonusLabelModal = "Final Bonus";
-                } else {
-                  bonusLabelModal = "Estimated Bonus";
+              // Status-based color overrides for CPM submissions in modal
+              if (earningsDisplay && contest?.contest_type === "cpm") {
+                if (isPaidModal && isPayoutsProcessed) {
+                  earningsDisplay.color = "text-green-700";
+                } else if (subStatusLowerModal === "verified") {
+                  earningsDisplay.color = isDark ? "text-blue-300" : "text-blue-600";
+                } else if (isPendingLikeModal) {
+                  earningsDisplay.color = isDark ? "text-yellow-300" : "text-yellow-500";
                 }
               }
-              const bonusColorModal = (bonusLabelModal === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
 
               const isInstagram = (submission.platform || "").toLowerCase() === "instagram";
               const isBroken = !!brokenThumbs[submission.id];
@@ -2378,77 +2584,21 @@ export default function SubmissionsClient({
                   </div>
 
                   {/* ── SECTION 3: Meta chips row ── */}
-                  <div className={cn("px-4 py-3 flex items-center gap-2 border-b whitespace-nowrap overflow-hidden", isDark ? "border-slate-700" : "border-slate-100")}>
+                  <div className={cn("px-4 py-3 flex items-center gap-2 border-b whitespace-nowrap overflow-hidden flex-wrap", isDark ? "border-slate-700" : "border-slate-100")}>
                     <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
                       <CalendarDays className="w-3 h-3 shrink-0" /> {submission.formatted_created_at?.split(',')[0]}
                     </span>
                     <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
                       <Eye className="w-3 h-3 shrink-0" /> {views.toLocaleString()}
                     </span>
-                    {(() => {
-                      const amount = centsToDollars(submission.earnings || 0);
-                      const subStatus = (submission.status as string || "").toLowerCase();
-                      const isPaid = subStatus === "paid" || (submission as any).paid === true;
-                      const postContestStatus = contest?.post_contest_status;
-                      const isPayoutsProcessed = postContestStatus === "payouts_processed";
-                      const isEnded = contest?.end_date ? new Date(contest.end_date) < new Date() : false;
-                      const currentStatus = contest?.status || contest?.moderation_status;
-                      const isActuallyLive = !isEnded && (currentStatus === "active" || currentStatus === "published" || currentStatus == null);
-                      const isLeaderboard = contest?.contest_type === "leaderboard";
-
-                      // 1. Payouts Processed styling
-                      if (isPayoutsProcessed) {
-                        return (
-                          <Link
-                            href={`/dashboard/opportunities/${contestId}?tab=leaderboard`}
-                            className={cn(
-                              "text-[11px] font-bold transition-colors whitespace-nowrap flex-shrink-0",
-                              (isPaid && amount > 0) ? "text-green-500 hover:text-green-600" : "text-slate-400 hover:text-slate-500"
-                            )}
-                          >
-                            View Leaderboard
-                          </Link>
-                        );
-                      }
-
-                      // 2. Post-contest / ended
-                      if (isEnded || postContestStatus) {
-                        return (
-                          <Link
-                            href={`/dashboard/opportunities/${contestId}?tab=leaderboard`}
-                            className="text-[11px] font-bold text-slate-400 hover:text-slate-500 transition-colors whitespace-nowrap flex-shrink-0"
-                          >
-                            View Leaderboard
-                          </Link>
-                        );
-                      }
-
-                      // 3. Live contests (Winning Zone) - only if money > 0
-                      if (isActuallyLive && isLeaderboard && amount > 0) {
-                        return (
-                          <Link
-                            href={`/dashboard/opportunities/${contestId}?tab=leaderboard`}
-                            className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold text-purple-500 whitespace-nowrap hover:opacity-80 transition-all rounded-full bg-purple-500/5 border border-purple-500/10 flex-shrink-0"
-                          >
-                            <Trophy className="w-3.5 h-3.5 shrink-0" /> Winning Zone: ${amount.toFixed(2)}
-                          </Link>
-                        );
-                      }
-
-                      // Default standard View Leaderboard
-                      return (
-                        <Link
-                          href={`/dashboard/opportunities/${contestId}?tab=leaderboard`}
-                          className="text-[11px] font-bold text-slate-400 hover:text-slate-500 transition-colors whitespace-nowrap flex-shrink-0"
-                        >
-                          View Leaderboard
-                        </Link>
-                      );
-                    })()}
+                    <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex-shrink-0 border", isDark ? "bg-slate-800 text-slate-300 border-slate-600" : "bg-slate-100 text-slate-600 border-slate-200")}>
+                      {contest?.contest_type === "leaderboard" ? "Leaderboard" : contest?.contest_type === "cpm" ? "CPM" : contest?.contest_type || "—"}
+                    </span>
+                    {contest?.contest_type === "leaderboard" && null}
                   </div>
 
                   {/* ── SECTION 4: Earnings grid ── */}
-                  <div className={cn("px-4 py-3 grid gap-3 border-b", isRejectedModal ? "grid-cols-1" : "grid-cols-2", isDark ? "border-slate-700" : "border-slate-100")}>
+                  <div className={cn("px-4 py-3 grid gap-3 border-b", isRejectedModal || !showBonusRowModal ? "grid-cols-1" : "grid-cols-2", isDark ? "border-slate-700" : "border-slate-100")}>
                     <div className={cn("rounded-[10px] p-3", isDark ? "bg-slate-800/60" : "bg-slate-50")}>
                       <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isDark ? "text-slate-500" : "text-slate-400")}>
                         {earningsDisplay?.label || "Estimated Earnings"}
@@ -2457,7 +2607,7 @@ export default function SubmissionsClient({
                         {(earningsDisplay as any)?.label === "Winning Zone" && <Trophy className="h-4 w-4" />}
                         {earningsDisplay?.amount === "Check Ranking" ? (
                           <Link href={`/dashboard/opportunities/${contestId}?tab=leaderboard`} className="underline hover:opacity-80 transition-opacity text-[13px]">
-                            Check Ranking <ExternalLink className="inline h-3 w-3 ml-1" />
+                            Check your rank <ExternalLink className="inline h-3 w-3 ml-1" />
                           </Link>
                         ) : earningsDisplay?.amount === "Not Eligible" ? (
                           "Not Eligible"
@@ -2469,13 +2619,14 @@ export default function SubmissionsClient({
                         </p>
                       )}
                     </div>
-                    {!isRejectedModal && (
+                    {/* Detailed helper text replaced by tooltip on the label */}
+                    {!isRejectedModal && showBonusRowModal && (
                       <div className={cn("rounded-[10px] p-3", isDark ? "bg-slate-800/60" : "bg-slate-50")}>
                         <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isDark ? "text-slate-500" : "text-slate-400")}>
                           {bonusLabelModal}
                         </p>
                         <p className={cn("text-[16px] font-black", bonusColorModal)}>
-                          {bonusAmountDollars === "Not Eligible" ? "Not Eligible" : `$${bonusAmountDollars} USD`}
+                          {bonusAmountDollarsModal === "Not Eligible" ? "Not Eligible" : `$${bonusAmountDollarsModal} USD`}
                         </p>
                         {isPayoutsProcessed && (submission as any).bonus_paid_at && (
                           <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">
