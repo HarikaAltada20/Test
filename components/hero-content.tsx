@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 
 import Link from "next/link";
+import { motion } from "framer-motion";
 
 import {
   ArrowRight,
@@ -22,7 +23,6 @@ import {
   User,
   Users2,
 } from "lucide-react";
-import socialPair from "@/public/images/social_pair.avif";
 import { useSwipeable } from "react-swipeable";
 import Testimonials from "./Testimonials";
 import FAQ from "./FAQ";
@@ -101,10 +101,20 @@ const steps = [
 
 export default function HeroContent() {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   const [animate, setAnimate] = useState(false);
 
   const sectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const mq = typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+    if (!mq) return;
+    setPrefersReducedMotion(mq.matches);
+    const handler = () => setPrefersReducedMotion(mq.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   const [worksVisible, setWorksVisible] = useState(false);
   // const [chooseVisible, setChooseVisible] = useState(false);
@@ -242,17 +252,113 @@ export default function HeroContent() {
 
         {/* Logos */}
         <div className="flex justify-center mb-8">
-          <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <div className="relative">
-              <Image
-                src={socialPair}
-                alt="Social Media Icons"
-                width={150}
-                height={40}
-                className="relative z-10"
-              />
-            </div>
+          <div className="relative flex items-center justify-center gap-1">
+
+            {/* Twitter (X) Card - Far Left */}
+            <motion.div
+              initial={{
+                rotate: -14,
+                boxShadow: "0 0 12px rgba(255,255,255,0.4)",
+              }}
+              {...(prefersReducedMotion ? {} : {
+                whileHover: {
+                  scale: 1.15,
+                  y: -12,
+                  rotate: -14,
+                  boxShadow: "0 0 26px rgba(255,255,255,0.9)",
+                  zIndex: 20,
+                  transition: { type: "spring", stiffness: 320, damping: 22 },
+                },
+              })}
+              style={{ zIndex: 1 }}
+              className="relative flex items-center justify-center w-[60px] h-[60px] rounded-[18px] bg-gradient-to-br from-gray-800 to-black border-[2px] border-white cursor-default"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none rounded-[16px]"></div>
+              <svg viewBox="0 0 24 24" className="w-[28px] h-[28px] text-white" fill="currentColor" aria-hidden="true">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+              </svg>
+            </motion.div>
+
+            {/* Instagram Card - Center Left */}
+            <motion.div
+              initial={{
+                rotate: -5,
+                boxShadow: "0 0 12px rgba(225,48,108,0.5)",
+              }}
+              {...(prefersReducedMotion ? {} : {
+                whileHover: {
+                  scale: 1.15,
+                  y: -12,
+                  rotate: -5,
+                  boxShadow: "0 0 26px rgba(225,48,108,0.9)",
+                  zIndex: 20,
+                  transition: { type: "spring", stiffness: 320, damping: 22 },
+                },
+              })}
+              style={{
+                zIndex: 2,
+                background:
+                  "radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)",
+              }}
+              className="relative flex items-center justify-center w-[60px] h-[60px] rounded-[18px] border-[2px] border-white cursor-default overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none rounded-[16px]"></div>
+              <svg viewBox="0 0 24 24" className="w-[30px] h-[30px] text-white" fill="currentColor" aria-hidden="true">
+                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
+              </svg>
+            </motion.div>
+
+            {/* YouTube Card - Center Right */}
+            <motion.div
+              initial={{
+                rotate: 5,
+                boxShadow: "0 0 12px rgba(255,0,0,0.5)",
+              }}
+              {...(prefersReducedMotion ? {} : {
+                whileHover: {
+                  scale: 1.15,
+                  y: -12,
+                  rotate: 5,
+                  boxShadow: "0 0 26px rgba(255,0,0,0.9)",
+                  zIndex: 20,
+                  transition: { type: "spring", stiffness: 320, damping: 22 },
+                },
+              })}
+              style={{ zIndex: 2 }}
+              className="relative flex items-center justify-center w-[60px] h-[60px] rounded-[18px] bg-gradient-to-br from-red-600 to-red-800 border-[2px] border-white cursor-default"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none rounded-[16px]"></div>
+              {/* YouTube SVG icon */}
+              <svg viewBox="0 0 24 24" className="w-[32px] h-[32px] text-white" fill="currentColor" aria-hidden="true">
+                <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+              </svg>
+            </motion.div>
+
+            {/* TikTok Card - Far Right */}
+            <motion.div
+              initial={{
+                rotate: 14,
+                boxShadow: "0 0 12px rgba(0,242,234,0.4)",
+              }}
+              {...(prefersReducedMotion ? {} : {
+                whileHover: {
+                  scale: 1.15,
+                  y: -12,
+                  rotate: 14,
+                  boxShadow: "0 0 26px rgba(0,242,234,0.9)",
+                  zIndex: 20,
+                  transition: { type: "spring", stiffness: 320, damping: 22 },
+                },
+              })}
+              style={{ zIndex: 1 }}
+              className="relative flex items-center justify-center w-[60px] h-[60px] rounded-[18px] bg-gradient-to-br from-gray-900 to-black border-[2px] border-white cursor-default"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none rounded-[16px]"></div>
+              <svg viewBox="0 0 24 24" className="w-[28px] h-[28px] text-white" fill="currentColor" aria-hidden="true">
+                <path d="M12.53.02C13.84 0 15.14.01 16.44 0c.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.06-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.9-.32-1.98-.23-2.82.31-.81.53-1.36 1.43-1.44 2.39-.12 1.2.61 2.39 1.65 3.02.5.34 1.12.47 1.72.44.86-.03 1.69-.42 2.25-1.07.61-.7.86-1.65.86-2.58.04-4.8.02-9.59.03-14.39.01-.02.01-.03.01-.05z" />
+              </svg>
+            </motion.div>
+
           </div>
         </div>
         {/* Title */}
@@ -329,9 +435,8 @@ export default function HeroContent() {
         >
           <div className="mt-8 sm:mt-14 md:mt-20 lg:mt-40">
             <h2
-              className={`text-white text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold ${
-                animate ? "slide-up" : "opacity-0"
-              }`}
+              className={`text-white text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold ${animate ? "slide-up" : "opacity-0"
+                }`}
             >
               <span className="text-purple-400">Creative</span>{" "}
               <span className="text-orange-400">Showcase</span>
@@ -339,9 +444,8 @@ export default function HeroContent() {
 
             <div className="flex flex-col sm:flex-row items-center justify-center mt-4 gap-3 sm:gap-5 flex-wrap">
               <span
-                className={`text-gray-300 text-sm sm:text-base md:text-lg font-medium ${
-                  animate ? "slide-left" : "opacity-0"
-                }`}
+                className={`text-gray-300 text-sm sm:text-base md:text-lg font-medium ${animate ? "slide-left" : "opacity-0"
+                  }`}
                 style={{ animationDelay: "0.3s" }}
               >
                 Join 1000+ Active Creators
@@ -349,9 +453,8 @@ export default function HeroContent() {
 
               {/* Avatar Stack */}
               <div
-                className={`flex -space-x-2 sm:-space-x-3 ${
-                  animate ? "slide-up" : "opacity-0"
-                }`}
+                className={`flex -space-x-2 sm:-space-x-3 ${animate ? "slide-up" : "opacity-0"
+                  }`}
                 style={{ animationDelay: "0.6s" }}
               >
                 {[
@@ -390,20 +493,20 @@ export default function HeroContent() {
       <div className="absolute bottom-[80px] lg:bottom-[90px] left-1/2 -translate-x-1/2 z-20 w-full scroll-container">
         <div className="scroll-track">
           {[
-            { src: "/videos/SnapInsta.to_AQNd.mp4",               poster: "/images/thumb_AQNd.jpg" },
-            { src: "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4",      poster: "/images/thumb_AQMAznjnb2VYJ.jpg" },
-            { src: "/videos/SnapInsta.to_AQNxeCNjx2k.mp4",        poster: "/images/thumb_AQNxeCNjx2k.jpg" },
-            { src: "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4",      poster: "/images/thumb_AQNVKvZ3ezk6J.jpg" },
-            { src: "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4",    poster: "/images/thumb_AQPB-nUfz2at6Wa.jpg" },
-            { src: "/videos/SnapInsta.to_AQMa90k.mp4",            poster: "/images/thumb_AQMa90k.jpg" },
+            { src: "/videos/SnapInsta.to_AQNd.mp4", poster: "/images/thumb_AQNd.jpg" },
+            { src: "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4", poster: "/images/thumb_AQMAznjnb2VYJ.jpg" },
+            { src: "/videos/SnapInsta.to_AQNxeCNjx2k.mp4", poster: "/images/thumb_AQNxeCNjx2k.jpg" },
+            { src: "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4", poster: "/images/thumb_AQNVKvZ3ezk6J.jpg" },
+            { src: "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4", poster: "/images/thumb_AQPB-nUfz2at6Wa.jpg" },
+            { src: "/videos/SnapInsta.to_AQMa90k.mp4", poster: "/images/thumb_AQMa90k.jpg" },
           ]
             .concat([
-              { src: "/videos/SnapInsta.to_AQNd.mp4",               poster: "/images/thumb_AQNd.jpg" },
-              { src: "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4",      poster: "/images/thumb_AQMAznjnb2VYJ.jpg" },
-              { src: "/videos/SnapInsta.to_AQNxeCNjx2k.mp4",        poster: "/images/thumb_AQNxeCNjx2k.jpg" },
-              { src: "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4",      poster: "/images/thumb_AQNVKvZ3ezk6J.jpg" },
-              { src: "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4",    poster: "/images/thumb_AQPB-nUfz2at6Wa.jpg" },
-              { src: "/videos/SnapInsta.to_AQMa90k.mp4",            poster: "/images/thumb_AQMa90k.jpg" },
+              { src: "/videos/SnapInsta.to_AQNd.mp4", poster: "/images/thumb_AQNd.jpg" },
+              { src: "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4", poster: "/images/thumb_AQMAznjnb2VYJ.jpg" },
+              { src: "/videos/SnapInsta.to_AQNxeCNjx2k.mp4", poster: "/images/thumb_AQNxeCNjx2k.jpg" },
+              { src: "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4", poster: "/images/thumb_AQNVKvZ3ezk6J.jpg" },
+              { src: "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4", poster: "/images/thumb_AQPB-nUfz2at6Wa.jpg" },
+              { src: "/videos/SnapInsta.to_AQMa90k.mp4", poster: "/images/thumb_AQMa90k.jpg" },
             ]) // duplicate videos for seamless loop
             .map(({ src, poster }, idx) => (
               <div
@@ -447,9 +550,8 @@ export default function HeroContent() {
 
           {/* Title */}
           <h2
-            className={`text-center text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold mb-4 leading-snug ${
-              worksVisible ? "slide-up" : "opacity-0"
-            }`}
+            className={`text-center text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold mb-4 leading-snug ${worksVisible ? "slide-up" : "opacity-0"
+              }`}
           >
             How <span className="text-purple-400">Game</span> of{" "}
             <span className="text-orange-400">Creators</span> Works
@@ -457,9 +559,8 @@ export default function HeroContent() {
 
           {/* Subtitle */}
           <p
-            className={`text-center text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto mb-8 md:mb-12 px-2 ${
-              worksVisible ? "slide-left" : "opacity-0"
-            }`}
+            className={`text-center text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto mb-8 md:mb-12 px-2 ${worksVisible ? "slide-left" : "opacity-0"
+              }`}
           >
             Three simple steps to launch your viral marketing campaign and
             dominate the game
@@ -550,9 +651,8 @@ export default function HeroContent() {
                 key={index}
                 onClick={() => setActiveIndex(index)}
                 aria-label={`Go to step ${index + 1}`}
-                className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-colors ${
-                  activeIndex === index ? "bg-purple-600" : "bg-gray-600"
-                }`}
+                className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-colors ${activeIndex === index ? "bg-purple-600" : "bg-gray-600"
+                  }`}
               ></button>
             ))}
           </div>
@@ -580,9 +680,8 @@ export default function HeroContent() {
                 Reasons to Select Us
               </button> */}
             <h2
-              className={`text-2xl sm:text-3xl md:text-5xl font-bold mb-4 leading-snug ${
-                reasonsVisible ? "slide-up" : "opacity-0"
-              }`}
+              className={`text-2xl sm:text-3xl md:text-5xl font-bold mb-4 leading-snug ${reasonsVisible ? "slide-up" : "opacity-0"
+                }`}
             >
               Why Choose{" "}
               <span className="bg-gradient-to-r from-purple-500 to-orange-400 bg-clip-text text-transparent">
@@ -590,9 +689,8 @@ export default function HeroContent() {
               </span>
             </h2>
             <p
-              className={`text-gray-300 text-base sm:text-lg md:text-xl ${
-                reasonsVisible ? "slide-left" : "opacity-0"
-              }`}
+              className={`text-gray-300 text-base sm:text-lg md:text-xl ${reasonsVisible ? "slide-left" : "opacity-0"
+                }`}
             >
               We're not just a platform – we're your competitive advantage in
               the creator economy.

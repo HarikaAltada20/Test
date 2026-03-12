@@ -80,6 +80,7 @@
     "dayjs": "^1.11.13",
     "dotenv": "^16.4.7",
     "embla-carousel-react": "8.5.1",
+    "framer-motion": "^12.35.0",
     "googleapis": "^148.0.0",
     "i18n-iso-countries": "^7.14.0",
     "input-otp": "1.4.1",

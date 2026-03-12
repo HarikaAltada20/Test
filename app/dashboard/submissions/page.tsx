@@ -44,7 +44,7 @@ export default async function SubmissionsPage() {
     console.error("Error fetching submissions:", submissionsError.message);
     return (
       // <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
-        <SubmissionsClient initialSubmissions={[]} fetchError={submissionsError.message} />
+      <SubmissionsClient initialSubmissions={[]} fetchError={submissionsError.message} />
       // </RouteGuard>
     );
   }
@@ -57,16 +57,37 @@ export default async function SubmissionsPage() {
     const contestIds = [...new Set(submissionsToFormat.map(sub => sub.contest_id).filter(Boolean))];
 
     if (contestIds.length > 0) {
-      const { data: fetchedContests } = await supabase
+      // 1. Fetch Contest basic data
+      const { data: fetchedContests, error: contestsError } = await supabase
         .from("contests")
-        .select("id, title, contest_type, contest_based_details, end_date, post_contest_status")
+        .select("id, title, contest_type, contest_based_details, bonus_details, end_date, post_contest_status, thumbnail_url, platform, advertiser_id")
         .in("id", contestIds);
 
-      contestsData = fetchedContests || [];
+      if (contestsError) {
+        console.error("Error fetching contests:", contestsError);
+      } else {
+        contestsData = fetchedContests || [];
+
+        // 2. Fetch Advertiser Profiles safely
+        const advertiserIds = [...new Set(contestsData.map(c => c.advertiser_id).filter(Boolean))];
+        if (advertiserIds.length > 0) {
+          const { data: profileData } = await supabase
+            .from("advertiser_profiles")
+            .select("id, company_name")
+            .in("id", advertiserIds);
+
+          if (profileData) {
+            const profilesMap = new Map(profileData.map(p => [p.id, p]));
+            contestsData = contestsData.map(c => ({
+              ...c,
+              advertiser_profiles: profilesMap.get(c.advertiser_id) || null
+            }));
+          }
+        }
+      }
     }
   } catch (error) {
-    console.warn("Could not fetch contest details:", error);
-    // Continue without contest data if there's an error
+    console.error("Unexpected error in contest fetch:", error);
   }
 
   // Create a map of contests for quick lookup
@@ -74,6 +95,7 @@ export default async function SubmissionsPage() {
   contestsData.forEach(contest => {
     contestsMap.set(contest.id, contest);
   });
+
 
   const formattedSubmissions = submissionsToFormat.map(sub => ({
     ...sub,
@@ -89,9 +111,9 @@ export default async function SubmissionsPage() {
 
   return (
     // <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
-      <SubmissionsClient
-        initialSubmissions={(formattedSubmissions as SubmissionWithContest[]) || []}
-      />
+    <SubmissionsClient
+      initialSubmissions={(formattedSubmissions as SubmissionWithContest[]) || []}
+    />
     // </RouteGuard>
   );
 }

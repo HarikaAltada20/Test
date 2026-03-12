@@ -282,8 +282,10 @@ export function ContestClientPage({
     }>
   >([]);
   const tabs = useMemo(() => getTabs(contest?.platform), [contest?.platform]);
+  const tabFromUrl = searchParams.get("tab");
+  const initialTab = tabFromUrl === "leaderboard" ? "leaderboard" : "details";
   const { activeTab, setActiveTab } = useTabState(tabs, {
-    defaultTab: "details",
+    defaultTab: initialTab,
   });
 
   // Analytics tab filter state
