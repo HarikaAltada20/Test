@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import ContestDetailClient from "../../../contests/[id]/contest-detail-client";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 
 export default async function AdminContestDetailPage({
@@ -76,6 +77,8 @@ export default async function AdminContestDetailPage({
         views, 
         earnings,
         other_stats,
+        insights_status,
+        last_insights_update,
         platform,
         video_thumbnail_url,
         video_title,
@@ -213,11 +216,7 @@ export default async function AdminContestDetailPage({
             : "No tweets found"
         );
       }
-    } else {
-      console.log(
-        `[Admin page.tsx] Not a Twitter campaign - skipping Twitter tweets fetch`
-      );
-    }
+    } 
 
     // For Twitter campaigns, fetch creator-level leaderboard data from twitter_campaign_leaderboard
     let creatorModerationData: Record<
@@ -619,6 +618,8 @@ export default async function AdminContestDetailPage({
             views: sub.views,
             earnings: sub.earnings,
             other_stats: sub.other_stats,
+            insights_status: (sub as any).insights_status ?? null,
+            last_insights_update: (sub as any).last_insights_update ?? null,
             platform: sub.platform,
             video_thumbnail_url: sub.video_thumbnail_url,
             video_title: sub.video_title,
@@ -646,22 +647,10 @@ export default async function AdminContestDetailPage({
     // Combine regular submissions and Twitter tweets
     const allSubmissions: any[] = [...submissions, ...twitterSubmissions];
 
-    console.log(
-      `[Admin page.tsx] Mapped submissions for contest ${contestId}:`,
-      {
-        regular: submissions.length,
-        twitter: twitterSubmissions.length,
-        total: allSubmissions.length,
-        isTwitterCampaign,
-        platform: contestData.platform,
-        contest_format: contestData.contest_format,
-        sampleTwitterSubmission:
-          twitterSubmissions.length > 0 ? twitterSubmissions[0] : null,
-      }
-    );
+
 
     return (
-      <>
+      <TooltipProvider>
         <div className="mb-4">
           <a
             href={`/dashboard/admin/affiliate/${contestId}`}
@@ -678,7 +667,7 @@ export default async function AdminContestDetailPage({
           isAdminView={true}
           creatorModerationData={creatorModerationData}
         />
-      </>
+      </TooltipProvider>
     );
   } catch (error) {
     console.error("Error in admin contest detail page:", error);

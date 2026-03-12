@@ -725,6 +725,55 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
       }
     }
 
+    // Decide if this new subscription should automatically cancel at the end of
+    // the first billing period (trial or one-time 100% coupon), unless it is
+    // explicitly configured as an "infinite free" coupon in Stripe metadata.
+    try {
+      const item = subscription.items?.data?.[0];
+      const price = item?.price;
+      const unitAmount: number = price?.unit_amount ?? 0;
+      const hasTrial = Boolean(subscription.trial_end);
+      const discount = subscription.discount as any | null;
+      const coupon = discount?.coupon as any | null;
+
+      const isInfiniteFreeCoupon =
+        coupon?.metadata?.infinite_free === "true" ||
+        coupon?.metadata?.infinite_free === "1";
+
+      let isFullDiscountCoupon = false;
+      if (coupon && unitAmount > 0) {
+        if (
+          typeof coupon.percent_off === "number" &&
+          coupon.percent_off === 100
+        ) {
+          isFullDiscountCoupon = true;
+        } else if (
+          typeof coupon.amount_off === "number" &&
+          coupon.amount_off >= unitAmount
+        ) {
+          isFullDiscountCoupon = true;
+        }
+      }
+
+      const shouldAutoCancel =
+        unitAmount > 0 && !isInfiniteFreeCoupon && (hasTrial || isFullDiscountCoupon);
+
+      if (shouldAutoCancel && !subscription.cancel_at_period_end) {
+        console.log(
+          `⚙️ Setting subscription ${subscription.id} to cancel at period end (trial/one-time free month).`
+        );
+        const updated = await stripe().subscriptions.update(subscription.id, {
+          cancel_at_period_end: true,
+        });
+        subscription.cancel_at_period_end = updated.cancel_at_period_end;
+      }
+    } catch (autoCancelError) {
+      console.error(
+        "❌ Error configuring auto-cancel behavior for subscription:",
+        autoCancelError
+      );
+    }
+
     // Handle period start/end with proper constraint logic
     const currentTime = new Date();
     const periodStart = safeTimestamp(subscription.current_period_start, true);

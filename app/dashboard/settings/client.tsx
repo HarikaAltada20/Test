@@ -98,6 +98,7 @@ interface SocialAccount {
   followers_count?: number;
   follows_count?: number;
   media_count?: number;
+  needs_reconnect?: boolean; // Set when token/connection failed; user should reconnect
 }
 
 interface CreatorProfile {
@@ -1644,9 +1645,15 @@ export default function SettingsPage({
                             " "
                           )}
                           )
-                          <span className="ml-2 text-green-600 text-xs">
-                            ✓ Active
-                          </span>
+                          {instagramAccount?.needs_reconnect ? (
+                            <span className="ml-2 text-amber-600 text-xs">
+                              Needs reconnect
+                            </span>
+                          ) : (
+                            <span className="ml-2 text-green-600 text-xs">
+                              ✓ Active
+                            </span>
+                          )}
                         </p>
                       </div>
                     ) : (
@@ -1657,17 +1664,32 @@ export default function SettingsPage({
                   </div>
                 </div>
                 {instagramConnected ? (
-                  <Button
-                    variant="outline"
-                    className="bg-[#C90808] text-white"
-                    onClick={handleInstagramDisconnect}
-                    disabled={isLoading}
-                  >
-                    {isLoading && (
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  <>
+                    <Button
+                      variant="outline"
+                      className="bg-[#C90808] text-white"
+                      onClick={handleInstagramDisconnect}
+                      disabled={isLoading}
+                    >
+                      {isLoading && (
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      Disconnect
+                    </Button>
+                    {instagramAccount?.needs_reconnect && (
+                      <Button
+                        onClick={handleInstagramConnect}
+                        disabled={isLoading}
+                        variant="default"
+                        className="ml-2"
+                      >
+                        {isLoading && (
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Reconnect Instagram
+                      </Button>
                     )}
-                    Disconnect
-                  </Button>
+                  </>
                 ) : (
                   <Button onClick={handleInstagramConnect} disabled={isLoading}>
                     {isLoading && (
@@ -1677,6 +1699,23 @@ export default function SettingsPage({
                   </Button>
                 )}
               </div>
+
+              {/* Instagram needs reconnect - connected but token/connection failed */}
+              {instagramConnected && instagramAccount?.needs_reconnect && (
+                <Alert
+                  variant="destructive"
+                  className="mt-2 border-amber-500/50 bg-amber-500/10"
+                >
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-sm leading-relaxed">
+                    Your Instagram connection needs to be reconnected. We
+                    couldn&apos;t fetch your insights (e.g. expired token or
+                    disconnected account). Please click{" "}
+                    <strong>Reconnect Instagram</strong> above to reconnect and
+                    restore insights for your submissions.
+                  </AlertDescription>
+                </Alert>
+              )}
 
               {/* Instagram Connection Information - Display if not connected */}
               {!instagramConnected && (

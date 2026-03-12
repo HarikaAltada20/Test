@@ -1,14 +1,19 @@
-import { createClient } from '@/utils/supabase/server';
-import { stripe } from './stripe';
-import { formatCurrencyFromCents } from './currency-utils';
-import { subscriptionPlans, getPlanByProductId, getPlanByName, getPriceId } from '@/constants/subscriptionPlans';
+import { createClient } from "@/utils/supabase/server";
+import { stripe } from "./stripe";
+import { formatCurrencyFromCents } from "./currency-utils";
+import {
+  subscriptionPlans,
+  getPlanByProductId,
+  getPlanByName,
+  getPriceId,
+} from "@/constants/subscriptionPlans";
 import type {
-SubscriptionPlan,
-UserSubscription,
-SubscriptionPayment,
-SubscriptionUpgradeOptions,
-CreateSubscriptionParams
-} from './subscription-types';
+  SubscriptionPlan,
+  UserSubscription,
+  SubscriptionPayment,
+  SubscriptionUpgradeOptions,
+  CreateSubscriptionParams,
+} from "./subscription-types";
 
 // Re-export types from the types file for backward compatibility
 export type {
@@ -20,124 +25,224 @@ CreateSubscriptionParams
 } from './subscription-types';
 
 // Get subscription plan by product ID (from constants - faster than DB)
-export function getSubscriptionPlanById(productId: string): SubscriptionPlan | null {
-const plan = getPlanByProductId(productId);
-return plan || null;
+export function getSubscriptionPlanById(
+  productId: string
+): SubscriptionPlan | null {
+  const plan = getPlanByProductId(productId);
+  return plan || null;
 }
 
 // Get subscription plan by name (from constants)
-export function getSubscriptionPlanByName(planName: string): SubscriptionPlan | null {
-const plan = getPlanByName(planName);
-return plan || null;
+export function getSubscriptionPlanByName(
+  planName: string
+): SubscriptionPlan | null {
+  const plan = getPlanByName(planName);
+  return plan || null;
 }
 
 // Get all subscription plans (from constants)
 export function getAllSubscriptionPlans(): SubscriptionPlan[] {
-return subscriptionPlans;
+  return subscriptionPlans;
 }
 
 // Note: convertDbPlanToSubscriptionPlan function removed as we now use constants instead of database
 
 // Check if plan is free
 export function isFreePlan(productId: string): boolean {
-const plan = getSubscriptionPlanById(productId);
-return plan?.price === 0;
+  const plan = getSubscriptionPlanById(productId);
+  return plan?.price === 0;
+}
+
+/**
+ * Check if a user has EVER had a paid subscription (lifetime).
+ *
+ * "Paid" here means the Stripe price for the subscription had unit_amount > 0,
+ * even if the first invoice was discounted to 0 via a coupon or promotion code.
+ *
+ * This is used to ensure that free trials are truly one‑time: once a user has
+ * ever been on any paid plan (even via a fully‑discounted first period),
+ * they are no longer eligible for plan‑level free trials.
+ */
+export async function hasUserEverHadPaidSubscription(
+  userId: string
+): Promise<boolean> {
+  const supabase = await createClient();
+
+  // Look for any historical subscription rows for this user that point to a
+  // paid Stripe price. We include canceled and past states as well to capture
+  // previous paid plans, not just the current one.
+  const {
+    data: subRow,
+    error: subError,
+  } = await supabase
+    .from("subscriptions")
+    .select("id, price_id")
+    .eq("user_id", userId)
+    .in("status", [
+      "active",
+      "trialing",
+      "past_due",
+      "canceled",
+      "unpaid",
+      "incomplete",
+      "incomplete_expired",
+    ])
+    .order("created", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (subError) {
+    // PGRST116 just means "no rows" – i.e. truly new user
+    if ((subError as any).code !== "PGRST116") {
+      console.error(
+        "Error checking historical subscriptions for user:",
+        userId,
+        subError
+      );
+    }
+    return false;
+  }
+
+  if (!subRow?.price_id) {
+    return false;
+  }
+
+  const {
+    data: priceRow,
+    error: priceError,
+  } = await supabase
+    .from("prices")
+    .select("unit_amount")
+    .eq("id", subRow.price_id)
+    .single();
+
+  if (priceError) {
+    if ((priceError as any).code !== "PGRST116") {
+      console.error(
+        "Error fetching price for historical subscription:",
+        subRow.price_id,
+        priceError
+      );
+    }
+    return false;
+  }
+
+  const unitAmount = priceRow?.unit_amount ?? 0;
+  return unitAmount > 0;
 }
 
 // Get user's current subscription from new database structure
 export async function getUserSubscription(userId: string): Promise<UserSubscription | null> {
-const supabase = await createClient();
+  const supabase = await createClient();
 
-// First, get subscription info from advertiser_profiles
-const { data: profileData, error: profileError } = await supabase
-.from('advertiser_profiles')
-.select('subscription_info')
-.eq('id', userId)
-.single();
+  // First, get subscription info from advertiser_profiles
+  const { data: profileData, error: profileError } = await supabase
+    .from("advertiser_profiles")
+    .select("subscription_info")
+    .eq("id", userId)
+    .single();
 
-if (profileError) {
-// PGRST116 just means no subscription found - this is normal for new users
-if (profileError.code !== 'PGRST116') {
-console.error('Error fetching subscription info:', profileError);
-} else {
-// This is expected - user has no subscription yet
-console.log('User has no subscription yet (PGRST116) - this is normal');
-}
-return null;
-}
+  if (profileError) {
+    // PGRST116 just means no subscription found - this is normal for new users
+    if (profileError.code !== "PGRST116") {
+      console.error("Error fetching subscription info:", profileError);
+    } else {
+      // This is expected - user has no subscription yet
+      console.log(
+        "User has no subscription yet (PGRST116) - this is normal"
+      );
+    }
+    return null;
+  }
 
-if (!profileData?.subscription_info) {
-console.log('User has no subscription_info in profile - this is normal for new users');
-return null;
-}
+  if (!profileData?.subscription_info) {
+    console.log(
+      "User has no subscription_info in profile - this is normal for new users"
+    );
+    return null;
+  }
 
-const subscriptionInfo = profileData.subscription_info;
+  const subscriptionInfo = profileData.subscription_info;
 
-// Handle free plans (no Stripe subscription)
-if (!subscriptionInfo.subscription_id || subscriptionInfo.subscription_id === 'free-plan') {
-// For free plans, create a virtual subscription object
-const freePlan = getSubscriptionPlanById(subscriptionInfo.product_id);
-if (!freePlan || freePlan.price > 0) {
-console.error('Invalid free plan configuration:', subscriptionInfo.product_id);
-return null;
-}
+  // Handle free plans (no Stripe subscription)
+  if (
+    !subscriptionInfo.subscription_id ||
+    subscriptionInfo.subscription_id === "free-plan"
+  ) {
+    // For free plans, create a virtual subscription object
+    const freePlan = getSubscriptionPlanById(subscriptionInfo.product_id);
+    if (!freePlan || freePlan.price > 0) {
+      console.error(
+        "Invalid free plan configuration:",
+        subscriptionInfo.product_id
+      );
+      return null;
+    }
 
-return {
-id: 'free-plan',
-user_id: userId,
-product_id: subscriptionInfo.product_id,
-price_id: subscriptionInfo.price_id,
-status: 'active',
-current_period_start: new Date(),
-current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days (monthly) for free plan
-cancel_at_period_end: false,
-trial_start: undefined,
-trial_end: undefined,
-subscription_info: subscriptionInfo,
-created_at: new Date(),
-updated_at: new Date()
-};
-}
+    return {
+      id: "free-plan",
+      user_id: userId,
+      product_id: subscriptionInfo.product_id,
+      price_id: subscriptionInfo.price_id,
+      status: "active",
+      current_period_start: new Date(),
+      current_period_end: new Date(
+        Date.now() + 30 * 24 * 60 * 60 * 1000
+      ), // 30 days (monthly) for free plan
+      cancel_at_period_end: false,
+      trial_start: undefined,
+      trial_end: undefined,
+      subscription_info: subscriptionInfo,
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
+  }
 
-// Get full subscription details from subscriptions table for paid plans
-const { data: subscription, error: subError } = await supabase
-.from('subscriptions')
-.select('*')
-.eq('id', subscriptionInfo.subscription_id)
-.eq('user_id', userId)
-.single();
+  // Get full subscription details from subscriptions table for paid plans
+  const { data: subscription, error: subError } = await supabase
+    .from("subscriptions")
+    .select("*")
+    .eq("id", subscriptionInfo.subscription_id)
+    .eq("user_id", userId)
+    .single();
 
-if (subError) {
-// PGRST116 means subscription not found in subscriptions table
-if (subError.code === 'PGRST116') {
-console.log('Subscription not found in subscriptions table - this might be a data inconsistency');
-return null;
-} else {
-console.error('Error fetching subscription details:', subError);
-return null;
-}
-}
+  if (subError) {
+    // PGRST116 means subscription not found in subscriptions table
+    if (subError.code === "PGRST116") {
+      console.log(
+        "Subscription not found in subscriptions table - this might be a data inconsistency"
+      );
+      return null;
+    } else {
+      console.error("Error fetching subscription details:", subError);
+      return null;
+    }
+  }
 
-if (!subscription) {
-console.log('No subscription data returned');
-return null;
-}
+  if (!subscription) {
+    console.log("No subscription data returned");
+    return null;
+  }
 
-return {
-id: subscription.id,
-user_id: subscription.user_id,
-product_id: subscriptionInfo.product_id,
-price_id: subscription.price_id,
-status: subscription.status,
-current_period_start: new Date(subscription.current_period_start),
-current_period_end: new Date(subscription.current_period_end),
-cancel_at_period_end: subscription.cancel_at_period_end,
-trial_start: subscription.trial_start ? new Date(subscription.trial_start) : undefined,
-trial_end: subscription.trial_end ? new Date(subscription.trial_end) : undefined,
-subscription_info: subscriptionInfo,
-created_at: new Date(subscription.created),
-updated_at: new Date(subscription.updated)
-};
+  return {
+    id: subscription.id,
+    user_id: subscription.user_id,
+    product_id: subscriptionInfo.product_id,
+    price_id: subscription.price_id,
+    status: subscription.status,
+    current_period_start: new Date(subscription.current_period_start),
+    current_period_end: new Date(subscription.current_period_end),
+    cancel_at_period_end: subscription.cancel_at_period_end,
+    trial_start: subscription.trial_start
+      ? new Date(subscription.trial_start)
+      : undefined,
+    trial_end: subscription.trial_end
+      ? new Date(subscription.trial_end)
+      : undefined,
+    subscription_info: subscriptionInfo,
+    created_at: new Date(subscription.created),
+    updated_at: new Date(subscription.updated),
+  };
 }
 
 // Get user's plan features from subscription_info

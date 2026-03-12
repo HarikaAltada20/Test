@@ -43,6 +43,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
@@ -77,6 +82,7 @@ interface Submission {
   manual_points_reason?: string | null;
   tweet_id?: string;
   filter_status?: string | null;
+  insights_status?: "ok" | "temporary_failure" | "permanent_failure" | null;
 }
 
 interface CreatorSubmissionsModalProps {
@@ -535,6 +541,44 @@ export function CreatorSubmissionsModal({
 
   const isInstagramContest =
     contest?.platform?.toLowerCase().includes("instagram") ?? false;
+
+  const getInsightsMeta = (
+    status: Submission["insights_status"],
+  ): { help: string; dotClass: string; pillClass: string } => {
+    const isDark = mode === "dark";
+    if (status === "ok") {
+      return {
+        help: "Insights fetched successfully",
+        dotClass: "bg-emerald-500",
+        pillClass: isDark
+          ? "border-emerald-700/60 bg-emerald-950/40"
+          : "border-emerald-200 bg-emerald-50",
+      };
+    }
+    if (status === "temporary_failure") {
+      return {
+        help: "Temporary error fetching insights\nWill retry later",
+        dotClass: "bg-amber-400",
+        pillClass: isDark
+          ? "border-amber-700/60 bg-amber-950/35"
+          : "border-amber-200 bg-amber-50",
+      };
+    }
+    if (status === "permanent_failure") {
+      return {
+        help: "Instagram insights cannot be fetched for this post",
+        dotClass: "bg-rose-500",
+        pillClass: isDark
+          ? "border-rose-700/60 bg-rose-950/35"
+          : "border-rose-200 bg-rose-50",
+      };
+    }
+    return {
+      help: "Never refreshed yet",
+      dotClass: "bg-slate-400",
+      pillClass: isDark ? "border-slate-600 bg-slate-900/30" : "border-slate-200 bg-slate-50",
+    };
+  };
 
   const formatMetricValue = (value: any) => {
     if (value === null || value === undefined || value === "") return "-";
@@ -1410,6 +1454,16 @@ export function CreatorSubmissionsModal({
                       </TableHead>
                     </>
                   )}
+                  {isAdminView && isInstagramContest && (
+                    <TableHead
+                      className={cn(
+                        "text-center",
+                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                      )}
+                    >
+                      Insights status
+                    </TableHead>
+                  )}
                   <TableHead
                     className={cn(
                       "text-center",
@@ -1448,6 +1502,7 @@ export function CreatorSubmissionsModal({
                             (isInstagramContest ? 6 : 0) + // Shares, Saves, Reach, Interactions, Avg Watch Time, Total Watch Time
                             2 + // Expected Reward, Reward Granted
                             (hasBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
+                            (isAdminView && isInstagramContest ? 1 : 0) + // Insights status (admin only)
                             3 // Status, Submitted, Actions
                       }
                       className={cn(
@@ -2057,6 +2112,39 @@ export function CreatorSubmissionsModal({
                                 : "-"}
                             </TableCell>
                           </>
+                        )}
+                        {isAdminView && isInstagramContest && (
+                          <TableCell className="text-center">
+                            {(() => {
+                              const meta = getInsightsMeta(
+                                submission.insights_status ?? null,
+                              );
+                              return (
+                                <div className="flex items-center justify-center">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span
+                                        className={cn(
+                                          "inline-flex items-center justify-center rounded-full border px-2 py-1",
+                                          meta.pillClass,
+                                        )}
+                                      >
+                                        <span
+                                          className={cn(
+                                            "h-2.5 w-2.5 rounded-full",
+                                            meta.dotClass,
+                                          )}
+                                        />
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="whitespace-pre-line">
+                                      {meta.help}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
                         )}
                         <TableCell>
                           {getStatusBadge(normalizedStatus, submission.paid)}
