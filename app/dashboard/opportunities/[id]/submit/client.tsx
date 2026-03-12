@@ -61,7 +61,7 @@ import { cn } from "@/lib/utils";
 //   - 1 week: SUBMISSION_WINDOW_VALUE = 1, SUBMISSION_WINDOW_UNIT = 'week'
 // Adjust the submission window value
 const SUBMISSION_WINDOW_VALUE: number = 2;
-const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "years";
+const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "days";
 
 // Auto-generate display text and handle singular/plural forms
 const IS_SUBMISSION_WINDOW_SINGULAR: boolean = SUBMISSION_WINDOW_VALUE === 1;
