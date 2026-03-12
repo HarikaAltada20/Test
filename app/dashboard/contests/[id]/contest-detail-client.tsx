@@ -13019,15 +13019,7 @@ export default function ContestDetailClient({
                                         currentContest.platform?.toLowerCase() ===
                                         "x") &&
                                       currentContest.contest_format ===
-                                      ((currentContest.contest_type ===
-                                        "leaderboard" ||
-                                        currentContest.contest_type === "cpm") &&
-                                        (currentContest.platform?.toLowerCase() ===
-                                          "twitter" ||
-                                          currentContest.platform?.toLowerCase() ===
-                                          "x") &&
-                                        currentContest.contest_format ===
-                                        "text_image") ? (
+                                      "text_image") ? (
                                       <>
                                         {(currentContest.platform
                                           ?.toLowerCase()
