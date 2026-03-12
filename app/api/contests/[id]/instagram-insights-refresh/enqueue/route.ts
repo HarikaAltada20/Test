@@ -48,7 +48,7 @@ export async function POST(
 
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
-      .select("id, platform, advertiser_id, views_locked_at")
+      .select("id, platform, advertiser_id, views_locked_at, post_contest_status")
       .eq("id", contestId)
       .single();
 
@@ -64,6 +64,17 @@ export async function POST(
     if (contest.views_locked_at) {
       return NextResponse.json(
         { error: "Contest is finalized; refresh not allowed" },
+        { status: 400 }
+      );
+    }
+    // Hard lock: once in review, verification complete, or payouts processed, do not refresh
+    if (
+      contest.post_contest_status === "in_review" ||
+      contest.post_contest_status === "verification_complete" ||
+      contest.post_contest_status === "payouts_processed"
+    ) {
+      return NextResponse.json(
+        { error: "Metrics are locked after contest review begins. No further refresh allowed." },
         { status: 400 }
       );
     }

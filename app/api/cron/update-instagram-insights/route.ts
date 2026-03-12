@@ -333,7 +333,7 @@ export async function GET(request: Request) {
     if (contestId) {
       const { data: c } = await supabaseAdmin
         .from("contests")
-        .select("id, views_locked_at")
+        .select("id, views_locked_at, post_contest_status")
         .eq("id", contestId)
         .single();
       if (!c || c.views_locked_at) {
@@ -341,11 +341,22 @@ export async function GET(request: Request) {
           message: `Contest ${contestId} is finalized or not found; nothing to update`,
         });
       }
+      if (
+        c.post_contest_status === "in_review" ||
+        c.post_contest_status === "verification_complete" ||
+        c.post_contest_status === "payouts_processed"
+      ) {
+        return NextResponse.json({
+          message: `Contest ${contestId} is locked for review; nothing to update`,
+        });
+      }
     } else {
       const { data: activeContests } = await supabaseAdmin
         .from("contests")
-        .select("id")
-        .is("views_locked_at", null);
+        .select("id, post_contest_status")
+        .is("views_locked_at", null)
+        // Only refresh while pending_review (or unset)
+        .or("post_contest_status.is.null,post_contest_status.eq.pending_review");
       activeIds = (activeContests || []).map((c: any) => c.id);
       if (!activeIds.length) {
         return NextResponse.json({ message: "No active contests to update" });
