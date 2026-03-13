@@ -816,6 +816,7 @@ export default function ContestDetailClient({
 
     // Apply status tab filter
     if (activeStatusTab !== "all") {
+      // Not Rejected: include all except rejected
       if (activeStatusTab === "not_rejected") {
         if (status === "rejected") return false;
       } else if (activeStatusTab === "verified_or_paid") {
@@ -10407,7 +10408,7 @@ export default function ContestDetailClient({
                             : "text-slate-900",
                       );
                     return (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 py-3">
                     {/* Always show reward cards */}
                     <div className={cardClass}>
                       <p className={labelClass}>Expected Reward</p>

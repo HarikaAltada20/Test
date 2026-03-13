@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { creditCreatorWithdrawableBalance } from "@/lib/payment-utils";
+import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 
 export async function POST(request: NextRequest) {
   const supabaseAdmin = await createClient();
@@ -284,12 +285,9 @@ export async function POST(request: NextRequest) {
         // Apply contest-level adjustment to CPM (reward) if configured
         const adjustedSubmissionEarnings =
           shouldAdjustReward && submissionEarnings > 0
-            ? Math.max(
-                0,
-                Math.round(
-                  submissionEarnings *
-                    ((100 - payoutAdjustmentPercentage) / 100),
-                ),
+            ? applyPayoutAdjustment(
+                submissionEarnings,
+                payoutAdjustmentPercentage,
               )
             : submissionEarnings;
 
@@ -325,26 +323,24 @@ export async function POST(request: NextRequest) {
 
       // Add to breakdown
       const finalCpmAmount =
-        payment_type !== "bonus" ? (shouldAdjustReward
-          ? Math.max(
-              0,
-              Math.round(
-                submissionEarnings *
-                  ((100 - payoutAdjustmentPercentage) / 100),
-              ),
-            )
-          : submissionEarnings) : 0;
+        payment_type !== "bonus"
+          ? shouldAdjustReward
+            ? applyPayoutAdjustment(
+                submissionEarnings,
+                payoutAdjustmentPercentage,
+              )
+            : submissionEarnings
+          : 0;
 
       const finalBonusAmount =
-        payment_type !== "standard" ? (shouldAdjustBonus
-          ? Math.max(
-              0,
-              Math.round(
-                submissionBonus *
-                  ((100 - payoutAdjustmentPercentage) / 100),
-              ),
-            )
-          : submissionBonus) : 0;
+        payment_type !== "standard"
+          ? shouldAdjustBonus
+            ? applyPayoutAdjustment(
+                submissionBonus,
+                payoutAdjustmentPercentage,
+              )
+            : submissionBonus
+          : 0;
 
       if (finalCpmAmount > 0 || finalBonusAmount > 0) {
         breakdown.push({

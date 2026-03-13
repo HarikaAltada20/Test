@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 
 interface Creator {
   id: string;
@@ -334,6 +335,8 @@ export function CreatorSubmissionsModal({
           return;
         }
 
+        setSelectedSubmissions(new Set());
+
         // Show detailed success message
         const { data } = result;
         const message = [
@@ -395,12 +398,10 @@ export function CreatorSubmissionsModal({
           description: `Successfully paid ${successCount} submission(s).`,
           variant: "default",
         });
+        setSelectedSubmissions(new Set());
       }
       window.location.reload();
     }
-
-    // Clear selection
-    setSelectedSubmissions(new Set());
     } finally {
       setBulkPaymentLoading(false);
     }
@@ -1637,13 +1638,10 @@ export function CreatorSubmissionsModal({
                     const expectedReward =
                       expectedRewardsMap.get(submission.id) || 0;
                     const adjustedExpectedReward = shouldAdjustReward
-                      ? Math.max(
-                        0,
-                        Math.round(
-                          expectedReward *
-                          ((100 - payoutAdjustmentPercentage) / 100),
-                        ),
-                      )
+                      ? applyPayoutAdjustment(
+                          expectedReward,
+                          payoutAdjustmentPercentage,
+                        )
                       : expectedReward;
                     let expectedRewardForDisplay = expectedReward;
 
@@ -1679,13 +1677,10 @@ export function CreatorSubmissionsModal({
                     const expectedBonus =
                       expectedBonusMap.get(submission.id) || 0;
                     const adjustedExpectedBonus = shouldAdjustBonus
-                      ? Math.max(
-                        0,
-                        Math.round(
-                          expectedBonus *
-                          ((100 - payoutAdjustmentPercentage) / 100),
-                        ),
-                      )
+                      ? applyPayoutAdjustment(
+                          expectedBonus,
+                          payoutAdjustmentPercentage,
+                        )
                       : expectedBonus;
                     // Use actual bonus_amount from database if available
                     const grantedBonus = submission.bonus_paid
