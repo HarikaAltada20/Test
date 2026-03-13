@@ -4,9 +4,9 @@
       "path": "/api/cron/update-youtube-metrics",
       "schedule": "0 1 * * *"
     },
-     {
+    {
       "path": "/api/cron/trigger-instagram-refresh",
-      "schedule": "0 2 * * *"
+      "schedule": "*/5 * * * *"
     }
   ]
 }
