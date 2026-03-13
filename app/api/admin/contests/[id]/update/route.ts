@@ -51,6 +51,8 @@ export async function POST(
       "content_type",
       "bonus_details",
       "max_earnings_per_creator",
+      "payout_adjustment_percentage",
+      "payout_adjustment_mode",
     ]);
 
     const updateData: Record<string, any> = {};

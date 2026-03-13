@@ -113,6 +113,29 @@ export async function POST(request: NextRequest) {
 
     const maxEarnings = contest.max_earnings_per_creator || null;
 
+    // Simple contest-level payout adjustment (percentage + mode)
+    const payoutAdjustmentPercentage =
+      typeof contest.payout_adjustment_percentage === "number"
+        ? contest.payout_adjustment_percentage
+        : typeof contest.payout_adjustment_percentage === "string"
+          ? parseFloat(contest.payout_adjustment_percentage) || 0
+          : 0;
+    const payoutAdjustmentMode = contest.payout_adjustment_mode as
+      | "cpm_only"
+      | "bonus_only"
+      | "combined"
+      | null;
+    const hasPayoutAdjustment =
+      payoutAdjustmentPercentage > 0 && !!payoutAdjustmentMode;
+    const shouldAdjustReward =
+      hasPayoutAdjustment &&
+      (payoutAdjustmentMode === "combined" ||
+        payoutAdjustmentMode === "cpm_only");
+    const shouldAdjustBonus =
+      hasPayoutAdjustment &&
+      (payoutAdjustmentMode === "combined" ||
+        payoutAdjustmentMode === "bonus_only");
+
     // Check bonus budget/cap before processing
     if (
       (payment_type === "bonus" || payment_type === "both") &&
@@ -258,7 +281,19 @@ export async function POST(request: NextRequest) {
           runningTotal += submissionEarnings;
         }
 
-        totalCPM += submissionEarnings;
+        // Apply contest-level adjustment to CPM (reward) if configured
+        const adjustedSubmissionEarnings =
+          shouldAdjustReward && submissionEarnings > 0
+            ? Math.max(
+                0,
+                Math.round(
+                  submissionEarnings *
+                    ((100 - payoutAdjustmentPercentage) / 100),
+                ),
+              )
+            : submissionEarnings;
+
+        totalCPM += adjustedSubmissionEarnings;
       }
 
       // Calculate bonus
@@ -289,12 +324,36 @@ export async function POST(request: NextRequest) {
       }
 
       // Add to breakdown
-      if (submissionEarnings > 0 || submissionBonus > 0) {
+      const finalCpmAmount =
+        payment_type !== "bonus" ? (shouldAdjustReward
+          ? Math.max(
+              0,
+              Math.round(
+                submissionEarnings *
+                  ((100 - payoutAdjustmentPercentage) / 100),
+              ),
+            )
+          : submissionEarnings) : 0;
+
+      const finalBonusAmount =
+        payment_type !== "standard" ? (shouldAdjustBonus
+          ? Math.max(
+              0,
+              Math.round(
+                submissionBonus *
+                  ((100 - payoutAdjustmentPercentage) / 100),
+              ),
+            )
+          : submissionBonus) : 0;
+
+      if (finalCpmAmount > 0 || finalBonusAmount > 0) {
         breakdown.push({
           submission_id: sub.id,
           video_title: sub.video_title || "Untitled",
-          cpm_amount: submissionEarnings,
-          bonus_amount: submissionBonus,
+          cpm_amount: finalCpmAmount,
+          bonus_amount: finalBonusAmount,
+          original_cpm_amount: submissionEarnings,
+          original_bonus_amount: submissionBonus,
           created_at: sub.created_at,
         });
         paidCount++;
@@ -303,7 +362,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const totalAmount = totalCPM + totalBonus;
+    // Use breakdown totals so credited amount matches adjusted values (not raw totalBonus)
+    const totalAmount = breakdown.reduce(
+      (sum, b) => sum + b.cpm_amount + b.bonus_amount,
+      0,
+    );
+    const totalCPMPaid = breakdown.reduce((s, b) => s + b.cpm_amount, 0);
+    const totalBonusPaid = breakdown.reduce((s, b) => s + b.bonus_amount, 0);
 
     if (totalAmount === 0) {
       return NextResponse.json(
@@ -329,8 +394,8 @@ export async function POST(request: NextRequest) {
           payment_type: payment_type,
           submission_count: paidCount,
           breakdown: breakdown,
-          total_cpm: totalCPM,
-          total_bonus: totalBonus,
+          total_cpm: totalCPMPaid,
+          total_bonus: totalBonusPaid,
           cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
         },
       }
@@ -389,8 +454,8 @@ export async function POST(request: NextRequest) {
       message: `Successfully paid ${paidCount} submissions`,
       data: {
         total_amount: totalAmount,
-        total_cpm: totalCPM,
-        total_bonus: totalBonus,
+        total_cpm: totalCPMPaid,
+        total_bonus: totalBonusPaid,
         paid_count: paidCount,
         skipped_count: skippedCount,
         breakdown: breakdown,

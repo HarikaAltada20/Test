@@ -290,7 +290,13 @@ export function ContestClientPage({
 
   // Analytics tab filter state
   const [activeAnalyticsTab, setActiveAnalyticsTab] = useState<
-    "all" | "verified" | "paid" | "pending" | "rejected" | "verified_or_paid"
+    | "all"
+    | "verified"
+    | "paid"
+    | "pending"
+    | "rejected"
+    | "verified_or_paid"
+    | "not_rejected"
   >("all");
 
   // Pagination state for leaderboard
@@ -8449,6 +8455,8 @@ export function ContestClientPage({
                   const status = getAnalyticsStatus(submission);
 
                   if (activeAnalyticsTab === "all") return true;
+                  if (activeAnalyticsTab === "not_rejected")
+                    return status !== "rejected";
                   if (activeAnalyticsTab === "verified_or_paid") {
                     return status === "verified" || status === "paid";
                   }
@@ -8571,7 +8579,7 @@ export function ContestClientPage({
                         }
                         className="w-full"
                       >
-                        <TabsList className="grid w-full grid-cols-6">
+                        <TabsList className="grid w-full grid-cols-7">
                           <TabsTrigger
                             value="all"
                             className={cn(
@@ -8582,6 +8590,21 @@ export function ContestClientPage({
                             )}
                           >
                             All ({allSubmissionsForAnalytics?.length || 0})
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="not_rejected"
+                            className={cn(
+                              "text-sm",
+                              isDark
+                                ? "text-white border border-gray-500"
+                                : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
+                            )}
+                          >
+                            Not Rejected (
+                            {allSubmissionsForAnalytics?.filter(
+                              (s: any) => getAnalyticsStatus(s) !== "rejected",
+                            ).length || 0}
+                            )
                           </TabsTrigger>
                           <TabsTrigger
                             value="verified"
