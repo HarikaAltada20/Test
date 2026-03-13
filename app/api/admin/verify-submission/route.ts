@@ -433,20 +433,25 @@ export async function POST(request: Request) {
           }
 
           // Update submission bonus_paid status and amount
-          const { error: bonusUpdateError } = await supabaseAdmin
-            .from("submissions")
-            .update({
-              bonus_paid: true,
-              bonus_paid_at: new Date().toISOString(),
-              bonus_amount: flatFeeBonus, // Store actual bonus amount paid (in cents)
-            })
-            .eq("id", submissionId);
+          const { data: afterBonusUpdate, error: bonusUpdateError } =
+            await supabaseAdmin
+              .from("submissions")
+              .update({
+                bonus_paid: true,
+                bonus_paid_at: new Date().toISOString(),
+                bonus_amount: flatFeeBonus, // Store actual bonus amount paid (in cents)
+              })
+              .eq("id", submissionId)
+              .select("id, status, earnings, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount")
+              .single();
 
           if (bonusUpdateError) {
             console.error(
               "Error updating bonus_paid status:",
               bonusUpdateError
             );
+          } else if (afterBonusUpdate) {
+            Object.assign(updatedSubmission, afterBonusUpdate);
           }
         }
       } else if (flatFeeBonus <= 0) {

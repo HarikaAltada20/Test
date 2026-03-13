@@ -51,6 +51,8 @@ export async function POST(
       "content_type",
       "bonus_details",
       "max_earnings_per_creator",
+      "payout_adjustment_percentage",
+      "payout_adjustment_mode",
     ]);
 
     const updateData: Record<string, any> = {};
@@ -65,6 +67,32 @@ export async function POST(
         { error: "No valid fields to update" },
         { status: 400 }
       );
+    }
+
+    // Validate payout adjustment fields when present
+    const validPayoutModes = ["cpm_only", "bonus_only", "combined"];
+    if (updateData.payout_adjustment_mode !== undefined) {
+      const mode = updateData.payout_adjustment_mode;
+      if (mode != null && !validPayoutModes.includes(mode)) {
+        return NextResponse.json(
+          {
+            error: `payout_adjustment_mode must be one of: ${validPayoutModes.join(", ")} or null`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+    if (updateData.payout_adjustment_percentage !== undefined) {
+      const pct = updateData.payout_adjustment_percentage;
+      if (pct != null) {
+        const num = typeof pct === "number" ? pct : parseFloat(pct);
+        if (Number.isNaN(num) || num < 0 || num > 100) {
+          return NextResponse.json(
+            { error: "payout_adjustment_percentage must be between 0 and 100" },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     const admin = createAdminClient();

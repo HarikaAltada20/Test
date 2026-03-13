@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 
 interface Creator {
   id: string;
@@ -129,6 +130,7 @@ export function CreatorSubmissionsModal({
     "views-desc" | "views-asc" | "date-desc" | "date-asc"
   >("date-desc");
   const [mode, setMode] = useState<"light" | "dark">("light");
+  const [bulkPaymentLoading, setBulkPaymentLoading] = useState(false);
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
     string | null
   >(null);
@@ -296,6 +298,9 @@ export function CreatorSubmissionsModal({
       return;
     }
 
+    setBulkPaymentLoading(true);
+    try {
+
     // Sort by submission time (earliest first)
     const sortedSubs = [...verifiedSubs].sort(
       (a, b) =>
@@ -330,6 +335,8 @@ export function CreatorSubmissionsModal({
           return;
         }
 
+        setSelectedSubmissions(new Set());
+
         // Show detailed success message
         const { data } = result;
         const message = [
@@ -357,8 +364,7 @@ export function CreatorSubmissionsModal({
       } catch (error) {
         console.error("Bulk payment error:", error);
         alert(
-          `Bulk payment failed:\n${
-            error instanceof Error ? error.message : "Unknown error"
+          `Bulk payment failed:\n${error instanceof Error ? error.message : "Unknown error"
           }`
         );
       }
@@ -392,12 +398,13 @@ export function CreatorSubmissionsModal({
           description: `Successfully paid ${successCount} submission(s).`,
           variant: "default",
         });
+        setSelectedSubmissions(new Set());
       }
       window.location.reload();
     }
-
-    // Clear selection
-    setSelectedSubmissions(new Set());
+    } finally {
+      setBulkPaymentLoading(false);
+    }
   };
 
   const getStatusBadge = (status: string, paid: boolean) => {
@@ -439,8 +446,13 @@ export function CreatorSubmissionsModal({
     return `$${(cents / 100).toFixed(2)}`;
   };
 
-  const calculateSubmissionBaseExpectedReward = (submission: Submission) => {
-    let baseExpectedReward = submission.earnings || 0;
+  /** Base expected reward. When useStoredEarnings is false, always compute from formula so Expected column does not equal Granted after payment. */
+  const calculateSubmissionBaseExpectedReward = (
+    submission: Submission,
+    useStoredEarnings = true,
+  ) => {
+    let baseExpectedReward =
+      useStoredEarnings && submission.earnings ? submission.earnings : 0;
 
     // Leaderboard: expected reward per tweet = prize for this creator's rank (same as normal view)
     if (
@@ -520,6 +532,23 @@ export function CreatorSubmissionsModal({
 
   const flatFeeBonus = getFlatFeeBonus();
   const hasBonus = flatFeeBonus > 0;
+
+  // Simple contest-level payout adjustment (percentage + mode)
+  const payoutAdjustmentPercentage = Number(
+    (contest as any)?.payout_adjustment_percentage ?? 0,
+  );
+  const payoutAdjustmentMode = (contest as any)
+    ?.payout_adjustment_mode as ("cpm_only" | "bonus_only" | "combined" | null);
+  const hasPayoutAdjustment =
+    payoutAdjustmentPercentage > 0 && !!payoutAdjustmentMode;
+  const shouldAdjustReward =
+    hasPayoutAdjustment &&
+    (payoutAdjustmentMode === "combined" ||
+      payoutAdjustmentMode === "cpm_only");
+  const shouldAdjustBonus =
+    hasPayoutAdjustment &&
+    (payoutAdjustmentMode === "combined" ||
+      payoutAdjustmentMode === "bonus_only");
 
   const isTwitterLeaderboardContest =
     contest?.contest_type === "leaderboard" &&
@@ -671,14 +700,14 @@ export function CreatorSubmissionsModal({
     const totalBudget =
       contest?.contest_type === "cpm"
         ? (contest?.contest_based_details as any)?.cpm_contest?.total_budget ||
-          0
+        0
         : (contest?.contest_based_details as any)?.leaderboard_contest
-            ?.total_budget || 0;
+          ?.total_budget || 0;
 
     const bonusBudget =
       contest?.contest_type === "cpm"
         ? (contest?.contest_based_details as any)?.cpm_contest
-            ?.flat_fee_bonus_cap || totalBudget
+          ?.flat_fee_bonus_cap || totalBudget
         : totalBudget;
 
     // Sort submissions by created_at to process in order
@@ -737,7 +766,11 @@ export function CreatorSubmissionsModal({
     let runningTotal = 0;
 
     submissionsByTime.forEach((sub) => {
-      const baseExpectedReward = calculateSubmissionBaseExpectedReward(sub);
+      // Formula-only so Expected Reward column does not become equal to Reward Granted after payment
+      const baseExpectedReward = calculateSubmissionBaseExpectedReward(
+        sub,
+        false,
+      );
       const remainingCap = maxEarningsPerCreator - runningTotal;
       let cappedExpectedReward = baseExpectedReward;
 
@@ -764,9 +797,12 @@ export function CreatorSubmissionsModal({
       }
     });
   } else {
-    // No cap (or leaderboard): use base expected rewards per submission
+    // No cap (or leaderboard): use formula-only expected per submission
     sortedSubmissions.forEach((sub) => {
-      const baseExpectedReward = calculateSubmissionBaseExpectedReward(sub);
+      const baseExpectedReward = calculateSubmissionBaseExpectedReward(
+        sub,
+        false,
+      );
       expectedRewardsMap.set(sub.id, baseExpectedReward);
     });
   }
@@ -879,8 +915,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "all"
-                    ? "text-white"
-                    : "text-gray-600"
+                      ? "text-white"
+                      : "text-gray-600"
                 )}
               >
                 All{" "}
@@ -901,8 +937,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "verified_or_paid"
-                    ? "text-white"
-                    : "text-gray-600"
+                      ? "text-white"
+                      : "text-gray-600"
                 )}
               >
                 Verified + Paid{" "}
@@ -921,8 +957,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "pending"
-                    ? "text-white"
-                    : "text-gray-600"
+                      ? "text-white"
+                      : "text-gray-600"
                 )}
               >
                 Pending{" "}
@@ -941,8 +977,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "verified"
-                    ? "text-white"
-                    : "text-gray-600"
+                      ? "text-white"
+                      : "text-gray-600"
                 )}
               >
                 Verified{" "}
@@ -961,8 +997,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "rejected"
-                    ? "text-white"
-                    : "text-gray-600"
+                      ? "text-white"
+                      : "text-gray-600"
                 )}
               >
                 Rejected{" "}
@@ -981,8 +1017,8 @@ export function CreatorSubmissionsModal({
                   isDark
                     ? "text-white border-gray-600"
                     : statusFilter === "paid"
-                    ? "text-white"
-                    : "text-gray-600"
+                      ? "text-white"
+                      : "text-gray-600"
                 )}
               >
                 Paid{" "}
@@ -1119,17 +1155,27 @@ export function CreatorSubmissionsModal({
                         <Button
                           size="sm"
                           onClick={() => handleBulkPayment("standard", false)}
+                          disabled={bulkPaymentLoading}
                           className="bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
                         >
-                          <DollarSign className="h-4 w-4 mr-1" />
+                          {bulkPaymentLoading ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          ) : (
+                            <DollarSign className="h-4 w-4 mr-1" />
+                          )}
                           Mark as Paid
                         </Button>
                         <Button
                           size="sm"
                           onClick={() => handleBulkPayment("standard", true)}
+                          disabled={bulkPaymentLoading}
                           className="bg-blue-500 hover:bg-blue-600 text-white whitespace-nowrap"
                         >
-                          <DollarSign className="h-4 w-4 mr-1" />
+                          {bulkPaymentLoading ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          ) : (
+                            <DollarSign className="h-4 w-4 mr-1" />
+                          )}
                           Mark as Paid (Bulk)
                         </Button>
                         {hasBonus && (
@@ -1141,9 +1187,14 @@ export function CreatorSubmissionsModal({
                                   onClick={() =>
                                     handleBulkPayment("bonus", false)
                                   }
+                                  disabled={bulkPaymentLoading}
                                   className="bg-green-600 hover:bg-green-700 text-white whitespace-nowrap"
                                 >
-                                  <DollarSign className="h-4 w-4 mr-1" />
+                                  {bulkPaymentLoading ? (
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-4 w-4 mr-1" />
+                                  )}
                                   Mark Bonus as Paid
                                 </Button>
                                 <Button
@@ -1151,9 +1202,14 @@ export function CreatorSubmissionsModal({
                                   onClick={() =>
                                     handleBulkPayment("bonus", true)
                                   }
+                                  disabled={bulkPaymentLoading}
                                   className="bg-green-500 hover:bg-green-600 text-white whitespace-nowrap"
                                 >
-                                  <DollarSign className="h-4 w-4 mr-1" />
+                                  {bulkPaymentLoading ? (
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-4 w-4 mr-1" />
+                                  )}
                                   Mark Bonus as Paid (Bulk)
                                 </Button>
                               </>
@@ -1161,17 +1217,27 @@ export function CreatorSubmissionsModal({
                             <Button
                               size="sm"
                               onClick={() => handleBulkPayment("both", false)}
+                              disabled={bulkPaymentLoading}
                               className="bg-purple-600 hover:bg-purple-700 text-white whitespace-nowrap"
                             >
-                              <DollarSign className="h-4 w-4 mr-1" />
+                              {bulkPaymentLoading ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <DollarSign className="h-4 w-4 mr-1" />
+                              )}
                               Mark Both as Paid
                             </Button>
                             <Button
                               size="sm"
                               onClick={() => handleBulkPayment("both", true)}
+                              disabled={bulkPaymentLoading}
                               className="bg-purple-500 hover:bg-purple-600 text-white whitespace-nowrap"
                             >
-                              <DollarSign className="h-4 w-4 mr-1" />
+                              {bulkPaymentLoading ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <DollarSign className="h-4 w-4 mr-1" />
+                              )}
                               Mark Both as Paid (Bulk)
                             </Button>
                           </>
@@ -1498,12 +1564,12 @@ export function CreatorSubmissionsModal({
                         isTwitterTextImageContest
                           ? 16 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Submitted, Actions
                           : 3 + // Checkbox, #, Content
-                            3 + // Views, Likes, Comments
-                            (isInstagramContest ? 6 : 0) + // Shares, Saves, Reach, Interactions, Avg Watch Time, Total Watch Time
-                            2 + // Expected Reward, Reward Granted
-                            (hasBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
-                            (isAdminView && isInstagramContest ? 1 : 0) + // Insights status (admin only)
-                            3 // Status, Submitted, Actions
+                          3 + // Views, Likes, Comments
+                          (isInstagramContest ? 6 : 0) + // Shares, Saves, Reach, Interactions, Avg Watch Time, Total Watch Time
+                          2 + // Expected Reward, Reward Granted
+                          (hasBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
+                          (isAdminView && isInstagramContest ? 1 : 0) + // Insights status (admin only)
+                          3 // Status, Submitted, Actions
                       }
                       className={cn(
                         "text-center py-8",
@@ -1521,13 +1587,13 @@ export function CreatorSubmissionsModal({
                     const likes = isTwitterTweet
                       ? submission.other_stats?.likes || 0
                       : submission.other_stats?.youtube?.likes ||
-                        submission.other_stats?.instagram?.likes ||
-                        0;
+                      submission.other_stats?.instagram?.likes ||
+                      0;
                     const comments = isTwitterTweet
                       ? submission.other_stats?.replies || 0
                       : submission.other_stats?.youtube?.comments ||
-                        submission.other_stats?.instagram?.comments ||
-                        0;
+                      submission.other_stats?.instagram?.comments ||
+                      0;
                     const instagramStats =
                       submission.other_stats?.instagram ||
                       submission.other_stats ||
@@ -1571,6 +1637,12 @@ export function CreatorSubmissionsModal({
                     // Get pre-calculated expected reward (with cap applied in submission time order)
                     const expectedReward =
                       expectedRewardsMap.get(submission.id) || 0;
+                    const adjustedExpectedReward = shouldAdjustReward
+                      ? applyPayoutAdjustment(
+                          expectedReward,
+                          payoutAdjustmentPercentage,
+                        )
+                      : expectedReward;
                     let expectedRewardForDisplay = expectedReward;
 
                     if (creatorCapApplied && submission.is_twitter_tweet) {
@@ -1599,11 +1671,17 @@ export function CreatorSubmissionsModal({
                       ? explicitPaidAmount != null && explicitPaidAmount > 0
                         ? Number(explicitPaidAmount)
                         : submission.earnings && submission.earnings > 0
-                        ? submission.earnings
-                        : expectedReward
+                          ? submission.earnings
+                          : expectedReward
                       : 0;
                     const expectedBonus =
                       expectedBonusMap.get(submission.id) || 0;
+                    const adjustedExpectedBonus = shouldAdjustBonus
+                      ? applyPayoutAdjustment(
+                          expectedBonus,
+                          payoutAdjustmentPercentage,
+                        )
+                      : expectedBonus;
                     // Use actual bonus_amount from database if available
                     const grantedBonus = submission.bonus_paid
                       ? (submission as any).bonus_amount || flatFeeBonus
@@ -1660,23 +1738,23 @@ export function CreatorSubmissionsModal({
                                       submission.other_stats?.tweet_type ===
                                         "reply" ||
                                         submission.other_stats?.tweet_type ===
-                                          "quote" ||
+                                        "quote" ||
                                         submission.other_stats?.tweet_type ===
-                                          "retweet"
+                                        "retweet"
                                         ? "bg-purple-100 text-purple-700 border-purple-300"
                                         : "bg-blue-100 text-blue-700 border-blue-300"
                                     )}
                                   >
                                     {submission.other_stats?.tweet_type ===
-                                    "reply"
+                                      "reply"
                                       ? "REPLY"
                                       : submission.other_stats?.tweet_type ===
                                         "quote"
-                                      ? "QUOTE"
-                                      : submission.other_stats?.tweet_type ===
-                                        "retweet"
-                                      ? "RETWEET"
-                                      : "TWEET"}
+                                        ? "QUOTE"
+                                        : submission.other_stats?.tweet_type ===
+                                          "retweet"
+                                          ? "RETWEET"
+                                          : "TWEET"}
                                   </Badge>
                                   {isDeletedTweet && (
                                     <Badge
@@ -1781,10 +1859,10 @@ export function CreatorSubmissionsModal({
                                     manualPointsAdjustment > 0
                                       ? "text-green-600"
                                       : manualPointsAdjustment < 0
-                                      ? "text-red-600"
-                                      : isDark
-                                      ? "text-white"
-                                      : "text-gray-900"
+                                        ? "text-red-600"
+                                        : isDark
+                                          ? "text-white"
+                                          : "text-gray-900"
                                   )}
                                 >
                                   {manualPointsAdjustment > 0 ? "+" : ""}
@@ -1934,9 +2012,9 @@ export function CreatorSubmissionsModal({
                                 >
                                   {submission.manual_points_reason.length > 20
                                     ? submission.manual_points_reason.substring(
-                                        0,
-                                        20
-                                      ) + "..."
+                                      0,
+                                      20
+                                    ) + "..."
                                     : submission.manual_points_reason}
                                 </span>
                               ) : (
@@ -1993,13 +2071,13 @@ export function CreatorSubmissionsModal({
                                           className={cn(
                                             "text-xs text-blue-600 hover:underline flex items-center gap-1",
                                             downloadingSubmissionId ===
-                                              submission.id &&
-                                              "opacity-50 cursor-not-allowed"
+                                            submission.id &&
+                                            "opacity-50 cursor-not-allowed"
                                           )}
                                           title="Download Reel/Short"
                                         >
                                           {downloadingSubmissionId ===
-                                          submission.id ? (
+                                            submission.id ? (
                                             <>
                                               <Loader2 className="h-3 w-3 animate-spin" />
                                               Downloading...
@@ -2082,7 +2160,13 @@ export function CreatorSubmissionsModal({
                             {!isTwitterTextImageContest && (
                               <>
                                 <TableCell className="text-center font-medium">
-                                  {formatCurrency(expectedReward)}
+                                  {hasPayoutAdjustment && shouldAdjustReward
+                                    ? `${formatCurrency(
+                                      expectedReward,
+                                    )} → ${formatCurrency(
+                                      adjustedExpectedReward,
+                                    )}`
+                                    : formatCurrency(expectedReward)}
                                 </TableCell>
                                 <TableCell className="text-center font-medium text-green-600">
                                   {grantedReward > 0
@@ -2098,13 +2182,19 @@ export function CreatorSubmissionsModal({
                           <>
                             <TableCell className="text-center font-medium">
                               {expectedBonus > 0
-                                ? formatCurrency(expectedBonus)
+                                ? hasPayoutAdjustment && shouldAdjustBonus
+                                  ? `${formatCurrency(
+                                    expectedBonus,
+                                  )} → ${formatCurrency(
+                                    adjustedExpectedBonus,
+                                  )}`
+                                  : formatCurrency(expectedBonus)
                                 : "-"}
                             </TableCell>
                             <TableCell
                               className={cn(
-                                "text-center font-medium text-green-600",
-                                isDark ? "text-white" : "text-gray-700"
+                                "text-center font-medium",
+                                isDark ? "text-green-400" : "text-green-600"
                               )}
                             >
                               {grantedBonus > 0
@@ -2168,7 +2258,7 @@ export function CreatorSubmissionsModal({
                               {contest?.post_contest_status !==
                                 "verification_complete" &&
                                 contest?.post_contest_status !==
-                                  "payments_processed" && (
+                                "payments_processed" && (
                                   <>
                                     {/* For Twitter tweets, check moderation_status; for others, check status */}
                                     {!isSubmissionVerified && (
@@ -2208,7 +2298,7 @@ export function CreatorSubmissionsModal({
                               {contest?.post_contest_status ===
                                 "verification_complete" &&
                                 getNormalizedSubmissionStatus(submission) ===
-                                  "verified" &&
+                                "verified" &&
                                 !submission.paid &&
                                 isAdminView &&
                                 !isTwitterLeaderboardContest && (
@@ -2263,7 +2353,7 @@ export function CreatorSubmissionsModal({
                               {contest?.post_contest_status ===
                                 "verification_complete" &&
                                 contest?.post_contest_status !==
-                                  "payments_processed" &&
+                                "payments_processed" &&
                                 isAdminView && (
                                   <>
                                     <DropdownMenuSeparator />
@@ -2293,9 +2383,9 @@ export function CreatorSubmissionsModal({
                                   </DropdownMenuItem>
                                   {isAdminView &&
                                     contest?.platform?.toLowerCase() !==
-                                      "twitter" &&
+                                    "twitter" &&
                                     contest?.platform?.toLowerCase() !==
-                                      "x" && (
+                                    "x" && (
                                       <DropdownMenuItem
                                         onClick={() =>
                                           handleDownloadReel(submission.id)
@@ -2306,13 +2396,13 @@ export function CreatorSubmissionsModal({
                                         }
                                         className={
                                           downloadingSubmissionId ===
-                                          submission.id
+                                            submission.id
                                             ? "opacity-50 cursor-not-allowed"
                                             : ""
                                         }
                                       >
                                         {downloadingSubmissionId ===
-                                        submission.id ? (
+                                          submission.id ? (
                                           <>
                                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                             Downloading...

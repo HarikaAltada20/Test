@@ -314,6 +314,8 @@ export interface Database {
           content_type: "ugc" | "clipping" | "other" | null;
           bonus_details: Json | null;
           max_earnings_per_creator: number | null; // Per-contest cap (in cents), NOT platform-wide
+          payout_adjustment_percentage: number | null;
+          payout_adjustment_mode: string | null;
           // Note: flat_fee_bonus is stored in contest_based_details JSONB (in cents)
         };
         Insert: {
@@ -367,6 +369,8 @@ export interface Database {
           content_type?: "ugc" | "clipping" | "other" | null;
           bonus_details?: Json | null;
           max_earnings_per_creator?: number | null;
+          payout_adjustment_percentage?: number | null;
+          payout_adjustment_mode?: string | null;
         };
         Update: {
           id?: string;
@@ -418,6 +422,8 @@ export interface Database {
           content_type?: "ugc" | "clipping" | "other" | null;
           bonus_details?: Json | null;
           max_earnings_per_creator?: number | null;
+          payout_adjustment_percentage?: number | null;
+          payout_adjustment_mode?: string | null;
         };
       };
       submissions: {

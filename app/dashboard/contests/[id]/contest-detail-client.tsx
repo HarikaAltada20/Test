@@ -75,6 +75,11 @@ import {
   centsToDollars,
   formatCurrencyFromCents as formatMoney,
 } from "@/lib/currency-utils";
+import {
+  parseSubmissionMetadata,
+  formatMetadataTimestamp,
+  getFullRejectionDetails,
+} from "@/lib/submission-metadata";
 import RejectionReasonModal from "@/components/RejectionReasonModal";
 import TwitterRejectionModal from "@/components/TwitterRejectionModal";
 import PaymentModal from "@/components/PaymentModal";
@@ -692,10 +697,22 @@ export default function ContestDetailClient({
       creatorUsername?: string;
     } | null>(null);
   const [activeStatusTab, setActiveStatusTab] = useState<
-    "all" | "pending" | "verified" | "rejected" | "paid" | "verified_or_paid"
+    | "all"
+    | "pending"
+    | "verified"
+    | "rejected"
+    | "paid"
+    | "verified_or_paid"
+    | "not_rejected"
   >("all");
   const [activeAnalyticsTab, setActiveAnalyticsTab] = useState<
-    "all" | "pending" | "verified" | "rejected" | "paid" | "verified_or_paid"
+    | "all"
+    | "pending"
+    | "verified"
+    | "rejected"
+    | "paid"
+    | "verified_or_paid"
+    | "not_rejected"
   >("all");
   // Eligibility filter for Twitter tweets
   const [activeEligibilityTab, setActiveEligibilityTab] = useState<
@@ -720,6 +737,9 @@ export default function ContestDetailClient({
     YT_COLUMN_IDS as unknown as string[],
   );
   const [ytColumnsModalOpen, setYtColumnsModalOpen] = useState(false);
+  // Submission-wise: modal to view rejection reason (from submission.metadata only; no rejection_reason on submissions for Instagram/YouTube)
+  const [rejectionDetailsModalSubmission, setRejectionDetailsModalSubmission] =
+    useState<{ id: string; metadata: any } | null>(null);
   const [customizableHeaders, setCustomizableHeaders] = useState({
     averageViews: false,
     averageLikes: false,
@@ -796,7 +816,10 @@ export default function ContestDetailClient({
 
     // Apply status tab filter
     if (activeStatusTab !== "all") {
-      if (activeStatusTab === "verified_or_paid") {
+      // Not Rejected: include all except rejected
+      if (activeStatusTab === "not_rejected") {
+        if (status === "rejected") return false;
+      } else if (activeStatusTab === "verified_or_paid") {
         if (!(status === "verified" || status === "paid")) return false;
       } else {
         if (status !== activeStatusTab) return false;
@@ -855,6 +878,7 @@ export default function ContestDetailClient({
       const status = getStatus(submission);
 
       if (activeAnalyticsTab === "all") return true;
+      if (activeAnalyticsTab === "not_rejected") return status !== "rejected";
       if (activeAnalyticsTab === "verified_or_paid") {
         return status === "verified" || status === "paid";
       }
@@ -1318,8 +1342,17 @@ export default function ContestDetailClient({
         group.paid = true;
       }
 
-      if (normalizedStatus === "verified" || normalizedStatus === "approved") {
-        group.statusCounts.verified++;
+      if (
+        normalizedStatus === "verified" ||
+        normalizedStatus === "approved" ||
+        normalizedStatus === "paid"
+      ) {
+        if (
+          normalizedStatus === "verified" ||
+          normalizedStatus === "approved"
+        ) {
+          group.statusCounts.verified++;
+        }
         if (submission.paid) group.statusCounts.verified_paid++;
 
         // Get flat_fee_bonus from the correct nested location
@@ -1330,7 +1363,7 @@ export default function ContestDetailClient({
             : (currentContest?.contest_based_details as any)
               ?.leaderboard_contest?.flat_fee_bonus || 0;
 
-        // Calculate bonus with budget constraints
+        // Calculate bonus with budget constraints (include paid so Bonus Expected is not 0 after grant)
         if (flatFeeBonus > 0) {
           // Check budget constraints before adding expected bonus
           const totalBudget =
@@ -1465,8 +1498,11 @@ export default function ContestDetailClient({
       }
 
       if (!isTwitterTweet) {
-        const submissionEarnings =
-          calculateSubmissionExpectedEarnings(submission);
+        // Use formula-only expected so "Expected Reward" column does not become equal to "Reward Granted" after payment
+        const submissionEarnings = calculateSubmissionExpectedEarnings(
+          submission,
+          false,
+        );
         group.earnings.expected += submissionEarnings;
         if (isSubmissionPaidForGrantedReward(submission)) {
           const storedGrantedEarnings =
@@ -1694,12 +1730,15 @@ export default function ContestDetailClient({
 
         // Assign bonus to verified creators only
         Object.values(grouped).forEach((group: any) => {
-          // For Twitter CPM contests, check if creator has verified submissions
-          // rather than relying on creator_moderation_status which might not be set
+          // For Twitter CPM contests, check if creator has verified/paid submissions
+          // so Bonus Expected is shown even after bonus is granted
           const hasVerifiedSubmissions = group.statusCounts.verified > 0;
+          const hasPaidSubmissions = group.statusCounts.paid > 0;
           const isVerified =
             hasVerifiedSubmissions ||
-            group.creator_moderation_status === "verified";
+            hasPaidSubmissions ||
+            group.creator_moderation_status === "verified" ||
+            group.creator_moderation_status === "paid";
 
           if (isVerified && remainingBudget > 0) {
             if (remainingBudget >= flatFeeBonus) {
@@ -1931,6 +1970,15 @@ export default function ContestDetailClient({
     );
   }, [groupSubmissionsByCreator]);
 
+  // In creator-wise view, hide Rejection Reason column for Instagram and YouTube only
+  const showRejectionReasonInCreatorView = useMemo(() => {
+    if (!showRejectionReasonColumn) return false;
+    const plat = currentContest?.platform?.toLowerCase() ?? "";
+    const isInstagramOrYoutube =
+      plat === "instagram" || plat.includes("youtube");
+    return !isInstagramOrYoutube;
+  }, [showRejectionReasonColumn, currentContest?.platform]);
+
   // Filter creator groups by participant filter and eligibility (for Twitter contests)
   const filteredCreatorGroups = useMemo(() => {
     if (!sortedCreatorGroups) return [];
@@ -2009,6 +2057,37 @@ export default function ContestDetailClient({
     setCurrentPage(1);
     setCreatorWisePage(1);
   }, [activeStatusTab, viewMode, sortOption, participantFilter]);
+
+  // Aggregate financial totals for the currently selected status tab (from filtered creator groups)
+  const statusFilterFinancialTotals = useMemo(() => {
+    const isLeaderboardOrCpm =
+      currentContest?.contest_type === "leaderboard" ||
+      currentContest?.contest_type === "cpm";
+    if (!isLeaderboardOrCpm || !filteredCreatorGroups?.length) {
+      return {
+        totalExpectedReward: 0,
+        totalRewardGranted: 0,
+        totalBonusExpected: 0,
+        totalBonusGranted: 0,
+      };
+    }
+    let totalExpectedReward = 0;
+    let totalRewardGranted = 0;
+    let totalBonusExpected = 0;
+    let totalBonusGranted = 0;
+    filteredCreatorGroups.forEach((group: any) => {
+      totalExpectedReward += Number(group.earnings?.expected ?? 0);
+      totalRewardGranted += Number(group.earnings?.granted ?? 0);
+      totalBonusExpected += Number(group.bonus?.expected ?? 0);
+      totalBonusGranted += Number(group.bonus?.granted ?? 0);
+    });
+    return {
+      totalExpectedReward,
+      totalRewardGranted,
+      totalBonusExpected,
+      totalBonusGranted,
+    };
+  }, [currentContest?.contest_type, filteredCreatorGroups]);
 
   // Watch for theme changes from parent layout
   useEffect(() => {
@@ -2763,6 +2842,9 @@ export default function ContestDetailClient({
             }
             if (typeof updated.bonus_paid_at !== "undefined") {
               merged.bonus_paid_at = updated.bonus_paid_at;
+            }
+            if (typeof updated.bonus_amount !== "undefined") {
+              merged.bonus_amount = updated.bonus_amount;
             }
           }
 
@@ -4016,8 +4098,13 @@ export default function ContestDetailClient({
     [isDark],
   );
 
-  function calculateSubmissionExpectedEarnings(submission: Submission) {
-    let expectedEarnings = submission.earnings || 0;
+  /** Expected earnings for a submission. When useStoredEarnings is false, always compute from CPM formula so "Expected" column stays correct after payment. */
+  function calculateSubmissionExpectedEarnings(
+    submission: Submission,
+    useStoredEarnings = true,
+  ) {
+    let expectedEarnings =
+      useStoredEarnings && submission.earnings ? submission.earnings : 0;
 
     if (!expectedEarnings && currentContest?.contest_type === "cpm") {
       const cpmConfig = (currentContest?.contest_based_details as any)
@@ -4289,12 +4376,12 @@ export default function ContestDetailClient({
       toast({
         title: "Success",
         description: `Tweet ${action === "approve"
-            ? "approved"
-            : action === "reject"
-              ? "rejected"
-              : action === "paid"
-                ? "marked as paid"
-                : "set to pending"
+          ? "approved"
+          : action === "reject"
+            ? "rejected"
+            : action === "paid"
+              ? "marked as paid"
+              : "set to pending"
           } successfully`,
       });
 
@@ -9307,6 +9394,157 @@ export default function ContestDetailClient({
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
+                        {isAdminView && (
+                          <div
+                            className={cn(
+                              "flex items-center gap-2 px-3 py-2 rounded-xl border text-xs flex-wrap",
+                              isDark
+                                ? "border-purple-500/60 bg-purple-900/40 text-purple-100"
+                                : "border-purple-300 bg-purple-50 text-purple-800",
+                            )}
+                          >
+                            <span className="font-semibold">
+                              Payout Adjustment
+                            </span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.01}
+                              value={
+                                (currentContest as any)
+                                  ?.payout_adjustment_percentage != null
+                                  ? String(
+                                      (currentContest as any)
+                                        .payout_adjustment_percentage,
+                                    )
+                                  : ""
+                              }
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                if (raw === "") {
+                                  setCurrentContest((prev) => ({
+                                    ...prev,
+                                    payout_adjustment_percentage: null,
+                                  }) as any);
+                                  return;
+                                }
+                                const pct = Number.parseFloat(raw);
+                                if (
+                                  Number.isNaN(pct) || pct < 0 || pct > 100
+                                )
+                                  return;
+                                setCurrentContest((prev) => ({
+                                  ...prev,
+                                  payout_adjustment_percentage:
+                                    Math.round(pct * 100) / 100,
+                                }) as any);
+                              }}
+                              className={cn(
+                                "w-16 px-2 py-1 rounded-md border text-xs bg-transparent",
+                                isDark
+                                  ? "border-purple-500/70 text-purple-50"
+                                  : "border-purple-400 text-purple-900",
+                              )}
+                              placeholder="%"
+                            />
+                            <select
+                              value={
+                                ((currentContest as any)
+                                  ?.payout_adjustment_mode as
+                                  | "cpm_only"
+                                  | "bonus_only"
+                                  | "combined"
+                                  | null) ?? "combined"
+                              }
+                              onChange={(e) => {
+                                const value = e.target.value as
+                                  | "cpm_only"
+                                  | "bonus_only"
+                                  | "combined";
+                                setCurrentContest((prev) => ({
+                                  ...prev,
+                                  payout_adjustment_mode: value,
+                                }) as any);
+                              }}
+                              className={cn(
+                                "px-2 py-1 rounded-md border text-xs bg-transparent",
+                                isDark
+                                  ? "border-purple-500/70 text-purple-50"
+                                  : "border-purple-400 text-purple-900",
+                              )}
+                            >
+                              <option value="cpm_only">CPM only</option>
+                              <option value="bonus_only">Bonus only</option>
+                              <option value="combined">Both</option>
+                            </select>
+                            <Button
+                              size="sm"
+                              className={cn(
+                                "text-xs h-7 px-3",
+                                isDark
+                                  ? "bg-purple-600 hover:bg-purple-700 text-white"
+                                  : "bg-purple-600 hover:bg-purple-700 text-white",
+                              )}
+                              onClick={async () => {
+                                const pct = (currentContest as any)
+                                  ?.payout_adjustment_percentage;
+                                const mode =
+                                  ((currentContest as any)
+                                    ?.payout_adjustment_mode as
+                                    | "cpm_only"
+                                    | "bonus_only"
+                                    | "combined"
+                                    | null) ?? "combined";
+                                try {
+                                  const resp = await fetch(
+                                    `/api/admin/contests/${contestId}/update`,
+                                    {
+                                      method: "POST",
+                                      headers: {
+                                        "Content-Type": "application/json",
+                                      },
+                                      body: JSON.stringify({
+                                        payout_adjustment_percentage:
+                                          pct != null
+                                            ? Math.round(pct * 100) / 100
+                                            : null,
+                                        payout_adjustment_mode: mode,
+                                      }),
+                                    },
+                                  );
+                                  if (!resp.ok) {
+                                    const j = await resp
+                                      .json()
+                                      .catch(() => ({}));
+                                    throw new Error(
+                                      j.error || "Failed to save",
+                                    );
+                                  }
+                                  toast({
+                                    title: "Saved",
+                                    description:
+                                      "Payout adjustment saved. It will apply to payouts and persist after refresh.",
+                                  });
+                                } catch (err: any) {
+                                  console.error(
+                                    "Failed to save payout adjustment:",
+                                    err,
+                                  );
+                                  toast({
+                                    title: "Save failed",
+                                    description:
+                                      err?.message ||
+                                      "Could not save payout adjustment.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                            >
+                              Save
+                            </Button>
+                          </div>
+                        )}
                         {(() => {
                           const { isDisabled, disabledReason } =
                             getRefreshButtonState();
@@ -9934,6 +10172,35 @@ export default function ContestDetailClient({
                           </Badge>
                         </TabsTrigger>
                         <TabsTrigger
+                          value="not_rejected"
+                          className={cn(
+                            "flex-1 gap-3 items-center px-1 border",
+                            isDark
+                              ? "text-white border-gray-400"
+                              : "text-[#7F39EC] border-[#7F39EC]",
+                          )}
+                        >
+                          <div className="flex items-center gap-1">
+                            <CheckCircle className="h-3.5 w-3.5 mr-1 mb-0.5" />
+                            <span className="text-[13px] font-medium">
+                              Not Rejected
+                            </span>
+                          </div>
+                          <Badge
+                            variant="secondary"
+                            className={cn(
+                              "px-1.5 py-0.5 text-sm h-5",
+                              isDark
+                                ? "text-white bg-[#FFFFFF36]"
+                                : "text-[#7F39EC] bg-purple-200",
+                            )}
+                          >
+                            {currentSubmissions.filter(
+                              (s) => getStatus(s) !== "rejected",
+                            ).length}
+                          </Badge>
+                        </TabsTrigger>
+                        <TabsTrigger
                           value="verified_or_paid"
                           className={cn(
                             "flex-1 gap-3 items-center px-1 border",
@@ -10099,6 +10366,94 @@ export default function ContestDetailClient({
                     </Tabs>
                   </div>
                 </div>
+
+                {/* Financial totals for selected status tab (leaderboard/CPM only) */}
+                {(currentContest?.contest_type === "leaderboard" ||
+                  currentContest?.contest_type === "cpm") &&
+                  (() => {
+                    const flatFeeBonus =
+                      currentContest?.contest_type === "cpm"
+                        ? (currentContest?.contest_based_details as any)
+                            ?.cpm_contest?.flat_fee_bonus ?? 0
+                        : (currentContest?.contest_based_details as any)
+                            ?.leaderboard_contest?.flat_fee_bonus ?? 0;
+                    const tot = statusFilterFinancialTotals;
+                    const hasBonus =
+                      flatFeeBonus > 0 ||
+                      tot.totalBonusExpected > 0 ||
+                      tot.totalBonusGranted > 0;
+                    const expectedTotal =
+                      tot.totalExpectedReward + tot.totalBonusExpected;
+                    const grantedTotal =
+                      tot.totalRewardGranted + tot.totalBonusGranted;
+                    const cardClass = cn(
+                      "rounded-xl border px-4 py-3",
+                      isDark
+                        ? "border-gray-600 bg-gray-800/50"
+                        : "border-slate-200 bg-slate-50",
+                    );
+                    const labelClass = cn(
+                      "text-xs font-medium uppercase tracking-wide",
+                      isDark ? "text-gray-400" : "text-slate-500",
+                    );
+                    const valueClass = (green?: boolean) =>
+                      cn(
+                        "text-lg font-bold mt-0.5",
+                        green
+                          ? isDark
+                            ? "text-green-400"
+                            : "text-green-600"
+                          : isDark
+                            ? "text-white"
+                            : "text-slate-900",
+                      );
+                    return (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 py-3">
+                    {/* Always show reward cards */}
+                    <div className={cardClass}>
+                      <p className={labelClass}>Expected Reward</p>
+                      <p className={valueClass()}>
+                        {formatMoney(tot.totalExpectedReward)}
+                      </p>
+                    </div>
+                    <div className={cardClass}>
+                      <p className={labelClass}>Reward Granted</p>
+                      <p className={valueClass(true)}>
+                        {formatMoney(tot.totalRewardGranted)}
+                      </p>
+                    </div>
+                    {/* When bonus exists, also show bonus and total cards */}
+                    {hasBonus && (
+                      <>
+                        <div className={cardClass}>
+                          <p className={labelClass}>Expected Bonus</p>
+                          <p className={valueClass()}>
+                            {formatMoney(tot.totalBonusExpected)}
+                          </p>
+                        </div>
+                        <div className={cardClass}>
+                          <p className={labelClass}>Bonus Granted</p>
+                          <p className={valueClass(true)}>
+                            {formatMoney(tot.totalBonusGranted)}
+                          </p>
+                        </div>
+                        <div className={cardClass}>
+                          <p className={labelClass}>Expected Total</p>
+                          <p className={valueClass()}>
+                            {formatMoney(expectedTotal)}
+                          </p>
+                        </div>
+                        <div className={cardClass}>
+                          <p className={labelClass}>Granted Total</p>
+                          <p className={valueClass(true)}>
+                            {formatMoney(grantedTotal)}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                    );
+                  })()}
 
                 {/* Eligibility Filter Tabs - Only for Twitter campaigns */}
                 {(currentContest?.platform?.toLowerCase() === "twitter" ||
@@ -10659,6 +11014,15 @@ export default function ContestDetailClient({
                                 : true) && (
                                   <TableHead className="text-center">
                                     Status
+                                  </TableHead>
+                                )}
+                              {(currentContest.platform
+                                ?.toLowerCase()
+                                .includes("youtube")
+                                ? ytVisibleColumns.includes("status")
+                                : true) && (
+                                  <TableHead className="text-center min-w-[140px]">
+                                    Rejection reason
                                   </TableHead>
                                 )}
                               {(currentContest.platform
@@ -12347,6 +12711,63 @@ export default function ContestDetailClient({
                                         </div>
                                       </TableCell>
                                     )}
+                                  {/* Rejection reason column - show for same visibility as Status */}
+                                  {(currentContest.platform
+                                    ?.toLowerCase()
+                                    .includes("youtube")
+                                    ? ytVisibleColumns.includes("status")
+                                    : true) && (
+                                      <TableCell
+                                        className={cn(
+                                          "text-center text-xs max-w-[200px]",
+                                          isDark
+                                            ? "text-slate-300"
+                                            : "text-slate-700",
+                                        )}
+                                      >
+                                        {statusToUse === "rejected" ? (
+                                          (() => {
+                                            const details =
+                                              getFullRejectionDetails(
+                                                (submission as any).metadata,
+                                              );
+                                            const reason = details?.reason ?? null;
+                                            return (
+                                              <div className="flex flex-col items-center gap-1">
+                                                {reason && (
+                                                  <span
+                                                    className="truncate max-w-full px-1"
+                                                    title={reason}
+                                                  >
+                                                    {reason.length > 25
+                                                      ? reason.slice(0, 25) + "…"
+                                                      : reason}
+                                                  </span>
+                                                )}
+                                                <Button
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className="text-xs h-6 px-2"
+                                                  onClick={() =>
+                                                    setRejectionDetailsModalSubmission({
+                                                      id: submission.id,
+                                                      metadata: (submission as
+                                                        any).metadata,
+                                                    })
+                                                  }
+                                                >
+                                                  Check
+                                                </Button>
+                                              </div>
+                                            );
+                                          })()
+                                        ) : (
+                                          <span className="text-slate-500">
+                                            —
+                                          </span>
+                                        )}
+                                      </TableCell>
+                                    )}
                                   {(currentContest.platform
                                     ?.toLowerCase()
                                     .includes("youtube")
@@ -13020,31 +13441,31 @@ export default function ContestDetailClient({
                                         "x") &&
                                       currentContest.contest_format ===
                                       "text_image") ? (
-                                      <>
-                                        {(currentContest.platform
-                                          ?.toLowerCase()
-                                          .includes("youtube")
-                                          ? ytVisibleColumns.includes(
-                                            "expected_reward",
-                                          )
-                                          : true) && (
-                                            <TableHead className="text-center">
-                                              Expected Reward
-                                            </TableHead>
-                                          )}
-                                        {(currentContest.platform
-                                          ?.toLowerCase()
-                                          .includes("youtube")
-                                          ? ytVisibleColumns.includes(
-                                            "reward_granted",
-                                          )
-                                          : true) && (
-                                            <TableHead className="text-center">
-                                              Reward Granted
-                                            </TableHead>
-                                          )}
-                                      </>
-                                    ) : null}
+                                    <>
+                                      {(currentContest.platform
+                                        ?.toLowerCase()
+                                        .includes("youtube")
+                                        ? ytVisibleColumns.includes(
+                                          "expected_reward",
+                                        )
+                                        : true) && (
+                                          <TableHead className="text-center">
+                                            Expected Reward
+                                          </TableHead>
+                                        )}
+                                      {(currentContest.platform
+                                        ?.toLowerCase()
+                                        .includes("youtube")
+                                        ? ytVisibleColumns.includes(
+                                          "reward_granted",
+                                        )
+                                        : true) && (
+                                          <TableHead className="text-center">
+                                            Reward Granted
+                                          </TableHead>
+                                        )}
+                                    </>
+                                  ) : null}
                                   {(() => {
                                     const flatFeeBonus =
                                       currentContest.contest_type === "cpm"
@@ -13086,8 +13507,8 @@ export default function ContestDetailClient({
                                         </TableHead>
                                       </>
                                     )}
-                                  {/* Rejection Reason Column - Show if there are any rejected creators */}
-                                  {showRejectionReasonColumn && (
+                                  {/* Rejection Reason Column - Show if there are any rejected creators (hidden for Instagram/YouTube in creator-wise view) */}
+                                  {showRejectionReasonInCreatorView && (
                                     <TableHead className="text-center">
                                       Rejection Reason
                                     </TableHead>
@@ -13811,7 +14232,7 @@ export default function ContestDetailClient({
                                               </>
                                             )}
                                           {/* Rejection Reason Column */}
-                                          {showRejectionReasonColumn && (
+                                          {showRejectionReasonInCreatorView && (
                                             <TableCell className="text-center">
                                               {group.creator_rejection_reason ? (
                                                 <div className="flex flex-col items-center max-w-[200px] mx-auto">
@@ -14544,7 +14965,7 @@ export default function ContestDetailClient({
                     }
                     className="w-full"
                   >
-                    <TabsList className="grid w-full grid-cols-6">
+                    <TabsList className="grid w-full grid-cols-7">
                       <TabsTrigger
                         value="all"
                         className={cn(
@@ -14555,6 +14976,21 @@ export default function ContestDetailClient({
                         )}
                       >
                         All ({currentSubmissions?.length || 0})
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="not_rejected"
+                        className={cn(
+                          "text-sm",
+                          isDark
+                            ? "text-white border border-gray-500"
+                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
+                        )}
+                      >
+                        Not Rejected (
+                        {currentSubmissions?.filter(
+                          (s) => getStatus(s) !== "rejected",
+                        ).length || 0}
+                        )
                       </TabsTrigger>
                       <TabsTrigger
                         value="verified"
@@ -16164,10 +16600,12 @@ export default function ContestDetailClient({
                                     ? "Pending Views"
                                     : activeAnalyticsTab === "rejected"
                                       ? "Rejected Views"
-                                      : activeAnalyticsTab ===
-                                        "verified_or_paid"
-                                        ? "Verified/Paid Views"
-                                        : "Filtered Views"}
+                                      : activeAnalyticsTab === "not_rejected"
+                                        ? "Not Rejected Views"
+                                        : activeAnalyticsTab ===
+                                          "verified_or_paid"
+                                          ? "Verified/Paid Views"
+                                          : "Filtered Views"}
                             </p>
                             <p
                               className={cn(
@@ -16587,9 +17025,12 @@ export default function ContestDetailClient({
                                           : activeAnalyticsTab === "rejected"
                                             ? "Rejected Only"
                                             : activeAnalyticsTab ===
-                                              "verified_or_paid"
-                                              ? "Verified/Paid"
-                                              : "Filtered"}
+                                              "not_rejected"
+                                              ? "Not Rejected"
+                                              : activeAnalyticsTab ===
+                                                "verified_or_paid"
+                                                ? "Verified/Paid"
+                                                : "Filtered"}
                                 </p>
                               </div>
                               <div
@@ -17057,6 +17498,118 @@ export default function ContestDetailClient({
         isCreatorRejection={pendingTwitterRejection?.type === "creator"}
         creatorUsername={pendingTwitterRejection?.creatorUsername}
       />
+
+      {/* Rejection Details Modal (submission-wise: view reason from submission.metadata) */}
+      <Dialog
+        open={!!rejectionDetailsModalSubmission}
+        onOpenChange={(open) => {
+          if (!open) setRejectionDetailsModalSubmission(null);
+        }}
+      >
+        <DialogContent
+          className={cn(
+            "max-w-md",
+            isDark ? "bg-[#1a0a2e] border-gray-700 text-white" : "bg-white",
+          )}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Rejection reason
+            </DialogTitle>
+          </DialogHeader>
+          {rejectionDetailsModalSubmission && (() => {
+            const parsed = parseSubmissionMetadata(
+              rejectionDetailsModalSubmission.metadata,
+            );
+            const hasStructured =
+              parsed && parsed.type === "rejection";
+            const reason = hasStructured ? parsed.reason : null;
+            const additionalNotes =
+              hasStructured ? parsed.additionalNotes : undefined;
+            const timestamp = hasStructured ? parsed.timestamp : undefined;
+            const updatedBy = hasStructured ? parsed.updatedBy : undefined;
+
+            if (!reason && !additionalNotes) {
+              return (
+                <p
+                  className={cn(
+                    "text-sm",
+                    isDark ? "text-gray-400" : "text-gray-600",
+                  )}
+                >
+                  No rejection details available.
+                </p>
+              );
+            }
+            return (
+              <div className="space-y-4 text-sm">
+                {reason && (
+                  <div>
+                    <span
+                      className={cn(
+                        "font-medium",
+                        isDark ? "text-gray-300" : "text-gray-700",
+                      )}
+                    >
+                      Reason
+                    </span>
+                    <p
+                      className={cn(
+                        "mt-1",
+                        isDark ? "text-gray-200" : "text-gray-900",
+                      )}
+                    >
+                      {reason}
+                    </p>
+                  </div>
+                )}
+                {additionalNotes && (
+                  <div>
+                    <span
+                      className={cn(
+                        "font-medium",
+                        isDark ? "text-gray-300" : "text-gray-700",
+                      )}
+                    >
+                      Additional notes
+                    </span>
+                    <p
+                      className={cn(
+                        "mt-1 whitespace-pre-wrap",
+                        isDark ? "text-gray-200" : "text-gray-900",
+                      )}
+                    >
+                      {additionalNotes}
+                    </p>
+                  </div>
+                )}
+                {timestamp && (
+                  <div
+                    className={cn(
+                      "text-xs",
+                      isDark ? "text-gray-500" : "text-gray-500",
+                    )}
+                  >
+                    <span>
+                      {formatMetadataTimestamp(timestamp)}
+                      {updatedBy ? ` · Updated by moderator` : ""}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRejectionDetailsModalSubmission(null)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Custom Pay Modal only */}
       <PaymentModal
