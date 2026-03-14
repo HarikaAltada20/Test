@@ -1,6 +1,6 @@
 "use client";
 import {useEffect, useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import {
   Table,
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -29,7 +30,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { RefundOldWithdrawalsButton } from "@/components/admin/RefundOldWithdrawalsButton";
 import {
   Eye,
   Clock,
@@ -44,7 +44,9 @@ import {
   CreditCard,
   Settings,
   Wallet,
+  PauseCircle,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 
@@ -82,6 +84,12 @@ export default function WithdrawalsClient({
   const [adminNotes, setAdminNotes] = useState<string>("");
   const [txRef, setTxRef] = useState<string>("");
   const [updating, setUpdating] = useState<boolean>(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState<boolean>(false);
+  const [rejectRequest, setRejectRequest] = useState<Request | null>(null);
+  const [rejectionReason, setRejectionReason] = useState<string>("");
+  const [payoutMethodSettings, setPayoutMethodSettings] = useState<{ method_type: string; is_paused: boolean }[]>([]);
+  const [loadingPayoutSettings, setLoadingPayoutSettings] = useState<boolean>(true);
+  const [updatingPayoutMethod, setUpdatingPayoutMethod] = useState<string | null>(null);
 // Get theme from parent layout instead of managing independent state
 const [isDark, setIsDark] = useState<boolean>(() => {
   if (typeof window !== "undefined") {
@@ -144,6 +152,56 @@ const [isDark, setIsDark] = useState<boolean>(() => {
 
     return () => observer.disconnect();
   }, [isDark]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingPayoutSettings(true);
+      try {
+        const res = await fetch("/api/admin/payout-method-settings");
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        if (cancelled) return;
+        setPayoutMethodSettings(json.settings || []);
+      } catch {
+        if (!cancelled) setPayoutMethodSettings([]);
+      } finally {
+        if (!cancelled) setLoadingPayoutSettings(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const PAYOUT_METHOD_LABELS: Record<string, string> = {
+    crypto: "Crypto",
+    upi: "UPI",
+    bank_transfer: "Bank transfer",
+    phantom: "Phantom",
+  };
+  const DEFAULT_METHOD_TYPES = ["crypto", "upi", "bank_transfer", "phantom"];
+
+  const setPayoutMethodPaused = async (methodType: string, isPaused: boolean) => {
+    setUpdatingPayoutMethod(methodType);
+    try {
+      const res = await fetch("/api/admin/payout-method-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ method_type: methodType, is_paused: isPaused }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setPayoutMethodSettings((prev) => {
+        const next = prev.filter((s) => s.method_type !== methodType);
+        next.push({ method_type: methodType, is_paused: isPaused });
+        next.sort((a, b) => a.method_type.localeCompare(b.method_type));
+        return next;
+      });
+    } catch (e) {
+      console.error("Failed to update payout method setting", e);
+      alert("Failed to update. Please try again.");
+    } finally {
+      setUpdatingPayoutMethod(null);
+    }
+  };
 
   const updateStatus = async (
     id: string,
@@ -232,6 +290,22 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     setAdminNotes(req.admin_notes || "");
     setTxRef(req.transaction_reference || "");
     setDetailsOpen(true);
+  };
+
+  const openRejectDialog = (req: Request) => {
+    setRejectRequest(req);
+    setRejectionReason("");
+    setRejectDialogOpen(true);
+  };
+
+  const confirmReject = async () => {
+    if (!rejectRequest) return;
+    const reason = rejectionReason.trim() || undefined;
+    await updateStatus(rejectRequest.id, "rejected", { admin_notes: reason });
+    setRejectDialogOpen(false);
+    setRejectRequest(null);
+    setRejectionReason("");
+    setDetailsOpen(false);
   };
 
   const getPaymentMethodIcon = (r: Request) => {
@@ -648,7 +722,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => updateStatus(r.id, "rejected")}
+                          onClick={() => openRejectDialog(r)}
                           disabled={updating}
                         >
                           <XCircle className="h-4 w-4" />
@@ -883,17 +957,59 @@ const [isDark, setIsDark] = useState<boolean>(() => {
           </div>
         </div>
 
-        {/* Refund Old Withdrawals Button - Minimized */}
-        <div className="flex justify-end">
-          <details className="group">
-            <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
-              Additional Controls
-            </summary>
-            <div className="mt-2 p-3 border rounded-lg bg-muted/30">
-              <RefundOldWithdrawalsButton />
-            </div>
-          </details>
-        </div>
+        {/* Payout method availability – pause/unpause methods globally */}
+        <Card
+          className={cn(
+            "shadow-sm",
+            isDark ? "bg-[#170337] border border-gray-700 text-white" : "bg-white text-black"
+          )}
+        >
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-medium flex items-center gap-2">
+              <PauseCircle className="h-4 w-4" />
+              Payout method availability
+            </CardTitle>
+            <CardDescription className={cn("text-sm", isDark ? "text-gray-400" : "text-muted-foreground")}>
+              When a method is paused, users cannot request withdrawals using that payment method. They will see a message to use another method.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {loadingPayoutSettings ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <div className="flex flex-wrap gap-6">
+                {DEFAULT_METHOD_TYPES.map((methodType) => {
+                  const setting = payoutMethodSettings.find((s) => s.method_type === methodType);
+                  const isPaused = setting ? setting.is_paused : false;
+                  const updating = updatingPayoutMethod === methodType;
+                  return (
+                    <div
+                      key={methodType}
+                      className={cn(
+                        "flex items-center justify-between gap-3 rounded-lg border px-4 py-3 min-w-[180px]",
+                        isDark ? "border-gray-600 bg-[#06021D]/50" : "border-slate-200 bg-slate-50/50"
+                      )}
+                    >
+                      <span className="font-medium capitalize">
+                        {PAYOUT_METHOD_LABELS[methodType] || methodType}
+                      </span>
+                      <Switch
+                        checked={!isPaused}
+                        onCheckedChange={(checked) => setPayoutMethodPaused(methodType, !checked)}
+                        disabled={updating}
+                        theme={isDark ? "dark" : "light"}
+                        variant="theme-aware"
+                      />
+                      {isPaused && (
+                        <span className="text-xs text-amber-600 dark:text-amber-400">Paused</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <EnhancedTabs
           tabs={[
@@ -1478,6 +1594,25 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                           </TooltipContent>
                         </Tooltip>
                       )}
+                      {/* Reject - only for pending, in_review, and approved */}
+                      {["pending", "in_review", "approved"].includes(active.status) && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openRejectDialog(active!)}
+                              disabled={updating}
+                            >
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Reject
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent className="z-50">
+                            <p>Reject request (optionally add reason for user)</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
                     </>
                   )}
                 </div>
@@ -1527,6 +1662,78 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                   )}
                 </div>
               </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reject withdrawal – optional reason */}
+        <Dialog
+          open={rejectDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setRejectDialogOpen(false);
+              setRejectRequest(null);
+              setRejectionReason("");
+            }
+          }}
+          isdark={isDark}
+        >
+          <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+              <DialogTitle
+                className={cn(
+                  "flex items-center gap-2",
+                  isDark ? "text-white" : "text-black"
+                )}
+              >
+                <XCircle className="h-5 w-5 text-red-500" />
+                Reject withdrawal request
+              </DialogTitle>
+              <DialogDescription>
+                You can optionally provide a reason for the rejection. It will
+                be shared with the user so they understand why the request was
+                declined.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-3">
+              <Label
+                htmlFor="rejection_reason"
+                className={cn(isDark ? "text-white" : "text-gray-800")}
+              >
+                Reason for rejection (optional)
+              </Label>
+              <Textarea
+                id="rejection_reason"
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="e.g. Invalid payout details, please add a valid UPI ID and try again."
+                rows={3}
+                className={cn(
+                  "resize-none",
+                  isDark
+                    ? "bg-[#06021D] border border-gray-600 text-white placeholder:text-gray-400"
+                    : "bg-white text-black"
+                )}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRejectDialogOpen(false);
+                  setRejectRequest(null);
+                  setRejectionReason("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmReject}
+                disabled={updating}
+              >
+                {updating ? "Rejecting…" : "Reject request"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

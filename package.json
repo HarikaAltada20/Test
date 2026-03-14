@@ -12,7 +12,6 @@
     "update:storage": "node scripts/update_storage_config.js",
     "update:all": "node scripts/update_all.js",
     "convert-images": "node ./scripts/convert-images.mjs",
-    "refund-old-withdrawals": "node scripts/refund-old-rejected-withdrawals.js",
     "backfill-geo-data": "node scripts/backfill-geo-data.js",
     "test-phantom-wallet": "node scripts/test-phantom-wallet-integration.js",
     "download-ytdlp": "node scripts/download-ytdlp-binary.js"

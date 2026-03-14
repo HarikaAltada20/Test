@@ -191,6 +191,12 @@ export default function BillingClientPage({
   const [bankCountry, setBankCountry] = useState("IN");
   const [bankSortCode, setBankSortCode] = useState("");
   const [bankRoutingNumber, setBankRoutingNumber] = useState("");
+  const [pausedPayoutMethodTypes, setPausedPayoutMethodTypes] = useState<
+    string[]
+  >([]);
+  const [enabledPayoutMethodTypes, setEnabledPayoutMethodTypes] = useState<
+    string[]
+  >(["crypto", "upi", "bank_transfer", "phantom"]);
   // Initialize mode state with proper detection to prevent flash
   const [mode, setMode] = useState<"light" | "dark">(() => {
     // Check if we're in browser environment
@@ -446,6 +452,43 @@ export default function BillingClientPage({
     initialWithdrawalRequests,
     router,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/payout-method-settings")
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        setPausedPayoutMethodTypes(data.pausedMethodTypes || []);
+        setEnabledPayoutMethodTypes(
+          data.enabledMethodTypes || ["crypto", "upi", "bank_transfer", "phantom"]
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPausedPayoutMethodTypes([]);
+          setEnabledPayoutMethodTypes([
+            "crypto",
+            "upi",
+            "bank_transfer",
+            "phantom",
+          ]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const PAYOUT_METHOD_LABELS: Record<string, string> = {
+    crypto: "Crypto",
+    upi: "UPI",
+    bank_transfer: "Bank transfer",
+    phantom: "Phantom",
+  };
+  const availablePayoutMethodsForWithdraw = payoutMethods.filter((m) =>
+    enabledPayoutMethodTypes.includes(m.method_type)
+  );
 
   // Reset form function
   const resetPayoutForm = () => {
@@ -2761,15 +2804,26 @@ export default function BillingClientPage({
             >
               <Label htmlFor="payoutMethodSelect">Select Payout Method</Label>
               <Select
-                value={selectedWithdrawMethodId || ""}
+                value={
+                  selectedWithdrawMethodId &&
+                  availablePayoutMethodsForWithdraw.some(
+                    (m) => m.id === selectedWithdrawMethodId
+                  )
+                    ? selectedWithdrawMethodId
+                    : ""
+                }
                 onValueChange={setSelectedWithdrawMethodId}
-                disabled={isLoading || payoutMethods.length === 0}
+                disabled={
+                  isLoading ||
+                  payoutMethods.length === 0 ||
+                  availablePayoutMethodsForWithdraw.length === 0
+                }
               >
                 <SelectTrigger id="payoutMethodSelect">
                   <SelectValue placeholder="Choose a method..." />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
-                  {payoutMethods
+                  {availablePayoutMethodsForWithdraw
                     .filter((m) => m.is_default)
                     .map((method) => (
                       <SelectItem
@@ -2780,7 +2834,7 @@ export default function BillingClientPage({
                         {getPayoutMethodSummary(method)} (Default)
                       </SelectItem>
                     ))}
-                  {payoutMethods
+                  {availablePayoutMethodsForWithdraw
                     .filter((m) => !m.is_default)
                     .map((method) => (
                       <SelectItem
@@ -2794,11 +2848,50 @@ export default function BillingClientPage({
                 </SelectContent>
               </Select>
             </div>
+            {pausedPayoutMethodTypes.length > 0 && (
+              <div
+                className={cn(
+                  "rounded-lg border p-3 text-sm",
+                  isDark
+                    ? "border-amber-800/50 bg-amber-950/30 text-amber-200"
+                    : "border-amber-200 bg-amber-50 text-amber-900"
+                )}
+              >
+                <p className="font-medium">
+                  Some payment methods are temporarily unavailable
+                </p>
+                <p className="mt-1">
+                  The following payment methods are not available for withdrawals
+                  right now:{" "}
+                  <span className="font-medium">
+                    {pausedPayoutMethodTypes
+                      .map((t) => PAYOUT_METHOD_LABELS[t] || t)
+                      .join(", ")}
+                  </span>
+                  . Please use one of the available methods
+                  {enabledPayoutMethodTypes.length > 0
+                    ? ` (e.g. ${enabledPayoutMethodTypes
+                        .slice(0, 3)
+                        .map((t) => PAYOUT_METHOD_LABELS[t] || t)
+                        .join(", ")})`
+                    : ""}
+                  .
+                </p>
+              </div>
+            )}
             {payoutMethods.length === 0 && (
               <p className="text-sm text-red-500">
                 You have no payout methods. Please add one first.
               </p>
             )}
+            {payoutMethods.length > 0 &&
+              availablePayoutMethodsForWithdraw.length === 0 && (
+                <p className="text-sm text-amber-600 dark:text-amber-400">
+                  None of your payout methods are currently available for
+                  withdrawal. Please try again later or add another payment
+                  method.
+                </p>
+              )}
           </div>
           <DialogFooter>
             <Button
@@ -2819,7 +2912,8 @@ export default function BillingClientPage({
                     withdrawAmountCoins > (userData.coins || 0) ||
                     withdrawAmountCoins <= 0)) ||
                 (activeTabModal === "cash" && !selectedWithdrawMethodId) ||
-                (activeTabModal === "cash" && payoutMethods.length === 0)
+                (activeTabModal === "cash" &&
+                  availablePayoutMethodsForWithdraw.length === 0)
               }
             >
               Request Withdrawal

@@ -196,6 +196,15 @@ export default function EarningsClientPage({
   const [redeemCode, setRedeemCode] = useState<string>("");
   const [isRedeeming, setIsRedeeming] = useState<boolean>(false);
 
+  // Payout method availability (admin can pause methods globally)
+  const [pausedPayoutMethodTypes, setPausedPayoutMethodTypes] = useState<string[]>([]);
+  const [enabledPayoutMethodTypes, setEnabledPayoutMethodTypes] = useState<string[]>([
+    "crypto",
+    "upi",
+    "bank_transfer",
+    "phantom",
+  ]);
+
   const getInitialMode = (): "light" | "dark" => {
     if (typeof document === "undefined") return "light";
     const dataMode = document
@@ -337,6 +346,34 @@ export default function EarningsClientPage({
     initialWithdrawalRequests,
     router,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/payout-method-settings")
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        setPausedPayoutMethodTypes(data.pausedMethodTypes || []);
+        setEnabledPayoutMethodTypes(data.enabledMethodTypes || ["crypto", "upi", "bank_transfer", "phantom"]);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPausedPayoutMethodTypes([]);
+          setEnabledPayoutMethodTypes(["crypto", "upi", "bank_transfer", "phantom"]);
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const PAYOUT_METHOD_LABELS: Record<string, string> = {
+    crypto: "Crypto",
+    upi: "UPI",
+    bank_transfer: "Bank transfer",
+    phantom: "Phantom",
+  };
+  const availablePayoutMethodsForWithdraw = payoutMethods.filter((m) =>
+    enabledPayoutMethodTypes.includes(m.method_type)
+  );
 
   // Wallet format validation functions
   const validateWalletAddress = async () => {
@@ -2698,9 +2735,20 @@ export default function EarningsClientPage({
                 Select Payout Method
               </Label>
               <Select
-                value={selectedWithdrawMethodId || ""}
+                value={
+                  selectedWithdrawMethodId &&
+                  availablePayoutMethodsForWithdraw.some(
+                    (m) => m.id === selectedWithdrawMethodId
+                  )
+                    ? selectedWithdrawMethodId
+                    : ""
+                }
                 onValueChange={setSelectedWithdrawMethodId}
-                disabled={isLoading || payoutMethods.length === 0}
+                disabled={
+                  isLoading ||
+                  payoutMethods.length === 0 ||
+                  availablePayoutMethodsForWithdraw.length === 0
+                }
               >
                 <SelectTrigger
                   id="payoutMethodSelect"
@@ -2711,7 +2759,7 @@ export default function EarningsClientPage({
                   <SelectValue placeholder="Choose a method..." />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
-                  {payoutMethods
+                  {availablePayoutMethodsForWithdraw
                     .filter((m) => m.is_default)
                     .map((method) => (
                       <SelectItem
@@ -2722,7 +2770,7 @@ export default function EarningsClientPage({
                         {getPayoutMethodSummary(method)} (Default)
                       </SelectItem>
                     ))}
-                  {payoutMethods
+                  {availablePayoutMethodsForWithdraw
                     .filter((m) => !m.is_default)
                     .map((method) => (
                       <SelectItem
@@ -2736,9 +2784,42 @@ export default function EarningsClientPage({
                 </SelectContent>
               </Select>
             </div>
+            {pausedPayoutMethodTypes.length > 0 && (
+              <div
+                className={cn(
+                  "rounded-lg border p-3 text-sm",
+                  isDark
+                    ? "border-amber-800/50 bg-amber-950/30 text-amber-200"
+                    : "border-amber-200 bg-amber-50 text-amber-900"
+                )}
+              >
+                <p className="font-medium">Some payment methods are temporarily unavailable</p>
+                <p className="mt-1">
+                  The following payment methods are not available for withdrawals right now:{" "}
+                  <span className="font-medium">
+                    {pausedPayoutMethodTypes
+                      .map((t) => PAYOUT_METHOD_LABELS[t] || t)
+                      .join(", ")}
+                  </span>
+                  . Please use one of the available methods
+                  {enabledPayoutMethodTypes.length > 0
+                    ? ` (e.g. ${enabledPayoutMethodTypes
+                        .slice(0, 3)
+                        .map((t) => PAYOUT_METHOD_LABELS[t] || t)
+                        .join(", ")})`
+                    : ""}
+                  .
+                </p>
+              </div>
+            )}
             {payoutMethods.length === 0 && (
               <p className="text-sm text-red-500">
                 You have no payout methods. Please add one first.
+              </p>
+            )}
+            {payoutMethods.length > 0 && availablePayoutMethodsForWithdraw.length === 0 && (
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                None of your payout methods are currently available for withdrawal. Please try again later or add another payment method.
               </p>
             )}
           </div>
@@ -2762,7 +2843,7 @@ export default function EarningsClientPage({
                     withdrawAmountCoins <= 0)) ||
                 // For coins, payoutMethod is optional, so don't disable if it's not selected and tab is coins
                 (activeTabModal === "cash" && !selectedWithdrawMethodId) ||
-                (activeTabModal === "cash" && payoutMethods.length === 0)
+                (activeTabModal === "cash" && availablePayoutMethodsForWithdraw.length === 0)
               }
               className={cn(
                 "w-full text-md rounded-full",
