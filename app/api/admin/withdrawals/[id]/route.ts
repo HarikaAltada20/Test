@@ -8,7 +8,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const body = await req.json();
-  const { status, transaction_reference, admin_notes, action, user_id } = body || {};
+  const { status, transaction_reference, admin_notes, action, user_id, in_review_reason } = body || {};
   if (!status && action !== 'cancel') return NextResponse.json({ error: "Missing status or action" }, { status: 400 });
 
   const supabase = createAdminClient();
@@ -160,10 +160,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Withdrawal request not found' }, { status: 404 });
   }
 
+  // When marking in_review, append internal reason to admin_notes (visible to other reviewers only)
+  let finalAdminNotes = admin_notes ?? request.admin_notes ?? null;
+  if (status === 'in_review' && in_review_reason != null && String(in_review_reason).trim() !== '') {
+    const prefix = (request.admin_notes || '').trim() ? `${(request.admin_notes || '').trim()}\n\n` : '';
+    finalAdminNotes = `${prefix}In review: ${String(in_review_reason).trim()}`;
+  }
+
   // Update withdrawal request
   const { error } = await supabase
     .from("withdrawal_requests")
-    .update({ status, updated_at: new Date().toISOString(), transaction_reference: transaction_reference ?? null, admin_notes: admin_notes ?? null, processed_at: status === 'processed' ? new Date().toISOString() : null })
+    .update({ status, updated_at: new Date().toISOString(), transaction_reference: transaction_reference ?? null, admin_notes: finalAdminNotes, processed_at: status === 'processed' ? new Date().toISOString() : null })
     .eq("id", id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

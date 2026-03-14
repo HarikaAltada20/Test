@@ -45,9 +45,20 @@ import {
   Settings,
   Wallet,
   PauseCircle,
+  ShieldOff,
+  ClipboardCheck,
+  RotateCcw,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 
 
 type Request = {
@@ -71,13 +82,36 @@ type Request = {
   } | null;
 };
 
-export default function WithdrawalsClient({
-  initialRequests,
-}: {
-  initialRequests: Request[];
-}) {
+const DEFAULT_PAGE_SIZE = 25;
 
-  const [requests, setRequests] = useState<Request[]>(initialRequests || []);
+export default function WithdrawalsClient({
+  initialRequests = [],
+}: {
+  initialRequests?: Request[];
+}) {
+  const [requests, setRequests] = useState<Request[]>(initialRequests);
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [totalsFromApi, setTotalsFromApi] = useState<{
+    all: number;
+    pending: number;
+    approved: number;
+    paid: number;
+    rejected: number;
+    forfeited: number;
+    failed: number;
+  } | null>(null);
+  const [statusCountsFromApi, setStatusCountsFromApi] = useState<{
+    all: number;
+    pending: number;
+    approved: number;
+    paid: number;
+    rejected: number;
+    forfeited: number;
+    failed: number;
+  } | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
   const [selectedTab, setSelectedTab] = useState<string>("all");
   const [detailsOpen, setDetailsOpen] = useState<boolean>(false);
   const [active, setActive] = useState<Request | null>(null);
@@ -87,6 +121,16 @@ export default function WithdrawalsClient({
   const [rejectDialogOpen, setRejectDialogOpen] = useState<boolean>(false);
   const [rejectRequest, setRejectRequest] = useState<Request | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>("");
+  const [forfeitDialogOpen, setForfeitDialogOpen] = useState<boolean>(false);
+  const [forfeitRequest, setForfeitRequest] = useState<Request | null>(null);
+  const [forfeitReason, setForfeitReason] = useState<string>("");
+  const [forfeitNotes, setForfeitNotes] = useState<string>("");
+  const [failedDialogOpen, setFailedDialogOpen] = useState<boolean>(false);
+  const [failedRequest, setFailedRequest] = useState<Request | null>(null);
+  const [failedNotes, setFailedNotes] = useState<string>("");
+  const [inReviewDialogOpen, setInReviewDialogOpen] = useState<boolean>(false);
+  const [inReviewRequest, setInReviewRequest] = useState<Request | null>(null);
+  const [inReviewReason, setInReviewReason] = useState<string>("");
   const [payoutMethodSettings, setPayoutMethodSettings] = useState<{ method_type: string; is_paused: boolean }[]>([]);
   const [loadingPayoutSettings, setLoadingPayoutSettings] = useState<boolean>(true);
   const [updatingPayoutMethod, setUpdatingPayoutMethod] = useState<string | null>(null);
@@ -109,21 +153,48 @@ const [isDark, setIsDark] = useState<boolean>(() => {
 
 
   const totals = useMemo(() => {
-    const all = requests.reduce(
-      (sum, r) => sum + (r.amount_type === "cash" ? r.amount : 0),
-      0
+    if (totalsFromApi) return totalsFromApi;
+    const sumCash = (list: Request[]) =>
+      list.reduce((s, r) => s + (r.amount_type === "cash" ? r.amount : 0), 0);
+    const all = sumCash(requests);
+    const pending = sumCash(
+      requests.filter((r) => r.status === "pending" || r.status === "in_review")
     );
-    const pending = requests
-      .filter((r) => r.status === "pending" || r.status === "in_review")
-      .reduce((s, r) => s + (r.amount_type === "cash" ? r.amount : 0), 0);
-    const paid = requests
-      .filter((r) => r.status === "processed" || r.status === "approved")
-      .reduce((s, r) => s + (r.amount_type === "cash" ? r.amount : 0), 0);
-    const rejected = requests
-      .filter((r) => r.status === "rejected" || r.status === "cancelled")
-      .reduce((s, r) => s + (r.amount_type === "cash" ? r.amount : 0), 0);
-    return { all, pending, paid, rejected };
-  }, [requests]);
+    const approved = sumCash(requests.filter((r) => r.status === "approved"));
+    const paid = sumCash(requests.filter((r) => r.status === "processed"));
+    const rejected = sumCash(
+      requests.filter((r) => r.status === "rejected" || r.status === "cancelled")
+    );
+    const forfeited = sumCash(requests.filter((r) => r.status === "forfeited"));
+    const failed = sumCash(requests.filter((r) => r.status === "failed"));
+    return { all, pending, approved, paid, rejected, forfeited, failed };
+  }, [requests, totalsFromApi]);
+
+  const fetchWithdrawals = async (pageNum: number) => {
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `/api/admin/withdrawals?page=${pageNum}&pageSize=${pageSize}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch");
+      const json = await res.json();
+      setRequests(json.data ?? []);
+      setTotalCount(json.total ?? 0);
+      setTotalsFromApi(json.totals ?? null);
+      setStatusCountsFromApi(json.statusCounts ?? null);
+      setPage(pageNum);
+    } catch (e) {
+      console.error("Fetch withdrawals error", e);
+      setRequests([]);
+      setTotalCount(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchWithdrawals(page);
+  }, [page, pageSize]);
 
    // Watch for theme changes from parent layout
    useEffect(() => {
@@ -206,7 +277,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
   const updateStatus = async (
     id: string,
     newStatus: string,
-    extras?: { transaction_reference?: string; admin_notes?: string }
+    extras?: { transaction_reference?: string; admin_notes?: string; in_review_reason?: string }
   ) => {
     try {
       setUpdating(true);
@@ -233,6 +304,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
             : r
         )
       );
+      fetchWithdrawals(page);
     } catch (e) {
       console.error("Failed to update status", e);
       alert("Failed to update status");
@@ -272,6 +344,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
         )
       );
       setDetailsOpen(false);
+      fetchWithdrawals(page);
       alert("Withdrawal request cancelled successfully!");
     } catch (e) {
       console.error("Failed to cancel request", e);
@@ -301,11 +374,95 @@ const [isDark, setIsDark] = useState<boolean>(() => {
   const confirmReject = async () => {
     if (!rejectRequest) return;
     const reason = rejectionReason.trim() || undefined;
-    await updateStatus(rejectRequest.id, "rejected", { admin_notes: reason });
-    setRejectDialogOpen(false);
-    setRejectRequest(null);
-    setRejectionReason("");
-    setDetailsOpen(false);
+    try {
+      await updateStatus(rejectRequest.id, "rejected", { admin_notes: reason });
+      setRejectDialogOpen(false);
+      setRejectRequest(null);
+      setRejectionReason("");
+      setDetailsOpen(false);
+    } catch {
+      // updateStatus shows alert; keep dialog open to retry
+    }
+  };
+
+  const FORFEIT_REASONS = [
+    { value: "violation_of_terms", label: "Violation of terms" },
+    { value: "fraud_invalid_details", label: "Fraud / invalid details" },
+    { value: "duplicate_request", label: "Duplicate request" },
+    { value: "other", label: "Other" },
+  ] as const;
+
+  const openForfeitDialog = (req: Request) => {
+    setForfeitRequest(req);
+    setForfeitReason("");
+    setForfeitNotes("");
+    setForfeitDialogOpen(true);
+  };
+
+  const confirmForfeit = async () => {
+    if (!forfeitRequest) return;
+    const reasonLabel = (FORFEIT_REASONS.find((r) => r.value === forfeitReason)?.label ?? forfeitReason) || "Forfeited";
+    const notes = forfeitNotes.trim();
+    const admin_notes = notes ? `${reasonLabel}\n\nAdditional notes: ${notes}` : reasonLabel;
+    try {
+      await updateStatus(forfeitRequest.id, "forfeited", { admin_notes });
+      setForfeitDialogOpen(false);
+      setForfeitRequest(null);
+      setForfeitReason("");
+      setForfeitNotes("");
+      setDetailsOpen(false);
+    } catch {
+      // updateStatus shows alert; keep dialog open
+    }
+  };
+
+  const openFailedDialog = (req: Request) => {
+    setFailedRequest(req);
+    setFailedNotes("");
+    setFailedDialogOpen(true);
+  };
+
+  const confirmFailed = async () => {
+    if (!failedRequest) return;
+    const admin_notes = failedNotes.trim() || undefined;
+    try {
+      await updateStatus(failedRequest.id, "failed", { admin_notes });
+      setFailedDialogOpen(false);
+      setFailedRequest(null);
+      setFailedNotes("");
+      setDetailsOpen(false);
+    } catch {
+      // updateStatus shows alert; keep dialog open
+    }
+  };
+
+  const openInReviewDialog = (req: Request) => {
+    setInReviewRequest(req);
+    setInReviewReason("");
+    setInReviewDialogOpen(true);
+  };
+
+  const confirmInReview = async () => {
+    if (!inReviewRequest) return;
+    const reason = inReviewReason.trim();
+    try {
+      await updateStatus(inReviewRequest.id, "in_review", { in_review_reason: reason || undefined });
+      const appendedNote = reason ? `\n\nIn review: ${reason}` : "";
+      setRequests((prev) =>
+        prev.map((r) =>
+          r.id === inReviewRequest.id
+            ? { ...r, status: "in_review", admin_notes: (r.admin_notes || "") + appendedNote }
+            : r
+        )
+      );
+      setInReviewDialogOpen(false);
+      setInReviewRequest(null);
+      setInReviewReason("");
+      setDetailsOpen(false);
+      fetchWithdrawals(page);
+    } catch {
+      // updateStatus shows alert; keep dialog open
+    }
   };
 
   const getPaymentMethodIcon = (r: Request) => {
@@ -419,10 +576,18 @@ const [isDark, setIsDark] = useState<boolean>(() => {
         lightBgColor: "bg-gray-100 border-gray-300",
         darkBgColor: "bg-gray-800 border-gray-700",
       },
+      forfeited: {
+        variant: "destructive" as const,
+        icon: ShieldOff,
+        lightColor: "text-amber-700",
+        darkColor: "text-amber-400",
+        lightBgColor: "bg-amber-100 border-amber-300",
+        darkBgColor: "bg-amber-900/30 border-amber-700",
+      },
     };
 
     const config =
-      statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
+      statusConfig[status as keyof typeof statusConfig] ?? statusConfig.pending;
     const Icon = config.icon;
 
     return (
@@ -659,27 +824,27 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                     </TooltipContent>
                   </Tooltip>
 
-                  {/* Mark In Review - only for pending */}
-                  {r.status === "pending" && (
+                  {/* Mark In Review - pending or in_review (add reason for other reviewers) */}
+                  {!isFinalStatus(r.status) && ["pending", "in_review"].includes(r.status) && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => updateStatus(r.id, "in_review")}
+                          onClick={() => openInReviewDialog(r)}
                           disabled={updating}
                         >
                           <Clock className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent className="z-50">
-                        <p>Mark as under review</p>
+                        <p>Mark as under review (add internal reason)</p>
                       </TooltipContent>
                     </Tooltip>
                   )}
 
                   {/* Approve - only for pending and in_review */}
-                  {["pending", "in_review"].includes(r.status) && (
+                  {!isFinalStatus(r.status) && ["pending", "in_review"].includes(r.status) && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -697,8 +862,8 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                     </Tooltip>
                   )}
 
-                  {/* Mark Paid - only for approved */}
-                  {r.status === "approved" && (
+                  {/* Mark Paid - approved or failed (retry after failure) */}
+                  {!isFinalStatus(r.status) && ["approved", "failed"].includes(r.status) && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -715,8 +880,8 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                     </Tooltip>
                   )}
 
-                  {/* Reject - only for pending, in_review, and approved */}
-                  {["pending", "in_review", "approved"].includes(r.status) && (
+                  {/* Reject - pending, in_review, approved, or failed */}
+                  {["pending", "in_review", "approved", "failed"].includes(r.status) && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -734,27 +899,45 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                     </Tooltip>
                   )}
 
-                  {/* Mark Failed - only for approved */}
-                  {r.status === "approved" && (
+                  {/* Mark Failed - approved only (internal: payment failed) */}
+                  {!isFinalStatus(r.status) && r.status === "approved" && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => updateStatus(r.id, "failed")}
+                          onClick={() => openFailedDialog(r)}
                           disabled={updating}
                         >
                           <AlertTriangle className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent className="z-50">
-                        <p>Mark payment as failed</p>
+                        <p>Mark payment as failed (internal)</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {/* Forfeited - only for approved (no refund) */}
+                  {!isFinalStatus(r.status) && r.status === "approved" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openForfeitDialog(r)}
+                          disabled={updating}
+                        >
+                          <ShieldOff className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-50">
+                        <p>Forfeit (no refund)</p>
                       </TooltipContent>
                     </Tooltip>
                   )}
 
-                  {/* Cancel - only for pending and in_review */}
-                  {["pending", "in_review"].includes(r.status) && (
+                  {/* Cancel - pending and in_review only */}
+                  {!isFinalStatus(r.status) && ["pending", "in_review"].includes(r.status) && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -771,6 +954,24 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                       </TooltipContent>
                     </Tooltip>
                   )}
+                  {/* Back to pending - in_review only */}
+                  {!isFinalStatus(r.status) && r.status === "in_review" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => updateStatus(r.id, "pending")}
+                          disabled={updating}
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-50">
+                        <p>Back to pending</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </div>
               </TableCell>
             </TableRow>
@@ -780,21 +981,26 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     </div>
   );
 
+  const FINAL_STATUSES = ["processed", "forfeited", "cancelled", "rejected"];
+  const isFinalStatus = (s: string) => FINAL_STATUSES.includes(s);
+
   const allRows = requests;
   const pendingRows = requests.filter(
     (r) => r.status === "pending" || r.status === "in_review"
   );
-  const paidRows = requests.filter(
-    (r) => r.status === "processed" || r.status === "approved"
-  );
+  const paidRows = requests.filter((r) => r.status === "processed");
+  const approvedRows = requests.filter((r) => r.status === "approved");
   const rejectedRows = requests.filter(
     (r) => r.status === "rejected" || r.status === "cancelled"
   );
+  const forfeitedRows = requests.filter((r) => r.status === "forfeited");
+  const failedRows = requests.filter((r) => r.status === "failed");
 
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+          {/* Total Requested */}
           <div
             className={cn(
               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3",
@@ -802,157 +1008,90 @@ const [isDark, setIsDark] = useState<boolean>(() => {
             )}
           >
             <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-              <h1
-                className={cn(
-                  "text-md font-medium",
-                  isDark ? "text-white" : "text-gray-900"
-                )}
-              >
-                Total
+              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>
+                Total Requested
               </h1>
-              <div
-                className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}
-              >
+              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
                 <DollarSign className="h-5 w-5" />
               </div>
             </div>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrencyFromCents(totals.all)}
-              </div>
-              <p
-                className={cn(
-                  "text-sm mt-2",
-                  isDark ? "text-gray-300" : "text-gray-600"
-                )}
-              >
+              <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.all)}</div>
+              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>
                 Total withdrawal amount
               </p>
             </CardContent>
           </div>
-          <div
-            className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3",
-              isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-            )}
-          >
+          <div className={cn("rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3", isDark ? "bg-[#170337] text-white" : "bg-white text-black")}>
             <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-              <h1
-                className={cn(
-                  "text-md font-medium",
-                  isDark ? "text-white" : "text-gray-900"
-                )}
-              >
-                Pending
-              </h1>
-              <div
-                className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}
-              >
+              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>Pending</h1>
+              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
                 <Clock className="h-5 w-5" />
               </div>
             </div>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrencyFromCents(totals.pending)}
-              </div>
-              <p
-                className={cn(
-                  "text-sm mt-2",
-                  isDark ? "text-gray-300" : "text-gray-600"
-                )}
-              >
-                Awaiting review
-              </p>
+              <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.pending)}</div>
+              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>Awaiting review</p>
             </CardContent>
           </div>
-          <div
-            className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3",
-              isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-            )}
-          >
+          <div className={cn("rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3", isDark ? "bg-[#170337] text-white" : "bg-white text-black")}>
             <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-              <h1
-                className={cn(
-                  "text-md font-medium",
-                  isDark ? "text-white" : "text-gray-900"
-                )}
-              >
-                Paid
-              </h1>
-              <div
-                className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}
-              >
+              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>Approved</h1>
+              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
+                <ClipboardCheck className="h-5 w-5" />
+              </div>
+            </div>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.approved)}</div>
+              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>Approved for payment</p>
+            </CardContent>
+          </div>
+          <div className={cn("rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3", isDark ? "bg-[#170337] text-white" : "bg-white text-black")}>
+            <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
+              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>Paid</h1>
+              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
                 <CheckCircle className="h-5 w-5" />
               </div>
             </div>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrencyFromCents(totals.paid)}
-              </div>
-              <p
-                className={cn(
-                  "text-sm mt-2",
-                  isDark ? "text-gray-300" : "text-gray-600"
-                )}
-              >
-                Successfully processed
-              </p>
+              <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.paid)}</div>
+              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>Successfully processed</p>
             </CardContent>
           </div>
-          <div
-            className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3",
-              isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-            )}
-          >
+          <div className={cn("rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3", isDark ? "bg-[#170337] text-white" : "bg-white text-black")}>
             <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-              <h1
-                className={cn(
-                  "text-md font-medium",
-                  isDark ? "text-white" : "text-gray-900"
-                )}
-              >
-                Rejected
-              </h1>
-              <div
-                className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}
-              >
+              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>Rejected</h1>
+              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
                 <XCircle className="h-5 w-5" />
               </div>
             </div>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">
-                {formatCurrencyFromCents(totals.rejected)}
+              <div className="text-2xl font-bold text-red-600">{formatCurrencyFromCents(totals.rejected)}</div>
+              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>Rejected or cancelled (refund)</p>
+            </CardContent>
+          </div>
+          <div className={cn("rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3", isDark ? "bg-[#170337] text-white" : "bg-white text-black")}>
+            <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
+              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>Forfeited</h1>
+              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
+                <ShieldOff className="h-5 w-5" />
               </div>
-              <p
-                className={cn(
-                  "text-sm mt-2",
-                  isDark ? "text-gray-300" : "text-gray-600"
-                )}
-              >
-                Rejected or cancelled
-              </p>
+            </div>
+            <CardContent>
+              <div className="text-2xl font-bold text-amber-600">{formatCurrencyFromCents(totals.forfeited)}</div>
+              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>No refund (e.g. violation)</p>
+            </CardContent>
+          </div>
+          <div className={cn("rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3", isDark ? "bg-[#170337] text-white" : "bg-white text-black")}>
+            <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
+              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>Failed</h1>
+              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+            </div>
+            <CardContent>
+              <div className="text-2xl font-bold text-amber-600">{formatCurrencyFromCents(totals.failed)}</div>
+              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>Payment failed (internal)</p>
             </CardContent>
           </div>
         </div>
@@ -1022,7 +1161,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                     variant="secondary"
                     className="ml-1 px-1.5 py-0.5 text-xs"
                   >
-                    {allRows.length}
+                    {statusCountsFromApi?.all ?? allRows.length}
                   </Badge>
                 </span>
               ),
@@ -1036,7 +1175,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                     variant="secondary"
                     className="ml-1 px-1.5 py-0.5 text-xs"
                   >
-                    {pendingRows.length}
+                    {statusCountsFromApi?.pending ?? pendingRows.length}
                   </Badge>
                 </span>
               ),
@@ -1050,7 +1189,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                     variant="secondary"
                     className="ml-1 px-1.5 py-0.5 text-xs"
                   >
-                    {paidRows.length}
+                    {statusCountsFromApi?.paid ?? paidRows.length}
                   </Badge>
                 </span>
               ),
@@ -1060,11 +1199,41 @@ const [isDark, setIsDark] = useState<boolean>(() => {
               label: (
                 <span>
                   Rejected{" "}
-                  <Badge
-                    variant="secondary"
-                    className="ml-1 px-1.5 py-0.5 text-xs"
-                  >
-                    {rejectedRows.length}
+                  <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs">
+                    {statusCountsFromApi?.rejected ?? rejectedRows.length}
+                  </Badge>
+                </span>
+              ),
+            },
+            {
+              id: "approved",
+              label: (
+                <span>
+                  Approved{" "}
+                  <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs">
+                    {statusCountsFromApi?.approved ?? approvedRows.length}
+                  </Badge>
+                </span>
+              ),
+            },
+            {
+              id: "forfeited",
+              label: (
+                <span>
+                  Forfeited{" "}
+                  <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs">
+                    {statusCountsFromApi?.forfeited ?? forfeitedRows.length}
+                  </Badge>
+                </span>
+              ),
+            },
+            {
+              id: "failed",
+              label: (
+                <span>
+                  Failed{" "}
+                  <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs">
+                    {statusCountsFromApi?.failed ?? failedRows.length}
                   </Badge>
                 </span>
               ),
@@ -1078,10 +1247,38 @@ const [isDark, setIsDark] = useState<boolean>(() => {
         />
 
         <div className="mt-4">
-          {selectedTab === "all" && renderTable(allRows)}
-          {selectedTab === "pending" && renderTable(pendingRows)}
-          {selectedTab === "paid" && renderTable(paidRows)}
-          {selectedTab === "rejected" && renderTable(rejectedRows)}
+          {loading ? (
+            <div className={cn("py-12 text-center text-sm", isDark ? "text-gray-400" : "text-gray-600")}>
+              Loading withdrawals…
+            </div>
+          ) : (
+            <>
+              {selectedTab === "all" && renderTable(allRows)}
+              {selectedTab === "pending" && renderTable(pendingRows)}
+              {selectedTab === "paid" && renderTable(paidRows)}
+              {selectedTab === "rejected" && renderTable(rejectedRows)}
+              {selectedTab === "approved" && renderTable(approvedRows)}
+              {selectedTab === "forfeited" && renderTable(forfeitedRows)}
+              {selectedTab === "failed" && renderTable(failedRows)}
+              <div className={cn("mt-4 border-t pt-4", isDark ? "border-gray-700" : "border-gray-200")}>
+                <PaginationControls
+                  page={page}
+                  limit={pageSize}
+                  total={totalCount}
+                  totalPages={Math.ceil(totalCount / pageSize) || 1}
+                  hasNextPage={page < (Math.ceil(totalCount / pageSize) || 1)}
+                  hasPreviousPage={page > 1}
+                  onPageChange={setPage}
+                  onLimitChange={(limit) => {
+                    setPageSize(limit);
+                    setPage(1);
+                  }}
+                  loading={loading}
+                  isDark={isDark}
+                />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Enhanced Details Modal */}
@@ -1550,9 +1747,9 @@ const [isDark, setIsDark] = useState<boolean>(() => {
             <DialogFooter className="border-t pt-4 mt-4">
               <div className="flex flex-wrap gap-2 w-full justify-between">
                 <div className="flex flex-wrap gap-2">
-                  {active && (
+                  {active && !isFinalStatus(active.status) && (
                     <>
-                      {/* Cancel - only for pending and in_review */}
+                      {/* Cancel - pending and in_review */}
                       {["pending", "in_review"].includes(active.status) && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -1571,7 +1768,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                           </TooltipContent>
                         </Tooltip>
                       )}
-                      {/* Approve - only for pending and in_review */}
+                      {/* Approve - pending and in_review */}
                       {["pending", "in_review"].includes(active.status) && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -1594,8 +1791,8 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                           </TooltipContent>
                         </Tooltip>
                       )}
-                      {/* Reject - only for pending, in_review, and approved */}
-                      {["pending", "in_review", "approved"].includes(active.status) && (
+                      {/* Reject - pending, in_review, approved, failed */}
+                      {["pending", "in_review", "approved", "failed"].includes(active.status) && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
@@ -1613,24 +1810,39 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                           </TooltipContent>
                         </Tooltip>
                       )}
-                    </>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {active && (
-                    <>
-                      {/* Mark In Review - only for pending */}
-                      {active.status === "pending" && (
+                      {/* Back to pending - in_review only */}
+                      {active.status === "in_review" && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() =>
-                                updateStatus(active!.id, "in_review", {
-                                  admin_notes: adminNotes,
-                                })
-                              }
+                              onClick={() => updateStatus(active!.id, "pending")}
+                              disabled={updating}
+                            >
+                              <RotateCcw className="h-4 w-4 mr-1" />
+                              Back to pending
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent className="z-50">
+                            <p>Revert to pending</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {active && !isFinalStatus(active.status) && (
+                    <>
+                      {/* Mark In Review - pending or in_review (add internal reason) */}
+                      {["pending", "in_review"].includes(active.status) && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openInReviewDialog(active!)}
                               disabled={updating}
                             >
                               <Clock className="h-4 w-4 mr-1" />
@@ -1638,12 +1850,12 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent className="z-50">
-                            <p>Mark as under review</p>
+                            <p>Mark as under review (add internal reason for other reviewers)</p>
                           </TooltipContent>
                         </Tooltip>
                       )}
-                      {/* Mark Paid - only for approved */}
-                      {active.status === "approved" && (
+                      {/* Mark Paid - approved or failed */}
+                      {["approved", "failed"].includes(active.status) && (
                         <Button
                           size="sm"
                           onClick={() =>
@@ -1657,6 +1869,44 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                           <DollarSign className="h-4 w-4 mr-1" />
                           Mark Paid
                         </Button>
+                      )}
+                      {/* Mark Failed - approved only */}
+                      {active.status === "approved" && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openFailedDialog(active!)}
+                              disabled={updating}
+                            >
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              Failed
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent className="z-50">
+                            <p>Payment failed (internal tracking)</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      {/* Forfeited - approved only */}
+                      {active.status === "approved" && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openForfeitDialog(active!)}
+                              disabled={updating}
+                            >
+                              <ShieldOff className="h-4 w-4 mr-1" />
+                              Forfeit
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent className="z-50">
+                            <p>Forfeit (no refund)</p>
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                     </>
                   )}
@@ -1733,6 +1983,184 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                 disabled={updating}
               >
                 {updating ? "Rejecting…" : "Reject request"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Mark in review – internal reason (visible to other reviewers only) */}
+        <Dialog
+          open={inReviewDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setInReviewDialogOpen(false);
+              setInReviewRequest(null);
+              setInReviewReason("");
+            }
+          }}
+          isdark={isDark}
+        >
+          <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+              <DialogTitle className={cn("flex items-center gap-2", isDark ? "text-white" : "text-black")}>
+                <Clock className="h-5 w-5 text-blue-500" />
+                Mark as in review
+              </DialogTitle>
+              <DialogDescription>
+                Add an internal reason so other reviewers can see why this request was marked in review. Only visible to admins, not to the user.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-3">
+              <Label className={cn(isDark ? "text-white" : "text-gray-800")}>Reason for review (internal)</Label>
+              <Textarea
+                value={inReviewReason}
+                onChange={(e) => setInReviewReason(e.target.value)}
+                placeholder="e.g. Suspicious payout details, need to verify ID..."
+                rows={3}
+                className={cn(
+                  "resize-none",
+                  isDark ? "bg-[#06021D] border border-gray-600 text-white placeholder:text-gray-400" : "bg-white text-black"
+                )}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setInReviewDialogOpen(false);
+                  setInReviewRequest(null);
+                  setInReviewReason("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={confirmInReview} disabled={updating}>
+                {updating ? "Updating…" : "Mark in review"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Forfeit withdrawal – predefined reason + additional notes (no refund) */}
+        <Dialog
+          open={forfeitDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setForfeitDialogOpen(false);
+              setForfeitRequest(null);
+              setForfeitReason("");
+              setForfeitNotes("");
+            }
+          }}
+          isdark={isDark}
+        >
+          <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+              <DialogTitle className={cn("flex items-center gap-2", isDark ? "text-white" : "text-black")}>
+                <ShieldOff className="h-5 w-5 text-amber-500" />
+                Forfeit withdrawal (no refund)
+              </DialogTitle>
+              <DialogDescription>
+                Use when the user violated terms, cheated, or similar. No refund will be given. Select a reason and optionally add notes.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-3">
+              <Label className={cn(isDark ? "text-white" : "text-gray-800")}>Reason (required)</Label>
+              <Select value={forfeitReason} onValueChange={setForfeitReason}>
+                <SelectTrigger className={cn(isDark ? "bg-[#06021D] border-gray-600 text-white" : "bg-white text-black")}>
+                  <SelectValue placeholder="Select reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {FORFEIT_REASONS.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Label className={cn(isDark ? "text-white" : "text-gray-800")}>Additional notes (optional)</Label>
+              <Textarea
+                value={forfeitNotes}
+                onChange={(e) => setForfeitNotes(e.target.value)}
+                placeholder="Extra details for audit..."
+                rows={3}
+                className={cn(
+                  "resize-none",
+                  isDark ? "bg-[#06021D] border border-gray-600 text-white placeholder:text-gray-400" : "bg-white text-black"
+                )}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setForfeitDialogOpen(false);
+                  setForfeitRequest(null);
+                  setForfeitReason("");
+                  setForfeitNotes("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmForfeit}
+                disabled={updating || !forfeitReason}
+              >
+                {updating ? "Forfeiting…" : "Forfeit (no refund)"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Mark Failed – optional internal notes */}
+        <Dialog
+          open={failedDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setFailedDialogOpen(false);
+              setFailedRequest(null);
+              setFailedNotes("");
+            }
+          }}
+          isdark={isDark}
+        >
+          <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+              <DialogTitle className={cn("flex items-center gap-2", isDark ? "text-white" : "text-black")}>
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                Mark payment as failed
+              </DialogTitle>
+              <DialogDescription>
+                Use when payment failed on our side (e.g. bank error). No refund. You can later reject so the user can request again.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-3">
+              <Label className={cn(isDark ? "text-white" : "text-gray-800")}>Internal notes (optional)</Label>
+              <Textarea
+                value={failedNotes}
+                onChange={(e) => setFailedNotes(e.target.value)}
+                placeholder="e.g. Bank returned payment, invalid account..."
+                rows={3}
+                className={cn(
+                  "resize-none",
+                  isDark ? "bg-[#06021D] border border-gray-600 text-white placeholder:text-gray-400" : "bg-white text-black"
+                )}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setFailedDialogOpen(false);
+                  setFailedRequest(null);
+                  setFailedNotes("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={confirmFailed} disabled={updating}>
+                {updating ? "Updating…" : "Mark as failed"}
               </Button>
             </DialogFooter>
           </DialogContent>
