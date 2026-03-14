@@ -1,14 +1,21 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 /**
- * Public API: returns which payout method types are paused.
- * Used by the earnings/billing UI to hide disabled methods and show a message.
+ * Read-only for authenticated users (creators + brands).
+ * Returns which payout method types are paused/enabled so billing and earnings UI can show
+ * availability. Admin toggles are in /api/admin/payout-method-settings.
  */
 export async function GET() {
-  const supabase = createAdminClient();
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  const { data: rows, error } = await supabase
+  const admin = createAdminClient();
+  const { data: rows, error } = await admin
     .from("payout_method_type_settings")
     .select("method_type, is_paused");
 
