@@ -6,7 +6,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
-import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   isInstagramInsightsQueueEnabled,
   enqueueInstagramInsightsJob,
@@ -40,7 +39,6 @@ export async function POST(
       return NextResponse.json({ error: "Contest ID required" }, { status: 400 });
     }
 
-    const { isAdmin } = await verifyAdminAccess();
     const supabaseAdmin = createAdminSupabaseClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -48,7 +46,7 @@ export async function POST(
 
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
-      .select("id, platform, advertiser_id, views_locked_at, post_contest_status")
+      .select("id, platform, views_locked_at, post_contest_status")
       .eq("id", contestId)
       .single();
 
@@ -79,14 +77,7 @@ export async function POST(
       );
     }
 
-    if (!cronAuth) {
-      const isOwner = user && contest.advertiser_id === user.id;
-      const isOpportunitiesRefresh =
-        request.headers.get("x-refresh-source") === "opportunities";
-      if (!isOpportunitiesRefresh && !isOwner && !isAdmin) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    }
+    // Any authenticated user (creator, brand, admin) may enqueue; run data is non-sensitive.
 
     if (!isInstagramInsightsQueueEnabled()) {
       return NextResponse.json(

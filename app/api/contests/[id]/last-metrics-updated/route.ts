@@ -40,7 +40,7 @@ export async function GET(
       platform === "instagram" || platform === "youtube";
 
     if (!allowAnyAuthenticated) {
-      // Twitter and others: allow owner, admin, or participant
+      // Twitter and others: allow owner, admin, or participant only
       const isOwner = contest.advertiser_id === user.id;
       const { data: userData } = await supabase
         .from("users")

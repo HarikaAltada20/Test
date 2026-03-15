@@ -37,7 +37,7 @@ export async function GET(
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
 
-    // Allow any authenticated user (owner, admin, or creator on opportunities page) to read run status
+    // Any authenticated user may read run status; data is non-sensitive (counts/progress only).
 
     const { data: run, error } = await supabaseAdmin
       .from("instagram_insights_refresh_runs")

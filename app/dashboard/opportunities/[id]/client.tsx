@@ -695,10 +695,7 @@ export function ContestClientPage({
         `/api/contests/${contest.id}/refresh-metrics`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-refresh-source": "opportunities", // Identify this as opportunities refresh
-          },
+          headers: { "Content-Type": "application/json" },
         },
       );
 

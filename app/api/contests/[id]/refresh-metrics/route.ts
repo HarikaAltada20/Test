@@ -67,23 +67,30 @@ export async function POST(
       );
     }
 
-    // Check if user has access (either owns the contest, is admin, or is viewing opportunities)
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
-    const isOwner = contest.advertiser_id === authUser?.id;
-
-    // Check if user is admin
+    // Access: Instagram/YouTube = any authenticated user. Twitter = owner, admin, or participant only.
     const { isAdmin } = await verifyAdminAccess();
-
-    // For opportunities side, we'll allow any authenticated user to refresh
-    // For owner side, we'll check ownership or admin status
-    const isOpportunitiesRefresh =
-      request.headers.get("x-refresh-source") === "opportunities";
-
-    if (!isOpportunitiesRefresh && !isOwner && !isAdmin) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    const isOwner = contest.advertiser_id === user?.id;
+    const platform = (contest.platform ?? "").toLowerCase();
+    if (platform === "twitter" || platform === "x") {
+      if (!isOwner && !isAdmin) {
+        const supabaseAdmin = createAdminSupabaseClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+        const { data: participant } = await supabaseAdmin
+          .from("twitter_campaign_participants")
+          .select("creator_id")
+          .eq("contest_id", contestId)
+          .eq("creator_id", user!.id)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (!participant) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+      }
     }
+    // Cooldown: creators (not owner, not admin) use longer cooldown; owner/admin use shorter.
+    const isOpportunitiesRefresh = !isAdmin && !isOwner;
 
     // Determine cooldown period based on user type
     const cooldownMs = isOpportunitiesRefresh
@@ -181,9 +188,6 @@ export async function POST(
         headers: {
           "Content-Type": "application/json",
           ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-          ...(request.headers.get("x-refresh-source")
-            ? { "x-refresh-source": request.headers.get("x-refresh-source")! }
-            : {}),
         },
         credentials: "include",
       });
