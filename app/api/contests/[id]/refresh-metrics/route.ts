@@ -181,6 +181,9 @@ export async function POST(
         headers: {
           "Content-Type": "application/json",
           ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+          ...(request.headers.get("x-refresh-source")
+            ? { "x-refresh-source": request.headers.get("x-refresh-source")! }
+            : {}),
         },
         credentials: "include",
       });

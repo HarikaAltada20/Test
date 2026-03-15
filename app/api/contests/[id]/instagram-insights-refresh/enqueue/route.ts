@@ -81,7 +81,9 @@ export async function POST(
 
     if (!cronAuth) {
       const isOwner = user && contest.advertiser_id === user.id;
-      if (!isOwner && !isAdmin) {
+      const isOpportunitiesRefresh =
+        request.headers.get("x-refresh-source") === "opportunities";
+      if (!isOpportunitiesRefresh && !isOwner && !isAdmin) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     }
