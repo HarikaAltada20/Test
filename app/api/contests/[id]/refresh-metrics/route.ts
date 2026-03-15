@@ -5,6 +5,7 @@ import {
   METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES,
   METRICS_REFRESH_COOLDOWN_MS_BRAND,
   METRICS_REFRESH_COOLDOWN_MS_ADMIN,
+  isPlatformAllowAnyAuthenticated,
 } from "@/lib/constants";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
@@ -67,27 +68,34 @@ export async function POST(
       );
     }
 
-    // Check if user has access (either owns the contest, is admin, or is viewing opportunities)
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
-    const isOwner = contest.advertiser_id === authUser?.id;
-
-    // Check if user is admin
+    // Access: platforms in PLATFORMS_ALLOW_ANY_AUTHENTICATED = any authenticated user; others (e.g. Twitter) = owner, admin, or participant only.
     const { isAdmin } = await verifyAdminAccess();
-
-    // For opportunities side, we'll allow any authenticated user to refresh
-    // For owner side, we'll check ownership or admin status
-    const isOpportunitiesRefresh =
-      request.headers.get("x-refresh-source") === "opportunities";
-
-    if (!isOpportunitiesRefresh && !isOwner && !isAdmin) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    const isOwner = contest.advertiser_id === user?.id;
+    const platform = (contest.platform ?? "").toLowerCase();
+    if (!isPlatformAllowAnyAuthenticated(contest.platform)) {
+      if (!isOwner && !isAdmin) {
+        const supabaseAdmin = createAdminSupabaseClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+        const { data: participant } = await supabaseAdmin
+          .from("twitter_campaign_participants")
+          .select("creator_id")
+          .eq("contest_id", contestId)
+          .eq("creator_id", user!.id)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (!participant) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+      }
     }
+    // Cooldown: creators (not owner, not admin) use longer cooldown; owner/admin use shorter.
+    const isOpportunitiesRefresh = !isAdmin && !isOwner;
 
     // Determine cooldown period based on user type
     const cooldownMs = isOpportunitiesRefresh
-      ? METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES // 60 minutes (1 hour) for creators
+      ? METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES // 2 hours for creators
       : isAdmin
       ? METRICS_REFRESH_COOLDOWN_MS_ADMIN // 1 minute for admins
       : METRICS_REFRESH_COOLDOWN_MS_BRAND; // 3 minutes for brands/advertisers
@@ -181,9 +189,6 @@ export async function POST(
         headers: {
           "Content-Type": "application/json",
           ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-          ...(request.headers.get("x-refresh-source")
-            ? { "x-refresh-source": request.headers.get("x-refresh-source")! }
-            : {}),
         },
         credentials: "include",
       });

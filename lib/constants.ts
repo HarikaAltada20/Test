@@ -3,10 +3,21 @@
 // ============================================================================
 
 /**
+ * Platforms where any authenticated user may refresh metrics and read status.
+ * Other platforms (e.g. Twitter) require owner, admin, or participant.
+ */
+export const PLATFORMS_ALLOW_ANY_AUTHENTICATED = ["instagram", "youtube"] as const;
+
+export function isPlatformAllowAnyAuthenticated(platform: string | null | undefined): boolean {
+  const p = (platform ?? "").toString().toLowerCase();
+  return (PLATFORMS_ALLOW_ANY_AUTHENTICATED as readonly string[]).includes(p);
+}
+
+/**
  * Cooldown periods for metrics refresh functionality
  * Different cooldowns for different user types to balance UX and security
  */
-export const METRICS_REFRESH_COOLDOWN_MINUTES_OPPORTUNITIES = 60; // For creators viewing opportunities (1 hour)
+export const METRICS_REFRESH_COOLDOWN_MINUTES_OPPORTUNITIES = 120; // For creators viewing opportunities (2 hours)
 export const METRICS_REFRESH_COOLDOWN_MINUTES_BRAND = 3; // For brands/advertisers (3 minutes)
 export const METRICS_REFRESH_COOLDOWN_MINUTES_ADMIN = 1; // For admins (1 minute)
 
