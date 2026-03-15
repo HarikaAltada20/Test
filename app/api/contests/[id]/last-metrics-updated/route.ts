@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
+import { isPlatformAllowAnyAuthenticated } from "@/lib/constants";
 
 export async function GET(
   _request: Request,
@@ -35,9 +36,7 @@ export async function GET(
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
 
-    const platform = (contest.platform ?? "").toString().toLowerCase();
-    const allowAnyAuthenticated =
-      platform === "instagram" || platform === "youtube";
+    const allowAnyAuthenticated = isPlatformAllowAnyAuthenticated(contest.platform);
 
     if (!allowAnyAuthenticated) {
       // Twitter and others: allow owner, admin, or participant only

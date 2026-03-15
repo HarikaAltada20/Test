@@ -5,6 +5,7 @@ import {
   METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES,
   METRICS_REFRESH_COOLDOWN_MS_BRAND,
   METRICS_REFRESH_COOLDOWN_MS_ADMIN,
+  isPlatformAllowAnyAuthenticated,
 } from "@/lib/constants";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
@@ -67,11 +68,11 @@ export async function POST(
       );
     }
 
-    // Access: Instagram/YouTube = any authenticated user. Twitter = owner, admin, or participant only.
+    // Access: platforms in PLATFORMS_ALLOW_ANY_AUTHENTICATED = any authenticated user; others (e.g. Twitter) = owner, admin, or participant only.
     const { isAdmin } = await verifyAdminAccess();
     const isOwner = contest.advertiser_id === user?.id;
     const platform = (contest.platform ?? "").toLowerCase();
-    if (platform === "twitter" || platform === "x") {
+    if (!isPlatformAllowAnyAuthenticated(contest.platform)) {
       if (!isOwner && !isAdmin) {
         const supabaseAdmin = createAdminSupabaseClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,

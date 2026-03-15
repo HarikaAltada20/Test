@@ -3,6 +3,17 @@
 // ============================================================================
 
 /**
+ * Platforms where any authenticated user may refresh metrics and read status.
+ * Other platforms (e.g. Twitter) require owner, admin, or participant.
+ */
+export const PLATFORMS_ALLOW_ANY_AUTHENTICATED = ["instagram", "youtube"] as const;
+
+export function isPlatformAllowAnyAuthenticated(platform: string | null | undefined): boolean {
+  const p = (platform ?? "").toString().toLowerCase();
+  return (PLATFORMS_ALLOW_ANY_AUTHENTICATED as readonly string[]).includes(p);
+}
+
+/**
  * Cooldown periods for metrics refresh functionality
  * Different cooldowns for different user types to balance UX and security
  */
