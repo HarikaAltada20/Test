@@ -75,7 +75,7 @@ export async function POST(
       ? METRICS_REFRESH_COOLDOWN_MS_ADMIN // 1 minute for admins
       : isOwner
       ? METRICS_REFRESH_COOLDOWN_MS_BRAND // 3 minutes for brands/advertisers
-      : METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES; // 60 minutes (1 hour) for creators (default)
+      : METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES; // 2 hours for creators (default)
 
     if (contest.last_metrics_updated) {
       const lastUpdate = new Date(contest.last_metrics_updated);

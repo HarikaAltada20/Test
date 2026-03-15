@@ -30,7 +30,7 @@ export interface TwitterFeedProps {
   showHeader?: boolean;
   className?: string;
   lastMetricsUpdated?: string | null;
-  cooldownType?: "opportunities" | "brand" | "admin"; // "opportunities" for creators (1 hour), "brand" for brands (3 minutes), "admin" for admins (1 minute)
+  cooldownType?: "opportunities" | "brand" | "admin"; // "opportunities" for creators (2 hours), "brand" for brands (3 minutes), "admin" for admins (1 minute)
   contestStatus?: string | null;
   /** When set to in_review, verification_complete, or payouts_processed, Refresh Feed is disabled (metrics locked). */
   postContestStatus?: string | null;
@@ -81,7 +81,7 @@ export function TwitterFeed({
   showHeader = true,
   className,
   lastMetricsUpdated,
-  cooldownType = "opportunities", // Default to opportunities (creators) - 1 hour cooldown
+  cooldownType = "opportunities", // Default to opportunities (creators) - 2 hour cooldown
   contestStatus,
   postContestStatus = null,
   disableRefreshWhenContestEnded = false,

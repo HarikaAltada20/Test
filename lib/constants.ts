@@ -6,7 +6,7 @@
  * Cooldown periods for metrics refresh functionality
  * Different cooldowns for different user types to balance UX and security
  */
-export const METRICS_REFRESH_COOLDOWN_MINUTES_OPPORTUNITIES = 60; // For creators viewing opportunities (1 hour)
+export const METRICS_REFRESH_COOLDOWN_MINUTES_OPPORTUNITIES = 120; // For creators viewing opportunities (2 hours)
 export const METRICS_REFRESH_COOLDOWN_MINUTES_BRAND = 3; // For brands/advertisers (3 minutes)
 export const METRICS_REFRESH_COOLDOWN_MINUTES_ADMIN = 1; // For admins (1 minute)
 

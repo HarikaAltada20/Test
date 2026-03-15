@@ -87,7 +87,7 @@ export async function POST(
 
     // Determine cooldown period based on user type
     const cooldownMs = isOpportunitiesRefresh
-      ? METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES // 60 minutes (1 hour) for creators
+      ? METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES // 2 hours for creators
       : isAdmin
       ? METRICS_REFRESH_COOLDOWN_MS_ADMIN // 1 minute for admins
       : METRICS_REFRESH_COOLDOWN_MS_BRAND; // 3 minutes for brands/advertisers
