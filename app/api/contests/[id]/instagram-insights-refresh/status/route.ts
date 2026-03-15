@@ -29,7 +29,7 @@ export async function GET(
 
     const { data: contest } = await supabaseAdmin
       .from("contests")
-      .select("id, advertiser_id")
+      .select("id")
       .eq("id", contestId)
       .maybeSingle();
 
@@ -37,16 +37,7 @@ export async function GET(
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
 
-    const isOwner = contest.advertiser_id === user.id;
-    const { data: userData } = await supabase
-      .from("users")
-      .select("user_type")
-      .eq("id", user.id)
-      .single();
-    const isAdmin = userData?.user_type === "admin";
-    if (!isOwner && !isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    // Allow any authenticated user (owner, admin, or creator on opportunities page) to read run status
 
     const { data: run, error } = await supabaseAdmin
       .from("instagram_insights_refresh_runs")

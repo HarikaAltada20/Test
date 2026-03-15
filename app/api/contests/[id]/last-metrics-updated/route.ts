@@ -27,7 +27,7 @@ export async function GET(
     );
     const { data: contest, error } = await supabaseAdmin
       .from("contests")
-      .select("id, last_metrics_updated, advertiser_id")
+      .select("id, last_metrics_updated, advertiser_id, platform")
       .eq("id", contestId)
       .maybeSingle();
 
@@ -35,26 +35,32 @@ export async function GET(
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
 
-    // Allow owner, admin, or participant (e.g. creator on opportunities page) so polling works after refresh
-    const isOwner = contest.advertiser_id === user.id;
-    const { data: userData } = await supabase
-      .from("users")
-      .select("user_type")
-      .eq("id", user.id)
-      .single();
-    const isAdmin = userData?.user_type === "admin";
-    if (isOwner || isAdmin) {
-      // allowed
-    } else {
-      const { data: participant } = await supabaseAdmin
-        .from("twitter_campaign_participants")
-        .select("creator_id")
-        .eq("contest_id", contestId)
-        .eq("creator_id", user.id)
-        .eq("is_active", true)
-        .maybeSingle();
-      if (!participant) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const platform = (contest.platform ?? "").toString().toLowerCase();
+    const allowAnyAuthenticated =
+      platform === "instagram" || platform === "youtube";
+
+    if (!allowAnyAuthenticated) {
+      // Twitter and others: allow owner, admin, or participant
+      const isOwner = contest.advertiser_id === user.id;
+      const { data: userData } = await supabase
+        .from("users")
+        .select("user_type")
+        .eq("id", user.id)
+        .single();
+      const isAdmin = userData?.user_type === "admin";
+      if (isOwner || isAdmin) {
+        // allowed
+      } else {
+        const { data: participant } = await supabaseAdmin
+          .from("twitter_campaign_participants")
+          .select("creator_id")
+          .eq("contest_id", contestId)
+          .eq("creator_id", user.id)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (!participant) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
       }
     }
 
