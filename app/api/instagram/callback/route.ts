@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 
         // 2. Exchange code for access token
         const clientId = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID;
-        const clientSecret = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_SECRET;
+        const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET;
         // The redirect_uri for the token exchange must exactly match the one configured in the Instagram App settings
         // and used in the initial authorization request.
         const serverSideRedirectUri = `${new URL(request.url).origin}/api/instagram/callback`;

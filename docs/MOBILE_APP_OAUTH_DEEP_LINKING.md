@@ -792,7 +792,7 @@ GOOGLE_CLIENT_SECRET=your_google_client_secret
 
 # Instagram
 NEXT_PUBLIC_INSTAGRAM_CLIENT_ID=your_instagram_client_id
-NEXT_PUBLIC_INSTAGRAM_CLIENT_SECRET=your_instagram_client_secret
+INSTAGRAM_CLIENT_SECRET=your_instagram_client_secret
 
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
