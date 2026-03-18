@@ -12,6 +12,7 @@ import {
   removeFromProcessing,
   isInstagramInsightsQueueEnabled,
   type InstagramInsightsJob,
+  recoverProcessingJobsToQueue,
 } from "@/lib/queue/instagram-insights-queue";
 import { updateCpmContestBudgets } from "@/lib/instagram-insights";
 import {
@@ -69,7 +70,15 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     );
   }
 
-  const popped = await popInstagramInsightsJob();
+  // Pop one job. If the queue looks empty, attempt recovery from the processing list
+  // (processor crash after LMOVE can strand jobs there) and pop again.
+  let popped = await popInstagramInsightsJob();
+  if (!popped) {
+    const recovered = await recoverProcessingJobsToQueue({ maxToMove: 25 });
+    if (recovered.moved > 0) {
+      popped = await popInstagramInsightsJob();
+    }
+  }
   if (!popped) {
     return NextResponse.json({ processed: 0, message: "Queue empty" });
   }
@@ -112,7 +121,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     );
   }
 
-  removeFromProcessing(rawJobString);
+  await removeFromProcessing(rawJobString);
 
   const hasMore = batchData.hasMore === true && !batchData.cancelled;
   if (batchData.cancelled) {

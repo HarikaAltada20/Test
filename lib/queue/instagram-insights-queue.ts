@@ -122,3 +122,47 @@ export async function removeFromProcessing(rawJobString: string): Promise<void> 
     console.error("[instagram-insights-queue] removeFromProcessing failed:", e);
   }
 }
+
+/**
+ * Best-effort recovery: move jobs from processing back into queue.
+ *
+ * Why: We use LMOVE(queue -> processing) for crash-safe pops. If the processor
+ * crashes after moving an item but before `removeFromProcessing`, the job will
+ * remain stuck in `:processing` and the queue appears empty. This function
+ * re-queues those stranded jobs so the system can resume.
+ *
+ * NOTE: We do not have timestamps on list entries, so this is conservative and
+ * bounded. Reprocessing is safe because the worker uses `current_batch_index`
+ * to prevent double-counting and batch selection is guarded by `run.started_at`.
+ */
+export async function recoverProcessingJobsToQueue(options?: {
+  maxToMove?: number;
+}): Promise<{ moved: number; error?: string }> {
+  const redis = getRedis();
+  if (!redis) return { moved: 0, error: "Redis not configured" };
+  const maxToMove = Math.max(1, Math.min(options?.maxToMove ?? 25, 200));
+  try {
+    let moved = 0;
+    for (let i = 0; i < maxToMove; i++) {
+      // Move from processing back to queue.
+      // We pop from the RIGHT of processing (oldest) and push to the LEFT of queue
+      // so older stuck jobs are retried first.
+      const raw = await redis.lmove(
+        REDIS_PROCESSING_KEY,
+        REDIS_QUEUE_KEY,
+        "right",
+        "left"
+      );
+      if (raw === null || raw === undefined) break;
+      moved += 1;
+    }
+    if (moved > 0) {
+      console.warn(`[instagram-insights-queue] Re-queued ${moved} job(s) from processing`);
+    }
+    return { moved };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[instagram-insights-queue] recoverProcessingJobsToQueue failed:", message);
+    return { moved: 0, error: message };
+  }
+}
