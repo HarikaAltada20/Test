@@ -174,7 +174,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     const now = new Date().toISOString();
     await supabaseAdmin
       .from("instagram_insights_refresh_runs")
-      .update({ status: "completed", finished_at: now })
+      .update({ status: "completed", finished_at: now, updated_at: now })
       .eq("id", job.runId);
 
     // Budget rollup can be expensive; do it once per run, after completion.

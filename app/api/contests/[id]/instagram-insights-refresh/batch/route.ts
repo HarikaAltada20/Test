@@ -424,6 +424,7 @@ export async function POST(
           skipped_recent_count: (runRow.skipped_recent_count ?? 0) + skippedRecentCount,
           current_batch_index: batchIndex + 1,
           last_batch_completed_at: now,
+          updated_at: now,
         })
         .eq("id", runId)
         .eq("current_batch_index", batchIndex);

@@ -514,6 +514,7 @@ export interface Database {
           started_at: string;
           finished_at: string | null;
           last_batch_completed_at: string | null;
+          updated_at: string;
           error_message: string | null;
         };
         Insert: {
@@ -532,6 +533,7 @@ export interface Database {
           started_at?: string;
           finished_at?: string | null;
           last_batch_completed_at?: string | null;
+          updated_at?: string;
           error_message?: string | null;
         };
         Update: {
@@ -550,6 +552,7 @@ export interface Database {
           started_at?: string;
           finished_at?: string | null;
           last_batch_completed_at?: string | null;
+          updated_at?: string;
           error_message?: string | null;
         };
       };

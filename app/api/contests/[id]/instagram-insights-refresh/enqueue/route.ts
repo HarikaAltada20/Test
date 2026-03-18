@@ -86,6 +86,25 @@ export async function POST(
       );
     }
 
+    const baseUrl =
+      request.headers.get("x-forwarded-proto") && request.headers.get("host")
+        ? `${request.headers.get("x-forwarded-proto")}://${request.headers.get("host")}`
+        : process.env.NEXT_PUBLIC_APP_URL
+          ? process.env.NEXT_PUBLIC_APP_URL.startsWith("http")
+            ? process.env.NEXT_PUBLIC_APP_URL
+            : `https://${process.env.NEXT_PUBLIC_APP_URL}`
+          : "http://localhost:3000";
+
+    const doFetch = () =>
+      fetch(`${baseUrl.replace(/\/$/, "")}/api/cron/process-instagram-insights-queue`, {
+        method: "POST",
+        headers: process.env.CRON_SECRET
+          ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
+          : {},
+      }).catch((e) =>
+        console.warn("[instagram-insights-refresh] Trigger processor failed:", e)
+      );
+
     // Check for existing active run
     const { data: existingRun } = await supabaseAdmin
       .from("instagram_insights_refresh_runs")
@@ -95,12 +114,24 @@ export async function POST(
       .maybeSingle();
 
     if (existingRun) {
+      // IMPORTANT: If a previous processor invocation failed (or crashed mid-pop),
+      // the run can remain "running" while no worker is active. Re-triggering is safe:
+      // - pop uses crash-safe LMOVE
+      // - worker/run updates are idempotent and batch-index guarded
+      if (isQStashEnabled()) {
+        triggerProcessInstagramInsightsQueue(baseUrl).then((res) => {
+          if (res?.error) doFetch();
+        }).catch(() => doFetch());
+      } else {
+        doFetch();
+      }
       return NextResponse.json({
         runId: existingRun.id,
         status: existingRun.status,
         alreadyActive: true,
         total_submissions: existingRun.total_submissions,
         total_batches: existingRun.total_batches,
+        processorTriggered: true,
       });
     }
 
@@ -173,30 +204,13 @@ export async function POST(
     if (enqueueResult.error) {
       await supabaseAdmin
         .from("instagram_insights_refresh_runs")
-        .update({ status: "failed", error_message: enqueueResult.error })
+        .update({ status: "failed", error_message: enqueueResult.error, updated_at: new Date().toISOString() })
         .eq("id", runId);
       return NextResponse.json(
         { error: `Failed to enqueue: ${enqueueResult.error}` },
         { status: 500 }
       );
     }
-
-    const baseUrl =
-      request.headers.get("x-forwarded-proto") && request.headers.get("host")
-        ? `${request.headers.get("x-forwarded-proto")}://${request.headers.get("host")}`
-        : process.env.NEXT_PUBLIC_APP_URL
-          ? `https://${process.env.NEXT_PUBLIC_APP_URL}`
-          : "http://localhost:3000";
-
-    const doFetch = () =>
-      fetch(`${baseUrl.replace(/\/$/, "")}/api/cron/process-instagram-insights-queue`, {
-        method: "POST",
-        headers: process.env.CRON_SECRET
-          ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
-          : {},
-      }).catch((e) =>
-        console.warn("[instagram-insights-refresh] Trigger processor failed:", e)
-      );
 
     if (isQStashEnabled()) {
       triggerProcessInstagramInsightsQueue(baseUrl).then((res) => {

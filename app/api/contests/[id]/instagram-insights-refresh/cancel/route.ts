@@ -47,7 +47,7 @@ export async function POST(
     const now = new Date().toISOString();
     const { data: run, error } = await supabaseAdmin
       .from("instagram_insights_refresh_runs")
-      .update({ status: "cancelled", finished_at: now })
+      .update({ status: "cancelled", finished_at: now, updated_at: now })
       .eq("contest_id", contestId)
       .in("status", ["pending", "running"])
       .select("id, status")
