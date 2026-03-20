@@ -3,11 +3,10 @@ import { Metadata } from "next";
 import CreatorsClient from "./CreatorsClient";
 import {
   getCachedCreatorsLandingData,
-  LANDING_DATA_REVALIDATE_SECONDS,
 } from "@/lib/landing-data-cache";
 
 /** Time-based ISR: page shell + `unstable_cache` refresh at this interval. */
-export const revalidate = LANDING_DATA_REVALIDATE_SECONDS;
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title:

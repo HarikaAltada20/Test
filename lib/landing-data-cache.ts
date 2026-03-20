@@ -6,7 +6,7 @@ import {
 import { createPublicServerClient } from "@/utils/supabase/public-server";
 
 /** Matches `export const revalidate` on landing routes — ISR-style data cache. */
-export const LANDING_DATA_REVALIDATE_SECONDS = 86400; // 1 day
+const LANDING_DATA_REVALIDATE_SECONDS = 86400; // 1 day
 
 export const getCachedBrandsLandingData = unstable_cache(
   async () => {
