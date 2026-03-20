@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
 import {
@@ -100,12 +103,32 @@ const steps = [
 // ];
 
 export default function HeroContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [heroNavPending, setHeroNavPending] = useState<
+    "brand" | "creator" | null
+  >(null);
+
   const [activeIndex, setActiveIndex] = useState(0);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   const [animate, setAnimate] = useState(false);
 
   const sectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    router.prefetch("/brands");
+    router.prefetch("/creators");
+  }, [router]);
+
+  useEffect(() => {
+    if (
+      heroNavPending &&
+      (pathname === "/brands" || pathname === "/creators")
+    ) {
+      setHeroNavPending(null);
+    }
+  }, [pathname, heroNavPending]);
 
   useEffect(() => {
     const mq = typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
@@ -389,27 +412,49 @@ export default function HeroContent() {
         {/* Buttons */}
 
         <div className="flex flex-col sm:flex-row gap-4 mt-8 sm:mt-10 relative items-center justify-center">
-          <Link href="/brands" passHref>
-            <button
-              className="rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2 w-full sm:w-auto justify-center"
-              style={{
-                background:
-                  "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-              }}
-            >
-              <div className="scan-line"></div>
-              <Crown className="h-5 w-5" />
-              I'm a Brand
-              <ArrowRight className="h-5 w-5" />
-            </button>
+          <Link
+            href="/brands"
+            prefetch
+            aria-busy={heroNavPending === "brand"}
+            onClick={() => setHeroNavPending("brand")}
+            className={cn(
+              "rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2 w-full sm:w-auto justify-center transition-[opacity,transform] active:scale-[0.98]",
+              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40",
+              heroNavPending === "brand" && "pointer-events-none opacity-85",
+            )}
+            style={{
+              background:
+                "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+            }}
+          >
+            <div className="scan-line"></div>
+            {heroNavPending === "brand" ? (
+              <ButtonLoadingSpinner />
+            ) : (
+              <Crown className="h-5 w-5 shrink-0" />
+            )}
+            I'm a Brand
+            <ArrowRight className="h-5 w-5 shrink-0" />
           </Link>
-          <Link href="/creators" passHref>
-            <button className="rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2 bg-gradient-to-r from-orange-500 to-orange-700 w-full sm:w-auto justify-center">
-              <div className="scan-line"></div>
-              <Sparkles className="h-5 w-5" />
-              I'm a Creator
-              <ArrowRight className="h-5 w-5" />
-            </button>
+          <Link
+            href="/creators"
+            prefetch
+            aria-busy={heroNavPending === "creator"}
+            onClick={() => setHeroNavPending("creator")}
+            className={cn(
+              "rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2 bg-gradient-to-r from-orange-500 to-orange-700 w-full sm:w-auto justify-center transition-[opacity,transform] active:scale-[0.98]",
+              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40",
+              heroNavPending === "creator" && "pointer-events-none opacity-85",
+            )}
+          >
+            <div className="scan-line"></div>
+            {heroNavPending === "creator" ? (
+              <ButtonLoadingSpinner />
+            ) : (
+              <Sparkles className="h-5 w-5 shrink-0" />
+            )}
+            I'm a Creator
+            <ArrowRight className="h-5 w-5 shrink-0" />
           </Link>
         </div>
       </section>
