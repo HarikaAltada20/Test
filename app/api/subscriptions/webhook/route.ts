@@ -28,18 +28,22 @@ const endpointSecret = process.env.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET || process
 
 
 
-
-
-
-
-
-
 export async function POST(request: NextRequest) {
+  console.log('🔥🔥🔥 SUBSCRIPTION WEBHOOK CALLED!', {
+    timestamp: new Date().toISOString(),
+    method: request.method,
+    url: request.url
+  });
+
   const body = await request.text();
   const headersList = await headers();
   const sig = headersList.get('stripe-signature');
 
-
+  console.log('📋 Subscription webhook details:', {
+    hasSignature: !!sig,
+    signatureLength: sig?.length,
+    bodyLength: body.length
+  });
 
   if (!sig) {
     console.error('No Stripe signature found');
@@ -912,11 +916,36 @@ async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string
     let productId, productName, priceAmount;
 
     if (priceError || !priceData || !priceData.products) {
-      console.warn(`⚠️ Could not find product details for price ID ${activeSubscription.price_id}, using subscription data`);
-      // Fallback to subscription data
-      productId = 'unknown';
-      productName = 'Unknown Product';
-      priceAmount = 0;
+      console.warn(`⚠️ Could not find product details for price ID ${activeSubscription.price_id}, using subscription constants fallback`);
+      console.log(`🔍 Available price IDs in constants:`, subscriptionPlans.map(p => ({
+        name: p.name,
+        monthlyId: p.prices?.monthly?.id,
+        yearlyId: p.prices?.yearly?.id
+      })));
+      
+      console.log(`🔍 Looking for price ID: ${activeSubscription.price_id}`);
+      console.log(`🔍 Found plan:`, subscriptionPlans.find(p => 
+        p.prices?.monthly?.id === activeSubscription.price_id || 
+        p.prices?.yearly?.id === activeSubscription.price_id)?.name || 'Not found');
+      
+      // Try to find plan by price ID in subscription constants
+      const plan = subscriptionPlans.find(p => 
+        p.prices?.monthly?.id === activeSubscription.price_id || 
+        p.prices?.yearly?.id === activeSubscription.price_id
+      );
+      
+      if (plan) {
+        productId = plan.id;
+        productName = plan.displayName || plan.name;
+        priceAmount = plan.price;
+        console.log(`✅ Found plan in constants: ${productId} (${productName}) - Amount: ${priceAmount} cents`);
+      } else {
+        // Final fallback
+        productId = 'unknown';
+        productName = 'Unknown Product';
+        priceAmount = 0;
+        console.log(`❌ Could not find plan for price ID ${activeSubscription.price_id} in constants either`);
+      }
     } else {
       productId = priceData.product_id;
       productName = (priceData.products as any).name;
