@@ -376,10 +376,10 @@ export default function RejectionReasonModal({
                         )}
                     >
                         {isLoading ? (
-                            <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            <div className="flex items-center justify-center text-center">
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#7F39EC] mr-2"></div>
                                 Rejecting...
-                            </>
+                            </div>
                         ) : (
                             <>
                                 {/* <XCircle className="h-4 w-4 mr-2" /> */}

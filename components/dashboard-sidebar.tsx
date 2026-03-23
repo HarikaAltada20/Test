@@ -27,6 +27,7 @@ import {
   Award,
   PlusCircle,
   Newspaper,
+  Star,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -34,12 +35,14 @@ interface DashboardSidebarProps {
   userRole?: "advertiser" | "creator" | "admin";
   collapsed?: boolean;
   onChatOpen: () => void;
+  onReviewOpen: () => void;
   mode?: "light" | "dark";
 }
 
 export function DashboardSidebar({
   userRole = "advertiser",
   onChatOpen,
+  onReviewOpen,
   collapsed = false,
   mode,
 }: DashboardSidebarProps) {
@@ -56,6 +59,7 @@ export function DashboardSidebar({
     if (userRole === "admin") {
       const othersDropdownItems = [
         "/dashboard/admin/manual-entry",
+        "/dashboard/admin/ratings",
         "/dashboard/admin/others",
       ];
       const shouldBeOpen = othersDropdownItems.some((href) =>
@@ -192,6 +196,12 @@ export function DashboardSidebar({
       href: "/dashboard/admin/manual-entry",
       icon: PlusCircle,
       description: "Credit coins or cash to users",
+    },
+    {
+      name: "Rating",
+      href: "/dashboard/admin/ratings",
+      icon: Star,
+      description: "View user reviews and ratings",
     },
   ];
 
@@ -453,6 +463,10 @@ export function DashboardSidebar({
                               pathname.startsWith(
                                 "/dashboard/admin/manual-entry",
                               ) ||
+                              pathname === "/dashboard/admin/ratings" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/ratings",
+                              ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others")
                                 ? activeBg
@@ -463,6 +477,10 @@ export function DashboardSidebar({
                               pathname.startsWith(
                                 "/dashboard/admin/manual-entry",
                               ) ||
+                              pathname === "/dashboard/admin/ratings" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/ratings",
+                              ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others")
                                 ? activeBorder
@@ -472,6 +490,10 @@ export function DashboardSidebar({
                               pathname === "/dashboard/admin/manual-entry" ||
                               pathname.startsWith(
                                 "/dashboard/admin/manual-entry",
+                              ) ||
+                              pathname === "/dashboard/admin/ratings" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/ratings",
                               ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others")
@@ -484,6 +506,10 @@ export function DashboardSidebar({
                               pathname === "/dashboard/admin/manual-entry" ||
                               pathname.startsWith(
                                 "/dashboard/admin/manual-entry",
+                              ) ||
+                              pathname === "/dashboard/admin/ratings" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/ratings",
                               ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others");
@@ -499,6 +525,10 @@ export function DashboardSidebar({
                               pathname === "/dashboard/admin/manual-entry" ||
                               pathname.startsWith(
                                 "/dashboard/admin/manual-entry",
+                              ) ||
+                              pathname === "/dashboard/admin/ratings" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/ratings",
                               ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others");
@@ -522,6 +552,10 @@ export function DashboardSidebar({
                                 pathname === "/dashboard/admin/manual-entry" ||
                                 pathname.startsWith(
                                   "/dashboard/admin/manual-entry",
+                                ) ||
+                                pathname === "/dashboard/admin/ratings" ||
+                                pathname.startsWith(
+                                  "/dashboard/admin/ratings",
                                 ) ||
                                 pathname === "/dashboard/admin/others" ||
                                 pathname.startsWith("/dashboard/admin/others")
@@ -548,6 +582,10 @@ export function DashboardSidebar({
                                       pathname.startsWith(
                                         "/dashboard/admin/manual-entry",
                                       ) ||
+                                      pathname === "/dashboard/admin/ratings" ||
+                                      pathname.startsWith(
+                                        "/dashboard/admin/ratings",
+                                      ) ||
                                       pathname === "/dashboard/admin/others" ||
                                       pathname.startsWith(
                                         "/dashboard/admin/others",
@@ -569,6 +607,10 @@ export function DashboardSidebar({
                                         "/dashboard/admin/manual-entry" ||
                                       pathname.startsWith(
                                         "/dashboard/admin/manual-entry",
+                                      ) ||
+                                      pathname === "/dashboard/admin/ratings" ||
+                                      pathname.startsWith(
+                                        "/dashboard/admin/ratings",
                                       ) ||
                                       pathname === "/dashboard/admin/others" ||
                                       pathname.startsWith(
@@ -746,6 +788,22 @@ export function DashboardSidebar({
                       Book a Call
                     </a>
                   )}
+
+                  {/* Review Button - Show for all user roles except admin */}
+                  {(userRole === "advertiser" || userRole === "creator") && (
+                    <button
+                      onClick={onReviewOpen}
+                      className={cn(
+                        "flex items-center justify-center gap-2 w-full rounded-xl py-2 text-center transition",
+                        isDark
+                          ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+                          : "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white",
+                      )}
+                    >
+                      {/* <Star className="h-4 w-4" /> */}
+                      Leave a Review
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-3">
@@ -776,6 +834,21 @@ export function DashboardSidebar({
                         <Phone size={18} className="text-white" />
                       </a>
                     </div>
+                  )}
+
+                  {/* Review Button - Show for all user roles except admin */}
+                  {(userRole === "advertiser" || userRole === "creator") && (
+                    <button
+                      onClick={onReviewOpen}
+                      className={cn(
+                        "rounded-full w-10 h-10 flex items-center justify-center",
+                        isDark
+                          ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                          : "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700",
+                      )}
+                    >
+                      <Star size={18} className="text-white" />
+                    </button>
                   )}
                 </div>
               )}
