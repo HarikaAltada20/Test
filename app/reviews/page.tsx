@@ -46,6 +46,7 @@ export default function ReviewsPage() {
   const [activeTab, setActiveTab] = useState<'creators' | 'brands'>('creators');
   const [ratingStats, setRatingStats] = useState<RatingStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [visibleReviews, setVisibleReviews] = useState(5);
   const searchParams = useSearchParams();
 
   const fetchRatingStats = async () => {
@@ -101,36 +102,13 @@ export default function ReviewsPage() {
     }
   }, [searchParams]);
 
-  const renderStars = (rating: number) => {
-    return (
-      <div className="flex gap-1">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Star
-            key={star}
-            className={`h-4 w-4 ${
-              star <= rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'
-            }`}
-          />
-        ))}
-      </div>
-    );
+
+
+  const handleViewMore = () => {
+    setVisibleReviews(prev => prev + 5);
   };
 
-  const handleImageClick = (images: string[]) => {
-    setSelectedImages(images);
-    setIsImageModalOpen(true);
-    setImagesLoading(true);
-    
-    // Preload images
-    Promise.all(images.map(src => new Promise<void>((resolve, reject) => {
-      const img = new window.Image();
-      img.onload = () => resolve();
-      img.onerror = reject;
-      img.src = src;
-    }))).finally(() => {
-      setImagesLoading(false);
-    });
-  };
+
 
   const filteredReviews = reviews.filter(review => {
     if (searchTerm) {
@@ -147,7 +125,7 @@ export default function ReviewsPage() {
     if (activeTab === 'creators') return review.user_type === 'creator';
     if (activeTab === 'brands') return review.user_type === 'advertiser';
     return true;
-  });
+  }).slice(0, visibleReviews);
 
   // Calculate stats
   const totalReviews = reviews.length;
@@ -212,17 +190,19 @@ export default function ReviewsPage() {
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   {/* Header */}
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="font-semibold text-lg text-slate-50">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
+                    <h3 className="font-semibold text-lg text-slate-50 truncate">
                       {review.users.username || review.users.full_name || review.users.email}
                     </h3>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/40 bg-purple-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#C4A3FF] w-fit">
-                      <span className="h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.85)]" />
-                      {review.user_type}
-                    </span>
-                    <span className="text-sm text-slate-400/90">
-                      {new Date(review.created_at).toLocaleDateString()}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/40 bg-purple-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#C4A3FF] w-fit">
+                        <span className="h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.85)]" />
+                        {review.user_type}
+                      </span>
+                      <span className="text-sm text-slate-400/90 whitespace-nowrap">
+                        {new Date(review.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
                   </div>
                   
                   {/* Rating */}
@@ -269,6 +249,33 @@ export default function ReviewsPage() {
             </div>
           ))}
         </div>
+        
+        {/* View More Button */}
+        {visibleReviews < reviews.filter(review => {
+          if (searchTerm) {
+            const searchLower = searchTerm.toLowerCase();
+            return (
+              review.users.email?.toLowerCase().includes(searchLower) ||
+              review.users.full_name?.toLowerCase().includes(searchLower) ||
+              review.users.username?.toLowerCase().includes(searchLower) ||
+              review.experience.toLowerCase().includes(searchLower)
+            );
+          }
+          return true;
+        }).filter(review => {
+          if (activeTab === 'creators') return review.user_type === 'creator';
+          if (activeTab === 'brands') return review.user_type === 'advertiser';
+          return true;
+        }).length && (
+          <div className="text-center mt-8">
+            <button
+              onClick={handleViewMore}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#4C238D] via-[#7F39EC] to-fuchsia-400 text-white font-medium rounded-full hover:shadow-lg hover:shadow-[#7F39EC]/50 transition-all duration-300"
+            >
+              View More Reviews
+            </button>
+          </div>
+        )}
       </div>
     );
   };
