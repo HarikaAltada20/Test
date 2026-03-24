@@ -1,8 +1,11 @@
 import React from "react";
 import { Metadata } from "next";
 import BrandsClient from "./BrandsClient";
-import { createClient } from "@/utils/supabase/server";
+import {
+  getCachedBrandsLandingData,
+} from "@/lib/landing-data-cache";
 
+/** Time-based ISR: page shell + `unstable_cache` refresh at this interval. */
 export const revalidate = 86400;
 
 export const metadata: Metadata = {
@@ -30,17 +33,7 @@ export const metadata: Metadata = {
 };
 
 export default async function BrandsPage() {
-  const supabase = await createClient();
-
-  const { data: submissions } = await supabase
-    .from("submissions")
-    .select("views");
-
-  const totalViews =
-    submissions?.reduce(
-      (sum, sub: { views: number | null }) => sum + (sub.views || 0),
-      0
-    ) || 0;
+  const { totalViews } = await getCachedBrandsLandingData();
 
   return <BrandsClient totalViews={totalViews} />;
 }
