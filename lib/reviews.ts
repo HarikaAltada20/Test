@@ -135,7 +135,7 @@ export async function getUserReviews(
       .from('user_reviews')
       .select('*')
       .eq('user_id', userId)
-      .eq('status', 'active')
+      .eq('status', 'approved')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -163,7 +163,7 @@ export async function getAllReviews(
     const { data, error, count } = await supabase
       .from('user_reviews')
       .select('*, users!inner(full_name, profile_picture_url)', { count: 'exact' })
-      .eq('status', 'active')
+      .eq('status', 'approved')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 

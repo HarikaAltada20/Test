@@ -4,6 +4,7 @@ import { Crown, Sparkles, Users } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 const homeTestimonials = [
   {
@@ -217,12 +218,12 @@ const config = {
 };
 
 export default function Testimonials() {
+  const pathname = usePathname();
+  const [isNavigating, setIsNavigating] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLDivElement>(null);
   const [headingAnimated, setHeadingAnimated] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const pathname = usePathname();
-
   const key = (
     pathname in config ? pathname : "default"
   ) as keyof typeof config;
@@ -258,6 +259,14 @@ export default function Testimonials() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  const handleNavigation = () => {
+    setIsNavigating(true);
+  };
+
+  useEffect(() => {
+    setIsNavigating(false);
+  }, [pathname]);
 
   const ButtonIcon = button.icon;
 
@@ -415,6 +424,7 @@ export default function Testimonials() {
           return (
             <Link 
               href={href}
+              onClick={handleNavigation}
               className="relative z-10 rounded-3xl text-white font-bold px-8 py-2.5 text-lg overflow-hidden flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
               style={{ 
                 backgroundImage: pathname?.includes('creators') 
@@ -422,6 +432,7 @@ export default function Testimonials() {
                    : "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)"
               }}
             >
+              {isNavigating ? <ButtonLoadingSpinner /> : null}
               {/* <Users className="w-5 h-5" /> */}
               View All Reviews
             </Link>

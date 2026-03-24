@@ -30,6 +30,8 @@ export async function GET(request: Request) {
     const status = searchParams.get('status');
     const userType = searchParams.get('userType');
     const rating = searchParams.get('rating');
+    const sortBy = searchParams.get('sortBy') || 'created_at';
+    const sortOrder = searchParams.get('sortOrder') || 'desc';
 
     const offset = (page - 1) * limit;
 
@@ -46,7 +48,7 @@ export async function GET(request: Request) {
           profile_picture_url
         )
       `, { count: 'exact' })
-      .order('created_at', { ascending: false });
+      .order(sortBy, { ascending: sortOrder === 'asc' });
 
     // Apply filters
     if (status) {

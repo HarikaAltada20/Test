@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Star, Search, CheckCircle, X, Clock, Sparkles, Heart, Palette, Trophy, Crown, Users, Building } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Image from "next/image";
 import SocialPair from "@/public/images/social_pair.avif";
@@ -35,18 +37,30 @@ interface RatingStats {
   ratingPercentages: { 1: number; 2: number; 3: number; 4: number; 5: number };
 }
 
+interface PaginationData {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export default function ReviewsPage() {
   const [reviews, setReviews] = useState<UserReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState<string>('');
   const [imagesLoading, setImagesLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'creators' | 'brands'>('creators');
   const [ratingStats, setRatingStats] = useState<RatingStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [visibleReviews, setVisibleReviews] = useState(5);
+  const [pagination, setPagination] = useState<PaginationData>({
+    page: 1,
+    limit: 9,
+    total: 0,
+    totalPages: 0
+  });
+  const [sortBy, setSortBy] = useState<string>('relevance');
   const searchParams = useSearchParams();
 
   const fetchRatingStats = async () => {
@@ -72,7 +86,13 @@ export default function ReviewsPage() {
     setError(null);
 
     try {
-      const response = await fetch('/api/reviews-api/reviews?status=approved');
+      const params = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
+        status: 'approved'
+      });
+
+      const response = await fetch(`/api/reviews-api/reviews?${params}`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch reviews');
@@ -80,6 +100,11 @@ export default function ReviewsPage() {
 
       const data = await response.json();
       setReviews(data.reviews || []);
+      setPagination(prev => ({
+        ...prev,
+        total: data.total || 0,
+        totalPages: Math.ceil((data.total || 0) / prev.limit)
+      }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -100,32 +125,56 @@ export default function ReviewsPage() {
     } else {
       console.log('Defaulting to creators tab');
     }
-  }, [searchParams]);
+  }, [searchParams, pagination.page, pagination.limit, sortBy]);
 
+  // Separate useEffect to handle tab changes and fetch reviews when tab changes
+  useEffect(() => {
+    fetchReviews();
+  }, [activeTab]);
 
-
-  const handleViewMore = () => {
-    setVisibleReviews(prev => prev + 5);
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
   };
 
-
+  const handleLimitChange = (newLimit: number) => {
+    setPagination(prev => ({ ...prev, limit: newLimit, page: 1 }));
+  };
 
   const filteredReviews = reviews.filter(review => {
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      return (
-        review.users.email?.toLowerCase().includes(searchLower) ||
-        review.users.full_name?.toLowerCase().includes(searchLower) ||
-        review.users.username?.toLowerCase().includes(searchLower) ||
-        review.experience.toLowerCase().includes(searchLower)
-      );
-    }
-    return true;
-  }).filter(review => {
     if (activeTab === 'creators') return review.user_type === 'creator';
     if (activeTab === 'brands') return review.user_type === 'advertiser';
     return true;
-  }).slice(0, visibleReviews);
+  }).sort((a, b) => {
+    if (sortBy === 'relevance') {
+      // Only consider reviews with both high rating (4-5 stars) AND review text as most relevant
+      const aHasRelevance = (a.rating >= 4) && (a.experience && a.experience.trim().length > 0);
+      const bHasRelevance = (b.rating >= 4) && (b.experience && b.experience.trim().length > 0);
+      
+      // If one has relevance and the other doesn't, prioritize the relevant one
+      if (aHasRelevance !== bHasRelevance) {
+        return bHasRelevance ? 1 : -1;
+      }
+      
+      // If both have relevance, sort by rating first, then date
+      if (aHasRelevance && bHasRelevance) {
+        if (b.rating !== a.rating) {
+          return b.rating - a.rating; // Higher rating first
+        }
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); // Newest first
+      }
+      
+      // If neither has relevance, sort by rating then date
+      if (b.rating !== a.rating) {
+        return b.rating - a.rating;
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    } else if (sortBy === 'newest') {
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    } else if (sortBy === 'oldest') {
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    }
+    return 0;
+  });
 
   // Calculate stats
   const totalReviews = reviews.length;
@@ -250,32 +299,24 @@ export default function ReviewsPage() {
           ))}
         </div>
         
-        {/* View More Button */}
-        {visibleReviews < reviews.filter(review => {
-          if (searchTerm) {
-            const searchLower = searchTerm.toLowerCase();
-            return (
-              review.users.email?.toLowerCase().includes(searchLower) ||
-              review.users.full_name?.toLowerCase().includes(searchLower) ||
-              review.users.username?.toLowerCase().includes(searchLower) ||
-              review.experience.toLowerCase().includes(searchLower)
-            );
-          }
-          return true;
-        }).filter(review => {
-          if (activeTab === 'creators') return review.user_type === 'creator';
-          if (activeTab === 'brands') return review.user_type === 'advertiser';
-          return true;
-        }).length && (
-          <div className="text-center mt-8">
-            <button
-              onClick={handleViewMore}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#4C238D] via-[#7F39EC] to-fuchsia-400 text-white font-medium rounded-full hover:shadow-lg hover:shadow-[#7F39EC]/50 transition-all duration-300"
-            >
-              View More Reviews
-            </button>
-          </div>
-        )}
+        {/* Pagination */}
+        <div className="mt-8">
+          <PaginationControls
+            page={pagination.page}
+            limit={pagination.limit}
+            total={pagination.total}
+            totalPages={pagination.totalPages}
+            hasNextPage={pagination.page < pagination.totalPages}
+            hasPreviousPage={pagination.page > 1}
+            onPageChange={handlePageChange}
+            onLimitChange={handleLimitChange}
+            loading={loading}
+            isDark={true}
+            pageSizeOptions={[9, 15, 21, 30]}
+            showResultInfo={true}
+            showPageSizeSelector={true}
+          />
+        </div>
       </div>
     );
   };
@@ -480,8 +521,23 @@ export default function ReviewsPage() {
           </div>
           </div> */}
 
-          {/* Tab Buttons */}
-          <div className="flex justify-center mb-16">
+          {/* Combined Tabs and Sort Controls - One Line */}
+          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
+            {/* Sort Dropdown - Left on desktop, top on mobile */}
+            <div className="w-full sm:w-auto">
+              <Select value={sortBy || "relevance"} onValueChange={(value) => setSortBy(value)}>
+                <SelectTrigger className="w-full bg-black/80 border border-[#7F39EC]/70 text-white">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent className="bg-black/90 border border-[#7F39EC]/70" >
+                  <SelectItem value="relevance" className="bg-black/90 text-white hover:bg-purple-300/30 hover:text-white focus:bg-purple-600/30 focus:text-white">Most Relevant</SelectItem>
+                  <SelectItem value="newest" className="bg-black/90 text-white hover:bg-purple-600/30 hover:text-white focus:bg-purple-600/30 focus:text-white">Newest</SelectItem>
+                  <SelectItem value="oldest" className="bg-black/90 text-white hover:bg-purple-600/30 hover:text-white focus:bg-purple-600/30 focus:text-white">Oldest</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Tab Buttons - Right on desktop, below on mobile */}
             <div className="inline-flex rounded-md border border-[#7F39EC]/70 bg-black/80 backdrop-blur-sm p-1">
               <button
                 onClick={() => setActiveTab('creators')}

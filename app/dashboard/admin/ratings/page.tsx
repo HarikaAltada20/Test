@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 
@@ -152,10 +153,11 @@ export default function RatingsPage() {
   const [isDark, setIsDark] = useState<boolean>(readIsDarkFromDom);
   const [reviews, setReviews] = useState<UserReview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState<PaginationData>({
     page: 1,
-    limit: 10,
+    limit: 25,
     total: 0,
     totalPages: 0
   });
@@ -192,6 +194,7 @@ export default function RatingsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [userTypeFilter, setUserTypeFilter] = useState<string>('');
   const [ratingFilter, setRatingFilter] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('relevance');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   const fetchRatingStats = async () => {
@@ -212,7 +215,7 @@ export default function RatingsPage() {
     }
   };
 
-  const fetchReviews = async (page = 1, reset = false) => {
+  const fetchReviews = async (page = 1) => {
     setLoading(true);
     setError(null);
 
@@ -225,6 +228,19 @@ export default function RatingsPage() {
       if (statusFilter) params.append('status', statusFilter);
       if (userTypeFilter) params.append('userType', userTypeFilter);
       if (ratingFilter) params.append('rating', ratingFilter);
+      
+      // Handle sorting logic
+      if (sortBy === 'relevance') {
+        // For relevance, we'll sort by rating (desc) then created_at (desc)
+        params.append('sortBy', 'rating');
+        params.append('sortOrder', 'desc');
+      } else if (sortBy === 'newest') {
+        params.append('sortBy', 'created_at');
+        params.append('sortOrder', 'desc');
+      } else if (sortBy === 'oldest') {
+        params.append('sortBy', 'created_at');
+        params.append('sortOrder', 'asc');
+      }
 
       const response = await fetch(`/api/admin/user-reviews?${params}`);
       
@@ -234,24 +250,33 @@ export default function RatingsPage() {
 
       const data = await response.json();
       
-      if (reset) {
-        setReviews(data.reviews);
-      } else {
-        setReviews(prev => page === 1 ? data.reviews : [...prev, ...data.reviews]);
-      }
+      setReviews(data.reviews);
       
       setPagination(data.pagination);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+      setInitialLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchReviews(1, true);
+    fetchReviews(1);
+  }, [statusFilter, userTypeFilter, ratingFilter, sortBy, pagination.limit]);
+
+  useEffect(() => {
     fetchRatingStats();
-  }, [statusFilter, userTypeFilter, ratingFilter]);
+  }, []);
+
+  const handlePageChange = (newPage: number) => {
+    fetchReviews(newPage);
+  };
+
+  const handleLimitChange = (newLimit: number) => {
+    setPagination(prev => ({ ...prev, limit: newLimit, page: 1 }));
+    // The useEffect above will trigger fetchReviews(1) because pagination.limit changed
+  };
 
   const handleStatusUpdate = async (reviewId: string, newStatus: 'pending' | 'approved' | 'rejected') => {
     try {
@@ -342,15 +367,37 @@ export default function RatingsPage() {
       );
     }
     return true;
+  }).sort((a, b) => {
+    if (sortBy === 'relevance') {
+      // Only consider reviews with both high rating (4-5 stars) AND review text as most relevant
+      const aHasRelevance = (a.rating >= 4) && (a.experience && a.experience.trim().length > 0);
+      const bHasRelevance = (b.rating >= 4) && (b.experience && b.experience.trim().length > 0);
+      
+      // If one has relevance and the other doesn't, prioritize the relevant one
+      if (aHasRelevance !== bHasRelevance) {
+        return bHasRelevance ? 1 : -1;
+      }
+      
+      // If both have relevance, sort by rating first, then date
+      if (aHasRelevance && bHasRelevance) {
+        if (b.rating !== a.rating) {
+          return b.rating - a.rating; // Higher rating first
+        }
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); // Newest first
+      }
+      
+      // If neither has relevance, sort by rating then date
+      if (b.rating !== a.rating) {
+        return b.rating - a.rating;
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+    return 0; // Let API handle other sorting
   });
 
-  // Calculate stats - count all reviews regardless of status
-  const approvedReviews = reviews.filter(review => review.status === 'approved').length;
-  const rejectedReviews = reviews.filter(review => review.status === 'rejected').length;
-  const pendingReviews = reviews.filter(review => review.status === 'pending').length;
-  const totalReviews = reviews.length; // Count all reviews
+ // Count all reviews
 
-  if (loading && reviews.length === 0) {
+  if (initialLoading) {
     return (
       <div className="flex items-center justify-center h-[76vh]">
         <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
@@ -374,7 +421,9 @@ export default function RatingsPage() {
             <div className="flex justify-between">
               <div className={`flex-1 space-y-2 ${isDark ? "text-white" : "text-black"}`}>
                 <p className="text-lg font-medium">Total Reviews</p>
-                <p className="text-xl font-bold">{totalReviews}</p>
+                <p className="text-xl font-bold">
+                  {statsLoading ? "..." : ratingStats?.totalReviews || 0}
+                </p>
                 <p className="text-sm mt-0.5">All submitted reviews</p>
               </div>
               <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-[#FFFFFF36] text-[#D8C3FF]" : "bg-[#D8C3FF] text-[#4A00BE]"}`}>
@@ -390,7 +439,9 @@ export default function RatingsPage() {
             <div className="flex justify-between">
               <div className={`flex-1 space-y-2 ${isDark ? "text-white" : "text-black"}`}>
                 <p className="text-lg font-medium">Approved</p>
-                <p className="text-xl font-bold">{approvedReviews}</p>
+                <p className="text-xl font-bold">
+                  {statsLoading ? "..." : (ratingStats as any)?.statusCounts?.approved || 0}
+                </p>
                 <p className="text-sm mt-0.5">Approved reviews</p>
               </div>
               <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-[#FFFFFF36] text-[#D8C3FF]" : "bg-[#D8C3FF] text-[#4A00BE]"}`}>
@@ -406,7 +457,9 @@ export default function RatingsPage() {
             <div className="flex justify-between">
               <div className={`flex-1 space-y-2 ${isDark ? "text-white" : "text-black"}`}>
                 <p className="text-lg font-medium">Rejected</p>
-                <p className="text-xl font-bold">{rejectedReviews}</p>
+                <p className="text-xl font-bold">
+                  {statsLoading ? "..." : (ratingStats as any)?.statusCounts?.rejected || 0}
+                </p>
                 <p className="text-sm mt-0.5">Rejected reviews</p>
               </div>
               <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-[#FFFFFF36] text-[#D8C3FF]" : "bg-[#D8C3FF] text-[#4A00BE]"}`}>
@@ -422,7 +475,9 @@ export default function RatingsPage() {
             <div className="flex justify-between">
               <div className={`flex-1 space-y-2 ${isDark ? "text-white" : "text-black"}`}>
                 <p className="text-lg font-medium">Pending</p>
-                <p className="text-xl font-bold">{pendingReviews}</p>
+                <p className="text-xl font-bold">
+                  {statsLoading ? "..." : (ratingStats as any)?.statusCounts?.pending || 0}
+                </p>
                 <p className="text-sm mt-0.5">Pending reviews</p>
               </div>
               <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-[#FFFFFF36] text-[#D8C3FF]" : "bg-[#D8C3FF] text-[#4A00BE]"}`}>
@@ -433,8 +488,9 @@ export default function RatingsPage() {
         </div>
       </div>
 
+
       {/* Rating Overview Component */}
-      {/* <div className="bg-white rounded-lg shadow-lg p-6">
+      <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="flex items-center justify-between">
          
           <div className="flex items-center space-x-6 gap-4">
@@ -515,7 +571,7 @@ export default function RatingsPage() {
             </div>
           </div>
         </div>
-      </div> */}
+      </div>
 
       {/* Filters */}
       <div className="flex flex-col lg:flex-row gap-4 py-4 items-start lg:items-center justify-between">
@@ -540,8 +596,21 @@ export default function RatingsPage() {
           </div>
         </div>
 
-        {/* Three filters on right */}
-        <div className="w-full lg:w-auto grid grid-cols-1 sm:grid-cols-3 gap-6 lg:gap-8">
+        {/* Four filters on right */}
+        <div className="w-full lg:w-auto grid grid-cols-1 sm:grid-cols-4 gap-6 lg:gap-8">
+          <div className="min-w-[180px]">
+            <Select value={sortBy || "relevance"} onValueChange={(value) => setSortBy(value)}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent isDark={isDark}>
+                <SelectItem value="relevance" isDark={isDark}>Most Relevant</SelectItem>
+                <SelectItem value="newest" isDark={isDark}>Newest</SelectItem>
+                <SelectItem value="oldest" isDark={isDark}>Oldest</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="min-w-[180px]">
             <Select value={statusFilter || "all"} onValueChange={(value) => setStatusFilter(value === "all" ? "" : value)}>
               <SelectTrigger className="w-full">
@@ -590,7 +659,7 @@ export default function RatingsPage() {
       {/* Reviews List */}
       <div className={`${isDark ? "bg-[#170337]" : "bg-white"} rounded-lg shadow`}>
         <div className="py-6 px-4">
-          {loading && reviews.length === 0 ? (
+          {loading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
               <p className={`mt-4 ${isDark ? "text-gray-300" : "text-gray-600"}`}>Loading reviews...</p>
@@ -599,7 +668,7 @@ export default function RatingsPage() {
             <div className="text-center py-12">
               <p className="text-red-600">{error}</p>
               <button
-                onClick={() => fetchReviews(1, true)}
+                onClick={() => fetchReviews(1)}
                 className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
               >
                 Retry
@@ -788,18 +857,21 @@ export default function RatingsPage() {
                 </TableBody>
               </Table>
 
-              {/* Load More */}
-              {pagination.page < pagination.totalPages && (
-                <div className="text-center pt-6">
-                  <button
-                    onClick={() => fetchReviews(pagination.page + 1, false)}
-                    disabled={loading}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {loading ? 'Loading...' : 'Load More'}
-                  </button>
-                </div>
-              )}
+              {/* Pagination */}
+              <div className="mt-4 px-6">
+                <PaginationControls
+                  page={pagination.page}
+                  limit={pagination.limit}
+                  total={pagination.total}
+                  totalPages={pagination.totalPages}
+                  hasNextPage={pagination.page < pagination.totalPages}
+                  hasPreviousPage={pagination.page > 1}
+                  onPageChange={handlePageChange}
+                  onLimitChange={handleLimitChange}
+                  loading={loading}
+                    isDark={isDark}
+                />
+              </div>
             </div>
           )}
         </div>
