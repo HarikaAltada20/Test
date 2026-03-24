@@ -1,6 +1,71 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 
+function toReviewImagePath(value: string): string | null {
+  if (!value || typeof value !== 'string') return null;
+  const raw = value.trim();
+  if (!raw) return null;
+
+  // Already stored as object path, e.g. "<user-id>/<filename>"
+  if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+    return raw.replace(/^\/+/, '');
+  }
+
+  try {
+    const parsed = new URL(raw);
+    const marker = '/review-images/';
+    const markerIndex = parsed.pathname.indexOf(marker);
+    if (markerIndex === -1) return null;
+    const path = parsed.pathname.slice(markerIndex + marker.length);
+    return decodeURIComponent(path).replace(/^\/+/, '');
+  } catch {
+    return null;
+  }
+}
+
+const REVIEW_IMAGE_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
+
+async function resolveSignedReviewImagesForReviews(
+  supabase: any,
+  reviews: any[]
+): Promise<any[]> {
+  if (!reviews || reviews.length === 0) return [];
+
+  const uniquePaths = Array.from(new Set(
+    reviews.flatMap((review) =>
+      (review.images || [])
+        .map((image: string) => toReviewImagePath(image))
+        .filter((path: string | null): path is string => Boolean(path))
+    )
+  ));
+
+  if (uniquePaths.length === 0) return reviews;
+
+  const { data, error } = await supabase.storage
+    .from('review-images')
+    .createSignedUrls(uniquePaths, REVIEW_IMAGE_SIGNED_URL_TTL_SECONDS);
+
+  if (error || !data) {
+    console.error('Error creating signed review image URLs:', error);
+    return reviews;
+  }
+
+  const signedByPath = new Map<string, string>();
+  data.forEach((item: { path: string; signedUrl: string | null }) => {
+    if (item?.path && item?.signedUrl) {
+      signedByPath.set(item.path, item.signedUrl);
+    }
+  });
+
+  return reviews.map((review) => ({
+    ...review,
+    images: (review.images || []).map((image: string) => {
+      const path = toReviewImagePath(image);
+      return path ? signedByPath.get(path) || image : image;
+    }),
+  }));
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -91,8 +156,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const reviewsWithSignedImages = await resolveSignedReviewImagesForReviews(
+      supabase,
+      reviews || []
+    );
+
     return NextResponse.json({
-      reviews: reviews || [],
+      reviews: reviewsWithSignedImages,
       total: count || 0,
       pagination: {
         page,

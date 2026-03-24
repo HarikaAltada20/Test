@@ -57,7 +57,8 @@ export async function submitReview(
     }
 
     // Upload compressed images to storage if any
-    const imageUrls: string[] = [];
+    // Store object paths (not public URLs) because the bucket is private.
+    const imagePaths: string[] = [];
     
     if (compressedImages.length > 0) {
       for (const image of compressedImages) {
@@ -73,12 +74,7 @@ export async function submitReview(
           continue; // Continue with other images if one fails
         }
 
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('review-images')
-          .getPublicUrl(fileName);
-
-        imageUrls.push(publicUrl);
+        imagePaths.push(fileName);
       }
     }
 
@@ -99,7 +95,7 @@ export async function submitReview(
       user_type: userData.user_type as 'advertiser' | 'creator',
       rating: reviewData.rating,
       experience: reviewData.experience,
-      images: imageUrls,
+      images: imagePaths,
       video_links: reviewData.videoLinks,
     };
 

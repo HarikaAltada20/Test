@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useLayoutEffect } from "react";
-import { Star, Filter, Search, CheckCircle,MessageSquare, XCircle, Clock, User as UserIcon, X, MoreHorizontal, MoreVertical } from "lucide-react";
+import { Star, Filter, Search, CheckCircle, MessageSquare, XCircle, Clock, User as UserIcon, X, MoreHorizontal, MoreVertical } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Table,
@@ -91,12 +91,12 @@ function ReviewTextCell({
           const containerWidth = containerRef.current.clientWidth;
           const contentWidth = contentRef.current.scrollWidth;
           const isOverflowing = contentWidth > containerWidth;
-          
+
           // Also check if text is longer than 70 characters as a fallback
           const isLongText = reviewText ? reviewText.length > 50 : false;
-          
+
           setShowMoreButton(isOverflowing || isLongText);
-          
+
           // Double-check after a brief delay to ensure truncation is applied
           setTimeout(() => {
             if (containerRef.current && contentRef.current) {
@@ -168,6 +168,9 @@ export default function RatingsPage() {
   const [imagesLoading, setImagesLoading] = useState(false);
   const [ratingStats, setRatingStats] = useState<RatingStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const isSingleImageModal = selectedImages.length === 1;
+  const imageRefreshInFlightRef = useRef(false);
+  const lastImageRefreshAtRef = useRef(0);
 
   // Watch for theme changes
   useLayoutEffect(() => {
@@ -201,7 +204,7 @@ export default function RatingsPage() {
     setStatsLoading(true);
     try {
       const response = await fetch('/api/admin/user-reviews/stats');
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch rating statistics');
       }
@@ -228,7 +231,7 @@ export default function RatingsPage() {
       if (statusFilter) params.append('status', statusFilter);
       if (userTypeFilter) params.append('userType', userTypeFilter);
       if (ratingFilter) params.append('rating', ratingFilter);
-      
+
       // Handle sorting logic
       if (sortBy === 'relevance') {
         // For relevance, we'll sort by rating (desc) then created_at (desc)
@@ -243,21 +246,36 @@ export default function RatingsPage() {
       }
 
       const response = await fetch(`/api/admin/user-reviews?${params}`);
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch reviews');
       }
 
       const data = await response.json();
-      
+
       setReviews(data.reviews);
-      
+
       setPagination(data.pagination);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
       setInitialLoading(false);
+    }
+  };
+
+  const handleReviewImageError = async () => {
+    const now = Date.now();
+    // Prevent loops and avoid storms when multiple images fail at once.
+    if (imageRefreshInFlightRef.current || now - lastImageRefreshAtRef.current < 30000) {
+      return;
+    }
+    imageRefreshInFlightRef.current = true;
+    lastImageRefreshAtRef.current = now;
+    try {
+      await fetchReviews(pagination.page);
+    } finally {
+      imageRefreshInFlightRef.current = false;
     }
   };
 
@@ -296,8 +314,8 @@ export default function RatingsPage() {
       }
 
       // Update review in local state
-      setReviews(prev => prev.map(review => 
-        review.id === reviewId 
+      setReviews(prev => prev.map(review =>
+        review.id === reviewId
           ? { ...review, status: newStatus, updated_at: new Date().toISOString() }
           : review
       ));
@@ -318,7 +336,7 @@ export default function RatingsPage() {
     setIsReviewModalOpen(true);
   };
 
-  
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'approved':
@@ -347,9 +365,8 @@ export default function RatingsPage() {
         {[1, 2, 3, 4, 5].map((star) => (
           <Star
             key={star}
-            className={`h-4 w-4 ${
-              star <= rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'
-            }`}
+            className={`h-4 w-4 ${star <= rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'
+              }`}
           />
         ))}
       </div>
@@ -372,12 +389,12 @@ export default function RatingsPage() {
       // Only consider reviews with both high rating (4-5 stars) AND review text as most relevant
       const aHasRelevance = (a.rating >= 4) && (a.experience && a.experience.trim().length > 0);
       const bHasRelevance = (b.rating >= 4) && (b.experience && b.experience.trim().length > 0);
-      
+
       // If one has relevance and the other doesn't, prioritize the relevant one
       if (aHasRelevance !== bHasRelevance) {
         return bHasRelevance ? 1 : -1;
       }
-      
+
       // If both have relevance, sort by rating first, then date
       if (aHasRelevance && bHasRelevance) {
         if (b.rating !== a.rating) {
@@ -385,7 +402,7 @@ export default function RatingsPage() {
         }
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); // Newest first
       }
-      
+
       // If neither has relevance, sort by rating then date
       if (b.rating !== a.rating) {
         return b.rating - a.rating;
@@ -395,7 +412,7 @@ export default function RatingsPage() {
     return 0; // Let API handle other sorting
   });
 
- // Count all reviews
+  // Count all reviews
 
   if (initialLoading) {
     return (
@@ -406,11 +423,11 @@ export default function RatingsPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto space-y-6">
       {/* Header */}
-      <div>
+      <div className="space-y-2 pt-1">
         <h1 className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>Users Ratings and reviews</h1>
-        <p className={`${isDark ? "text-gray-300" : "text-gray-600"} mt-2`}>Manage and moderate user reviews and ratings</p>
+        <p className={`${isDark ? "text-gray-300" : "text-gray-600"}`}>Manage and moderate user reviews and ratings</p>
       </div>
 
       {/* Stats Cards */}
@@ -490,10 +507,10 @@ export default function RatingsPage() {
 
 
       {/* Rating Overview Component */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <div className="flex items-center justify-between">
-         
-          <div className="flex items-center space-x-6 gap-4">
+      <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-6">
             <div className="text-center">
               {statsLoading ? (
                 <div className="animate-pulse">
@@ -515,10 +532,9 @@ export default function RatingsPage() {
                     {[1, 2, 3, 4, 5].map((star) => (
                       <Star
                         key={star}
-                        className={`h-5 w-5 ${
-                          star <= Math.floor(ratingStats.averageRating) ? 'fill-green-500 text-green-500' : 
+                        className={`h-5 w-5 ${star <= Math.floor(ratingStats.averageRating) ? 'fill-green-500 text-green-500' :
                           star === Math.ceil(ratingStats.averageRating) && ratingStats.averageRating % 1 !== 0 ? 'fill-green-500 text-green-500' : 'text-gray-300'
-                        }`}
+                          }`}
                       />
                     ))}
                   </div>
@@ -528,14 +544,14 @@ export default function RatingsPage() {
                 <div className="text-6xl font-bold text-gray-900">0.0</div>
               )}
             </div>
-            
-            
-            <div className="space-y-1.5">
+
+
+            <div className="space-y-1.5 w-full">
               {statsLoading ? (
                 [5, 4, 3, 2, 1].map((rating) => (
                   <div key={rating} className="flex items-center space-x-2 animate-pulse">
                     <span className="text-sm text-gray-600 w-6">{rating}</span>
-                    <div className="w-[500px] bg-gray-200 rounded-full h-2">
+                    <div className="w-[clamp(160px,52vw,500px)] bg-gray-200 rounded-full h-2">
                       <div className="bg-gray-300 h-2 rounded-full w-0" />
                     </div>
                   </div>
@@ -546,7 +562,7 @@ export default function RatingsPage() {
                   return (
                     <div key={rating} className="flex items-center space-x-2">
                       <span className="text-sm text-gray-600 w-6">{rating}</span>
-                      <div className="w-[500px] bg-gray-200 rounded-full h-2">
+                      <div className="w-[clamp(160px,52vw,500px)] bg-gray-200 rounded-full h-2">
                         <div
                           className="bg-green-500 h-2 rounded-full transition-all duration-500"
                           style={{ width: `${percentage}%` }}
@@ -562,7 +578,7 @@ export default function RatingsPage() {
                 [5, 4, 3, 2, 1].map((rating) => (
                   <div key={rating} className="flex items-center space-x-2">
                     <span className="text-sm text-gray-600 w-6">{rating}</span>
-                    <div className="w-[500px] bg-gray-200 rounded-full h-2">
+                    <div className="w-[clamp(160px,52vw,500px)] bg-gray-200 rounded-full h-2">
                       <div className="bg-green-500 h-2 rounded-full" style={{ width: '0%' }} />
                     </div>
                   </div>
@@ -574,9 +590,9 @@ export default function RatingsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col lg:flex-row gap-4 py-4 items-start lg:items-center justify-between">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 pt-1 pb-2 items-start lg:items-center justify-between">
         {/* Search on left */}
-        <div className="w-full lg:w-auto lg:flex-1 lg:max-w-lg">
+        <div className="w-full lg:w-auto lg:flex-1 lg:max-w-lg lg:pr-2">
           <div className="relative">
             <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
             <Input
@@ -585,8 +601,8 @@ export default function RatingsPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search by name, username, email"
-              
-                className={cn(
+
+              className={cn(
                 "pl-10",
                 isDark
                   ? "bg-[#06021d] border border-gray-600 text-white"
@@ -597,8 +613,8 @@ export default function RatingsPage() {
         </div>
 
         {/* Four filters on right */}
-        <div className="w-full lg:w-auto grid grid-cols-1 sm:grid-cols-4 gap-6 lg:gap-8">
-          <div className="min-w-[180px]">
+        <div className="w-full lg:w-auto grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
+          <div className="min-w-0">
             <Select value={sortBy || "relevance"} onValueChange={(value) => setSortBy(value)}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Sort by" />
@@ -611,7 +627,7 @@ export default function RatingsPage() {
             </Select>
           </div>
 
-          <div className="min-w-[180px]">
+          <div className="min-w-0">
             <Select value={statusFilter || "all"} onValueChange={(value) => setStatusFilter(value === "all" ? "" : value)}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Status" />
@@ -625,7 +641,7 @@ export default function RatingsPage() {
             </Select>
           </div>
 
-          <div className="min-w-[180px]">
+          <div className="min-w-0">
             <Select value={userTypeFilter || "all"} onValueChange={(value) => setUserTypeFilter(value === "all" ? "" : value)}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Types" />
@@ -638,7 +654,7 @@ export default function RatingsPage() {
             </Select>
           </div>
 
-          <div className="min-w-[180px]">
+          <div className="min-w-0">
             <Select value={ratingFilter || "all"} onValueChange={(value) => setRatingFilter(value === "all" ? "" : value)}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Ratings" />
@@ -739,8 +755,8 @@ export default function RatingsPage() {
                               {review.users.full_name || review.users.username || 'Unknown User'}
                             </div>
                             <div className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                              {review.users.username && review.users.full_name && review.users.username !== review.users.full_name 
-                                ? `@${review.users.username}` 
+                              {review.users.username && review.users.full_name && review.users.username !== review.users.full_name
+                                ? `@${review.users.username}`
                                 : ''}
                             </div>
                           </div>
@@ -750,15 +766,14 @@ export default function RatingsPage() {
                         <div className={`text-sm ${isDark ? "text-white" : "text-gray-900"}`}>{review.users.email}</div>
                       </TableCell>
                       <TableCell className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full border ${
-                          review.user_type === 'advertiser' 
-                            ? isDark 
-                              ? 'bg-blue-900 text-blue-200 border-blue-700'
-                              : 'bg-blue-100 text-blue-800 border-blue-200'
-                            : isDark
-                              ? 'bg-purple-900 text-purple-200 border-purple-700'
-                              : 'bg-purple-100 text-purple-800 border-purple-200'
-                        }`}>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full border ${review.user_type === 'advertiser'
+                          ? isDark
+                            ? 'bg-blue-900 text-blue-200 border-blue-700'
+                            : 'bg-blue-100 text-blue-800 border-blue-200'
+                          : isDark
+                            ? 'bg-purple-900 text-purple-200 border-purple-700'
+                            : 'bg-purple-100 text-purple-800 border-purple-200'
+                          }`}>
                           {review.user_type}
                         </span>
                       </TableCell>
@@ -837,18 +852,24 @@ export default function RatingsPage() {
                             </div>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="min-w-[120px]">
-                            <DropdownMenuItem onClick={() => handleStatusChange(review.id, 'pending')} className="flex items-center gap-2">
-                              <Clock className="h-4 w-4" />
-                              Pending
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleStatusChange(review.id, 'approved')} className="flex items-center gap-2">
-                              <CheckCircle className="h-4 w-4" />
-                              Approved
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleStatusChange(review.id, 'rejected')} className="flex items-center gap-2">
-                              <XCircle className="h-4 w-4" />
-                              Rejected
-                            </DropdownMenuItem>
+                            {review.status !== "pending" && (
+                              <DropdownMenuItem onClick={() => handleStatusChange(review.id, "pending")} className="flex items-center gap-2">
+                                <Clock className="h-4 w-4" />
+                                Pending
+                              </DropdownMenuItem>
+                            )}
+                            {review.status !== "approved" && (
+                              <DropdownMenuItem onClick={() => handleStatusChange(review.id, "approved")} className="flex items-center gap-2">
+                                <CheckCircle className="h-4 w-4" />
+                                Approved
+                              </DropdownMenuItem>
+                            )}
+                            {review.status !== "rejected" && (
+                              <DropdownMenuItem onClick={() => handleStatusChange(review.id, "rejected")} className="flex items-center gap-2">
+                                <XCircle className="h-4 w-4" />
+                                Rejected
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -869,7 +890,7 @@ export default function RatingsPage() {
                   onPageChange={handlePageChange}
                   onLimitChange={handleLimitChange}
                   loading={loading}
-                    isDark={isDark}
+                  isDark={isDark}
                 />
               </div>
             </div>
@@ -880,8 +901,18 @@ export default function RatingsPage() {
       {/* Image Modal */}
       {isImageModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
-          <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-lg overflow-hidden ${imagesLoading ? 'w-full max-w-2xl' : 'max-w-4xl'} max-h-[90vh]`}>
-            <div className="flex items-center justify-between p-4 border-b">
+          <div
+            className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-lg overflow-hidden w-full ${imagesLoading
+              ? "max-w-2xl"
+              : isSingleImageModal
+                ? "max-w-3xl"
+                : "max-w-5xl"
+              } max-h-[90vh]`}
+          >
+            <div
+              className={`flex items-center justify-between p-4 border-b ${isDark ? "border-gray-700/70" : "border-gray-200"
+                }`}
+            >
               <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>Review Images</h3>
               <button
                 onClick={() => {
@@ -900,13 +931,20 @@ export default function RatingsPage() {
                   <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div
+                  className={
+                    isSingleImageModal
+                      ? "flex justify-center"
+                      : `grid grid-cols-1 ${selectedImages.length === 2 ? "md:grid-cols-2" : "md:grid-cols-2 lg:grid-cols-3"} gap-4`
+                  }
+                >
                   {selectedImages.map((image, index) => (
-                    <div key={index} className="relative group">
+                    <div key={index} className={`relative group ${isSingleImageModal ? "w-full" : ""}`}>
                       <img
                         src={image}
                         alt={`Review image ${index + 1}`}
-                        className={`w-full h-64 object-cover rounded-lg border ${isDark ? "border-gray-600" : "border-gray-200"}`}
+                        className={`w-full ${isSingleImageModal ? "max-h-[70vh] object-contain" : "h-64 object-cover"} rounded-lg border ${isDark ? "border-gray-600" : "border-gray-200"}`}
+                        onError={handleReviewImageError}
                       />
                       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-25 transition-opacity rounded-lg flex items-center justify-center">
                         <a

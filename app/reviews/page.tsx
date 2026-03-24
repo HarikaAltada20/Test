@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Star, X, Sparkles, Heart, Palette, Trophy, Crown, Users, Building, Link as LinkIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -65,6 +65,8 @@ export default function ReviewsPage() {
   });
   const [sortBy, setSortBy] = useState<string>('relevance');
   const searchParams = useSearchParams();
+  const imageRefreshInFlightRef = useRef(false);
+  const lastImageRefreshAtRef = useRef(0);
 
   const normalizeVideoUrl = (rawUrl: string): string | null => {
     if (!rawUrl || !rawUrl.trim()) return null;
@@ -136,6 +138,21 @@ export default function ReviewsPage() {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleReviewImageError = async () => {
+    const now = Date.now();
+    // Prevent loops and avoid storms when multiple images fail at once.
+    if (imageRefreshInFlightRef.current || now - lastImageRefreshAtRef.current < 30000) {
+      return;
+    }
+    imageRefreshInFlightRef.current = true;
+    lastImageRefreshAtRef.current = now;
+    try {
+      await fetchReviews();
+    } finally {
+      imageRefreshInFlightRef.current = false;
     }
   };
 
@@ -293,6 +310,7 @@ export default function ReviewsPage() {
                             alt={`Review image ${index + 1}`}
                             className="w-12 h-12 object-cover rounded cursor-pointer group-hover:scale-[1.06] transition-transform duration-700 ease-out"
                             onClick={() => window.open(image, '_blank')}
+                            onError={handleReviewImageError}
                           />
                           {review.images.length > 3 && index === 2 && (
                             <div className="absolute inset-0 bg-black/50 rounded flex items-center justify-center">
@@ -636,6 +654,7 @@ export default function ReviewsPage() {
                         src={image}
                         alt={`Review image ${index + 1}`}
                         className="w-full h-64 object-cover rounded-lg border"
+                        onError={handleReviewImageError}
                       />
                       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-25 transition-opacity rounded-lg flex items-center justify-center">
                         <a
