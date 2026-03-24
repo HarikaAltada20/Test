@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { Star, Filter, Search, CheckCircle,MessageSquare, XCircle, Clock, User as UserIcon, X, MoreHorizontal, MoreVertical } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -23,6 +23,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { cn } from "@/lib/utils";
+
+const readIsDarkFromDom = () => {
+  if (typeof window === "undefined") return false;
+  const modeElement = document.querySelector("[data-mode]");
+  if (modeElement) {
+    return modeElement.getAttribute("data-mode") === "dark";
+  }
+  const themeElement = document.documentElement;
+  return themeElement.getAttribute("data-theme") === "dark";
+};
 
 interface UserReview {
   id: string;
@@ -61,9 +72,11 @@ interface RatingStats {
 function ReviewTextCell({
   reviewText,
   onViewFullReview,
+  isDark,
 }: {
   reviewText: string;
   onViewFullReview: (reviewText: string) => void;
+  isDark: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLSpanElement>(null);
@@ -106,7 +119,7 @@ function ReviewTextCell({
   }, [reviewText]);
 
   if (!reviewText || reviewText.trim().length === 0) {
-    return <div className="text-sm text-gray-400">No review</div>;
+    return <div className={`text-sm ${isDark ? "text-gray-500" : "text-gray-400"}`}>No review</div>;
   }
 
   return (
@@ -125,7 +138,7 @@ function ReviewTextCell({
         <Button
           variant="ghost"
           size="sm"
-          className="text-purple-600 underline h-6 px-2 text-xs flex-shrink-0"
+          className={`${isDark ? "text-purple-400" : "text-purple-600"} underline h-6 px-2 text-xs flex-shrink-0`}
           onClick={() => onViewFullReview(reviewText)}
         >
           More
@@ -136,6 +149,7 @@ function ReviewTextCell({
 }
 
 export default function RatingsPage() {
+  const [isDark, setIsDark] = useState<boolean>(readIsDarkFromDom);
   const [reviews, setReviews] = useState<UserReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -152,6 +166,27 @@ export default function RatingsPage() {
   const [imagesLoading, setImagesLoading] = useState(false);
   const [ratingStats, setRatingStats] = useState<RatingStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+
+  // Watch for theme changes
+  useLayoutEffect(() => {
+    const checkTheme = () => {
+      const newIsDark = readIsDarkFromDom();
+      setIsDark((prev) => (prev === newIsDark ? prev : newIsDark));
+    };
+
+    checkTheme();
+
+    const observer = new MutationObserver(checkTheme);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -315,26 +350,34 @@ export default function RatingsPage() {
   const pendingReviews = reviews.filter(review => review.status === 'pending').length;
   const totalReviews = reviews.length; // Count all reviews
 
+  if (loading && reviews.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-[76vh]">
+        <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Users Ratings and reviews</h1>
-        <p className="text-gray-600 mt-2">Manage and moderate user reviews and ratings</p>
+        <h1 className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>Users Ratings and reviews</h1>
+        <p className={`${isDark ? "text-gray-300" : "text-gray-600"} mt-2`}>Manage and moderate user reviews and ratings</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Total Reviews Card */}
-        <div className="rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 bg-white">
+        <div className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 ${isDark ? "bg-[#170337]" : "bg-white"}`}>
           <CardContent className="p-4">
             <div className="flex justify-between">
-              <div className="flex-1 space-y-2 text-black">
+              <div className={`flex-1 space-y-2 ${isDark ? "text-white" : "text-black"}`}>
                 <p className="text-lg font-medium">Total Reviews</p>
                 <p className="text-xl font-bold">{totalReviews}</p>
                 <p className="text-sm mt-0.5">All submitted reviews</p>
               </div>
-              <div className="w-10 h-10 flex items-center justify-center rounded-full mb-4 bg-[#D8C3FF] text-[#4A00BE]">
+              <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-[#FFFFFF36] text-[#D8C3FF]" : "bg-[#D8C3FF] text-[#4A00BE]"}`}>
                 <MessageSquare className="w-5 h-5" />
               </div>
             </div>
@@ -342,15 +385,15 @@ export default function RatingsPage() {
         </div>
 
         {/* Approved Reviews Card - Green */}
-        <div className="rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 bg-white">
+        <div className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 ${isDark ? "bg-[#170337]" : "bg-white"}`}>
           <CardContent className="p-4">
             <div className="flex justify-between">
-              <div className="flex-1 space-y-2 text-black">
+              <div className={`flex-1 space-y-2 ${isDark ? "text-white" : "text-black"}`}>
                 <p className="text-lg font-medium">Approved</p>
                 <p className="text-xl font-bold">{approvedReviews}</p>
                 <p className="text-sm mt-0.5">Approved reviews</p>
               </div>
-              <div className="w-10 h-10 flex items-center justify-center rounded-full mb-4 bg-[#D8C3FF] text-[#4A00BE]">
+              <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-[#FFFFFF36] text-[#D8C3FF]" : "bg-[#D8C3FF] text-[#4A00BE]"}`}>
                 <CheckCircle className="w-5 h-5" />
               </div>
             </div>
@@ -358,15 +401,15 @@ export default function RatingsPage() {
         </div>
 
         {/* Rejected Reviews Card - Red */}
-        <div className="rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 bg-white">
+        <div className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 ${isDark ? "bg-[#170337]" : "bg-white"}`}>
           <CardContent className="p-4">
             <div className="flex justify-between">
-              <div className="flex-1 space-y-2 text-black">
+              <div className={`flex-1 space-y-2 ${isDark ? "text-white" : "text-black"}`}>
                 <p className="text-lg font-medium">Rejected</p>
                 <p className="text-xl font-bold">{rejectedReviews}</p>
                 <p className="text-sm mt-0.5">Rejected reviews</p>
               </div>
-              <div className="w-10 h-10 flex items-center justify-center rounded-full mb-4 bg-[#D8C3FF] text-[#4A00BE]">
+              <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-[#FFFFFF36] text-[#D8C3FF]" : "bg-[#D8C3FF] text-[#4A00BE]"}`}>
                 <XCircle className="w-5 h-5" />
               </div>
             </div>
@@ -374,15 +417,15 @@ export default function RatingsPage() {
         </div>
 
         {/* Pending Reviews Card - Yellow */}
-        <div className="rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 bg-white">
+        <div className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 ${isDark ? "bg-[#170337]" : "bg-white"}`}>
           <CardContent className="p-4">
             <div className="flex justify-between">
-              <div className="flex-1 space-y-2 text-black">
+              <div className={`flex-1 space-y-2 ${isDark ? "text-white" : "text-black"}`}>
                 <p className="text-lg font-medium">Pending</p>
                 <p className="text-xl font-bold">{pendingReviews}</p>
                 <p className="text-sm mt-0.5">Pending reviews</p>
               </div>
-              <div className="w-10 h-10 flex items-center justify-center rounded-full mb-4 bg-[#D8C3FF] text-[#4A00BE]">
+              <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-[#FFFFFF36] text-[#D8C3FF]" : "bg-[#D8C3FF] text-[#4A00BE]"}`}>
                 <Clock className="w-5 h-5" />
               </div>
             </div>
@@ -479,14 +522,20 @@ export default function RatingsPage() {
         {/* Search on left */}
         <div className="w-full lg:w-auto lg:flex-1 lg:max-w-lg">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
             <Input
               id="search"
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search by name, username, email"
-              className="pl-10"
+              
+                className={cn(
+                "pl-10",
+                isDark
+                  ? "bg-[#06021d] border border-gray-600 text-white"
+                  : "bg-white text-gray-900"
+              )}
             />
           </div>
         </div>
@@ -498,11 +547,11 @@ export default function RatingsPage() {
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Status" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectContent isDark={isDark}>
+                <SelectItem value="all" isDark={isDark}>All Status</SelectItem>
+                <SelectItem value="pending" isDark={isDark}>Pending</SelectItem>
+                <SelectItem value="approved" isDark={isDark}>Approved</SelectItem>
+                <SelectItem value="rejected" isDark={isDark}>Rejected</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -512,10 +561,10 @@ export default function RatingsPage() {
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Types" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="advertiser">Advertiser</SelectItem>
-                <SelectItem value="creator">Creator</SelectItem>
+              <SelectContent isDark={isDark}>
+                <SelectItem value="all" isDark={isDark}>All Types</SelectItem>
+                <SelectItem value="advertiser" isDark={isDark}>Advertiser</SelectItem>
+                <SelectItem value="creator" isDark={isDark}>Creator</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -525,13 +574,13 @@ export default function RatingsPage() {
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Ratings" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Ratings</SelectItem>
-                <SelectItem value="5">5 Stars</SelectItem>
-                <SelectItem value="4">4 Stars</SelectItem>
-                <SelectItem value="3">3 Stars</SelectItem>
-                <SelectItem value="2">2 Stars</SelectItem>
-                <SelectItem value="1">1 Star</SelectItem>
+              <SelectContent isDark={isDark}>
+                <SelectItem value="all" isDark={isDark}>All Ratings</SelectItem>
+                <SelectItem value="5" isDark={isDark}>5 Stars</SelectItem>
+                <SelectItem value="4" isDark={isDark}>4 Stars</SelectItem>
+                <SelectItem value="3" isDark={isDark}>3 Stars</SelectItem>
+                <SelectItem value="2" isDark={isDark}>2 Stars</SelectItem>
+                <SelectItem value="1" isDark={isDark}>1 Star</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -539,12 +588,12 @@ export default function RatingsPage() {
       </div>
 
       {/* Reviews List */}
-      <div className="bg-white rounded-lg shadow">
+      <div className={`${isDark ? "bg-[#170337]" : "bg-white"} rounded-lg shadow`}>
         <div className="py-6 px-4">
           {loading && reviews.length === 0 ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading reviews...</p>
+              <p className={`mt-4 ${isDark ? "text-gray-300" : "text-gray-600"}`}>Loading reviews...</p>
             </div>
           ) : error ? (
             <div className="text-center py-12">
@@ -558,48 +607,48 @@ export default function RatingsPage() {
             </div>
           ) : filteredReviews.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-gray-600">No reviews found matching your criteria.</p>
+              <p className={`${isDark ? "text-gray-300" : "text-gray-600"}`}>No reviews found matching your criteria.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader className="bg-gray-50">
+                <TableHeader className={`${isDark ? "bg-[#391a6a]" : "bg-gray-50"}`}>
                   <TableRow>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <TableHead className={`px-6 py-3 text-left text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-500"} uppercase tracking-wider`}>
                       User
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <TableHead className={`px-6 py-3 text-left text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-500"} uppercase tracking-wider`}>
                       Email
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <TableHead className={`px-6 py-3 text-left text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-500"} uppercase tracking-wider`}>
                       Type
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <TableHead className={`px-6 py-3 text-left text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-500"} uppercase tracking-wider`}>
                       Rating
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <TableHead className={`px-6 py-3 text-left text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-500"} uppercase tracking-wider`}>
                       Review
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <TableHead className={`px-6 py-3 text-left text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-500"} uppercase tracking-wider`}>
                       Images
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <TableHead className={`px-6 py-3 text-left text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-500"} uppercase tracking-wider`}>
                       Videos
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <TableHead className={`px-6 py-3 text-left text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-500"} uppercase tracking-wider`}>
                       Status
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <TableHead className={`px-6 py-3 text-left text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-500"} uppercase tracking-wider`}>
                       Date
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <TableHead className={`px-6 py-3 text-left text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-500"} uppercase tracking-wider`}>
                       Actions
                     </TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody className="bg-white divide-y divide-gray-200">
+                <TableBody className={`${isDark ? "bg-[#170337] divide-gray-700" : "bg-white divide-gray-200"} divide-y`}>
                   {filteredReviews.map((review) => (
-                    <TableRow key={review.id} className="hover:bg-gray-50">
+                    <TableRow key={review.id}>
                       <TableCell className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <Avatar className="w-10 h-10 mr-3">
@@ -617,10 +666,10 @@ export default function RatingsPage() {
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <div className="text-sm font-medium text-gray-900">
+                            <div className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
                               {review.users.full_name || review.users.username || 'Unknown User'}
                             </div>
-                            <div className="text-sm text-gray-500">
+                            <div className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
                               {review.users.username && review.users.full_name && review.users.username !== review.users.full_name 
                                 ? `@${review.users.username}` 
                                 : ''}
@@ -629,13 +678,17 @@ export default function RatingsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{review.users.email}</div>
+                        <div className={`text-sm ${isDark ? "text-white" : "text-gray-900"}`}>{review.users.email}</div>
                       </TableCell>
                       <TableCell className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 text-xs font-medium rounded-full border ${
                           review.user_type === 'advertiser' 
-                            ? 'bg-blue-100 text-blue-800 border-blue-200'
-                            : 'bg-purple-100 text-purple-800 border-purple-200'
+                            ? isDark 
+                              ? 'bg-blue-900 text-blue-200 border-blue-700'
+                              : 'bg-blue-100 text-blue-800 border-blue-200'
+                            : isDark
+                              ? 'bg-purple-900 text-purple-200 border-purple-700'
+                              : 'bg-purple-100 text-purple-800 border-purple-200'
                         }`}>
                           {review.user_type}
                         </span>
@@ -643,13 +696,14 @@ export default function RatingsPage() {
                       <TableCell className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           {renderStars(review.rating)}
-                          <span className="ml-2 text-sm text-gray-500">({review.rating}/5)</span>
+                          <span className={`ml-2 text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>({review.rating}/5)</span>
                         </div>
                       </TableCell>
                       <TableCell className="px-6 py-4 max-w-xs">
                         <ReviewTextCell
                           reviewText={review.experience}
                           onViewFullReview={handleViewFullReview}
+                          isDark={isDark}
                         />
                       </TableCell>
                       <TableCell className="px-6 py-4 whitespace-nowrap">
@@ -662,12 +716,12 @@ export default function RatingsPage() {
                               // Simulate image loading time or you could preload images
                               setTimeout(() => setImagesLoading(false), 1000);
                             }}
-                            className="text-blue-600 hover:text-blue-800 underline text-sm font-medium"
+                            className={`${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-800"} underline text-sm font-medium`}
                           >
                             View {review.images.length} image(s)
                           </button>
                         ) : (
-                          <span className="text-xs text-gray-400">No images</span>
+                          <span className={`text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>No images</span>
                         )}
                       </TableCell>
                       <TableCell className="px-6 py-4 whitespace-nowrap">
@@ -679,14 +733,13 @@ export default function RatingsPage() {
                                 href={video}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-green-600 hover:text-green-800 underline text-sm"
                               >
                                 Video {index + 1}
                               </a>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-xs text-gray-400">No videos</span>
+                          <span className={`text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>No videos</span>
                         )}
                       </TableCell>
                       <TableCell className="px-6 py-4 whitespace-nowrap">
@@ -697,7 +750,7 @@ export default function RatingsPage() {
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <TableCell className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
                         <div>
                           {new Date(review.created_at).toLocaleDateString()}
                           {/* {review.updated_at !== review.created_at && (
@@ -711,7 +764,7 @@ export default function RatingsPage() {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <div className="p-1">
-                              <MoreVertical className="h-5 w-5 text-gray-500" />
+                              <MoreVertical className={`h-5 w-5 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
                             </div>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="min-w-[120px]">
@@ -755,16 +808,16 @@ export default function RatingsPage() {
       {/* Image Modal */}
       {isImageModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
-          <div className={`bg-white rounded-lg overflow-hidden ${imagesLoading ? 'w-full max-w-2xl' : 'max-w-4xl'} max-h-[90vh]`}>
+          <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-lg overflow-hidden ${imagesLoading ? 'w-full max-w-2xl' : 'max-w-4xl'} max-h-[90vh]`}>
             <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-semibold">Review Images</h3>
+              <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>Review Images</h3>
               <button
                 onClick={() => {
                   setIsImageModalOpen(false);
                   setSelectedImages([]);
                   setImagesLoading(false);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className={`p-2 ${isDark ? "hover:bg-gray-700" : "hover:bg-gray-100"} rounded-full`}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -772,7 +825,7 @@ export default function RatingsPage() {
             <div className="p-4 overflow-y-auto max-h-[calc(90vh-80px)]">
               {imagesLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <PageLoadingSpinner mode="light" />
+                  <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -781,14 +834,14 @@ export default function RatingsPage() {
                       <img
                         src={image}
                         alt={`Review image ${index + 1}`}
-                        className="w-full h-64 object-cover rounded-lg border"
+                        className={`w-full h-64 object-cover rounded-lg border ${isDark ? "border-gray-600" : "border-gray-200"}`}
                       />
                       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-25 transition-opacity rounded-lg flex items-center justify-center">
                         <a
                           href={image}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="opacity-0 group-hover:opacity-100 bg-white text-gray-800 px-3 py-1 rounded-md text-sm font-medium hover:bg-gray-100 transition-opacity"
+                          className={`opacity-0 group-hover:opacity-100 ${isDark ? "bg-gray-800 text-white hover:bg-gray-700" : "bg-white text-gray-800 hover:bg-gray-100"} px-3 py-1 rounded-md text-sm font-medium transition-opacity`}
                         >
                           Open in New Tab
                         </a>
@@ -805,21 +858,21 @@ export default function RatingsPage() {
       {/* Review Modal */}
       {isReviewModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
+          <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden`}>
             <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-semibold">Full Review</h3>
+              <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>Full Review</h3>
               <button
                 onClick={() => {
                   setIsReviewModalOpen(false);
                   setSelectedReview(null);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className={`p-2 ${isDark ? "hover:bg-gray-700" : "hover:bg-gray-100"} rounded-full`}
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-              <p className="text-gray-900 whitespace-pre-wrap leading-relaxed">
+              <p className={`${isDark ? "text-white" : "text-gray-900"} whitespace-pre-wrap leading-relaxed`}>
                 {selectedReview}
               </p>
             </div>
