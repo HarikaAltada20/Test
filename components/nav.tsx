@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
 import {
   DropdownMenu,
@@ -108,11 +109,17 @@ export function Nav({
         ? Trophy
         : User;
   const [open, setOpen] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  const handleNavigation = (e: React.MouseEvent) => {
+    setIsNavigating(true);
+  };
   
 
   
   useEffect(() => {
     setOpen(false);
+    setIsNavigating(false);
   }, [pathname]);
   // Hide nav on all /auth/* pages, /choose-username, and /dashboard/* pages
   if (
@@ -347,7 +354,7 @@ export function Nav({
                     </Button>
                   </Link>
 
-                  <Link href="/auth/signup">
+                  <Link href="/auth/signup" onClick={handleNavigation}>
                     <Button
                       className={cn(
                         "hidden md:flex px-6 py-2.5 text-md rounded-full transition-all duration-300 relative overflow-hidden min-h-[44px]",
@@ -356,9 +363,10 @@ export function Nav({
                           : "bg-[linear-gradient(90deg,#4C238D_0%,#7F39EC_50%,#4C238D_100%)] text-white hover:opacity-90"
                       )}
                     >
-                      {/* Scan line */}
                       <div className="scan-line"></div>
-
+                      {isNavigating ? (
+                        <ButtonLoadingSpinner />
+                      ) : null}
                       <span className="relative z-10">Get Started</span>
                     </Button>
                   </Link>
@@ -502,7 +510,8 @@ export function Nav({
                             </Link>
 
                             <Button className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold shadow-xl shadow-violet-500/25">
-                              <Link href="/auth/signup">
+                              <Link href="/auth/signup" onClick={handleNavigation}>
+                                {isNavigating ? <ButtonLoadingSpinner /> : null}
                                 {/* <Zap className="mr-2 h-4 w-4" /> */}
                                 Get Started
                               </Link>

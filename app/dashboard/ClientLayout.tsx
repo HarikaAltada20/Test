@@ -2,6 +2,11 @@
 
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { LoadingPlaceholder } from "@/components/loading-placeholder";
+import { ReviewModal } from "@/components/ReviewModal";
+import { submitReview, ReviewData } from "@/lib/reviews";
+import { hasPublishedContests } from "@/lib/review-utils";
+import { hasSubmittedContent } from "@/lib/creator-review-utils";
+import { useToast } from "@/hooks/use-toast";
 import type { UserResponse } from "@supabase/supabase-js";
 import React, { Suspense, useState, useEffect, useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -237,6 +242,7 @@ function DashboardContent({
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
   const [open, setOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const userRole =
     (user?.user_type as "advertiser" | "creator" | "admin") || null;
   const pathname = usePathname();
@@ -298,8 +304,137 @@ function DashboardContent({
     try {
       await logout();
       console.log("Sign out successful");
+      router.push("/");
     } catch (error) {
-      console.error("Sign out error:", error);
+      console.error("Error signing out:", error);
+    }
+  };
+
+  const { toast } = useToast();
+
+  const handleReviewOpen = async () => {
+    if (!user) return;
+
+    try {
+      // Check contests for advertisers
+      const contestResult = await hasPublishedContests(user.id);
+      
+      if (!contestResult.success) {
+        toast({
+          title: "Error",
+          description: "Failed to check your contest status. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Check content submissions for creators
+      const contentResult = await hasSubmittedContent(user.id);
+
+      if (!contentResult.success) {
+        toast({
+          title: "Error",
+          description: "Failed to check your content submission status. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Get user type to provide specific validation
+      const supabase = createClient();
+      const { data: userData } = await supabase
+        .from("users")
+        .select("user_type")
+        .eq("id", user.id)
+        .single();
+
+      const userType = userData?.user_type;
+
+      // Validate based on user type
+      if (userType === "creator" && !contentResult.hasSubmittedContent) {
+        toast({
+          title: "Submit Content First",
+          description: "You need to submit at least one content before leaving a review. Start by participating in a contest!",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (userType === "advertiser" && !contestResult.hasPublishedContests) {
+        toast({
+          title: "Create a Contest First",
+          description: "You need to create and publish at least one contest before leaving a review. Get started by launching your first campaign!",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!contestResult.hasPublishedContests && !contentResult.hasSubmittedContent) {
+        toast({
+          title: "Activity Required",
+          description: "You need to create and publish at least one contest as an advertiser, or submit at least one content as a creator before leaving a review.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // User meets the requirements, open the review modal
+      setIsReviewModalOpen(true);
+    } catch (error) {
+      console.error("Error checking review eligibility:", error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleReviewSubmit = async (review: {
+    rating: number;
+    experience: string;
+    images: File[];
+    videoLinks: string[];
+  }) => {
+    try {
+      // Show loading toast
+      const loadingToast = toast({
+        title: "Submitting Review",
+        description: "Please wait while we compress and upload your images...",
+      });
+      
+      // Submit review to Supabase with compression progress callback
+      const result = await submitReview(user, review as ReviewData, (index, originalSize, compressedSize) => {
+        console.log(`Compression progress for image ${index + 1}: ${(originalSize / 1024).toFixed(1)}KB → ${(compressedSize / 1024).toFixed(1)}KB`);
+        // The modal will show the compression progress via its own state
+      });
+      
+      // Dismiss loading toast
+      loadingToast.dismiss();
+      
+      if (result.success) {
+        // Show success toast
+        toast({
+          title: "Review Submitted Successfully!",
+          description: "Thank you for sharing your experience with us.",
+        });
+        console.log("Review submitted with ID:", result.reviewId);
+      } else {
+        // Show error toast
+        toast({
+          title: "Submission Failed",
+          description: result.error || "Failed to submit review. Please try again.",
+          variant: "destructive",
+        });
+        console.error("Review submission failed:", result.error);
+      }
+    } catch (error) {
+      console.error("Unexpected error in review submission:", error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -889,6 +1024,7 @@ function DashboardContent({
               <DashboardSidebar
                 userRole={userRole}
                 onChatOpen={() => setIsChatOpen(true)}
+                onReviewOpen={handleReviewOpen}
                 collapsed={sidebarCollapsed}
                 mode={currentMode}
               />
@@ -1123,6 +1259,7 @@ function DashboardContent({
                             <DashboardSidebar
                               userRole={userRole}
                               onChatOpen={() => setIsChatOpen(true)}
+                              onReviewOpen={handleReviewOpen}
                               collapsed={false}
                               mode={currentMode}
                             />
@@ -2384,6 +2521,13 @@ function DashboardContent({
                   userType={userRole as any}
                 />
               )}
+
+              {/* Review Modal */}
+              <ReviewModal
+                isOpen={isReviewModalOpen}
+                onClose={() => setIsReviewModalOpen(false)}
+                onSubmit={handleReviewSubmit}
+              />
             </div>
           </main>
         </div>

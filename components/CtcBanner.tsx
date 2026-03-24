@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,7 @@ export default function CtcBanner() {
   const [showCreatorModal, setShowCreatorModal] = useState(false);
   const [isCheckingAccount, setIsCheckingAccount] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   // Route flags
   const isBrands = pathname === "/brands";
@@ -54,9 +56,13 @@ export default function CtcBanner() {
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) setInView(true);
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setInView(true);
+          }
+        });
       },
-      { threshold: 0.3 }
+      { threshold: 0.1 }
     );
 
     if (sectionRef.current) observer.observe(sectionRef.current);
@@ -66,8 +72,13 @@ export default function CtcBanner() {
     };
   }, []);
 
+  useEffect(() => {
+    setIsNavigating(false);
+  }, [pathname]);
+
   const handleMainCtaClick = async () => {
     if (isHome) {
+      setIsNavigating(true);
       localStorage.removeItem("signupRole");
       router.push("/auth/signup");
       return;
@@ -235,7 +246,7 @@ export default function CtcBanner() {
           style={{ backgroundImage: theme.btnGradient }}
         >
           <div className="scan-line"></div>
-          <Rocket className="w-4 h-4" />
+          {isNavigating ? <ButtonLoadingSpinner /> : <Rocket className="w-4 h-4" />}
           {isHome
             ? "Join Game Of Creators"
             : isCreators

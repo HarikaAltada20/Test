@@ -2984,6 +2984,145 @@ export default function ContestDetailClient({
     }
   };
 
+  const handleBulkUpdateSubmissionStatus = async (
+    submissionIds: string[],
+    action: "approve" | "verified" | "reject" | "rejected" | "pending" | "paid",
+    reason?: string,
+  ) => {
+    if (!submissionIds || submissionIds.length === 0) return;
+
+    // Split into Twitter vs Non-Twitter
+    const twitterIds: string[] = [];
+    const normalIds: string[] = [];
+
+    submissionIds.forEach((id) => {
+      const submission = currentSubmissions.find((s) => s.id === id);
+      if ((submission as any)?.is_twitter_tweet) {
+        twitterIds.push(id);
+      } else {
+        normalIds.push(id);
+      }
+    });
+
+    // Set loading state for all
+    setIsLoadingSubmission((prev) => {
+      const newLoadingState = { ...prev };
+      submissionIds.forEach(id => newLoadingState[id] = true);
+      return newLoadingState;
+    });
+
+    try {
+      const promises = [];
+
+      if (normalIds.length > 0) {
+        // Map action for normal submissions
+        const normalAction = action === "approve" ? "verified" : action === "reject" ? "rejected" : action;
+        promises.push(
+          fetch("/api/admin/bulk-verify-submissions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ submissionIds: normalIds, action: normalAction, reason }),
+          }).then(res => res.json())
+        );
+      }
+
+      if (twitterIds.length > 0) {
+        // Map action for Twitter submissions
+        const twitterAction = action === "verified" || action === "approve" ? "approve" : action === "rejected" || action === "reject" ? "reject" : action;
+        promises.push(
+          fetch(`/api/contests/${contestId}/bulk-moderate-submissions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tweetIds: twitterIds, action: twitterAction, reason }),
+          }).then(res => res.json())
+        );
+      }
+
+      const results = await Promise.all(promises);
+      
+      let hasError = false;
+      let errorMessage = "";
+      let totalProcessed = 0;
+
+      // Update state internally
+      const updatedSubmissionsMap = new Map();
+
+      for (const result of results) {
+        if (!result.success && !result.results) {
+          hasError = true;
+          errorMessage = result.error || "Bulk API failed";
+          continue;
+        }
+        
+        if (result.results && Array.isArray(result.results)) {
+          result.results.forEach((item: any) => {
+            const data = item.data;
+            if (data?.submission) {
+               updatedSubmissionsMap.set(item.id, data.submission);
+               totalProcessed++;
+            } else if (data?.success) {
+               // Update twitter statuses based on action
+               const twitterAction = action === "verified" || action === "approve" ? "approve" : action === "rejected" || action === "reject" ? "reject" : action;
+               const moderationStatus = twitterAction === "approve" ? "verified" : twitterAction === "reject" ? "rejected" : twitterAction;
+               updatedSubmissionsMap.set(item.id, { moderation_status: moderationStatus, ...(twitterAction === 'reject' ? { manual_points_reason: reason } : {}) });
+               totalProcessed++;
+            }
+          });
+        }
+        if (result.errors && result.errors.length > 0) {
+           hasError = true;
+           errorMessage = "Some updates failed. Check console for details.";
+           console.error("Bulk update errors:", result.errors);
+        }
+      }
+
+      if (updatedSubmissionsMap.size > 0) {
+        setCurrentSubmissions((prev) =>
+          prev.map((sub) => {
+            if (updatedSubmissionsMap.has(sub.id)) {
+              const updates = updatedSubmissionsMap.get(sub.id);
+              // ensure we don't erase existing other fields
+              return { ...sub, ...updates };
+            }
+            return sub;
+          }),
+        );
+      }
+
+      if (hasError) {
+        toast({
+          title: "Warning",
+          description: errorMessage || "Completed with some errors.",
+          variant: "destructive",
+        });
+      } else {
+        const actionText = action === "verified" || action === "approve" ? "Verified" : action === "rejected" || action === "reject" ? "Rejected" : action === "pending" ? "Set to Pending" : "Updated";
+        toast({
+          title: "✅Success",
+          description: `Successfully ${actionText} ${totalProcessed} submissions.`,
+          variant: "default",
+        });
+      }
+      
+      // Refresh UI to sync database states completely
+      setTimeout(() => window.dispatchEvent(new Event("contests:refresh")), 1000);
+
+    } catch (error: any) {
+      console.error("Bulk update failed:", error);
+      toast({
+        title: "Error",
+        description: error?.message || "Bulk update failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingSubmission((prev) => {
+        const resetState = { ...prev };
+        submissionIds.forEach(id => { delete resetState[id]; });
+        return resetState;
+      });
+    }
+  };
+
   const handleRejectSubmission = (submissionId: string) => {
     setPendingRejectionSubmissionIds([submissionId]);
     setRejectionModalOpen(true);
@@ -2998,14 +3137,9 @@ export default function ContestDetailClient({
       ? `${reason}\n\nAdditional Notes: ${additionalNotes}`
       : reason;
 
-    for (const id of pendingRejectionSubmissionIds) {
-      const submission = currentSubmissions.find((s) => s.id === id);
-      if ((submission as any)?.is_twitter_tweet) {
-        await handleModerateTwitterTweet(id, "reject", fullReason);
-      } else {
-        await handleUpdateSubmissionStatus(id, "rejected", fullReason);
-      }
-    }
+    // Use bulk API wrapper for rejection
+    await handleBulkUpdateSubmissionStatus(pendingRejectionSubmissionIds, "rejected", fullReason);
+    
     setRejectionModalOpen(false);
     setPendingRejectionSubmissionIds([]);
   };
@@ -17837,10 +17971,8 @@ export default function ContestDetailClient({
             creatorRankingMap.get(selectedCreatorForModal) ?? undefined
           }
           onVerify={async (ids: string[]) => {
-            // Handle bulk verify
-            for (const id of ids) {
-              await handleUpdateSubmissionStatus(id, "verified");
-            }
+            // Handle bulk verify via new API wrapper
+            await handleBulkUpdateSubmissionStatus(ids, "verified");
             setSelectedCreatorForModal(null);
           }}
           onReject={(ids: string[]) => {
@@ -17850,10 +17982,8 @@ export default function ContestDetailClient({
             }
           }}
           onSetPending={async (ids: string[]) => {
-            // Handle bulk pending
-            for (const id of ids) {
-              await handleUpdateSubmissionStatus(id, "pending");
-            }
+            // Handle bulk pending via new API wrapper
+            await handleBulkUpdateSubmissionStatus(ids, "pending");
             setSelectedCreatorForModal(null);
           }}
           onPayment={async (
