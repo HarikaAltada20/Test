@@ -5,11 +5,17 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const statusParam = searchParams.get('status');
+    const userTypeParam = searchParams.get('userType');
+    const pageParam = searchParams.get('page');
+    const limitParam = searchParams.get('limit');
+    const sortByParam = searchParams.get('sortBy') || 'created_at';
+    const sortOrderParam = searchParams.get('sortOrder') || 'desc';
 
     const supabase = await createClient();
 
     // Default status to approved
     let status = 'approved';
+    let userType: 'creator' | 'advertiser' | null = null;
 
     // If a different status is requested, check if the user is an admin
     if (statusParam && statusParam !== 'approved') {
@@ -41,6 +47,18 @@ export async function GET(request: NextRequest) {
       status = statusParam;
     }
 
+    if (userTypeParam === 'creator' || userTypeParam === 'advertiser') {
+      userType = userTypeParam;
+    }
+
+    const page = Math.max(1, parseInt(pageParam || '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(limitParam || '10', 10) || 10));
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+    const allowedSortBy = new Set(['created_at', 'rating']);
+    const sortBy = allowedSortBy.has(sortByParam) ? sortByParam : 'created_at';
+    const sortOrder = sortOrderParam === 'asc' ? 'asc' : 'desc';
+
     let query = supabase
       .from('user_reviews')
       .select(`
@@ -51,11 +69,18 @@ export async function GET(request: NextRequest) {
           username,
           profile_picture_url
         )
-      `)
-      .eq('status', status)
-      .order('created_at', { ascending: false });
+      `, { count: 'exact' })
+      .eq('status', status);
 
-    const { data: reviews, error } = await query;
+    if (userType) {
+      query = query.eq('user_type', userType);
+    }
+
+    query = query
+      .order(sortBy, { ascending: sortOrder === 'asc' })
+      .range(from, to);
+
+    const { data: reviews, error, count } = await query;
 
 
     if (error) {
@@ -68,7 +93,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       reviews: reviews || [],
-      total: reviews?.length || 0
+      total: count || 0,
+      pagination: {
+        page,
+        limit,
+        totalPages: Math.ceil((count || 0) / limit),
+      },
     });
 
   } catch (error) {

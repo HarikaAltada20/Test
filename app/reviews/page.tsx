@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { Star, Search, CheckCircle, X, Clock, Sparkles, Heart, Palette, Trophy, Crown, Users, Building } from "lucide-react";
+import { Star, X, Sparkles, Heart, Palette, Trophy, Crown, Users, Building, Link as LinkIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -30,12 +30,14 @@ interface UserReview {
   };
 }
 
+/*
 interface RatingStats {
   averageRating: number;
   totalReviews: number;
   ratingCounts: { 1: number; 2: number; 3: number; 4: number; 5: number };
   ratingPercentages: { 1: number; 2: number; 3: number; 4: number; 5: number };
 }
+*/
 
 interface PaginationData {
   page: number;
@@ -52,8 +54,9 @@ export default function ReviewsPage() {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [imagesLoading, setImagesLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'creators' | 'brands'>('creators');
-  const [ratingStats, setRatingStats] = useState<RatingStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
+  // Kept commented for future re-enable of public stats widget.
+  // const [ratingStats, setRatingStats] = useState<RatingStats | null>(null);
+  // const [statsLoading, setStatsLoading] = useState(true);
   const [pagination, setPagination] = useState<PaginationData>({
     page: 1,
     limit: 9,
@@ -63,33 +66,57 @@ export default function ReviewsPage() {
   const [sortBy, setSortBy] = useState<string>('relevance');
   const searchParams = useSearchParams();
 
-  const fetchRatingStats = async () => {
-    setStatsLoading(true);
+  const normalizeVideoUrl = (rawUrl: string): string | null => {
+    if (!rawUrl || !rawUrl.trim()) return null;
+    const trimmed = rawUrl.trim();
     try {
-      const response = await fetch('/api/reviews/stats');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch rating statistics');
+      const url = new URL(trimmed);
+      return ["http:", "https:"].includes(url.protocol) ? url.toString() : null;
+    } catch {
+      try {
+        const url = new URL(`https://${trimmed}`);
+        return url.toString();
+      } catch {
+        return null;
       }
-
-      const data = await response.json();
-      setRatingStats(data);
-    } catch (err) {
-      console.error('Error fetching rating stats:', err);
-    } finally {
-      setStatsLoading(false);
     }
   };
+
+  // Kept commented for future re-enable of public stats widget.
+  // const fetchRatingStats = async () => {
+  //   setStatsLoading(true);
+  //   try {
+  //     const response = await fetch('/api/reviews/stats');
+  //
+  //     if (!response.ok) {
+  //       throw new Error('Failed to fetch rating statistics');
+  //     }
+  //
+  //     const data = await response.json();
+  //     setRatingStats(data);
+  //   } catch (err) {
+  //     console.error('Error fetching rating stats:', err);
+  //   } finally {
+  //     setStatsLoading(false);
+  //   }
+  // };
+
+  // Kept commented for future re-enable of public stats widget.
+  // useEffect(() => {
+  //   fetchRatingStats();
+  // }, []);
 
   const fetchReviews = async () => {
     setLoading(true);
     setError(null);
 
     try {
+      const userTypeForTab = activeTab === 'creators' ? 'creator' : 'advertiser';
       const params = new URLSearchParams({
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
-        status: 'approved'
+        status: 'approved',
+        userType: userTypeForTab,
       });
 
       const response = await fetch(`/api/reviews-api/reviews?${params}`);
@@ -113,24 +140,13 @@ export default function ReviewsPage() {
   };
 
   useEffect(() => {
-    fetchReviews();
-    fetchRatingStats();
-    
-    // Set active tab based on URL parameter
     const tabParam = searchParams.get('tab');
-    console.log('URL tab parameter:', tabParam);
-    if (tabParam === 'brands') {
-      console.log('Setting active tab to brands');
-      setActiveTab('brands');
-    } else {
-      console.log('Defaulting to creators tab');
-    }
-  }, [searchParams, pagination.page, pagination.limit, sortBy]);
+    setActiveTab(tabParam === 'brands' ? 'brands' : 'creators');
+  }, [searchParams]);
 
-  // Separate useEffect to handle tab changes and fetch reviews when tab changes
   useEffect(() => {
     fetchReviews();
-  }, [activeTab]);
+  }, [pagination.page, pagination.limit, activeTab]);
 
   const handlePageChange = (newPage: number) => {
     setPagination(prev => ({ ...prev, page: newPage }));
@@ -140,11 +156,7 @@ export default function ReviewsPage() {
     setPagination(prev => ({ ...prev, limit: newLimit, page: 1 }));
   };
 
-  const filteredReviews = reviews.filter(review => {
-    if (activeTab === 'creators') return review.user_type === 'creator';
-    if (activeTab === 'brands') return review.user_type === 'advertiser';
-    return true;
-  }).sort((a, b) => {
+  const filteredReviews = [...reviews].sort((a, b) => {
     if (sortBy === 'relevance') {
       // Only consider reviews with both high rating (4-5 stars) AND review text as most relevant
       const aHasRelevance = (a.rating >= 4) && (a.experience && a.experience.trim().length > 0);
@@ -291,6 +303,27 @@ export default function ReviewsPage() {
                           )}
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Video Links */}
+                  {review.video_links && review.video_links.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {review.video_links
+                        .map((link, index) => ({ index, href: normalizeVideoUrl(link) }))
+                        .filter((item) => item.href)
+                        .map((item) => (
+                          <a
+                            key={`${review.id}-video-${item.index}`}
+                            href={item.href as string}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-200 hover:bg-cyan-500/20 transition-colors"
+                          >
+                            <LinkIcon className="h-3.5 w-3.5" />
+                            Video Link {item.index + 1}
+                          </a>
+                        ))}
                     </div>
                   )}
                 </div>
@@ -521,46 +554,50 @@ export default function ReviewsPage() {
           </div>
           </div> */}
 
-          {/* Combined Tabs and Sort Controls - One Line */}
-          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
-            {/* Sort Dropdown - Left on desktop, top on mobile */}
-            <div className="w-full sm:w-auto">
-              <Select value={sortBy || "relevance"} onValueChange={(value) => setSortBy(value)}>
-                <SelectTrigger className="w-full bg-black/80 border border-[#7F39EC]/70 text-white">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent className="bg-black/90 border border-[#7F39EC]/70" >
-                  <SelectItem value="relevance" className="bg-black/90 text-white hover:bg-purple-300/30 hover:text-white focus:bg-purple-600/30 focus:text-white">Most Relevant</SelectItem>
-                  <SelectItem value="newest" className="bg-black/90 text-white hover:bg-purple-600/30 hover:text-white focus:bg-purple-600/30 focus:text-white">Newest</SelectItem>
-                  <SelectItem value="oldest" className="bg-black/90 text-white hover:bg-purple-600/30 hover:text-white focus:bg-purple-600/30 focus:text-white">Oldest</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Combined Tabs and Sort Controls */}
+          <div className="max-w-7xl mx-auto mb-8">
+            <div className="flex flex-col gap-4 sm:relative sm:min-h-[42px]">
+              {/* Only filter on right (desktop), full width on mobile */}
+              <div className="w-full sm:w-auto sm:absolute sm:right-0 sm:top-0 sm:z-10">
+                <Select value={sortBy || "relevance"} onValueChange={(value) => setSortBy(value)}>
+                  <SelectTrigger className="w-full sm:w-[170px] bg-black/80 border border-[#7F39EC]/70 text-white">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-black/90 border border-[#7F39EC]/70" >
+                    <SelectItem value="relevance" className="bg-black/90 text-white hover:bg-purple-300/30 hover:text-white focus:bg-purple-600/30 focus:text-white">Most Relevant</SelectItem>
+                    <SelectItem value="newest" className="bg-black/90 text-white hover:bg-purple-600/30 hover:text-white focus:bg-purple-600/30 focus:text-white">Newest</SelectItem>
+                    <SelectItem value="oldest" className="bg-black/90 text-white hover:bg-purple-600/30 hover:text-white focus:bg-purple-600/30 focus:text-white">Oldest</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            {/* Tab Buttons - Right on desktop, below on mobile */}
-            <div className="inline-flex rounded-md border border-[#7F39EC]/70 bg-black/80 backdrop-blur-sm p-1">
-              <button
-                onClick={() => setActiveTab('creators')}
-                className={`flex items-center gap-2 px-6 py-2 rounded-md text-md font-medium transition-all duration-500 ${
-                  activeTab === 'creators'
-                    ? 'bg-gradient-to-r from-[#4C238D] via-[#7F39EC] to-fuchsia-400 text-white shadow-lg shadow-[#7F39EC]/50 ring-2 ring-[#7F39EC]/60'
-                    : 'text-slate-400/90 hover:text-slate-100 hover:bg-[#7F39EC]/10'
-                }`}
-              >
-                <Users className="h-4 w-4" />
-                Creators
-              </button>
-              <button
-                onClick={() => setActiveTab('brands')}
-                className={`flex items-center gap-2 px-6 py-2 rounded-md text-md font-medium transition-all duration-500 ${
-                  activeTab === 'brands'
-                    ? 'bg-gradient-to-r from-[#4C238D] via-[#7F39EC] to-fuchsia-400 text-white shadow-lg shadow-[#7F39EC]/50 ring-2 ring-[#7F39EC]/60'
-                    : 'text-slate-400/90 hover:text-slate-100 hover:bg-[#7F39EC]/10'
-                }`}
-              >
-                <Building className="h-4 w-4" />
-                Brands
-              </button>
+              {/* Keep creator/brands centered */}
+              <div className="flex justify-center">
+                <div className="inline-flex rounded-md border border-[#7F39EC]/70 bg-black/80 backdrop-blur-sm p-1">
+                  <button
+                    onClick={() => setActiveTab('creators')}
+                    className={`flex items-center gap-2 px-6 py-2 rounded-md text-md font-medium transition-all duration-500 ${
+                      activeTab === 'creators'
+                        ? 'bg-gradient-to-r from-[#4C238D] via-[#7F39EC] to-fuchsia-400 text-white shadow-lg shadow-[#7F39EC]/50 ring-2 ring-[#7F39EC]/60'
+                        : 'text-slate-400/90 hover:text-slate-100 hover:bg-[#7F39EC]/10'
+                    }`}
+                  >
+                    <Users className="h-4 w-4" />
+                    Creators
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('brands')}
+                    className={`flex items-center gap-2 px-6 py-2 rounded-md text-md font-medium transition-all duration-500 ${
+                      activeTab === 'brands'
+                        ? 'bg-gradient-to-r from-[#4C238D] via-[#7F39EC] to-fuchsia-400 text-white shadow-lg shadow-[#7F39EC]/50 ring-2 ring-[#7F39EC]/60'
+                        : 'text-slate-400/90 hover:text-slate-100 hover:bg-[#7F39EC]/10'
+                    }`}
+                  >
+                    <Building className="h-4 w-4" />
+                    Brands
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           

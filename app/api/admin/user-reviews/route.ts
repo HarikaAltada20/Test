@@ -25,13 +25,15 @@ export async function GET(request: Request) {
 
     // Get query parameters for filtering and pagination
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '10', 10) || 10));
     const status = searchParams.get('status');
     const userType = searchParams.get('userType');
     const rating = searchParams.get('rating');
-    const sortBy = searchParams.get('sortBy') || 'created_at';
+    const sortByParam = searchParams.get('sortBy') || 'created_at';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
+    const allowedSortBy = new Set(['created_at', 'rating', 'status', 'user_type']);
+    const sortBy = allowedSortBy.has(sortByParam) ? sortByParam : 'created_at';
 
     const offset = (page - 1) * limit;
 

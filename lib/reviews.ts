@@ -64,7 +64,7 @@ export async function submitReview(
         const fileExt = image.name.split('.').pop();
         const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('review-images')
           .upload(fileName, image);
 
