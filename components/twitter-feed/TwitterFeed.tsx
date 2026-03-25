@@ -39,7 +39,7 @@ export interface TwitterFeedProps {
   allowRefreshMyTweetsWhenEnded?: boolean;
   /**
    * When set (e.g. opportunities/creator view), refresh only this creator's tweets/metrics.
-   * Feed display remains the full contest timeline (does not hide other creators' tweets).
+   * Feed filtering uses the Creators sidebar like the brand view; this prop does not hide it.
    */
   creatorOnlyUserId?: string | null;
 }
@@ -749,8 +749,8 @@ export function TwitterFeed({
             })
           )}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
+          {/* Pagination — show whenever there are entries so page size / position are visible */}
+          {totalEntries > 0 && (
             <div
               className={cn(
                 "py-3 sm:py-4 mt-4 sm:mt-6 min-w-0 overflow-x-auto",
@@ -784,8 +784,8 @@ export function TwitterFeed({
           )}
         </div>
 
-        {/* Creator Sidebar - hide when showing only one creator (e.g. opportunities) */}
-        {creators.length > 0 && !creatorOnlyUserId && (
+        {/* Creator Sidebar — same UX on brand and creator (opportunities); creatorOnlyUserId is refresh/cooldown only */}
+        {creators.length > 0 && (
           <div
             className={cn(
               "w-full min-[500px]:w-64 flex-shrink-0 border rounded-lg p-3 sm:p-4 min-w-0",
