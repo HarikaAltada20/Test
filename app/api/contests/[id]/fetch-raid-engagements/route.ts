@@ -69,6 +69,7 @@ export async function POST(
       fromQueue?: boolean;
       batchIndex?: number;
       totalBatches?: number;
+      creatorId?: string;
     } = {};
     try {
       body = await request.json();
@@ -80,6 +81,11 @@ export async function POST(
       typeof body.batchIndex === "number" ? body.batchIndex : undefined;
     const totalBatches =
       typeof body.totalBatches === "number" ? body.totalBatches : undefined;
+    const creatorId =
+      typeof body.creatorId === "string" && body.creatorId.trim()
+        ? body.creatorId.trim()
+        : undefined;
+    const creatorIdOnly = !!creatorId;
     const isBatchedRaid =
       fromQueue &&
       batchIndex !== undefined &&
@@ -547,7 +553,12 @@ export async function POST(
       (p) => !rejectedCreatorIds.has(p.creator_id)
     );
 
-    if (activeParticipants.length === 0) {
+    // Creator-only raid refresh: only process the requested creator's slice.
+    const activeParticipantsFiltered = creatorIdOnly
+      ? activeParticipants.filter((p) => p.creator_id === creatorId)
+      : activeParticipants;
+
+    if (activeParticipantsFiltered.length === 0) {
       return NextResponse.json({
         success: true,
         message: "No active non-rejected participants",
@@ -557,11 +568,11 @@ export async function POST(
 
     // When batching, only process this slice of participants; participantMap stays full for reply attribution.
     const batchParticipants = isBatchedRaid
-      ? activeParticipants.slice(
+      ? activeParticipantsFiltered.slice(
           batchIndex! * RAID_BATCH_SIZE,
           (batchIndex! + 1) * RAID_BATCH_SIZE
         )
-      : activeParticipants;
+      : activeParticipantsFiltered;
     const batchParticipantIds =
       isBatchedRaid && batchParticipants.length > 0
         ? new Set(batchParticipants.map((p) => p.creator_id))
@@ -588,7 +599,7 @@ export async function POST(
     // Create map of username -> creator_id and join date for quick lookup (only for non-rejected creators)
     const participantMap = new Map<string, string>();
     const participantJoinDateMap = new Map<string, Date>(); // Map username -> join date
-    activeParticipants.forEach((p) => {
+    activeParticipantsFiltered.forEach((p) => {
       if (p.twitter_username) {
         const cleanUsername = p.twitter_username.replace("@", "").toLowerCase();
         participantMap.set(cleanUsername, p.creator_id);
@@ -1849,10 +1860,7 @@ export async function POST(
         `[fetch-raid-engagements] Enforcing raid submission cap (${maxSubmissionsPerCreator}) per creator`
       );
 
-      const {
-        data: eligibleRaidEngagements,
-        error: eligibleRaidEngagementsError,
-      } = await supabaseAdmin
+      let eligibleRaidEngagementsQuery = supabaseAdmin
         .from("twitter_campaign_tweets")
         .select("creator_id, tweet_id, tweet_created_at")
         .eq("contest_id", contestId)
@@ -1860,6 +1868,18 @@ export async function POST(
         .not("target_tweet_id", "is", null) // Only raid engagements
         .order("creator_id", { ascending: true })
         .order("tweet_created_at", { ascending: false }); // Newest first
+
+      if (creatorIdOnly && creatorId) {
+        eligibleRaidEngagementsQuery = eligibleRaidEngagementsQuery.eq(
+          "creator_id",
+          creatorId
+        );
+      }
+
+      const {
+        data: eligibleRaidEngagements,
+        error: eligibleRaidEngagementsError,
+      } = await eligibleRaidEngagementsQuery;
 
       if (eligibleRaidEngagementsError) {
         console.error(
@@ -1968,91 +1988,87 @@ export async function POST(
     }
 
     // 9. Update leaderboard with raid engagement points
-    await updateRaidLeaderboard(contestId, supabaseAdmin);
+    await updateRaidLeaderboard(contestId, supabaseAdmin, creatorIdOnly ? creatorId : undefined);
 
-    // 10. Update total_* metrics and total_filtered_tweets in metrics table
-    const { count: filteredTweetsCount } = await supabaseAdmin
-      .from("twitter_campaign_tweets")
-      .select("*", { count: "exact", head: true })
-      .eq("contest_id", contestId)
-      .eq("is_eligible", true)
-      .not("target_tweet_id", "is", null); // Only raid engagements
+    // 10. Update total_* metrics and last_metrics_updated in contests table.
+    // Creator-only raid refresh should NOT touch contest-level cooldown.
+    if (!creatorIdOnly) {
+      // Use upsert instead of update to create row if it doesn't exist
+      const { count: filteredTweetsCount } = await supabaseAdmin
+        .from("twitter_campaign_tweets")
+        .select("*", { count: "exact", head: true })
+        .eq("contest_id", contestId)
+        .eq("is_eligible", true)
+        .not("target_tweet_id", "is", null); // Only raid engagements
 
-    // Get total participants count (excluding rejected creators)
-    // First get all active participants
-    const { data: allParticipants } = await supabaseAdmin
-      .from("twitter_campaign_participants")
-      .select("creator_id")
-      .eq("contest_id", contestId)
-      .eq("is_active", true);
+      // Get total participants count (excluding rejected creators)
+      const { data: allParticipants } = await supabaseAdmin
+        .from("twitter_campaign_participants")
+        .select("creator_id")
+        .eq("contest_id", contestId)
+        .eq("is_active", true);
 
-    // Get rejected creator IDs
-    const allCreatorIds = (allParticipants || []).map((p) => p.creator_id);
-    const { data: allLeaderboardData } = await supabaseAdmin
-      .from("twitter_campaign_leaderboard")
-      .select("creator_id, moderation_status")
-      .eq("contest_id", contestId)
-      .in("creator_id", allCreatorIds);
+      const allCreatorIds = (allParticipants || []).map((p) => p.creator_id);
+      const { data: allLeaderboardData } = await supabaseAdmin
+        .from("twitter_campaign_leaderboard")
+        .select("creator_id, moderation_status")
+        .eq("contest_id", contestId)
+        .in("creator_id", allCreatorIds);
 
-    const rejectedCreatorIdsSet = new Set(
-      (allLeaderboardData || [])
-        .filter((entry) => entry.moderation_status === "rejected")
-        .map((entry) => entry.creator_id)
-    );
-
-    // Count only non-rejected participants
-    const totalParticipants = (allParticipants || []).filter(
-      (p) => !rejectedCreatorIdsSet.has(p.creator_id)
-    ).length;
-
-    // Use upsert instead of update to create row if it doesn't exist
-    await supabaseAdmin.from("twitter_campaign_metrics").upsert(
-      {
-        contest_id: contestId,
-        campaign_type: "raid", // Required field - we know this is a raid campaign
-        total_filtered_tweets: filteredTweetsCount || 0,
-        total_participants: totalParticipants || 0,
-        total_likes: totalLikes,
-        total_replies: totalReplies,
-        total_retweets: totalRetweets,
-        total_quote_reposts: totalQuoteReposts,
-        total_impressions: totalImpressions,
-        total_points: totalPoints,
-        last_updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: "contest_id",
-      }
-    );
-
-    // 11. Update last_metrics_updated in contests table (only when full run or last batch)
-    const isLastRaidBatch =
-      !isBatchedRaid ||
-      (typeof batchIndex === "number" &&
-        typeof totalBatches === "number" &&
-        batchIndex === totalBatches - 1);
-    if (isLastRaidBatch) {
-      const currentTime = new Date().toISOString();
-      console.log(
-        `[fetch-raid-engagements] Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime}`
+      const rejectedCreatorIdsSet = new Set(
+        (allLeaderboardData || [])
+          .filter((entry) => entry.moderation_status === "rejected")
+          .map((entry) => entry.creator_id)
       );
 
-      const { data: updateData, error: updateError } = await supabaseAdmin
-        .from("contests")
-        .update({ last_metrics_updated: currentTime })
-        .eq("id", contestId)
-        .select();
+      const totalParticipants = (allParticipants || []).filter(
+        (p) => !rejectedCreatorIdsSet.has(p.creator_id)
+      ).length;
 
-      if (updateError) {
-        console.error(
-          `[fetch-raid-engagements] Failed to update last_metrics_updated for contest ${contestId}:`,
-          updateError
-        );
-        // Don't fail the request, just log the error
-      } else {
+      await supabaseAdmin.from("twitter_campaign_metrics").upsert(
+        {
+          contest_id: contestId,
+          campaign_type: "raid",
+          total_filtered_tweets: filteredTweetsCount || 0,
+          total_participants: totalParticipants || 0,
+          total_likes: totalLikes,
+          total_replies: totalReplies,
+          total_retweets: totalRetweets,
+          total_quote_reposts: totalQuoteReposts,
+          total_impressions: totalImpressions,
+          total_points: totalPoints,
+          last_updated_at: new Date().toISOString(),
+        },
+        { onConflict: "contest_id" }
+      );
+
+      // 11. Update last_metrics_updated in contests table (only when full run or last batch)
+      const isLastRaidBatch =
+        !isBatchedRaid ||
+        (typeof batchIndex === "number" &&
+          typeof totalBatches === "number" &&
+          batchIndex === totalBatches - 1);
+      if (isLastRaidBatch) {
+        const currentTime = new Date().toISOString();
         console.log(
-          `[fetch-raid-engagements] Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`
+          `[fetch-raid-engagements] Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime}`
         );
+
+        const { error: updateError } = await supabaseAdmin
+          .from("contests")
+          .update({ last_metrics_updated: currentTime })
+          .eq("id", contestId);
+
+        if (updateError) {
+          console.error(
+            `[fetch-raid-engagements] Failed to update last_metrics_updated for contest ${contestId}:`,
+            updateError
+          );
+        } else {
+          console.log(
+            `[fetch-raid-engagements] Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`
+          );
+        }
       }
     }
 
@@ -2162,10 +2178,11 @@ function calculateEngagementBonusPoints(
 // Helper function to update leaderboard with raid engagement points
 async function updateRaidLeaderboard(
   contestId: string,
-  supabaseAdmin: any
+  supabaseAdmin: any,
+  creatorId?: string
 ): Promise<void> {
   // Aggregate points AND metrics from twitter_campaign_tweets where target_tweet_id is set (raid engagements)
-  const { data: raidEngagements, error: raidError } = await supabaseAdmin
+  let raidEngagementsQuery = supabaseAdmin
     .from("twitter_campaign_tweets")
     .select(
       "creator_id, points, likes, replies, retweets, quote_reposts, impressions, moderation_status, manual_points_adjustment"
@@ -2173,6 +2190,12 @@ async function updateRaidLeaderboard(
     .eq("contest_id", contestId)
     .eq("is_eligible", true)
     .not("target_tweet_id", "is", null);
+
+  if (creatorId) {
+    raidEngagementsQuery = raidEngagementsQuery.eq("creator_id", creatorId);
+  }
+
+  const { data: raidEngagements, error: raidError } = await raidEngagementsQuery;
 
   if (raidError) {
     console.error(
@@ -2231,13 +2254,19 @@ async function updateRaidLeaderboard(
   }
 
   // Get existing leaderboard entries (to preserve manual adjustments)
+  let existingLeaderboardQuery = supabaseAdmin
+    .from("twitter_campaign_leaderboard")
+    .select(
+      "creator_id, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, manual_points_adjustment"
+    )
+    .eq("contest_id", contestId);
+
+  if (creatorId) {
+    existingLeaderboardQuery = existingLeaderboardQuery.eq("creator_id", creatorId);
+  }
+
   const { data: existingLeaderboard, error: leaderboardError } =
-    await supabaseAdmin
-      .from("twitter_campaign_leaderboard")
-      .select(
-        "creator_id, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, manual_points_adjustment"
-      )
-      .eq("contest_id", contestId);
+    await existingLeaderboardQuery;
 
   if (leaderboardError) {
     console.error(
@@ -2248,7 +2277,7 @@ async function updateRaidLeaderboard(
   }
 
   // Get regular tweet points and metrics (non-raid tweets)
-  const { data: regularTweets } = await supabaseAdmin
+  let regularTweetsQuery = supabaseAdmin
     .from("twitter_campaign_tweets")
     .select(
       "creator_id, points, likes, replies, retweets, quote_reposts, impressions, moderation_status, manual_points_adjustment"
@@ -2256,6 +2285,12 @@ async function updateRaidLeaderboard(
     .eq("contest_id", contestId)
     .eq("is_eligible", true)
     .is("target_tweet_id", null);
+
+  if (creatorId) {
+    regularTweetsQuery = regularTweetsQuery.eq("creator_id", creatorId);
+  }
+
+  const { data: regularTweets } = await regularTweetsQuery;
 
   const regularDataByCreator = new Map<
     string,
@@ -2372,7 +2407,7 @@ async function updateRaidLeaderboard(
   leaderboardUpdates.forEach((entry, index) => {
     entry.current_rank = index + 1;
     entry.last_refreshed_at = new Date().toISOString();
-    const cooldownMs = 5 * 60 * 1000; // 5 minutes
+    const cooldownMs = creatorId ? 2 * 60 * 60 * 1000 : 5 * 60 * 1000; // 2h for creator-only; 5m for full refresh
     entry.next_refresh_available_at = new Date(
       Date.now() + cooldownMs
     ).toISOString();

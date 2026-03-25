@@ -62,6 +62,10 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
   const jobStartMs = Date.now();
   const baseUrl = getBaseUrl();
   const { contestId } = job;
+  const creatorId =
+    typeof (job as any)?.creatorId === "string"
+      ? (job as any).creatorId
+      : undefined;
   console.log(
     `[process-metrics-queue] Processing job contestId=${contestId} job.isRaid=${job.isRaid}`
   );
@@ -111,7 +115,14 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
         : undefined;
     const raidBody =
       raidBatchIndex !== undefined && raidTotalBatches !== undefined
-        ? { fromQueue: true, batchIndex: raidBatchIndex, totalBatches: raidTotalBatches }
+        ? {
+            fromQueue: true,
+            batchIndex: raidBatchIndex,
+            totalBatches: raidTotalBatches,
+            ...(creatorId ? { creatorId } : {}),
+          }
+        : creatorId
+        ? { creatorId }
         : {};
     let raidHasMore = false;
     try {
@@ -148,6 +159,7 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
           isRaid: true,
           batchIndex: raidBatchIndex! + 1,
           totalBatches: raidTotalBatches!,
+          ...(creatorId ? { creatorId } : {}),
         };
         await enqueueMetricsRefreshJob(nextRaidJob);
         const baseUrlForTrigger = getBaseUrl();
@@ -178,7 +190,8 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
       }
 
       // Update last_metrics_updated only when raid is fully done (last batch or non-batched run).
-      if (!raidHasMore) {
+      // Creator-only refresh must NOT touch contest-level cooldown.
+      if (!raidHasMore && !creatorId) {
         const doneTime = new Date().toISOString();
         await supabaseAdmin
           .from("contests")
@@ -258,6 +271,7 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
         fromQueue: true,
         batchIndex,
         totalBatches,
+        creatorId,
       }),
     });
 
@@ -285,6 +299,7 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
         isRaid: false,
         batchIndex: batchIndex + 1,
         totalBatches,
+        ...(creatorId ? { creatorId } : {}),
       };
       await enqueueMetricsRefreshJob(nextJob);
       // Trigger next run: QStash (event-driven) or direct POST when QStash not configured / loopback

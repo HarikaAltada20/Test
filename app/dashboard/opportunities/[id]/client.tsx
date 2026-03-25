@@ -5552,7 +5552,7 @@ export function ContestClientPage({
                   contestStatus={contest?.status}
                   postContestStatus={contest?.post_contest_status}
                   disableRefreshWhenContestEnded
-                  creatorOnlyUserId={undefined}
+                  creatorOnlyUserId={user?.id ?? null}
                 />
               </div>
             </TabPanel>

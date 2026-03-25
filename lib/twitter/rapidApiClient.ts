@@ -125,6 +125,7 @@ export async function rapidApiRequest<T = any>(
   let lastError: unknown;
   let keyIndex = rotationIndex;
   let attempts = 0;
+  const timeoutMs = Number(process.env.RAPIDAPI_TIMEOUT_MS ?? 30000);
 
   while (attempts < RAPIDAPI_KEYS.length) {
     const apiKey = RAPIDAPI_KEYS[keyIndex];
@@ -163,6 +164,8 @@ export async function rapidApiRequest<T = any>(
         ...requestConfig,
         url,
         headers: requestHeaders,
+        // Prevent requests from hanging indefinitely (RapidAPI sometimes stalls).
+        timeout: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30000,
       });
       rotationIndex = keyIndex;
       return response;
@@ -204,10 +207,26 @@ export async function rapidApiRequest<T = any>(
         throw error;
       }
       
-      // Only retry on rate limit errors
+      // Retry on rate limits and network timeouts (try next key).
       if (isRateLimitError(error)) {
         console.warn(
           `[rapidApiClient] RapidAPI key #${keyIndex} rate-limited; trying next key`
+        );
+        attempts++;
+        keyIndex = (keyIndex + 1) % RAPIDAPI_KEYS.length;
+        rotationIndex = keyIndex;
+        continue;
+      }
+
+      const message = (error as any)?.message ? String((error as any).message) : "";
+      const isTimeout =
+        (error as any)?.code === "ECONNABORTED" ||
+        (error as any)?.code === "ETIMEDOUT" ||
+        message.toLowerCase().includes("timeout");
+
+      if (isTimeout) {
+        console.warn(
+          `[rapidApiClient] RapidAPI request timed out; trying next key (keyIndex=${keyIndex})`
         );
         attempts++;
         keyIndex = (keyIndex + 1) % RAPIDAPI_KEYS.length;

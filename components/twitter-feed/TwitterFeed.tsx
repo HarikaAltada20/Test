@@ -35,7 +35,7 @@ export interface TwitterFeedProps {
   /** When set to in_review, verification_complete, or payouts_processed, Refresh Feed is disabled (metrics locked). */
   postContestStatus?: string | null;
   disableRefreshWhenContestEnded?: boolean;
-  /** When true (e.g. opportunities/creator view), show "Refresh my tweets" and allow refresh even when contest ended (creator-only refresh, 1h cooldown). */
+  /** When true (e.g. opportunities/creator view), show "Refresh my tweets" and allow refresh even when contest ended (creator-only refresh, 2h cooldown). */
   allowRefreshMyTweetsWhenEnded?: boolean;
   /** When set (e.g. opportunities/creator view), only load and show this creator's tweets. Hides creator filter. */
   creatorOnlyUserId?: string | null;
@@ -104,6 +104,13 @@ export function TwitterFeed({
   const [currentLastMetricsUpdated, setCurrentLastMetricsUpdated] = useState<
     string | null | undefined
   >(lastMetricsUpdated);
+  const [creatorLastRefreshedAt, setCreatorLastRefreshedAt] = useState<
+    string | null
+  >(null);
+  const [creatorNextRefreshAvailableAt, setCreatorNextRefreshAvailableAt] =
+    useState<string | null>(null);
+  // Used to force re-render so countdown timers stay accurate.
+  const [creatorCooldownTick, setCreatorCooldownTick] = useState(0);
   const tweetsLoadedRef = useRef<string | null>(null);
   const contestEnded =
     disableRefreshWhenContestEnded && isContestEnded(contestStatus);
@@ -111,6 +118,48 @@ export function TwitterFeed({
     postContestStatus === "in_review" ||
     postContestStatus === "verification_complete" ||
     postContestStatus === "payouts_processed";
+
+  const creatorOnlyMode = !!creatorOnlyUserId;
+  const nowMs = Date.now() + creatorCooldownTick * 0;
+  const creatorNextRefreshMs = creatorNextRefreshAvailableAt
+    ? new Date(creatorNextRefreshAvailableAt).getTime()
+    : null;
+  const creatorCanRefresh =
+    creatorNextRefreshMs === null ? true : nowMs >= creatorNextRefreshMs;
+  const creatorRemainingMs =
+    creatorNextRefreshMs === null ? 0 : Math.max(0, creatorNextRefreshMs - nowMs);
+
+  // Load creator-specific refresh cooldown only when we're in "my tweets" mode.
+  useEffect(() => {
+    if (!creatorOnlyMode || !creatorOnlyUserId || !contestId) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/contests/${contestId}/twitter-creator-refresh-status?creatorId=${creatorOnlyUserId}`
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setCreatorLastRefreshedAt(data.last_refreshed_at ?? null);
+        setCreatorNextRefreshAvailableAt(data.next_refresh_available_at ?? null);
+      } catch {
+        // Ignore: cooldown will fall back to "enabled"
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [contestId, creatorOnlyMode, creatorOnlyUserId]);
+
+  // Re-render periodically so the remaining countdown doesn't look stale.
+  useEffect(() => {
+    if (!creatorOnlyMode) return;
+    const interval = setInterval(() => setCreatorCooldownTick((t) => t + 1), 30000);
+    return () => clearInterval(interval);
+  }, [creatorOnlyMode]);
 
   // Reset loaded flag when contest changes (same pattern as leaderboard)
   useEffect(() => {
@@ -183,6 +232,7 @@ export function TwitterFeed({
 
   // Update cooldown display every 30 seconds for accurate countdown
   useEffect(() => {
+    if (creatorOnlyMode) return;
     if (!currentLastMetricsUpdated) return;
 
     const interval = setInterval(() => {
@@ -191,7 +241,7 @@ export function TwitterFeed({
     }, 30000); // Update every 30 seconds for smoother countdown
 
     return () => clearInterval(interval);
-  }, [currentLastMetricsUpdated]);
+  }, [currentLastMetricsUpdated, creatorOnlyMode]);
 
   // When creatorOnlyUserId is set (e.g. opportunities), keep filter locked to that creator
   useEffect(() => {
@@ -241,13 +291,15 @@ export function TwitterFeed({
       return;
     }
 
-    // Check cooldown before making request - use appropriate cooldown based on context
-    const cooldownInfo =
-      cooldownType === "admin"
-        ? getMetricsRefreshCooldownInfoAdmin(currentLastMetricsUpdated)
-        : cooldownType === "brand"
-        ? getMetricsRefreshCooldownInfoBrand(currentLastMetricsUpdated)
-        : getMetricsRefreshCooldownInfoOpportunities(currentLastMetricsUpdated);
+    // Check cooldown before making request.
+    // In "my tweets" mode we use creator-specific cooldown (twitter_campaign_leaderboard.next_refresh_available_at).
+    const cooldownInfo = creatorOnlyMode
+      ? { canRefresh: creatorCanRefresh, remainingMs: creatorRemainingMs }
+      : cooldownType === "admin"
+      ? getMetricsRefreshCooldownInfoAdmin(currentLastMetricsUpdated)
+      : cooldownType === "brand"
+      ? getMetricsRefreshCooldownInfoBrand(currentLastMetricsUpdated)
+      : getMetricsRefreshCooldownInfoOpportunities(currentLastMetricsUpdated);
 
     if (!cooldownInfo.canRefresh) {
       toast({
@@ -291,6 +343,7 @@ export function TwitterFeed({
       if (result?.queued) {
         // Feed refresh queued; poll until done then reload
         const previousUpdated = currentLastMetricsUpdated ?? null;
+        const previousCreatorRefreshedAt = creatorLastRefreshedAt ?? null;
         const pollIntervalMs = 3000;
         const pollMaxMs = 120000;
         const startedAt = Date.now();
@@ -301,16 +354,33 @@ export function TwitterFeed({
             return;
           }
           try {
-            const res = await fetch(
-              `/api/contests/${contestId}/last-metrics-updated`
-            );
-            if (!res.ok) return;
-            const data = await res.json();
-            const newUpdated = data.last_metrics_updated ?? null;
-            if (newUpdated && newUpdated !== previousUpdated) {
-              clearInterval(pollTimer);
-              setIsRefreshingFeed(false);
-              window.location.reload();
+            if (creatorOnlyMode && creatorOnlyUserId) {
+              const res = await fetch(
+                `/api/contests/${contestId}/twitter-creator-refresh-status?creatorId=${creatorOnlyUserId}`
+              );
+              if (!res.ok) return;
+              const data = await res.json();
+              const newCreatorRefreshedAt = data.last_refreshed_at ?? null;
+              if (
+                newCreatorRefreshedAt &&
+                newCreatorRefreshedAt !== previousCreatorRefreshedAt
+              ) {
+                clearInterval(pollTimer);
+                setIsRefreshingFeed(false);
+                window.location.reload();
+              }
+            } else {
+              const res = await fetch(
+                `/api/contests/${contestId}/last-metrics-updated`
+              );
+              if (!res.ok) return;
+              const data = await res.json();
+              const newUpdated = data.last_metrics_updated ?? null;
+              if (newUpdated && newUpdated !== previousUpdated) {
+                clearInterval(pollTimer);
+                setIsRefreshingFeed(false);
+                window.location.reload();
+              }
             }
           } catch {
             // ignore
@@ -408,19 +478,13 @@ export function TwitterFeed({
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {(() => {
-              // Use appropriate cooldown based on cooldownType prop
-              const cooldownInfo =
-                cooldownType === "admin"
-                  ? getMetricsRefreshCooldownInfoAdmin(
-                      currentLastMetricsUpdated
-                    )
-                  : cooldownType === "brand"
-                  ? getMetricsRefreshCooldownInfoBrand(
-                      currentLastMetricsUpdated
-                    )
-                  : getMetricsRefreshCooldownInfoOpportunities(
-                      currentLastMetricsUpdated
-                    );
+              const cooldownInfo = creatorOnlyMode
+                ? { canRefresh: creatorCanRefresh, remainingMs: creatorRemainingMs }
+                : cooldownType === "admin"
+                ? getMetricsRefreshCooldownInfoAdmin(currentLastMetricsUpdated)
+                : cooldownType === "brand"
+                ? getMetricsRefreshCooldownInfoBrand(currentLastMetricsUpdated)
+                : getMetricsRefreshCooldownInfoOpportunities(currentLastMetricsUpdated);
 
               const waitLabel = formatRemainingTime(cooldownInfo.remainingMs);
               const disableByContestEnded =
@@ -439,7 +503,9 @@ export function TwitterFeed({
                 : isRefreshingFeed
                 ? "Refreshing..."
                 : "";
-              const defaultLabel = allowRefreshMyTweetsWhenEnded
+              const defaultLabel = creatorOnlyMode
+                ? "Refresh my tweets"
+                : allowRefreshMyTweetsWhenEnded
                 ? "Refresh my tweets"
                 : "Refresh Feed";
               // Keep the button text stable (Refresh Feed / Refresh my tweets),
@@ -468,8 +534,10 @@ export function TwitterFeed({
                   )}
                   title={
                     disabledReason ||
-                    (allowRefreshMyTweetsWhenEnded
-                      ? "Refresh your tweets and metrics (1h cooldown)"
+                    (creatorOnlyMode
+                      ? "Fetch & update only your tweets and metrics (2h cooldown)"
+                      : allowRefreshMyTweetsWhenEnded
+                      ? "Refresh your tweets and metrics (2h cooldown)"
                       : "Refresh Twitter feed")
                   }
                 >
