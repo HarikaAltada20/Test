@@ -715,6 +715,12 @@ export function ContestClientPage({
           if (Date.now() - startedAt > pollMaxMs) {
             clearInterval(pollTimer);
             setIsRefreshingMetrics(false);
+            toast({
+              title: "Refresh taking longer than expected",
+              description:
+                "Metrics may still be updating in the background. Try reloading the page shortly.",
+              variant: "destructive",
+            });
             return;
           }
           try {
@@ -740,7 +746,13 @@ export function ContestClientPage({
       }
     } catch (error: any) {
       console.error("Failed to refresh metrics:", error);
-      // In opportunities page, we'll silently handle errors or show a subtle notification
+      toast({
+        title: "Cannot refresh yet",
+        description:
+          error?.message ??
+          "Please participate in the campaign before refreshing.",
+        variant: "destructive",
+      });
     } finally {
       // Only clear loading state here for non-queued path; queued path clears it when poll completes or times out
       if (!result?.queued) {
@@ -5552,7 +5564,7 @@ export function ContestClientPage({
                   contestStatus={contest?.status}
                   postContestStatus={contest?.post_contest_status}
                   disableRefreshWhenContestEnded
-                  creatorOnlyUserId={undefined}
+                  creatorOnlyUserId={user?.id ?? null}
                 />
               </div>
             </TabPanel>
@@ -6885,20 +6897,27 @@ export function ContestClientPage({
                         cooldownInfo,
                         isContestEnded,
                       } = getRefreshButtonState();
+                      const isTwitterLeaderboardRefresh =
+                        contest?.platform?.toLowerCase() === "twitter" ||
+                        contest?.platform?.toLowerCase() === "x";
                       const refreshLabelLarge = isRefreshingMetrics
                         ? "Updating..."
                         : isContestEnded
                           ? "Contest Ended"
                           : !cooldownInfo?.canRefresh
                             ? `Wait ${cooldownInfo?.remainingMinutes}m`
-                            : "Refresh Metrics";
+                            : isTwitterLeaderboardRefresh
+                              ? "Refresh all participants"
+                              : "Refresh Metrics";
                       const refreshLabelSmall = isRefreshingMetrics
                         ? "Updating..."
                         : isContestEnded
                           ? "Contest Ended"
                           : !cooldownInfo?.canRefresh
                             ? `${cooldownInfo?.remainingMinutes}m`
-                            : "Refresh";
+                            : isTwitterLeaderboardRefresh
+                              ? "All"
+                              : "Refresh";
                       return (
                         <div
                           className={cn(
@@ -6957,7 +6976,9 @@ export function ContestClientPage({
                             )}
                             title={
                               disabledReason ||
-                              "Refresh metrics and leaderboard"
+                              (isTwitterLeaderboardRefresh
+                                ? "Refresh all participants: fetch latest tweets and metrics for everyone on the leaderboard."
+                                : "Refresh metrics and leaderboard")
                             }
                           >
                             {isRefreshingMetrics ? (

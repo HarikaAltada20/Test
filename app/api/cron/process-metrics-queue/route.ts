@@ -62,6 +62,10 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
   const jobStartMs = Date.now();
   const baseUrl = getBaseUrl();
   const { contestId } = job;
+  const creatorId =
+    typeof (job as any)?.creatorId === "string"
+      ? (job as any).creatorId
+      : undefined;
   console.log(
     `[process-metrics-queue] Processing job contestId=${contestId} job.isRaid=${job.isRaid}`
   );
@@ -111,7 +115,14 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
         : undefined;
     const raidBody =
       raidBatchIndex !== undefined && raidTotalBatches !== undefined
-        ? { fromQueue: true, batchIndex: raidBatchIndex, totalBatches: raidTotalBatches }
+        ? {
+            fromQueue: true,
+            batchIndex: raidBatchIndex,
+            totalBatches: raidTotalBatches,
+            ...(creatorId ? { creatorId } : {}),
+          }
+        : creatorId
+        ? { creatorId }
         : {};
     let raidHasMore = false;
     try {
@@ -148,6 +159,7 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
           isRaid: true,
           batchIndex: raidBatchIndex! + 1,
           totalBatches: raidTotalBatches!,
+          ...(creatorId ? { creatorId } : {}),
         };
         await enqueueMetricsRefreshJob(nextRaidJob);
         const baseUrlForTrigger = getBaseUrl();
@@ -177,14 +189,8 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
         }
       }
 
-      // Update last_metrics_updated only when raid is fully done (last batch or non-batched run).
-      if (!raidHasMore) {
-        const doneTime = new Date().toISOString();
-        await supabaseAdmin
-          .from("contests")
-          .update({ last_metrics_updated: doneTime })
-          .eq("id", contestId);
-      }
+      // last_metrics_updated for full raid runs is updated inside fetch-raid-engagements
+      // (last batch / non-batched). Avoid duplicating that write here.
 
     } catch (err) {
       console.error("[process-metrics-queue] Raid fetch error:", err);
@@ -258,6 +264,7 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
         fromQueue: true,
         batchIndex,
         totalBatches,
+        creatorId,
       }),
     });
 
@@ -285,6 +292,7 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
         isRaid: false,
         batchIndex: batchIndex + 1,
         totalBatches,
+        ...(creatorId ? { creatorId } : {}),
       };
       await enqueueMetricsRefreshJob(nextJob);
       // Trigger next run: QStash (event-driven) or direct POST when QStash not configured / loopback

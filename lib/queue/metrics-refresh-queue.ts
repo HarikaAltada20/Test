@@ -18,9 +18,16 @@ const REDIS_QUEUE_KEY = `${REDIS_PREFIX}:queue`;
 const REDIS_STATE_TTL_SEC = 60 * 60 * 2; // 2 hours
 
 export type MetricsRefreshJob =
-  | { contestId: string; isRaid: true; batchIndex?: number; totalBatches?: number }
   | {
       contestId: string;
+      creatorId?: string;
+      isRaid: true;
+      batchIndex?: number;
+      totalBatches?: number;
+    }
+  | {
+      contestId: string;
+      creatorId?: string;
       isRaid: false;
       batchIndex: number;
       totalBatches: number;
