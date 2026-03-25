@@ -111,6 +111,7 @@ export default function HeroContent() {
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [startNowLoading, setStartNowLoading] = useState(false);
 
   const [animate, setAnimate] = useState(false);
 
@@ -670,8 +671,18 @@ export default function HeroContent() {
                       background:
                         "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
                     }}
+                    onClick={() => {
+                      setStartNowLoading(true);
+                      setTimeout(() => {
+                        window.location.href = '/dashboard';
+                      }, 100);
+                    }}
+                    disabled={startNowLoading}
                   >
                     <div className="scan-line"></div>
+                    {startNowLoading ? (
+                      <ButtonLoadingSpinner />
+                    ) : null}
                     Start Now
                     <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
                   </button>

@@ -32,7 +32,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
-import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { PageLoadingSpinner, ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import GettingStartedModal from "@/components/GettingStartedModal";
 import { SurveyModal } from "@/components/SurveyModal";
 import { hasSubmitted } from "@/lib/form-submissions";
@@ -67,6 +67,12 @@ function DashboardPage() {
   const [showPopup, setShowPopup] = useState(false);
   const [isSurveyModalOpen, setIsSurveyModalOpen] = useState(false);
   const [isSurveyCompleted, setIsSurveyCompleted] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [viewButtonsLoading, setViewButtonsLoading] = useState<Record<string, boolean>>({});
+
+  const handleNavigation = () => {
+    setIsNavigating(true);
+  };
   const [mode, setMode] = useState<"light" | "dark">("light");
 
   // Read mode from data attribute
@@ -764,7 +770,7 @@ function DashboardPage() {
                   )}
                   onClick={() => setShowPopup(true)}
                 >
-                  <HelpCircle className="w-4 h-4" />
+                  {isNavigating ? <ButtonLoadingSpinner /> : <HelpCircle className="w-4 h-4" />}
                   Get Started
                 </Button>
                 <GettingStartedModal
@@ -847,7 +853,21 @@ function DashboardPage() {
                       }
                       className="block w-full sm:w-auto"
                     >
-                      <button className="w-full px-4 py-2 rounded-xl bg-[#6C43D0] text-white">
+                      <button 
+                        className="w-full px-4 py-2 rounded-xl bg-[#6C43D0] text-white flex items-center justify-center gap-2"
+                        onClick={() => {
+                          setViewButtonsLoading(prev => ({ ...prev, [contest.id]: true }));
+                          setTimeout(() => {
+                            window.location.href = isAdvertiser
+                              ? `/dashboard/contests/${contest.id}`
+                              : `/dashboard/opportunities/${contest.id}`;
+                          }, 100);
+                        }}
+                        disabled={viewButtonsLoading[contest.id]}
+                      >
+                        {viewButtonsLoading[contest.id] ? (
+                          <ButtonLoadingSpinner />
+                        ) : null}
                         View
                       </button>
                     </Link>

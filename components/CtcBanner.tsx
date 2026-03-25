@@ -246,7 +246,7 @@ export default function CtcBanner() {
           style={{ backgroundImage: theme.btnGradient }}
         >
           <div className="scan-line"></div>
-          {isNavigating ? <ButtonLoadingSpinner /> : <Rocket className="w-4 h-4" />}
+          {(isNavigating || isCheckingAccount) ? <ButtonLoadingSpinner /> : <Rocket className="w-4 h-4" />}
           {isHome
             ? "Join Game Of Creators"
             : isCreators
@@ -298,6 +298,7 @@ export default function CtcBanner() {
               onClick={handleContinueAsAdvertiser}
               disabled={isSigningOut}
             >
+              {isSigningOut ? <ButtonLoadingSpinner /> : null}
               Continue as Brand
             </Button>
             <Button
@@ -305,6 +306,7 @@ export default function CtcBanner() {
               onClick={handleSignOutAndContinueCreator}
               disabled={isSigningOut}
             >
+              {isSigningOut ? <ButtonLoadingSpinner /> : null}
               Sign out & Continue as Creator
             </Button>
           </DialogFooter>
@@ -358,6 +360,7 @@ export default function CtcBanner() {
               onClick={handleContinueAsCreator}
               disabled={isSigningOut}
             >
+              {isSigningOut ? <ButtonLoadingSpinner /> : null}
               Continue as Creator
             </Button>
             <Button
@@ -365,6 +368,7 @@ export default function CtcBanner() {
               onClick={handleSignOutAndContinueBrand}
               disabled={isSigningOut}
             >
+              {isSigningOut ? <ButtonLoadingSpinner /> : null}
               Sign out & Continue as Brand
             </Button>
           </DialogFooter>

@@ -38,6 +38,7 @@ import {
   ArrowRight,
   CheckCircle2,
 } from "lucide-react";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   Dialog,
   DialogContent,
@@ -51,7 +52,7 @@ import { FaDiscord, FaWhatsapp, FaLinkedin } from "react-icons/fa";
 import { SiInstagram, SiYoutube } from "react-icons/si";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
 import dayjs from "dayjs";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -120,6 +121,7 @@ export default function SettingsPage({
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
 
   // State declarations
   const [profile, setProfile] = useState<
@@ -171,6 +173,10 @@ export default function SettingsPage({
   const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
   const [billingData, setBillingData] = useState<any>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [profileCompletionLoading, setProfileCompletionLoading] = useState(false);
+  const [navigatingProfile, setNavigatingProfile] = useState(false);
+  const [navigatingTerms, setNavigatingTerms] = useState(false);
+  const [navigatingPrivacy, setNavigatingPrivacy] = useState(false);
   const { logout } = useClientAuth();
   const [showProfileNotification, setShowProfileNotification] = useState(true);
   const [creatorProfileData, setCreatorProfileData] = useState<any>(null);
@@ -325,6 +331,13 @@ export default function SettingsPage({
       router.replace(newUrl.pathname);
     }
   }, [searchParams, toast, router]);
+
+  // Reset navigation states when route changes
+  useEffect(() => {
+    setNavigatingProfile(false);
+    setNavigatingTerms(false);
+    setNavigatingPrivacy(false);
+  }, [pathname]);
 
   // Function declarations
   const refreshInstagramToken = async (
@@ -1086,6 +1099,21 @@ export default function SettingsPage({
 
   const toggleSection = (section: string) => {
     setExpandedSection(expandedSection === section ? null : section);
+  };
+
+  const handleNavigation = (item: string, href: string) => {
+    switch (item) {
+      case "profile":
+        setNavigatingProfile(true);
+        break;
+      case "terms":
+        setNavigatingTerms(true);
+        break;
+      case "privacy":
+        setNavigatingPrivacy(true);
+        break;
+    }
+    router.push(href);
   };
 
   const fetchBillingDetails = async () => {
@@ -2017,15 +2045,20 @@ export default function SettingsPage({
                       : "bg-white border border-gray-300 hover:border-purple-300"
                   )}
                 >
-                  <Link
-                    href={item.href}
+                  <div
+                    onClick={() => handleNavigation(item.id, item.href)}
                     className={cn(
-                      "flex items-center justify-between w-full px-4 py-4 rounded-t-xl transition-all duration-200",
+                      "flex items-center justify-between w-full px-4 py-4 rounded-t-xl transition-all duration-200 cursor-pointer",
                       item.id === "profile" &&
                         showProfileNotification &&
                         isProfileIncomplete()
                         ? "rounded-b-none"
-                        : "rounded-b-xl"
+                        : "rounded-b-xl",
+                      (item.id === "profile" && navigatingProfile) ||
+                      (item.id === "terms" && navigatingTerms) ||
+                      (item.id === "privacy" && navigatingPrivacy)
+                        ? "opacity-70"
+                        : ""
                     )}
                   >
                     <div className="flex items-center gap-4 flex-1">
@@ -2064,13 +2097,19 @@ export default function SettingsPage({
                         )} */}
                       </div>
                     </div>
-                    <ChevronRight
-                      className={cn(
-                        "h-5 w-5",
-                        isDark ? "text-gray-400" : "text-gray-500"
-                      )}
-                    />
-                  </Link>
+                    {(item.id === "profile" && navigatingProfile) ||
+                    (item.id === "terms" && navigatingTerms) ||
+                    (item.id === "privacy" && navigatingPrivacy) ? (
+                      <ButtonLoadingSpinner />
+                    ) : (
+                      <ChevronRight
+                        className={cn(
+                          "h-5 w-5",
+                          isDark ? "text-gray-400" : "text-gray-500"
+                        )}
+                      />
+                    )}
+                  </div>
                   {/* Profile Completion Notification */}
                   {item.id === "profile" &&
                     showProfileNotification &&
@@ -2158,9 +2197,21 @@ export default function SettingsPage({
                                 "w-full sm:w-auto bg-purple-500 hover:bg-purple-600 text-white font-bold py-2.5 px-6 rounded-full flex items-center justify-center gap-2 transition-colors",
                                 isDark && "bg-purple-600 hover:bg-purple-700"
                               )}
+                              onClick={() => {
+                                setProfileCompletionLoading(true);
+                              setTimeout(() => {
+                                window.location.href = '/dashboard/profile';
+                              }, 100);
+                              }}
+                              disabled={profileCompletionLoading}
                             >
+                             
                               COMPLETE PROFILE
-                              <ArrowRight className="h-4 w-4" />
+                               {profileCompletionLoading ? (
+                                <ButtonLoadingSpinner />
+                              ) : (
+                                <ArrowRight className="h-4 w-4" />
+                              )}
                             </Button>
                           </Link>
                         </div>

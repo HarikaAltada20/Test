@@ -65,6 +65,7 @@ import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useToast } from "@/hooks/use-toast";
 import { PaidPlanUpgradeModal } from "@/components/PaidPlanUpgradeModal";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 // Define the type for a contest
 type Contest = {
@@ -271,6 +272,26 @@ export function ContestListClient({
 
   const [contests, setContests] = useState<Contest[]>(initialContests);
   const isMountedRef = useRef(true);
+  
+  // Loading states for buttons
+  const [loadingButtons, setLoadingButtons] = useState<{
+    [key: string]: {
+      edit?: boolean;
+      editDates?: boolean;
+      view?: boolean;
+    };
+  }>({});
+
+  // Helper functions for loading states
+  const setButtonLoading = (contestId: string, action: 'edit' | 'editDates' | 'view', isLoading: boolean) => {
+    setLoadingButtons(prev => ({
+      ...prev,
+      [contestId]: {
+        ...prev[contestId],
+        [action]: isLoading
+      }
+    }));
+  };
 
   const fetchLatestContests = useCallback(async () => {
     if (isAdminView) {
@@ -1331,16 +1352,22 @@ export function ContestListClient({
               )}
               onClick={(e) => {
                 e.stopPropagation();
+                setButtonLoading(contest.id, 'view', true);
                 const href = isAdminView
                   ? `/dashboard/admin/contests/${contest.id}`
                   : `/dashboard/contests/${contest.id}`;
                 router.push(href);
               }}
+              disabled={loadingButtons[contest.id]?.view}
               // size="sm"
               // variant="outline"
             >
-              <Eye className="h-4 w-4 mr-1" />
-              View Details
+              {loadingButtons[contest.id]?.view ? (
+                <ButtonLoadingSpinner />
+              ) : (
+                <Eye className="h-4 w-4 mr-1" />
+              )}
+              <span>View Details</span>
             </button>
           </CardContent>
         </Card>
@@ -1541,13 +1568,19 @@ export function ContestListClient({
                     )}
                     onClick={(e) => {
                       e.stopPropagation();
+                      setButtonLoading(contest.id, 'editDates', true);
                       router.push(
                         `/dashboard/contests/${contest.id}/edit?dates=true`,
                       );
                     }}
+                    disabled={loadingButtons[contest.id]?.editDates}
                   >
-                    <Calendar className="h-4 w-4" />
-                    Edit Dates
+                    {loadingButtons[contest.id]?.editDates ? (
+                      <ButtonLoadingSpinner />
+                    ) : (
+                      <Calendar className="h-4 w-4" />
+                    )}
+                    <span>Edit Dates</span>
                   </Button>
                 </>
               ) : contest.moderation_status !== "published" ? (
@@ -1561,13 +1594,19 @@ export function ContestListClient({
                   )}
                   onClick={(e) => {
                     e.stopPropagation();
+                    setButtonLoading(contest.id, 'edit', true);
                     const href = isAdminView
                       ? `/dashboard/contests/${contest.id}/edit`
                       : `/dashboard/contests/${contest.id}/edit`;
                     router.push(href);
                   }}
+                  disabled={loadingButtons[contest.id]?.edit}
                 >
-                  <Edit className="h-4 w-4" />
+                  {loadingButtons[contest.id]?.edit ? (
+                    <ButtonLoadingSpinner />
+                  ) : (
+                    <Edit className="h-4 w-4" />
+                  )}
                   <span>Edit Contest</span>
                 </button>
               ) : (
@@ -1577,14 +1616,20 @@ export function ContestListClient({
                   className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
                   onClick={(e) => {
                     e.stopPropagation();
+                    setButtonLoading(contest.id, 'view', true);
                     const href = isAdminView
                       ? `/dashboard/admin/contests/${contest.id}`
                       : `/dashboard/contests/${contest.id}`;
                     router.push(href);
                   }}
+                  disabled={loadingButtons[contest.id]?.view}
                 >
-                  <Eye className="h-4 w-4" />
-                  <span>View Details</span>
+                  {loadingButtons[contest.id]?.view ? (
+                    <ButtonLoadingSpinner />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                  <span>{loadingButtons[contest.id]?.view ? 'Loading...' : 'View Details'}</span>
                 </button>
               )}
 
@@ -2144,13 +2189,19 @@ export function ContestListClient({
               )}
               onClick={(e) => {
                 e.stopPropagation();
+                setButtonLoading(contest.id, 'view', true);
                 const href = isAdminView
                   ? `/dashboard/admin/contests/${contest.id}`
                   : `/dashboard/contests/${contest.id}`;
                 router.push(href);
               }}
+              disabled={loadingButtons[contest.id]?.view}
             >
-              <Eye className="h-4 w-4" />
+              {loadingButtons[contest.id]?.view ? (
+                <ButtonLoadingSpinner />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
               <span className="text-sm font-medium">View Details</span>
             </button>
           </div>
@@ -2362,12 +2413,18 @@ export function ContestListClient({
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
+                  setButtonLoading(contest.id, 'editDates', true);
                   router.push(
                     `/dashboard/contests/${contest.id}/edit?dates=true`,
                   );
                 }}
+                disabled={loadingButtons[contest.id]?.editDates}
               >
-                <Calendar className="h-4 w-4" />
+                {loadingButtons[contest.id]?.editDates ? (
+                  <ButtonLoadingSpinner />
+                ) : (
+                  <Calendar className="h-4 w-4" />
+                )}
                 <span>Edit Dates</span>
               </Button>
               <DeleteContestButton
@@ -2388,13 +2445,19 @@ export function ContestListClient({
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
+                  setButtonLoading(contest.id, 'edit', true);
                   const href = isAdminView
                     ? `/dashboard/contests/${contest.id}/edit`
                     : `/dashboard/contests/${contest.id}/edit`;
                   router.push(href);
                 }}
+                disabled={loadingButtons[contest.id]?.edit}
               >
-                <Edit className="h-4 w-4" />
+                {loadingButtons[contest.id]?.edit ? (
+                  <ButtonLoadingSpinner />
+                ) : (
+                  <Edit className="h-4 w-4" />
+                )}
                 <span>Edit Contest</span>
               </button>
               <DeleteContestButton
@@ -2409,13 +2472,19 @@ export function ContestListClient({
               className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full text-sm font-medium"
               onClick={(e) => {
                 e.stopPropagation();
+                setButtonLoading(contest.id, 'view', true);
                 const href = isAdminView
                   ? `/dashboard/admin/contests/${contest.id}`
                   : `/dashboard/contests/${contest.id}`;
                 router.push(href);
               }}
+              disabled={loadingButtons[contest.id]?.view}
             >
-              <Eye className="h-4 w-4" />
+              {loadingButtons[contest.id]?.view ? (
+                <ButtonLoadingSpinner />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
               <span>View Details</span>
             </button>
           )}
