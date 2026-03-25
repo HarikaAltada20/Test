@@ -189,15 +189,8 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
         }
       }
 
-      // Update last_metrics_updated only when raid is fully done (last batch or non-batched run).
-      // Creator-only refresh must NOT touch contest-level cooldown.
-      if (!raidHasMore && !creatorId) {
-        const doneTime = new Date().toISOString();
-        await supabaseAdmin
-          .from("contests")
-          .update({ last_metrics_updated: doneTime })
-          .eq("id", contestId);
-      }
+      // last_metrics_updated for full raid runs is updated inside fetch-raid-engagements
+      // (last batch / non-batched). Avoid duplicating that write here.
 
     } catch (err) {
       console.error("[process-metrics-queue] Raid fetch error:", err);

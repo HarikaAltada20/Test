@@ -10,6 +10,7 @@ import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   isMetricsQueueEnabled,
   enqueueMetricsRefreshJob,
+  type MetricsRefreshJob,
 } from "@/lib/queue/metrics-refresh-queue";
 import { isQStashEnabled, triggerProcessMetricsQueue } from "@/lib/qstash";
 
@@ -80,6 +81,24 @@ export async function POST(
         process.env.SUPABASE_SERVICE_ROLE_KEY!
       );
 
+      // Creator-only refresh is allowed only for active participants.
+      const { data: participant } = await supabaseAdmin
+        .from("twitter_campaign_participants")
+        .select("creator_id")
+        .eq("contest_id", contestId)
+        .eq("creator_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (!participant) {
+        return NextResponse.json(
+          {
+            error: "Please participate in the campaign before refreshing ....",
+          },
+          { status: 403 }
+        );
+      }
+
       const { data: creatorLb } = await supabaseAdmin
         .from("twitter_campaign_leaderboard")
         .select("next_refresh_available_at, last_refreshed_at")
@@ -149,15 +168,23 @@ export async function POST(
         typeof campaignType === "string" &&
         campaignType.toLowerCase().trim() === "raid";
 
-      const job = {
-        contestId,
-        isRaid: isRaidCampaign,
-        batchIndex: 0,
-        totalBatches: 1,
-        creatorId: user.id,
-      };
+      const job: MetricsRefreshJob = isRaidCampaign
+        ? {
+            contestId,
+            isRaid: true,
+            batchIndex: 0,
+            totalBatches: 1,
+            creatorId: user.id,
+          }
+        : {
+            contestId,
+            isRaid: false,
+            batchIndex: 0,
+            totalBatches: 1,
+            creatorId: user.id,
+          };
 
-      const enqueueResult = await enqueueMetricsRefreshJob(job as any);
+      const enqueueResult = await enqueueMetricsRefreshJob(job);
       if (enqueueResult.error) {
         console.error(
           `[twitter-refresh-feed] Creator queue enqueue failed for ${contestId}:`,

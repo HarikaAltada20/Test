@@ -12,6 +12,7 @@ import {
   getBatchState,
   clearBatchState,
 } from "@/lib/queue/metrics-refresh-queue";
+import { rerankTwitterContestLeaderboard } from "@/lib/twitter/rerank-twitter-leaderboard";
 
 export const dynamic = "force-dynamic";
 
@@ -2111,6 +2112,9 @@ export async function POST(
             "entries:",
             upsertPayload.length
           );
+          if (creatorIdOnly) {
+            await rerankTwitterContestLeaderboard(contestId, supabaseAdmin);
+          }
         }
       } else {
         console.log(

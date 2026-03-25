@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   hasRapidApiKeys,
   rapidApiHost,
   rapidApiRequest,
 } from "@/lib/twitter/rapidApiClient";
 import { extractTweetId, getTwitterRaidTarget } from "@/lib/twitter-utils";
+import { rerankTwitterContestLeaderboard } from "@/lib/twitter/rerank-twitter-leaderboard";
 
 export const dynamic = "force-dynamic";
 
@@ -100,7 +102,7 @@ export async function POST(
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
       .select(
-        "id, contest_type, contest_based_details, start_date, max_submissions_per_creator, post_contest_status"
+        "id, advertiser_id, contest_type, contest_based_details, start_date, max_submissions_per_creator, post_contest_status"
       )
       .eq("id", contestId)
       .maybeSingle();
@@ -124,6 +126,49 @@ export async function POST(
         contestId
       );
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+    }
+
+    // Queue worker: same contract as twitter-refresh-tweets (CRON_SECRET).
+    // Interactive: must be admin, contest owner, or active Twitter participant.
+    if (fromQueue) {
+      const cronSecret = process.env.CRON_SECRET;
+      const authHeader = request.headers.get("authorization");
+      if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+        return NextResponse.json(
+          { error: "Unauthorized (queue)" },
+          { status: 401 }
+        );
+      }
+    } else {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const { isAdmin } = await verifyAdminAccess();
+      const advertiserId = (contest as { advertiser_id?: string })
+        .advertiser_id;
+      const isOwner = !!advertiserId && advertiserId === user.id;
+      const { data: participantRow } = await supabaseAdmin
+        .from("twitter_campaign_participants")
+        .select("creator_id")
+        .eq("contest_id", contestId)
+        .eq("creator_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+      const isParticipant = !!participantRow;
+      if (!isAdmin && !isOwner && !isParticipant) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (
+        creatorId &&
+        creatorId !== user.id &&
+        !isAdmin &&
+        !isOwner
+      ) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
 
     // Hard lock: same as refresh-metrics - no raid refresh after review begins
@@ -2430,6 +2475,10 @@ async function updateRaidLeaderboard(
       console.log(
         `[updateRaidLeaderboard] Updated leaderboard for ${leaderboardUpdates.length} creators`
       );
+      // Creator-only upsert only touched one row; ranks must reflect full contest ordering.
+      if (creatorId) {
+        await rerankTwitterContestLeaderboard(contestId, supabaseAdmin);
+      }
     }
   }
 }

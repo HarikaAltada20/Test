@@ -120,7 +120,9 @@ export function TwitterFeed({
     postContestStatus === "payouts_processed";
 
   const creatorOnlyMode = !!creatorOnlyUserId;
-  const nowMs = Date.now() + creatorCooldownTick * 0;
+  // creatorCooldownTick bumps on an interval to force re-renders; Date.now() is read each render.
+  void creatorCooldownTick;
+  const nowMs = Date.now();
   const creatorNextRefreshMs = creatorNextRefreshAvailableAt
     ? new Date(creatorNextRefreshAvailableAt).getTime()
     : null;
@@ -351,6 +353,12 @@ export function TwitterFeed({
           if (Date.now() - startedAt > pollMaxMs) {
             clearInterval(pollTimer);
             setIsRefreshingFeed(false);
+            toast({
+              title: "Refresh taking longer than expected",
+              description:
+                "The update may still be running in the background. Try reloading the page in a moment.",
+              variant: "destructive",
+            });
             return;
           }
           try {
