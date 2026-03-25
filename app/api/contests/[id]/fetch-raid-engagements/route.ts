@@ -9,6 +9,7 @@ import {
 } from "@/lib/twitter/rapidApiClient";
 import { extractTweetId, getTwitterRaidTarget } from "@/lib/twitter-utils";
 import { rerankTwitterContestLeaderboard } from "@/lib/twitter/rerank-twitter-leaderboard";
+import { getTweetLeafPublicMetrics } from "@/lib/twitter/tweet-public-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -1690,10 +1691,12 @@ export async function POST(
       // - For CPM contests: Use brand-assigned base points and multipliers from points_config
       // - For leaderboard contests: Use hardcoded RAID_POINTS_CONFIG base points and multipliers
       const basePoints = calculateBasePoints(engagementType, raidPointsConfig);
+      const leafMetrics = getTweetLeafPublicMetrics(tweet);
       const engagementBonusPoints = calculateEngagementBonusPoints(
         tweet,
         engagementType,
-        raidPointsConfig
+        raidPointsConfig,
+        leafMetrics
       );
 
       // Handle different field names from API
@@ -1729,12 +1732,12 @@ export async function POST(
             : engagementType,
         target_tweet_id: targetTweetId, // Mark as raid engagement
 
-        // Metrics - always update from fresh API data
-        likes: tweet.likes || tweet.favorites || tweet.favorite_count || 0,
-        replies: tweet.replies || tweet.reply_count || 0,
-        retweets: tweet.retweets || tweet.retweet_count || 0,
-        quote_reposts: tweet.quotes || tweet.quote_count || 0,
-        impressions: parseInt(tweet.views || tweet.view_count || "0", 10),
+        // Metrics — leaf post only (avoid parent/target tweet counts on RT shells)
+        likes: leafMetrics.likes,
+        replies: leafMetrics.replies,
+        retweets: leafMetrics.retweets,
+        quote_reposts: leafMetrics.quotes,
+        impressions: leafMetrics.impressions,
         points: Math.round(basePoints + engagementBonusPoints), // Recalculate based on fresh metrics
         points_calculated_at: new Date().toISOString(),
 
@@ -2175,14 +2178,15 @@ function calculateBasePoints(
 function calculateEngagementBonusPoints(
   tweet: any,
   engagementType: "comment" | "retweet" | "quote_repost",
-  pointsConfig: typeof RAID_POINTS_CONFIG
+  pointsConfig: typeof RAID_POINTS_CONFIG,
+  leafMetrics?: ReturnType<typeof getTweetLeafPublicMetrics>
 ): number {
-  // Handle different field names from API
-  const likes = tweet.likes || tweet.favorites || tweet.favorite_count || 0;
-  const replies = tweet.replies || tweet.reply_count || 0;
-  const impressions = parseInt(tweet.views || tweet.view_count || "0", 10);
-  const retweets = tweet.retweets || tweet.retweet_count || 0;
-  const quotes = tweet.quotes || tweet.quote_count || 0;
+  const leaf = leafMetrics ?? getTweetLeafPublicMetrics(tweet);
+  const likes = leaf.likes;
+  const replies = leaf.replies;
+  const impressions = leaf.impressions;
+  const retweets = leaf.retweets;
+  const quotes = leaf.quotes;
   // const bookmarks = tweet.bookmarks || tweet.bookmark_count || 0; // If available in future
 
   if (engagementType === "comment") {

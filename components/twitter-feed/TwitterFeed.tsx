@@ -37,7 +37,10 @@ export interface TwitterFeedProps {
   disableRefreshWhenContestEnded?: boolean;
   /** When true (e.g. opportunities/creator view), show "Refresh my tweets" and allow refresh even when contest ended (creator-only refresh, 2h cooldown). */
   allowRefreshMyTweetsWhenEnded?: boolean;
-  /** When set (e.g. opportunities/creator view), only load and show this creator's tweets. Hides creator filter. */
+  /**
+   * When set (e.g. opportunities/creator view), refresh only this creator's tweets/metrics.
+   * Feed display remains the full contest timeline (does not hide other creators' tweets).
+   */
   creatorOnlyUserId?: string | null;
 }
 
@@ -92,9 +95,10 @@ export function TwitterFeed({
   const [tweets, setTweets] = useState<TwitterTweet[]>([]);
   const [creators, setCreators] = useState<TwitterCreator[]>([]);
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(
-    creatorOnlyUserId ?? null
+    null
   );
-  const effectiveCreatorId = creatorOnlyUserId ?? selectedCreatorId;
+  // creatorOnlyUserId controls refresh/cooldown only; for display we use selectedCreatorId.
+  const effectiveCreatorId = selectedCreatorId;
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -245,12 +249,7 @@ export function TwitterFeed({
     return () => clearInterval(interval);
   }, [currentLastMetricsUpdated, creatorOnlyMode]);
 
-  // When creatorOnlyUserId is set (e.g. opportunities), keep filter locked to that creator
-  useEffect(() => {
-    if (creatorOnlyUserId) {
-      setSelectedCreatorId(creatorOnlyUserId);
-    }
-  }, [creatorOnlyUserId]);
+  // Note: creatorOnlyUserId intentionally does NOT lock the displayed feed filter.
 
   // Load tweets only if not already loaded (to avoid refetching on tab switch)
   // IMPORTANT: This only reads from database - NO Twitter API calls
