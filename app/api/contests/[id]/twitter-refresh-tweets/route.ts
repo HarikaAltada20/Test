@@ -13,6 +13,7 @@ import {
   clearBatchState,
 } from "@/lib/queue/metrics-refresh-queue";
 import { rerankTwitterContestLeaderboard } from "@/lib/twitter/rerank-twitter-leaderboard";
+import { getTweetLeafPublicMetrics } from "@/lib/twitter/tweet-public-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -1085,20 +1086,26 @@ export async function POST(
         const mappedTweets = filteredTimeline.map((tweet: any) => {
           const inferredType = tweet.retweeted_tweet
             ? "retweet"
-            : tweet.quoted
+            : tweet.quoted || tweet.quoted_tweet || tweet.quoted_status
             ? "quote"
             : "tweet";
+
+          const leaf = getTweetLeafPublicMetrics(tweet);
 
           return {
             tweet_id: tweet.tweet_id || tweet.id_str || tweet.id || "",
             type: inferredType,
             text: tweet.text || tweet.full_text || "",
             created_at: tweet.created_at || "",
-            quotes: tweet.quotes || 0,
-            favorites: tweet.favorites || 0,
-            replies: tweet.replies || 0,
-            retweets: tweet.retweets || 0,
-            views: tweet.views || "0",
+            // Use leaf metrics so retweet/quote shells don't inherit parent/target counts.
+            quotes: leaf.quotes,
+            favorites: leaf.likes,
+            replies: leaf.replies,
+            retweets: leaf.retweets,
+            views:
+              leaf.impressions > 0
+                ? String(leaf.impressions)
+                : tweet.views ?? tweet.view_count ?? "0",
             entities: {
               hashtags: tweet.entities?.hashtags || [],
               symbols: tweet.entities?.symbols || [],
@@ -2280,11 +2287,12 @@ function calculateAwarenessEngagementBonusPoints(
   engagementType: "comment" | "retweet" | "quote_repost",
   pointsConfig: any
 ): number {
-  const likes = tweet.likes || tweet.favorites || tweet.favorite_count || 0;
-  const replies = tweet.replies || tweet.reply_count || 0;
-  const impressions = parseInt(tweet.views || tweet.view_count || "0", 10);
-  const retweets = tweet.retweets || tweet.retweet_count || 0;
-  const quotes = tweet.quotes || tweet.quote_count || 0;
+  const leaf = getTweetLeafPublicMetrics(tweet);
+  const likes = leaf.likes;
+  const replies = leaf.replies;
+  const impressions = leaf.impressions;
+  const retweets = leaf.retweets;
+  const quotes = leaf.quotes;
 
   if (engagementType === "comment") {
     return (
