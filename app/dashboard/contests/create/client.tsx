@@ -3875,6 +3875,9 @@ export default function CreateContestPage({
 
   // Update nextStep to auto-save basics as draft before moving to brief
   const nextStep = async () => {
+    setIsLoading(true);
+    
+    try {
     // Helper function to set error for UI display (for steps other than basics)
     const setError = (message: string) => {
       setFormFeedback(message);
@@ -3922,6 +3925,7 @@ export default function CreateContestPage({
           setToastError(
             "CPM-based contests are only available with paid plans. Please upgrade your subscription or select Leaderboard contest type."
           );
+          setIsLoading(false);
           return;
         }
       }
@@ -3936,6 +3940,7 @@ export default function CreateContestPage({
               )}`;
         // Use toast-only error for basics step (no CardFooter alert)
         setToastError(errorMessage);
+        setIsLoading(false);
         return;
       }
 
@@ -3970,10 +3975,12 @@ export default function CreateContestPage({
 
       if (isQuillEmpty(briefToCheck)) {
         setError("Please enter a brief description for your contest");
+        setIsLoading(false);
         return;
       }
       if (isQuillEmpty(rulesToCheck)) {
         setError("Please provide rules for your contest");
+        setIsLoading(false);
         return;
       }
       setStep("resources");
@@ -3985,15 +3992,20 @@ export default function CreateContestPage({
         setError(
           "Please provide at least one resource - either upload an asset OR add an external resource link to help creators understand your requirements"
         );
+        setIsLoading(false);
         return;
       }
       if (inspirationLinks.length === 0) {
         setError(
           "Please add at least one inspiration link to help creators understand your vision"
         );
+        setIsLoading(false);
         return;
       }
       setStep("prize");
+    }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -9835,7 +9847,14 @@ export default function CreateContestPage({
                     onClick={nextStep}
                     disabled={isLoading}
                   >
-                    Next
+                    {isLoading ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Next
+                      </div>
+                    ) : (
+                      "Next"
+                    )}
                   </button>
                 </div>
               </CardFooter>
@@ -10390,7 +10409,14 @@ export default function CreateContestPage({
                     onClick={nextStep}
                     disabled={isNextDisabled() || isLoading}
                   >
-                    Next
+                    {isLoading ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Next
+                      </div>
+                    ) : (
+                      "Next"
+                    )}
                   </button>
                 </div>
               </CardFooter>
@@ -11552,7 +11578,14 @@ export default function CreateContestPage({
                           inspirationLinks.length === 0
                         }
                       >
-                        Next
+                        {isLoading ? (
+                          <div className="flex items-center gap-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            Next
+                          </div>
+                        ) : (
+                          "Next"
+                        )}
                       </button>
                     </div>
                   </div>

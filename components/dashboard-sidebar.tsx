@@ -30,6 +30,7 @@ import {
   Star,
 } from "lucide-react";
 import Link from "next/link";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 interface DashboardSidebarProps {
   userRole?: "advertiser" | "creator" | "admin";
@@ -52,6 +53,15 @@ export function DashboardSidebar({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [showChat, setShowChat] = useState(false);
   const [isOthersDropdownOpen, setIsOthersDropdownOpen] = useState(false);
+  const [navigatingLink, setNavigatingLink] = useState<string | null>(null);
+
+  const handleNavigation = (href: string) => {
+    setNavigatingLink(href);
+  };
+
+  useEffect(() => {
+    setNavigatingLink(null);
+  }, [pathname]);
   const isDark = mode === "dark";
 
   // Auto-open Others dropdown if current path matches any dropdown item
@@ -345,6 +355,7 @@ export function DashboardSidebar({
                       <Link
                         key={link.href}
                         href={link.href}
+                        onClick={() => handleNavigation(link.href)}
                         className={cn(
                           "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
                           "border border-transparent",
@@ -390,7 +401,7 @@ export function DashboardSidebar({
                               : "hsl(var(--primary))",
                           }}
                         >
-                          <link.icon
+                           <link.icon
                             className={cn(collapsed ? "h-6 w-6" : "h-5 w-5")}
                           />
                         </div>
@@ -422,6 +433,9 @@ export function DashboardSidebar({
                                 {link.description}
                               </div>
                             </div>
+                            {navigatingLink === link.href ? (
+                            <ButtonLoadingSpinner />
+                          ) : (
                             <ChevronRight
                               className={cn(
                                 "h-4 w-4 transition-all duration-200",
@@ -435,6 +449,7 @@ export function DashboardSidebar({
                                   : "hsl(var(--muted-foreground))",
                               }}
                             />
+                          )}
                           </>
                         )}
                       </Link>
@@ -643,6 +658,7 @@ export function DashboardSidebar({
                                 <Link
                                   key={item.href}
                                   href={item.href}
+                                  onClick={() => handleNavigation(item.href)}
                                   className={cn(
                                     "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
                                     "border border-transparent",
@@ -717,13 +733,17 @@ export function DashboardSidebar({
                                       {item.description}
                                     </div>
                                   </div>
-                                  {isItemActive && (
-                                    <ChevronRight
-                                      className="h-4 w-4 transition-all duration-200 translate-x-0.5"
-                                      style={{
-                                        color: isDark ? "#C9A7FF" : "#4A00BE",
-                                      }}
-                                    />
+                                  {navigatingLink === item.href ? (
+                                    <ButtonLoadingSpinner />
+                                  ) : (
+                                    isItemActive && (
+                                      <ChevronRight
+                                        className="h-4 w-4 transition-all duration-200 translate-x-0.5"
+                                        style={{
+                                          color: isDark ? "#C9A7FF" : "#4A00BE",
+                                        }}
+                                      />
+                                    )
                                   )}
                                 </Link>
                               );

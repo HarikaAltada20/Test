@@ -29,6 +29,7 @@ import { SOCIAL_LINKS } from "@/constants/socialLinks";
 import { useSearchParams } from "next/navigation";
 import { DiscordOnboardingModal } from "@/components/DiscordOnboardingModal";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 
 interface GettingStartedClientProps {
@@ -44,6 +45,24 @@ export default function GettingStartedClient({
   const supabase = createClient();
   const [mode, setMode] = useState<"light" | "dark">("light");
   const searchParams = useSearchParams();
+  const [loadingButtons, setLoadingButtons] = useState<{
+    [key: string]: {
+      createContest?: boolean;
+      createLeaderboard?: boolean;
+      createCpm?: boolean;
+    };
+  }>({});
+
+  // Helper functions for loading states
+  const setButtonLoading = (buttonId: string, action: string, isLoading: boolean) => {
+    setLoadingButtons(prev => ({
+      ...prev,
+      [buttonId]: {
+        ...prev[buttonId],
+        [action]: isLoading
+      }
+    }));
+  };
 
   // Read mode from data attribute
   useEffect(() => {
@@ -444,17 +463,23 @@ export default function GettingStartedClient({
                 </div>
 
                 <div className="text-center pt-4">
-                  <Link href="/dashboard/contests">
-                    <Button
-                      className={cn(
-                        "text-md text-white",
-                        isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]",
-                      )}
-                    >
-                      {/* <Play className="w-4 h-4 mr-2" /> */}
-                      Create Your First Contest
-                    </Button>
-                  </Link>
+                  <Button
+                    className={cn(
+                      "text-md text-white",
+                      isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]",
+                    )}
+                    onClick={() => {
+                      setButtonLoading('create-first', 'createContest', true);
+                      window.location.href = '/dashboard/contests';
+                    }}
+                    disabled={loadingButtons['create-first']?.createContest}
+                  >
+                    {loadingButtons['create-first']?.createContest ? (
+                      <ButtonLoadingSpinner />
+                    ) : null}
+                    {/* <Play className="w-4 h-4 mr-2" /> */}
+                    Create Your First Contest
+                  </Button>
                 </div>
               </CardContent>
             </div>
@@ -537,12 +562,21 @@ export default function GettingStartedClient({
                     ))}
                   </ul>
 
-                  <Link href="/dashboard/contests" className="mt-auto">
-                    <Button className={cn("text-sm text-white w-full", isDark ? "bg-[#5F2BB1] hover:bg-[#4A1E99]" : "bg-[#4A00BE] hover:bg-[#3900a0]")}>
+                  <Button 
+                    className={cn("text-sm text-white w-full", isDark ? "bg-[#5F2BB1] hover:bg-[#4A1E99]" : "bg-[#4A00BE] hover:bg-[#3900a0]")}
+                    onClick={() => {
+                      setButtonLoading('leaderboard', 'createLeaderboard', true);
+                      window.location.href = '/dashboard/contests';
+                    }}
+                    disabled={loadingButtons['leaderboard']?.createLeaderboard}
+                  >
+                    {loadingButtons['leaderboard']?.createLeaderboard ? (
+                      <ButtonLoadingSpinner />
+                    ) : (
                       <Trophy className="w-4 h-4" />
-                      Create Leaderboard Contest
-                    </Button>
-                  </Link>
+                    )}
+                    Create Leaderboard Contest
+                  </Button>
                 </div>
 
                 {/* CPM Card */}
@@ -614,12 +648,21 @@ export default function GettingStartedClient({
                     ))}
                   </ul>
 
-                  <Link href="/dashboard/contests" className="mt-auto">
-                    <Button className={cn("text-sm text-white w-full", isDark ? "bg-[#5F2BB1] hover:bg-[#4A1E99]" : "bg-[#4A00BE] hover:bg-[#3900a0]")}>
+                  <Button 
+                    className={cn("text-sm text-white w-full", isDark ? "bg-[#5F2BB1] hover:bg-[#4A1E99]" : "bg-[#4A00BE] hover:bg-[#3900a0]")}
+                    onClick={() => {
+                      setButtonLoading('cpm', 'createCpm', true);
+                      window.location.href = '/dashboard/contests';
+                    }}
+                    disabled={loadingButtons['cpm']?.createCpm}
+                  >
+                    {loadingButtons['cpm']?.createCpm ? (
+                      <ButtonLoadingSpinner />
+                    ) : (
                       <DollarSign className="w-4 h-4" />
-                      Create CPM Contest
-                    </Button>
-                  </Link>
+                    )}
+                    Create CPM Contest
+                  </Button>
                 </div>
               </div>
 
@@ -1232,14 +1275,21 @@ export default function GettingStartedClient({
                 </div>
 
                 <div className="text-center pt-3">
-                  <Link href="/dashboard/opportunities">
-                    <Button
-                      className={cn("text-md text-white px-6 py-5", primaryButtonClass)}
-                    >
+                  <Button
+                    className={cn("text-md text-white px-6 py-5", primaryButtonClass)}
+                    onClick={() => {
+                      setButtonLoading('browse-creator', 'createContest', true);
+                      window.location.href = '/dashboard/opportunities';
+                    }}
+                    disabled={loadingButtons['browse-creator']?.createContest}
+                  >
+                    {loadingButtons['browse-creator']?.createContest ? (
+                      <ButtonLoadingSpinner />
+                    ) : (
                       <Video className="w-4 h-4" />
-                      Browse Contests
-                    </Button>
-                  </Link>
+                    )}
+                    Browse Contests
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1827,17 +1877,24 @@ export default function GettingStartedClient({
             </div>
 
             <div className="text-center">
-              <Link href="/dashboard/contests">
-                <Button
-                  className={cn(
-                    "w-full py-3 px-8 text-lg",
-                    isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]",
-                  )}
-                >
+              <Button
+                className={cn(
+                  "w-full py-3 px-8 text-lg",
+                  isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]",
+                )}
+                onClick={() => {
+                  setButtonLoading('create-advertiser', 'createContest', true);
+                  window.location.href = '/dashboard/contests';
+                }}
+                disabled={loadingButtons['create-advertiser']?.createContest}
+              >
+                {loadingButtons['create-advertiser']?.createContest ? (
+                  <ButtonLoadingSpinner />
+                ) : (
                   <Video className="w-6 h-6" />
-                  Create Contest
-                </Button>
-              </Link>
+                )}
+                Create Contest
+              </Button>
             </div>
           </CardContent>
         </div>
@@ -1875,46 +1932,59 @@ export default function GettingStartedClient({
             </div>
 
             <div className="text-center flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Link href="/dashboard/opportunities">
+              <div className="w-full sm:w-auto">
                 <Button
                   className={cn(
-                    "w-full py-3 px-8 text-lg",
+                    "w-full sm:w-auto py-3 px-8 text-lg",
                     primaryButtonClass,
                   )}
+                  onClick={() => {
+                    setButtonLoading('browse-final', 'createContest', true);
+                    window.location.href = '/dashboard/opportunities';
+                  }}
+                  disabled={loadingButtons['browse-final']?.createContest}
                 >
-                  <Video className="w-5 h-5" />
+                  {loadingButtons['browse-final']?.createContest ? (
+                    <ButtonLoadingSpinner />
+                  ) : (
+                    <Video className="w-5 h-5" />
+                  )}
                   Browse Contests
                 </Button>
-              </Link>
+              </div>
               <a
                 href={SOCIAL_LINKS.discord}
                 target="_blank"
                 rel="noopener noreferrer"
               >
+                <div className="w-full sm:w-auto">
                 <Button
                   className={cn(
-                    "w-full py-3 px-8 text-lg",
+                    "w-full sm:w-auto py-3 px-8 text-lg",
                     primaryButtonClass,
                   )}
                 >
                   <FaDiscord className="w-5 h-5" />
                   Join Community
                 </Button>
+              </div>
               </a>
               <a
                 href={SOCIAL_LINKS.whatsapp}
                 target="_blank"
                 rel="noopener noreferrer"
               >
+                <div className="w-full sm:w-auto">
                 <Button
                   className={cn(
-                    "w-full py-3 px-8 text-lg",
+                    "w-full sm:w-auto py-3 px-8 text-lg",
                     primaryButtonClass,
                   )}
                 >
                   <FaWhatsapp className="w-5 h-5" />
                   Join Community
                 </Button>
+              </div>
               </a>
             </div>
           </CardContent>

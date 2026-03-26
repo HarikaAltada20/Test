@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   Select,
   SelectContent,
@@ -203,6 +204,22 @@ export default function OpportunitiesPage({
   // Default to 9 campaigns per page with options: 9, 15, 21, 30
   const [limit, setLimit] = useState<number>(9);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [loadingButtons, setLoadingButtons] = useState<{
+    [key: string]: {
+      view?: boolean;
+    };
+  }>({});
+
+  // Helper functions for loading states
+  const setButtonLoading = (contestId: string, action: 'view', isLoading: boolean) => {
+    setLoadingButtons(prev => ({
+      ...prev,
+      [contestId]: {
+        ...prev[contestId],
+        [action]: isLoading
+      }
+    }));
+  };
   const [mode, setMode] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {
       const modeElement = document.querySelector("[data-mode]");
@@ -1227,6 +1244,7 @@ export default function OpportunitiesPage({
   );
 
   const handleViewDetails = (id: string) => {
+    setButtonLoading(id, 'view', true);
     router.push(`/dashboard/opportunities/${id}`);
   };
   const resetFilters = () => {
@@ -1752,8 +1770,13 @@ export default function OpportunitiesPage({
               e.stopPropagation();
               handleViewDetails(contest.id);
             }}
+            disabled={loadingButtons[contest.id]?.view}
           >
-            <Eye className="h-4 w-4" />
+            {loadingButtons[contest.id]?.view ? (
+              <ButtonLoadingSpinner />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
             <span className="text-sm font-medium">View Details</span>
           </button>
         </div>
@@ -2791,8 +2814,14 @@ export default function OpportunitiesPage({
                         color: isDark ? "white" : "#7F39EC",
                         transition: "none",
                       }}
+                      disabled={loadingButtons[contest.id]?.view}
                     >
-                      View Details
+                      {loadingButtons[contest.id]?.view ? (
+                        <ButtonLoadingSpinner />
+                      ) : (
+                        <Eye className="h-4 w-4 mr-1" />
+                      )}
+                      <span>View Details</span>
                     </button>
                   </CardContent>
                 </Card>

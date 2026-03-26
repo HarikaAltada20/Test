@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 import NumbersSection from "@/components/NumberSection";
 import {
@@ -26,6 +26,7 @@ import {
   Coins,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   Dialog,
   DialogContent,
@@ -176,6 +177,13 @@ export default function CreatorsClient({
   const [showAdvertiserModal, setShowAdvertiserModal] = useState(false);
   const [isCheckingStartEarning, setIsCheckingStartEarning] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [navigatingContestId, setNavigatingContestId] = useState<string | null>(null);
+  const [isNavigatingViewMore, setIsNavigatingViewMore] = useState(false);
+
+  const handleNavigation = () => {
+    setIsNavigating(true);
+  };
   const router = useRouter();
 
   // Cache management for client-side fetching
@@ -348,8 +356,23 @@ export default function CreatorsClient({
   }, []);
 
   const handleViewContest = (id: string) => {
+    setNavigatingContestId(id);
     router.push(`/dashboard/opportunities/${id}`);
   };
+
+  const handleViewMoreClick = () => {
+    setIsNavigatingViewMore(true);
+    router.push(getViewMoreLink());
+  };
+
+  // Get pathname for route change detection
+  const pathname = usePathname();
+
+  // Reset navigating contest ID when route changes
+  useEffect(() => {
+    setNavigatingContestId(null);
+    setIsNavigatingViewMore(false);
+  }, [pathname]);
 
   // Get the "View More" link based on user type
   const getViewMoreLink = () => {
@@ -630,8 +653,17 @@ export default function CreatorsClient({
       <div
         key={contest.id}
         onClick={() => handleViewContest(contest.id)}
-        className="relative w-[180px] sm:w-[200px] md:w-[220px] lg:w-[240px] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-700 bg-[#06021D] p-1 pb-2 font-medium transition-transform duration-150 ease-in-out hover:scale-105 hover:border-orange-400 cursor-pointer my-2"
+        className={cn(
+          "relative w-[180px] sm:w-[200px] md:w-[220px] lg:w-[240px] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-700 bg-[#06021D] p-1 pb-2 font-medium transition-transform duration-150 ease-in-out hover:scale-105 hover:border-orange-400 cursor-pointer my-2",
+          navigatingContestId === contest.id && "opacity-70 cursor-not-allowed"
+        )}
       >
+        {/* Loading overlay with spinner */}
+        {navigatingContestId === contest.id && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10 rounded-2xl">
+            <ButtonLoadingSpinner />
+          </div>
+        )}
         {/* Image */}
         {contest.thumbnail_url ? (
           <div className="w-full h-[140px] sm:h-[150px] md:h-[170px] lg:h-[190px] rounded-xl flex items-center justify-center overflow-hidden">
@@ -821,7 +853,7 @@ export default function CreatorsClient({
                 disabled={isCheckingStartEarning}
                 className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                <Sparkles className="h-4 w-4" />
+                {isCheckingStartEarning ? <ButtonLoadingSpinner /> : <Sparkles className="h-4 w-4" />}
                 <span>Start Earning →</span>
               </Button>
 
@@ -871,10 +903,19 @@ export default function CreatorsClient({
                   {finalMostPopularContests.map(renderContestCard)}
 
                   {/* Total Budget Card */}
-                  <Link
-                    href={getViewMoreLink()}
-                    className="relative w-[180px] sm:w-[200px] md:w-[220px] lg:w-[240px] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-700 bg-[#06021D] p-2 font-medium transition-transform duration-150 ease-in-out hover:scale-105 hover:border-orange-400 cursor-pointer my-2 flex items-center justify-center"
+                  <div
+                    onClick={handleViewMoreClick}
+                    className={cn(
+                      "relative w-[180px] sm:w-[200px] md:w-[220px] lg:w-[240px] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-700 bg-[#06021D] p-2 font-medium transition-transform duration-150 ease-in-out hover:scale-105 hover:border-orange-400 cursor-pointer my-2 flex items-center justify-center",
+                      isNavigatingViewMore && "opacity-70 cursor-not-allowed"
+                    )}
                   >
+                    {/* Loading overlay with spinner */}
+                    {isNavigatingViewMore && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10 rounded-2xl">
+                        <ButtonLoadingSpinner />
+                      </div>
+                    )}
                     {/* Icon Area (similar to image area) */}
                     <div className="w-full h-[140px] sm:h-[150px] md:h-[170px] lg:h-[190px] rounded-xl flex flex-col items-center justify-center gap-2">
                       <div className="relative flex items-center justify-center">
@@ -897,7 +938,7 @@ export default function CreatorsClient({
                         </div>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 </div>
               </div>
             )}
@@ -1233,6 +1274,7 @@ export default function CreatorsClient({
                 disabled={isCheckingStartEarning}
                 className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
               >
+                {isCheckingStartEarning ? <ButtonLoadingSpinner /> : null}
                 Start earning
               </Button>
             </div>
