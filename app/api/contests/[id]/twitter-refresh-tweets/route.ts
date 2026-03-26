@@ -12,6 +12,8 @@ import {
   getBatchState,
   clearBatchState,
 } from "@/lib/queue/metrics-refresh-queue";
+import { rerankTwitterContestLeaderboard } from "@/lib/twitter/rerank-twitter-leaderboard";
+import { getTweetLeafPublicMetrics } from "@/lib/twitter/tweet-public-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +53,8 @@ export async function POST(
     }
     const fromQueue = fromQueueHeader && bodyFromQueue && queueBatchIndex !== undefined && queueTotalBatches !== undefined;
     // Single-creator mode: only refresh tweets for this creator (e.g. opportunities "Refresh Feed")
-    const creatorIdOnly = !fromQueue && bodyCreatorId;
+    // Also support creatorId when invoked by the queue worker (fromQueue=true).
+    const creatorIdOnly = !!bodyCreatorId;
 
     const supabase = await createClient();
     if (fromQueue) {
@@ -123,6 +126,7 @@ export async function POST(
             "Content-Type": "application/json",
             ...(cookieHeader ? { Cookie: cookieHeader } : {}),
           },
+          body: JSON.stringify(creatorIdOnly && bodyCreatorId ? { creatorId: bodyCreatorId } : {}),
         });
 
         // Check if the response is OK before parsing
@@ -317,9 +321,13 @@ export async function POST(
 
     // Queue batch mode: process only this batch of participants
     if (fromQueue && queueBatchIndex !== undefined && queueTotalBatches !== undefined) {
-      const start = queueBatchIndex * BATCH_SIZE;
-      const end = (queueBatchIndex + 1) * BATCH_SIZE;
-      activeParticipants = activeParticipants.slice(start, end);
+      // For creator-only queued runs we already filtered to a single creator,
+      // so avoid slicing that could accidentally skip extra participant rows.
+      if (!creatorIdOnly) {
+        const start = queueBatchIndex * BATCH_SIZE;
+        const end = (queueBatchIndex + 1) * BATCH_SIZE;
+        activeParticipants = activeParticipants.slice(start, end);
+      }
       if (activeParticipants.length === 0) {
         const hasMore = queueBatchIndex + 1 < queueTotalBatches;
         return NextResponse.json({
@@ -1078,20 +1086,26 @@ export async function POST(
         const mappedTweets = filteredTimeline.map((tweet: any) => {
           const inferredType = tweet.retweeted_tweet
             ? "retweet"
-            : tweet.quoted
+            : tweet.quoted || tweet.quoted_tweet || tweet.quoted_status
             ? "quote"
             : "tweet";
+
+          const leaf = getTweetLeafPublicMetrics(tweet);
 
           return {
             tweet_id: tweet.tweet_id || tweet.id_str || tweet.id || "",
             type: inferredType,
             text: tweet.text || tweet.full_text || "",
             created_at: tweet.created_at || "",
-            quotes: tweet.quotes || 0,
-            favorites: tweet.favorites || 0,
-            replies: tweet.replies || 0,
-            retweets: tweet.retweets || 0,
-            views: tweet.views || "0",
+            // Use leaf metrics so retweet/quote shells don't inherit parent/target counts.
+            quotes: leaf.quotes,
+            favorites: leaf.likes,
+            replies: leaf.replies,
+            retweets: leaf.retweets,
+            views:
+              leaf.impressions > 0
+                ? String(leaf.impressions)
+                : tweet.views ?? tweet.view_count ?? "0",
             entities: {
               hashtags: tweet.entities?.hashtags || [],
               symbols: tweet.entities?.symbols || [],
@@ -1916,13 +1930,21 @@ export async function POST(
     // Separate regular tweets from raid engagements
     // NOTE: Include ALL non-rejected tweets, not just is_eligible=true
     // This ensures manual points and base points are counted for manually-approved creators
-    const { data: regularTweets, error: regularTweetsError } = await supabase
+    let regularTweetsQuery = supabase
       .from("twitter_campaign_tweets")
       .select(
         "creator_id, likes, replies, retweets, quote_reposts, impressions, points, target_tweet_id, moderation_status, manual_points_adjustment, is_eligible"
       )
       .eq("contest_id", contestId)
       .neq("moderation_status", "rejected");
+
+    // Creator-only refresh should not recompute leaderboard for the whole contest.
+    if (creatorIdOnly && bodyCreatorId) {
+      regularTweetsQuery = regularTweetsQuery.eq("creator_id", bodyCreatorId);
+    }
+
+    const { data: regularTweets, error: regularTweetsError } =
+      await regularTweetsQuery;
 
     if (regularTweetsError) {
       console.error(
@@ -1993,10 +2015,19 @@ export async function POST(
       }
 
       // Get existing leaderboard entries to preserve manual adjustments
-      const { data: existingLeaderboard } = await supabaseAdmin
+      let existingLeaderboardQuery = supabaseAdmin
         .from("twitter_campaign_leaderboard")
         .select("creator_id, manual_points_adjustment")
         .eq("contest_id", contestId);
+
+      if (creatorIdOnly && bodyCreatorId) {
+        existingLeaderboardQuery = existingLeaderboardQuery.eq(
+          "creator_id",
+          bodyCreatorId
+        );
+      }
+
+      const { data: existingLeaderboard } = await existingLeaderboardQuery;
 
       const leaderboardManualAdjustments = new Map<string, number>();
       if (existingLeaderboard) {
@@ -2022,15 +2053,22 @@ export async function POST(
         .sort((a, b) => b.total_points - a.total_points);
 
       const nowIso = new Date().toISOString();
-      // Use 1 hour cooldown as per table definition (matches next_refresh_available_at default)
-      const cooldownMs = 60 * 60 * 1000; // 1 hour (60 minutes)
+      // Creator-only refresh should have its own cooldown window.
+      const cooldownMs = creatorIdOnly ? 2 * 60 * 60 * 1000 : 60 * 60 * 1000;
       const nextRefreshIso = new Date(Date.now() + cooldownMs).toISOString();
 
       // Get existing leaderboard entries to preserve refresh_count
-      const { data: existingLeaderboardForRefresh } = await supabaseAdmin
+      let existingLeaderboardForRefreshQuery = supabaseAdmin
         .from("twitter_campaign_leaderboard")
         .select("creator_id, refresh_count")
         .eq("contest_id", contestId);
+
+      if (creatorIdOnly && bodyCreatorId) {
+        existingLeaderboardForRefreshQuery =
+          existingLeaderboardForRefreshQuery.eq("creator_id", bodyCreatorId);
+      }
+
+      const { data: existingLeaderboardForRefresh } = await existingLeaderboardForRefreshQuery;
 
       const refreshCountMap = new Map<string, number>();
       if (existingLeaderboardForRefresh) {
@@ -2081,6 +2119,9 @@ export async function POST(
             "entries:",
             upsertPayload.length
           );
+          if (creatorIdOnly) {
+            await rerankTwitterContestLeaderboard(contestId, supabaseAdmin);
+          }
         }
       } else {
         console.log(
@@ -2094,110 +2135,106 @@ export async function POST(
       );
     }
 
-    // Update last_metrics_updated in contests table (same logic as Instagram and YouTube)
     const currentTime = new Date().toISOString();
     console.log(
-      `[twitter-refresh-tweets] Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime}`
+      `[twitter-refresh-tweets] Preparing contest-level updates for contest ${contestId} at ${currentTime} (creatorIdOnly=${creatorIdOnly})`
     );
 
-    const { data: updateData, error: updateError } = await supabaseAdmin
-      .from("contests")
-      .update({ last_metrics_updated: currentTime })
-      .eq("id", contestId)
-      .select();
-
-    if (updateError) {
-      console.error(
-        `[twitter-refresh-tweets] Failed to update last_metrics_updated for contest ${contestId}:`,
-        updateError
-      );
-      // Don't fail the request, just log the error
-    } else {
+    if (!creatorIdOnly) {
+      // Update last_metrics_updated in contests table (same logic as Instagram and YouTube)
       console.log(
-        `[twitter-refresh-tweets] Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`
+        `[twitter-refresh-tweets] Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime}`
+      );
+
+      const { error: updateError } = await supabaseAdmin
+        .from("contests")
+        .update({ last_metrics_updated: currentTime })
+        .eq("id", contestId);
+
+      if (updateError) {
+        console.error(
+          `[twitter-refresh-tweets] Failed to update last_metrics_updated for contest ${contestId}:`,
+          updateError
+        );
+        // Don't fail the request, just log the error
+      } else {
+        console.log(
+          `[twitter-refresh-tweets] Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`
+        );
+      }
+
+      // Update twitter_campaign_metrics table with aggregated data
+      const { count: totalFilteredTweets } = await supabaseAdmin
+        .from("twitter_campaign_tweets")
+        .select("*", { count: "exact", head: true })
+        .eq("contest_id", contestId)
+        .eq("is_eligible", true);
+
+      // Get total participants count (excluding rejected creators)
+      const { data: allParticipants } = await supabaseAdmin
+        .from("twitter_campaign_participants")
+        .select("creator_id")
+        .eq("contest_id", contestId)
+        .eq("is_active", true);
+
+      const allCreatorIds = (allParticipants || []).map((p) => p.creator_id);
+      const { data: allLeaderboardData } = await supabaseAdmin
+        .from("twitter_campaign_leaderboard")
+        .select("creator_id, moderation_status")
+        .eq("contest_id", contestId)
+        .in("creator_id", allCreatorIds);
+
+      const rejectedCreatorIdsSet = new Set(
+        (allLeaderboardData || [])
+          .filter((entry) => entry.moderation_status === "rejected")
+          .map((entry) => entry.creator_id)
+      );
+
+      const totalParticipants = (allParticipants || []).filter(
+        (p) => !rejectedCreatorIdsSet.has(p.creator_id)
+      ).length;
+
+      // Aggregate total metrics from eligible tweets
+      const { data: allTweets } = await supabaseAdmin
+        .from("twitter_campaign_tweets")
+        .select("likes, replies, retweets, quote_reposts, impressions, points")
+        .eq("contest_id", contestId)
+        .eq("is_eligible", true);
+
+      const totalLikes =
+        allTweets?.reduce((sum, t) => sum + (t.likes || 0), 0) || 0;
+      const totalReplies =
+        allTweets?.reduce((sum, t) => sum + (t.replies || 0), 0) || 0;
+      const totalRetweets =
+        allTweets?.reduce((sum, t) => sum + (t.retweets || 0), 0) || 0;
+      const totalQuoteReposts =
+        allTweets?.reduce((sum, t) => sum + (t.quote_reposts || 0), 0) || 0;
+      const totalImpressions =
+        allTweets?.reduce((sum, t) => sum + (Number(t.impressions) || 0), 0) || 0;
+      const totalPoints =
+        allTweets?.reduce((sum, t) => sum + (t.points || 0), 0) || 0;
+
+      const campaignType =
+        contestData?.contest_based_details?.twitter_campaign?.campaign_type ||
+        "awareness";
+
+      await supabaseAdmin.from("twitter_campaign_metrics").upsert(
+        {
+          contest_id: contestId,
+          campaign_type: campaignType,
+          total_filtered_tweets: totalFilteredTweets || 0,
+          total_participants: totalParticipants || 0,
+          total_likes: totalLikes,
+          total_replies: totalReplies,
+          total_retweets: totalRetweets,
+          total_quote_reposts: totalQuoteReposts,
+          total_impressions: totalImpressions,
+          total_points: totalPoints,
+          last_updated_at: currentTime,
+        },
+        { onConflict: "contest_id" }
       );
     }
-
-    // Update twitter_campaign_metrics table with aggregated data
-    const { count: totalFilteredTweets } = await supabaseAdmin
-      .from("twitter_campaign_tweets")
-      .select("*", { count: "exact", head: true })
-      .eq("contest_id", contestId)
-      .eq("is_eligible", true);
-
-    // Get total participants count (excluding rejected creators)
-    // First get all active participants
-    const { data: allParticipants } = await supabaseAdmin
-      .from("twitter_campaign_participants")
-      .select("creator_id")
-      .eq("contest_id", contestId)
-      .eq("is_active", true);
-
-    // Get rejected creator IDs
-    const allCreatorIds = (allParticipants || []).map((p) => p.creator_id);
-    const { data: allLeaderboardData } = await supabaseAdmin
-      .from("twitter_campaign_leaderboard")
-      .select("creator_id, moderation_status")
-      .eq("contest_id", contestId)
-      .in("creator_id", allCreatorIds);
-
-    const rejectedCreatorIdsSet = new Set(
-      (allLeaderboardData || [])
-        .filter((entry) => entry.moderation_status === "rejected")
-        .map((entry) => entry.creator_id)
-    );
-
-    // Count only non-rejected participants
-    const totalParticipants = (allParticipants || []).filter(
-      (p) => !rejectedCreatorIdsSet.has(p.creator_id)
-    ).length;
-
-    // Aggregate total metrics from eligible tweets
-    // OPTIMIZED: Only select the columns we need for aggregation
-    const { data: allTweets } = await supabaseAdmin
-      .from("twitter_campaign_tweets")
-      .select("likes, replies, retweets, quote_reposts, impressions, points")
-      .eq("contest_id", contestId)
-      .eq("is_eligible", true);
-
-    // Fast in-memory aggregation (sufficiently fast for 10,000+ rows)
-    const totalLikes =
-      allTweets?.reduce((sum, t) => sum + (t.likes || 0), 0) || 0;
-    const totalReplies =
-      allTweets?.reduce((sum, t) => sum + (t.replies || 0), 0) || 0;
-    const totalRetweets =
-      allTweets?.reduce((sum, t) => sum + (t.retweets || 0), 0) || 0;
-    const totalQuoteReposts =
-      allTweets?.reduce((sum, t) => sum + (t.quote_reposts || 0), 0) || 0;
-    const totalImpressions =
-      allTweets?.reduce((sum, t) => sum + (Number(t.impressions) || 0), 0) || 0;
-    const totalPoints =
-      allTweets?.reduce((sum, t) => sum + (t.points || 0), 0) || 0;
-
-    // Get campaign_type from contest data (already fetched earlier)
-    const campaignType =
-      contestData?.contest_based_details?.twitter_campaign?.campaign_type ||
-      "awareness";
-
-    // Update metrics table
-    await supabaseAdmin.from("twitter_campaign_metrics").upsert(
-      {
-        contest_id: contestId,
-        campaign_type: campaignType, // Required field - set to "awareness" or "raid" based on contest config
-        total_filtered_tweets: totalFilteredTweets || 0,
-        total_participants: totalParticipants || 0,
-        total_likes: totalLikes,
-        total_replies: totalReplies,
-        total_retweets: totalRetweets,
-        total_quote_reposts: totalQuoteReposts,
-        total_impressions: totalImpressions,
-        total_points: totalPoints,
-        last_updated_at: currentTime,
-      },
-      {
-        onConflict: "contest_id",
-      }
-    );
 
     if (fromQueue && isLastQueueBatch) {
       await clearBatchState(contestId);
@@ -2250,11 +2287,12 @@ function calculateAwarenessEngagementBonusPoints(
   engagementType: "comment" | "retweet" | "quote_repost",
   pointsConfig: any
 ): number {
-  const likes = tweet.likes || tweet.favorites || tweet.favorite_count || 0;
-  const replies = tweet.replies || tweet.reply_count || 0;
-  const impressions = parseInt(tweet.views || tweet.view_count || "0", 10);
-  const retweets = tweet.retweets || tweet.retweet_count || 0;
-  const quotes = tweet.quotes || tweet.quote_count || 0;
+  const leaf = getTweetLeafPublicMetrics(tweet);
+  const likes = leaf.likes;
+  const replies = leaf.replies;
+  const impressions = leaf.impressions;
+  const retweets = leaf.retweets;
+  const quotes = leaf.quotes;
 
   if (engagementType === "comment") {
     return (

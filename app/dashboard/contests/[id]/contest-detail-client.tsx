@@ -90,6 +90,7 @@ import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPane
 import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { TwitterFeed } from "@/components/twitter-feed";
+import { getTwitterSubmissionActionKind } from "@/lib/twitter/analytics-twitter-submission-kind";
 import {
   Tooltip,
   TooltipContent,
@@ -364,6 +365,17 @@ const sanitizeTwitterList = (value: unknown): string[] => {
     (item): item is string => typeof item === "string" && item.trim() !== "",
   );
 };
+
+/** Per-tweet points for ranking / prizes — matches table "Total Points" when `points` is unset (base + manual). */
+function getTwitterSubmissionPointsForRanking(submission: any): number {
+  const manual = Number((submission as any)?.manual_points_adjustment) || 0;
+  const base = Number(submission?.other_stats?.base_points) || 0;
+  const pts = submission?.other_stats?.points;
+  if (typeof pts === "number" && !Number.isNaN(pts)) {
+    return pts;
+  }
+  return base + manual;
+}
 
 function formatDurationSeconds(sec: number): string {
   if (sec < 60) return `${sec}s`;
@@ -950,6 +962,12 @@ export default function ContestDetailClient({
         // Calculate base_points from submissions (for raid campaigns, this correctly uses base_points from other_stats)
         // For leaderboard, we need to sum base_points from all eligible submissions
         let calculatedBasePoints = 0;
+        let aggLikes = 0;
+        let aggReplies = 0;
+        let aggRetweets = 0;
+        let aggQuoteReposts = 0;
+        let aggImpressions = 0;
+        let aggPointsFromSubs = 0;
         creatorSubmissions.forEach((submission: any) => {
           const status =
             (submission.is_twitter_tweet && submission.moderation_status) ||
@@ -959,6 +977,12 @@ export default function ContestDetailClient({
             const submissionBasePoints =
               submission.other_stats?.base_points || 0;
             calculatedBasePoints += submissionBasePoints;
+            aggLikes += submission.other_stats?.likes || 0;
+            aggReplies += submission.other_stats?.replies || 0;
+            aggRetweets += submission.other_stats?.retweets || 0;
+            aggQuoteReposts += submission.other_stats?.quote_reposts || 0;
+            aggImpressions += submission.other_stats?.impressions || 0;
+            aggPointsFromSubs += getTwitterSubmissionPointsForRanking(submission);
 
             // DEBUG: Log each submission's base points contribution for Twitter CPM
             if (
@@ -990,6 +1014,12 @@ export default function ContestDetailClient({
               (leaderboardData.total_points || 0) -
               (leaderboardData.manual_points_adjustment || 0),
             );
+
+        const hasTweetSubs = creatorSubmissions.some((s: any) => {
+          const st =
+            (s.is_twitter_tweet && s.moderation_status) || s.status;
+          return st !== "rejected";
+        });
 
         const verifiedSubmissionCount = creatorSubmissions.filter(
           (submission: any) => {
@@ -1062,16 +1092,29 @@ export default function ContestDetailClient({
           },
           metrics: {
             views: 0, // Not applicable for Twitter
-            likes: leaderboardData.total_likes || 0,
-            comments: leaderboardData.total_replies || 0,
+            // Like Instagram: sums from individual tweets after status/eligibility filters
+            likes: hasTweetSubs
+              ? aggLikes
+              : leaderboardData.total_likes || 0,
+            comments: hasTweetSubs
+              ? aggReplies
+              : leaderboardData.total_replies || 0,
             shares: 0,
             saves: 0,
             reach: 0,
             interactions: 0,
-            retweets: leaderboardData.total_retweets || 0,
-            quote_reposts: leaderboardData.total_quote_reposts || 0,
-            impressions: leaderboardData.total_impressions || 0,
-            points: leaderboardData.total_points || 0,
+            retweets: hasTweetSubs
+              ? aggRetweets
+              : leaderboardData.total_retweets || 0,
+            quote_reposts: hasTweetSubs
+              ? aggQuoteReposts
+              : leaderboardData.total_quote_reposts || 0,
+            impressions: hasTweetSubs
+              ? aggImpressions
+              : leaderboardData.total_impressions || 0,
+            points: hasTweetSubs
+              ? aggPointsFromSubs
+              : leaderboardData.total_points || 0,
             base_points: basePoints,
             manual_points_adjustment: manualPointsAdjustmentTotal,
             manual_points_reason: leaderboardData.manual_points_reason || null,
@@ -1110,42 +1153,47 @@ export default function ContestDetailClient({
         };
       });
 
-      // Calculate earnings based on rank for Twitter leaderboard campaigns
-      // Consider both verified and paid creators when calculating ranks
+      // Expected reward: same idea as Instagram — derive from current leaderboard ordering of
+      // filtered submissions (pending creators still see winning-zone prize by rank).
       const contestDetails =
         currentContest?.contest_based_details?.leaderboard_contest;
       const prizes = contestDetails?.prizes || [];
 
-      // Filter to only verified creators and sort by points to recalculate ranks
-      const verifiedCreators = Object.values(grouped).filter((group: any) => {
-        const status = (group.creator_moderation_status || "").toLowerCase();
-        return status === "verified" || status === "paid";
-      });
-
-      // Sort verified creators by total points (descending)
-      // Note: metrics.points already includes manual_points_adjustment for Twitter campaigns
-      verifiedCreators.sort((a: any, b: any) => {
-        const pointsA = a.metrics?.points || 0;
-        const pointsB = b.metrics?.points || 0;
-        return pointsB - pointsA;
-      });
-
-      // Assign expected earnings based on recalculated rank among verified/paid creators
-      verifiedCreators.forEach((group: any, index: number) => {
-        const verifiedRank = index + 1; // Rank among verified/paid creators only (1, 2, 3, ...)
-        const prizeForRank = prizes.find(
-          (p: any) => p.position === verifiedRank,
+      const creatorPointsTotals = new Map<string, number>();
+      filteredSubmissions.forEach((submission: any) => {
+        if (!submission.is_twitter_tweet || !submission.creator_id) return;
+        const cid = submission.creator_id as string;
+        const add = getTwitterSubmissionPointsForRanking(submission);
+        creatorPointsTotals.set(
+          cid,
+          (creatorPointsTotals.get(cid) || 0) + add,
         );
+      });
+
+      const sortedByPoints = Array.from(creatorPointsTotals.entries()).sort(
+        (a, b) => b[1] - a[1],
+      );
+      const rankAmongFiltered = new Map<string, number>();
+      sortedByPoints.forEach(([cid], index) => {
+        rankAmongFiltered.set(cid, index + 1);
+      });
+
+      Object.values(grouped).forEach((group: any) => {
+        const cid = group.creator?.id as string;
+        if (!cid || !prizes.length) return;
+        const r = rankAmongFiltered.get(cid);
+        if (!r) return;
+        const prizeForRank = prizes.find((p: any) => p.position === r);
         if (prizeForRank) {
           group.earnings.expected = prizeForRank.amount;
-          // Primary path: use paid status from leaderboard (creator-level payment)
-          if (
-            group.paid &&
-            group.earnings_from_db &&
-            group.earnings_from_db > 0
-          ) {
-            group.earnings.granted = group.earnings_from_db; // Use actual earnings from database
-          }
+        }
+        if (
+          group.paid &&
+          group.earnings_from_db &&
+          group.earnings_from_db > 0 &&
+          (!group.earnings.granted || group.earnings.granted <= 0)
+        ) {
+          group.earnings.granted = group.earnings_from_db;
         }
       });
 
@@ -1650,17 +1698,12 @@ export default function ContestDetailClient({
 
       if (cpmRate > 0) {
         Object.values(grouped).forEach((group: any) => {
-          const hasVerifiedSubmissions = group.statusCounts?.verified > 0;
           const creatorStatus = (
             group.creator_moderation_status || ""
           ).toLowerCase();
-          // Treat "paid" creators as eligible (same as verified)
-          const isCreatorEligible =
-            hasVerifiedSubmissions ||
-            creatorStatus === "verified" ||
-            creatorStatus === "paid";
-
-          if (!isCreatorEligible) {
+          // Match normal (submission) view: CPM expected is shown for pending too, from points × rate.
+          // Only skip creators rejected at creator level.
+          if (creatorStatus === "rejected") {
             group.earnings.expected = 0;
             return;
           }
@@ -1883,10 +1926,7 @@ export default function ContestDetailClient({
       const isTwitterTweet = submission.is_twitter_tweet === true;
       if (!isTwitterTweet) return;
 
-      // Calculate total points for this submission (base + manual)
-      const basePoints = submission.other_stats?.base_points || 0;
-      const manualPoints = (submission as any).manual_points_adjustment || 0;
-      const totalPoints = basePoints + manualPoints;
+      const totalPoints = getTwitterSubmissionPointsForRanking(submission);
 
       // Add to creator's total
       const currentTotal = creatorPointsMap.get(creatorId) || 0;
@@ -1918,14 +1958,10 @@ export default function ContestDetailClient({
       currentContest?.contest_type === "leaderboard";
 
     if (isTwitterLeaderboard) {
-      // Sort by total points (descending)
+      // Sort by aggregated tweet points (descending), same signal as prize ranking
       return [...groupSubmissionsByCreator].sort((a: any, b: any) => {
-        const totalPointsA =
-          (a.metrics.base_points || 0) +
-          (a.metrics.manual_points_adjustment || 0);
-        const totalPointsB =
-          (b.metrics.base_points || 0) +
-          (b.metrics.manual_points_adjustment || 0);
+        const totalPointsA = a.metrics?.points || 0;
+        const totalPointsB = b.metrics?.points || 0;
         return totalPointsB - totalPointsA; // Descending order
       });
     }
@@ -15239,11 +15275,12 @@ export default function ContestDetailClient({
                         if (isTwitterTweet && sub.other_stats) {
                           metrics.total_tweets += 1;
                           metrics.total_likes += sub.other_stats.likes || 0;
-                          metrics.total_replies += sub.other_stats.replies || 0;
-                          metrics.total_retweets +=
-                            sub.other_stats.retweets || 0;
-                          metrics.total_quote_reposts +=
-                            sub.other_stats.quote_reposts || 0;
+                          const actionKind = getTwitterSubmissionActionKind(sub);
+                          if (actionKind === "reply") metrics.total_replies += 1;
+                          if (actionKind === "retweet")
+                            metrics.total_retweets += 1;
+                          if (actionKind === "quote")
+                            metrics.total_quote_reposts += 1;
                           metrics.total_impressions += sub.views || 0;
 
                           // Calculate points as base_points + manual adjustment (avoid double counting)
@@ -16363,7 +16400,7 @@ export default function ContestDetailClient({
                                   )}
                                   {renderMetricCard(
                                     <MessageCircle className="h-6 w-6 text-white" />,
-                                    "Total Replies",
+                                    "Reply posts",
                                     metricsForDisplay?.total_replies || 0,
                                     isDark
                                       ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
@@ -16374,7 +16411,7 @@ export default function ContestDetailClient({
                                   )}
                                   {renderMetricCard(
                                     <Share2 className="h-6 w-6 text-white" />,
-                                    "Total Retweets",
+                                    "Retweet posts",
                                     metricsForDisplay?.total_retweets || 0,
                                     isDark
                                       ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
@@ -16385,7 +16422,7 @@ export default function ContestDetailClient({
                                   )}
                                   {renderMetricCard(
                                     <RefreshCw className="h-6 w-6 text-white" />,
-                                    "Total Quote Reposts",
+                                    "Quote posts",
                                     metricsForDisplay?.total_quote_reposts || 0,
                                     isDark
                                       ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"

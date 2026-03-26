@@ -86,7 +86,13 @@ export async function POST(
           .eq("is_active", true)
           .maybeSingle();
         if (!participant) {
-          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          return NextResponse.json(
+            {
+              error:
+                "Please participate in the campaign before refreshing ....",
+            },
+            { status: 403 }
+          );
         }
       }
     }

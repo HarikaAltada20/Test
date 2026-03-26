@@ -84,6 +84,7 @@ import { useTabState } from "@/components/ui/tab-utils";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
 import { TwitterFeed } from "@/components/twitter-feed";
+import { getTwitterSubmissionActionKind } from "@/lib/twitter/analytics-twitter-submission-kind";
 // --- START DUMMY DATA CONFIGURATION ---
 const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
 const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
@@ -472,7 +473,9 @@ export function ContestClientPage({
           user_platform_pfp_url: null,
           submissions: [entry],
           total_views: 0,
-          total_earnings: entry.earnings || 0,
+            // Twitter/X "creator-wise" leaderboard is already aggregated by creator,
+            // and the API returns `total_earnings` (not `earnings`).
+            total_earnings: entry.total_earnings ?? entry.earnings ?? 0,
           best_submission: entry,
           best_rank: currentRank,
           submission_count: entry.total_eligible_tweets || 0,
@@ -715,6 +718,12 @@ export function ContestClientPage({
           if (Date.now() - startedAt > pollMaxMs) {
             clearInterval(pollTimer);
             setIsRefreshingMetrics(false);
+            toast({
+              title: "Refresh taking longer than expected",
+              description:
+                "Metrics may still be updating in the background. Try reloading the page shortly.",
+              variant: "destructive",
+            });
             return;
           }
           try {
@@ -740,7 +749,13 @@ export function ContestClientPage({
       }
     } catch (error: any) {
       console.error("Failed to refresh metrics:", error);
-      // In opportunities page, we'll silently handle errors or show a subtle notification
+      toast({
+        title: "Cannot refresh yet",
+        description:
+          error?.message ??
+          "Please participate in the campaign before refreshing.",
+        variant: "destructive",
+      });
     } finally {
       // Only clear loading state here for non-queued path; queued path clears it when poll completes or times out
       if (!result?.queued) {
@@ -5552,7 +5567,7 @@ export function ContestClientPage({
                   contestStatus={contest?.status}
                   postContestStatus={contest?.post_contest_status}
                   disableRefreshWhenContestEnded
-                  creatorOnlyUserId={undefined}
+                  creatorOnlyUserId={user?.id ?? null}
                 />
               </div>
             </TabPanel>
@@ -6885,20 +6900,27 @@ export function ContestClientPage({
                         cooldownInfo,
                         isContestEnded,
                       } = getRefreshButtonState();
+                      const isTwitterLeaderboardRefresh =
+                        contest?.platform?.toLowerCase() === "twitter" ||
+                        contest?.platform?.toLowerCase() === "x";
                       const refreshLabelLarge = isRefreshingMetrics
                         ? "Updating..."
                         : isContestEnded
                           ? "Contest Ended"
                           : !cooldownInfo?.canRefresh
                             ? `Wait ${cooldownInfo?.remainingMinutes}m`
-                            : "Refresh Metrics";
+                            : isTwitterLeaderboardRefresh
+                              ? "Refresh all participants"
+                              : "Refresh Metrics";
                       const refreshLabelSmall = isRefreshingMetrics
                         ? "Updating..."
                         : isContestEnded
                           ? "Contest Ended"
                           : !cooldownInfo?.canRefresh
                             ? `${cooldownInfo?.remainingMinutes}m`
-                            : "Refresh";
+                            : isTwitterLeaderboardRefresh
+                              ? "All"
+                              : "Refresh";
                       return (
                         <div
                           className={cn(
@@ -6957,7 +6979,9 @@ export function ContestClientPage({
                             )}
                             title={
                               disabledReason ||
-                              "Refresh metrics and leaderboard"
+                              (isTwitterLeaderboardRefresh
+                                ? "Refresh all participants: fetch latest tweets and metrics for everyone on the leaderboard."
+                                : "Refresh metrics and leaderboard")
                             }
                           >
                             {isRefreshingMetrics ? (
@@ -8465,8 +8489,11 @@ export function ContestClientPage({
                 const metrics = {
                   total_tweets: 0,
                   total_likes: 0,
+                  /** Count of reply/comment *submissions* (not “replies on your tweet”). */
                   total_replies: 0,
+                  /** Count of retweet *submissions*. */
                   total_retweets: 0,
+                  /** Count of quote *submissions*. */
                   total_quote_reposts: 0,
                   total_impressions: 0,
                   total_points: 0,
@@ -8487,10 +8514,10 @@ export function ContestClientPage({
                   if (sub.is_twitter_tweet && sub.other_stats) {
                     metrics.total_tweets += 1;
                     metrics.total_likes += sub.other_stats.likes || 0;
-                    metrics.total_replies += sub.other_stats.replies || 0;
-                    metrics.total_retweets += sub.other_stats.retweets || 0;
-                    metrics.total_quote_reposts +=
-                      sub.other_stats.quote_reposts || 0;
+                    const actionKind = getTwitterSubmissionActionKind(sub);
+                    if (actionKind === "reply") metrics.total_replies += 1;
+                    if (actionKind === "retweet") metrics.total_retweets += 1;
+                    if (actionKind === "quote") metrics.total_quote_reposts += 1;
                     metrics.total_impressions += sub.views || 0;
 
                     // Calculate points as base_points + manual adjustment (avoid double counting)
@@ -9770,7 +9797,7 @@ export function ContestClientPage({
                                     )}
                                     {renderMetricCard(
                                       <MessageCircle className="h-6 w-6 text-white" />,
-                                      "Total Replies",
+                                      "Reply posts",
                                       metricsForDisplay?.total_replies || 0,
                                       isDark
                                         ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
@@ -9781,7 +9808,7 @@ export function ContestClientPage({
                                     )}
                                     {renderMetricCard(
                                       <Share2 className="h-6 w-6 text-white" />,
-                                      "Total Retweets",
+                                      "Retweet posts",
                                       metricsForDisplay?.total_retweets || 0,
                                       isDark
                                         ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
@@ -9792,7 +9819,7 @@ export function ContestClientPage({
                                     )}
                                     {renderMetricCard(
                                       <RefreshCw className="h-6 w-6 text-white" />,
-                                      "Total Quote Reposts",
+                                      "Quote posts",
                                       metricsForDisplay?.total_quote_reposts ||
                                         0,
                                       isDark
