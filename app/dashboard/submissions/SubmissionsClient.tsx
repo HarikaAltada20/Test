@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   Select,
   SelectContent,
@@ -266,6 +267,7 @@ export default function SubmissionsClient({
   const [expandedCaptions, setExpandedCaptions] = useState<Record<string, boolean>>({});
   const [expandedReasons, setExpandedReasons] = useState<Record<string, boolean>>({});
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+  const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
 
   // Contest Status Multi-select State
   const [contestStatusFilter, setContestStatusFilter] = useState<string[]>([
@@ -1805,7 +1807,21 @@ export default function SubmissionsClient({
             </Button>
 
             <Button asChild className="h-10 flex-1 sm:flex-none px-[18px] rounded-[10px] bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0 transition-all">
-              <Link href="/dashboard/opportunities">Find Opportunities</Link>
+              <button
+                onClick={() => {
+                  setOpportunitiesLoading(true);
+                  setTimeout(() => {
+                    window.location.href = '/dashboard/opportunities';
+                  }, 100);
+                }}
+                disabled={opportunitiesLoading}
+                className="w-full h-full flex items-center justify-center"
+              >
+                {opportunitiesLoading ? (
+                  <ButtonLoadingSpinner />
+                ) : null}
+                <span className="ml-2">Find Opportunities</span>
+              </button>
             </Button>
           </div>
         </div>

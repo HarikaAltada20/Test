@@ -64,6 +64,12 @@ export function Nav({
 }: NavProps) {
   const pathname = usePathname();
   const { logout } = useClientAuth();
+  const [brandsLoading, setBrandsLoading] = useState(false);
+  const [creatorsLoading, setCreatorsLoading] = useState(false);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [quickLinkLoading, setQuickLinkLoading] = useState(false);
+  const [homeLoading, setHomeLoading] = useState(false);
 
   const handleSignOut = async () => {
     try {
@@ -179,37 +185,49 @@ export function Nav({
             {/* Center Navigation - Desktop */}
             <div className="hidden md:flex items-center space-x-2">
               <nav className="flex items-center md:ml-20 space-x-1">
-                <Link
-                  href="/brands"
+                <button
+                  onClick={() => {
+                    setBrandsLoading(true);
+                    window.location.href = '/brands';
+                  }}
+                  disabled={brandsLoading}
                   className={cn(
-                    "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl",
+                    "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl flex items-center gap-2",
                     pathname === "/brands"
                       ? "text-purple-400"
-                      : "text-slate-300 hover:text-purple-400"
+                      : "text-slate-300 hover:text-purple-400",
+                    brandsLoading && "opacity-70 cursor-not-allowed"
                   )}
                 >
-                  <div className="flex items-center gap-2">
+                  {brandsLoading ? (
+                    <ButtonLoadingSpinner />
+                  ) : (
                     <Crown className="h-4 w-4 text-purple-400 shrink-0" />
-                    <span>For Brands</span>
-                  </div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-violet-600/0 to-purple-600/0 group-hover:from-violet-600/10 group-hover:to-purple-600/10 rounded-xl transition-all duration-300" />
-                </Link>
+                  )}
+                  For Brands
+                </button>
 
-                <Link
-                  href="/creators"
+                <button
+                  onClick={() => {
+                    setCreatorsLoading(true);
+                    window.location.href = '/creators';
+                  }}
+                  disabled={creatorsLoading}
                   className={cn(
-                    "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl",
+                    "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl flex items-center gap-2",
                     pathname === "/creators"
                       ? "text-orange-400"
-                      : "text-slate-300 hover:text-orange-400"
+                      : "text-slate-300 hover:text-orange-400",
+                    creatorsLoading && "opacity-70 cursor-not-allowed"
                   )}
                 >
-                  <div className="flex items-center gap-2">
+                  {creatorsLoading ? (
+                    <ButtonLoadingSpinner />
+                  ) : (
                     <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
-                    <span>For Creators</span>
-                  </div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-600/0 to-orange-600/0 group-hover:from-amber-600/10 group-hover:to-orange-600/10 rounded-xl transition-all duration-300" />
-                </Link>
+                  )}
+                  For Creators
+                </button>
               </nav>
             </div>
 
@@ -284,43 +302,93 @@ export function Nav({
                         asChild
                         className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
                       >
-                        <Link href={quickLinkHref} className="flex items-center">
-                          <QuickLinkIcon className="mr-2 h-4 w-4" />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setQuickLinkLoading(true);
+                            window.location.href = quickLinkHref;
+                          }}
+                          disabled={quickLinkLoading}
+                          className="flex w-full items-center"
+                        >
+                          {quickLinkLoading ? (
+                            <ButtonLoadingSpinner />
+                          ) : (
+                            <QuickLinkIcon className="mr-2 h-4 w-4" />
+                          )}
                           {quickLinkLabel}
-                        </Link>
+                        </button>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         asChild
                         className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
                       >
-                        <Link href="/dashboard" className="flex items-center">
-                          <LayoutDashboard className="mr-2 h-4 w-4" />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setDashboardLoading(true);
+                            window.location.href = "/dashboard";
+                          }}
+                          disabled={dashboardLoading}
+                          className="flex w-full items-center"
+                        >
+                          {dashboardLoading ? (
+                            <ButtonLoadingSpinner />
+                          ) : (
+                            <LayoutDashboard className="mr-2 h-4 w-4" />
+                          )}
                           Dashboard
-                        </Link>
+                        </button>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         asChild
                         className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
                       >
-                        <Link
-                          href={MARKETING_HOME_AS_GUEST}
-                          className="flex items-center"
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setHomeLoading(true);
+                            window.location.href = MARKETING_HOME_AS_GUEST;
+                          }}
+                          disabled={homeLoading}
+                          className="flex w-full items-center"
                         >
-                          <Home className="mr-2 h-4 w-4" />
+                          {homeLoading ? (
+                            <ButtonLoadingSpinner />
+                          ) : (
+                            <Home className="mr-2 h-4 w-4" />
+                          )}
                           Home
-                        </Link>
+                        </button>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         asChild
                         className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
                       >
-                        <Link
-                          href="/dashboard/settings"
-                          className="flex items-center"
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setSettingsLoading(true);
+                            window.location.href = "/dashboard/settings";
+                          }}
+                          disabled={settingsLoading}
+                          className="flex w-full items-center"
                         >
-                          <Settings className="mr-2 h-4 w-4" />
+                          {settingsLoading ? (
+                            <ButtonLoadingSpinner />
+                          ) : (
+                            <Settings className="mr-2 h-4 w-4" />
+                          )}
                           Settings
-                        </Link>
+                        </button>
                       </DropdownMenuItem>
                       {userType === "advertiser" &&
                         subscriptionPlan !== PRODUCT_IDS.CHAMPION && (
@@ -429,30 +497,48 @@ export function Nav({
 
                         {/* Mobile Navigation Links */}
                         <nav className="space-y-2 mb-8">
-                          <Link
-                            href="/brands"
+                          <button
+                            onClick={() => {
+                              setBrandsLoading(true);
+                              window.location.href = '/brands';
+                            }}
+                            disabled={brandsLoading}
                             className={cn(
-                              "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200",
+                              "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full",
                               pathname === "/brands"
                                 ? "text-white bg-white/5 border-l-2 border-purple-500"
-                                : "text-slate-200 hover:text-white hover:bg-white/5"
+                                : "text-slate-200 hover:text-white hover:bg-white/5",
+                              brandsLoading && "opacity-70 cursor-not-allowed"
                             )}
                           >
-                            <Crown className="h-4 w-4 text-purple-400 shrink-0" />
-                            For Brands
-                          </Link>
-                          <Link
-                            href="/creators"
+                            {brandsLoading ? (
+                              <ButtonLoadingSpinner />
+                            ) : (
+                              <Crown className="h-4 w-4 text-purple-400 shrink-0" />
+                            )}
+                            {brandsLoading ? "Loading..." : "For Brands"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setCreatorsLoading(true);
+                              window.location.href = '/creators';
+                            }}
+                            disabled={creatorsLoading}
                             className={cn(
-                              "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200",
+                              "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full",
                               pathname === "/creators"
                                 ? "text-white bg-white/5 border-l-2 border-orange-400"
-                                : "text-slate-200 hover:text-white hover:bg-white/5"
+                                : "text-slate-200 hover:text-white hover:bg-white/5",
+                              creatorsLoading && "opacity-70 cursor-not-allowed"
                             )}
                           >
-                            <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
-                            For Creators
-                          </Link>
+                            {creatorsLoading ? (
+                              <ButtonLoadingSpinner />
+                            ) : (
+                              <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
+                            )}
+                            {creatorsLoading ? "Loading..." : "For Creators"}
+                          </button>
                         </nav>
 
                         {/* Mobile User Section or Auth */}

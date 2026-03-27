@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { Crown, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ButtonLoadingSpinner } from '@/components/loading/LoadingSpinner'
 import { createClient } from '@/utils/supabase/client'
 import {
     Dialog,
@@ -78,7 +79,7 @@ export default function BrandGetStartedButton() {
                 onClick={handleGetStartedClick}
                 disabled={isCheckingAccount}
             >
-                <Crown className="h-4 w-4" />
+                {isCheckingAccount ? <ButtonLoadingSpinner /> : <Crown className="h-4 w-4" />}
                 <span>Get Started →</span>
             </Button>
 
@@ -107,6 +108,7 @@ export default function BrandGetStartedButton() {
                             onClick={handleContinueAsCreator}
                             disabled={isSigningOut}
                         >
+                            {isSigningOut ? <ButtonLoadingSpinner /> : null}
                             Continue as Creator
                         </Button>
                         <Button
@@ -114,7 +116,7 @@ export default function BrandGetStartedButton() {
                             onClick={handleSignOutAndContinueBrand}
                             disabled={isSigningOut}
                         >
-                            {isSigningOut ? 'Signing out...' : 'Sign out & Continue as Brand'}
+                            {isSigningOut ? <ButtonLoadingSpinner /> : 'Sign out & Continue as Brand'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -15,6 +15,7 @@ import {
   PartyPopper,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 const steps = [
   {
@@ -62,6 +63,11 @@ export default function GettingStartedModal({
   const [currentStep, setCurrentStep] = useState(0);
   const [showSecondPopup, setShowSecondPopup] = useState(false);
   const [showThirdPopup, setShowThirdPopup] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  const handleNavigation = () => {
+    setIsNavigating(true);
+  };
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const partyIconRef = useRef<HTMLDivElement>(null);
@@ -557,16 +563,16 @@ export default function GettingStartedModal({
               </div>
 
               <div className="text-center pt-4">
-                <Link href="/dashboard/contests/create">
+                <Link href="/dashboard/contests/create" onClick={handleNavigation}>
                   <Button
                     className={cn(
                       "text-md text-white w-full",
                       isDark
-                        ? "bg-[#5F2BB1]"
-                        : "bg-[#4A00BE] hover:bg-[#4A00BE] "
+                        ? "bg-[#5F2BB1] hover:bg-[#4A1F8A]"
+                        : "bg-purple-600 hover:bg-purple-700"
                     )}
                   >
-                    <Trophy className="w-4 h-4" />
+                    {isNavigating ? <ButtonLoadingSpinner /> : <Trophy className="w-4 h-4" />}
                     Create Leaderboard Contest
                   </Button>
                 </Link>
@@ -726,16 +732,16 @@ export default function GettingStartedModal({
               </div>
 
               <div className="text-center pt-4">
-                <Link href="/dashboard/contests/create">
+                <Link href="/dashboard/contests/create" onClick={handleNavigation}>
                   <Button
                     className={cn(
                       "text-md text-white w-full",
                       isDark
-                        ? "bg-[#5F2BB1]"
-                        : "bg-[#4A00BE] hover:bg-[#4A00BE] "
+                        ? "bg-[#5F2BB1] hover:bg-[#4A1F8A]"
+                        : "bg-purple-600 hover:bg-purple-700"
                     )}
                   >
-                    <DollarSign className="w-4 h-4" />
+                    {isNavigating ? <ButtonLoadingSpinner /> : <DollarSign className="w-4 h-4" />}
                     Create CPM Contest
                   </Button>
                 </Link>
@@ -831,16 +837,16 @@ export default function GettingStartedModal({
           </div>
 
           <div className="text-center">
-            <Link href="/dashboard/contests/create">
+            <Link href="/dashboard/contests/create" onClick={handleNavigation}>
               <Button
                 className={cn(
                   "w-full py-3 px-8 text-lg flex items-center justify-center gap-2",
                   isDark
-                    ? "bg-[#5F2BB1]"
-                    : "bg-[#4A00BE] hover:bg-[#4A00BE] text-white"
+                    ? "bg-[#5F2BB1] hover:bg-[#4A1F8A] text-white"
+                    : "bg-purple-600 hover:bg-purple-700 text-white"
                 )}
               >
-                <Video className="w-6 h-6" />
+                {isNavigating ? <ButtonLoadingSpinner /> : <Video className="w-6 h-6" />}
                 Create Contest
               </Button>
             </Link>

@@ -127,9 +127,9 @@ interface AdvertiserProfile {
 
 interface EmailChangeLog {
   id: string;
-  old_email: string;
-  new_email: string;
-  changed_at: string;
+  old_email: string | null;
+  new_email: string | null;
+  created_at: string;
 }
 
 export default function ProfilePage({
@@ -352,9 +352,9 @@ export default function ProfilePage({
         try {
           const { data: logs, error: logsError } = await supabase
             .from("email_change_logs")
-            .select("id, old_email, new_email, changed_at")
+            .select("id, old_email, new_email, created_at")
             .eq("user_id", userData.id)
-            .order("changed_at", { ascending: false })
+            .order("created_at", { ascending: false })
             .limit(5);
 
           if (!logsError && logs) {

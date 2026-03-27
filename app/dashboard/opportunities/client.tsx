@@ -1,5 +1,11 @@
 "use client";
-import { useCallback, useEffect, useState, useLayoutEffect } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,7 +46,7 @@ import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { cn } from "@/lib/utils";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
-import { useTabState } from "@/components/ui/tab-utils";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   Select,
   SelectContent,
@@ -59,9 +65,13 @@ import {
   extractCountryFromRegionJsonb,
   getRegionForCountry,
 } from "@/lib/region-utils";
+import {
+  getEndedOpportunityBadgeClassName,
+  getEndedOpportunityPhaseLabel,
+} from "@/lib/contest-ended-phase-display";
 
 // Define types for filters and sorting
-type StatusFilterType = "all" | "live" | "upcoming" | "completed";
+type StatusFilterType = "all" | "live" | "upcoming" | "ended";
 type PlatformFilterType = "all" | "youtube" | "instagram" | "twitter"; // Scalable: add more platforms as needed
 type ContestTypeFilterType = "all" | "leaderboard" | "cpm";
 type SortOptionType =
@@ -178,17 +188,14 @@ export default function OpportunitiesPage({
       ).length,
     },
     {
-      id: "completed",
-      label: "Completed",
+      id: "ended",
+      label: "Ended",
       count: filteredContestsByMediaType.filter(
         (c) =>
-          c.moderation_status === "published" &&
-          c.post_contest_status === "payouts_processed",
+          c.moderation_status === "published" && c.status === "ended",
       ).length,
     },
   ];
-
-  const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: "all" });
 
   // New state variables for filters and sorting
   const [statusFilter, setStatusFilter] = useState<StatusFilterType>("all");
@@ -203,6 +210,25 @@ export default function OpportunitiesPage({
   // Default to 9 campaigns per page with options: 9, 15, 21, 30
   const [limit, setLimit] = useState<number>(9);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  /** List layout is only available at lg+ (1024px); below that we force grid. */
+  const [layoutAllowsListView, setLayoutAllowsListView] = useState(false);
+  const opportunitiesResultsRef = useRef<HTMLDivElement>(null);
+  const [loadingButtons, setLoadingButtons] = useState<{
+    [key: string]: {
+      view?: boolean;
+    };
+  }>({});
+
+  // Helper functions for loading states
+  const setButtonLoading = (contestId: string, action: 'view', isLoading: boolean) => {
+    setLoadingButtons(prev => ({
+      ...prev,
+      [contestId]: {
+        ...prev[contestId],
+        [action]: isLoading
+      }
+    }));
+  };
   const [mode, setMode] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {
       const modeElement = document.querySelector("[data-mode]");
@@ -320,25 +346,17 @@ export default function OpportunitiesPage({
     };
   }, [mode]);
 
-  // Responsive view mode: switch to grid view on smaller screens if in list view
-  useEffect(() => {
-    const checkScreenSize = () => {
-      // Use 768px as the breakpoint (matches md:flex used for view toggle buttons)
-      if (window.innerWidth < 768 && viewMode === "list") {
-        setViewMode("grid");
-      }
+  // Below 1024px (lg): hide list layout and use grid only.
+  useLayoutEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const apply = () => {
+      setLayoutAllowsListView(mq.matches);
+      if (!mq.matches) setViewMode("grid");
     };
-
-    // Check on mount
-    checkScreenSize();
-
-    // Check on resize
-    window.addEventListener("resize", checkScreenSize);
-
-    return () => {
-      window.removeEventListener("resize", checkScreenSize);
-    };
-  }, [viewMode]);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   // Cache invalidation on user change
   useEffect(() => {
@@ -378,62 +396,71 @@ export default function OpportunitiesPage({
       let currentUserRegion: string | null = null;
       let hasProfileCountry = false;
 
-      try {
-        const { data: creatorProfileData, error: creatorProfileError } =
-          await supabase
-            .from("creator_profiles")
-            .select("country")
-            .eq("id", user.id)
-            .single();
+      const [
+        { data: creatorRow, error: creatorProfileError },
+        { data: userRow, error: userError },
+      ] = await Promise.all([
+        supabase
+          .from("creator_profiles")
+          .select(
+            "country, has_seen_guidelines, categories, subcategories, interests",
+          )
+          .eq("id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("users")
+          .select("geo_data, user_type")
+          .eq("id", user.id)
+          .single(),
+      ]);
 
-        if (!creatorProfileError && creatorProfileData?.country) {
-          hasProfileCountry = true;
-          if (!userCountries.includes(creatorProfileData.country)) {
-            userCountries.push(creatorProfileData.country);
-          }
-          currentUserCountry = creatorProfileData.country;
-          currentUserRegion = getRegionForCountry(creatorProfileData.country);
-        }
-      } catch (creatorProfileError) {
-        console.error(
-          "Error fetching creator profile country:",
-          creatorProfileError,
-        );
+      if (creatorProfileError) {
+        console.error("Error fetching creator profile:", creatorProfileError);
       }
 
-      try {
-        const { data: userProfile, error: profileError } = await supabase
-          .from("users")
-          .select("geo_data")
-          .eq("id", user.id)
-          .single();
+      if (userError) {
+        console.error("Error fetching user:", userError);
+        setAvailableContests([]);
+        return;
+      }
 
-        if (!profileError && userProfile?.geo_data && !hasProfileCountry) {
-          const geoDataColumn = userProfile.geo_data as
-            | { geo_data?: { country?: string }; country?: string }
-            | null;
-          const extractedCountry =
-            geoDataColumn?.geo_data?.country || geoDataColumn?.country || null;
+      if (userRow?.user_type === "advertiser") {
+        console.log(
+          "OpportunitiesPage: Advertiser detected, redirecting to contests.",
+        );
+        router.push("/dashboard/contests");
+        return;
+      }
 
-          if (extractedCountry) {
-            if (!userCountries.includes(extractedCountry)) {
-              userCountries.push(extractedCountry);
-            }
-            if (!currentUserCountry) {
-              currentUserCountry = extractedCountry;
-              currentUserRegion = getRegionForCountry(extractedCountry);
-            }
-          }
-        } else if (profileError) {
-          console.error("Error fetching location from geo_data:", profileError);
+      if (creatorRow?.country) {
+        hasProfileCountry = true;
+        if (!userCountries.includes(creatorRow.country)) {
+          userCountries.push(creatorRow.country);
         }
-      } catch (dbError) {
-        console.error("Error fetching location from geo_data:", dbError);
+        currentUserCountry = creatorRow.country;
+        currentUserRegion = getRegionForCountry(creatorRow.country);
+      }
+
+      if (userRow?.geo_data && !hasProfileCountry) {
+        const geoDataColumn = userRow.geo_data as
+          | { geo_data?: { country?: string }; country?: string }
+          | null;
+        const extractedCountry =
+          geoDataColumn?.geo_data?.country || geoDataColumn?.country || null;
+
+        if (extractedCountry) {
+          if (!userCountries.includes(extractedCountry)) {
+            userCountries.push(extractedCountry);
+          }
+          if (!currentUserCountry) {
+            currentUserCountry = extractedCountry;
+            currentUserRegion = getRegionForCountry(extractedCountry);
+          }
+        }
       }
 
       if (currentUserCountry) {
         if (hasProfileCountry) {
-          // Strict priority: when profile country exists, do not mix geo fallback countries.
           userCountries = [currentUserCountry];
         }
         setUserCountry(currentUserCountry);
@@ -467,28 +494,6 @@ export default function OpportunitiesPage({
         }
       }
 
-      // If creator profile country is missing, fallback is users.geo_data.country.
-
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("user_type")
-        .eq("id", user.id)
-        .single();
-
-      if (userError) {
-        console.error("Error fetching user type:", userError);
-        setAvailableContests([]);
-        return;
-      }
-
-      if (userData?.user_type === "advertiser") {
-        console.log(
-          "OpportunitiesPage: Advertiser detected, redirecting to contests.",
-        );
-        router.push("/dashboard/contests");
-        return;
-      }
-
       const guidelinesCacheKey = `guidelines_${user.id}`;
       const guidelinesTimestampKey = `guidelines_timestamp_${user.id}`;
       const cachedGuidelines = localStorage.getItem(guidelinesCacheKey);
@@ -496,7 +501,7 @@ export default function OpportunitiesPage({
 
       const isCacheValid =
         cachedTimestamp &&
-        Date.now() - parseInt(cachedTimestamp) < 24 * 60 * 60 * 1000;
+        Date.now() - parseInt(cachedTimestamp, 10) < 24 * 60 * 60 * 1000;
 
       if (cachedGuidelines === "true" && isCacheValid) {
         setProfile({ has_seen_guidelines: true });
@@ -505,29 +510,20 @@ export default function OpportunitiesPage({
         setProfile({ has_seen_guidelines: false });
         setShowGuidelines(true);
         setHasCheckedGuidelines(true);
+      } else if (!creatorRow) {
+        console.error("No creator profile row for guidelines state");
+        setProfile({ has_seen_guidelines: false });
+        setShowGuidelines(true);
+        setHasCheckedGuidelines(true);
       } else {
-        const { data: creatorProfile, error: profileError } = await supabase
-          .from("creator_profiles")
-          .select(
-            "has_seen_guidelines, country, categories, subcategories, interests",
-          )
-          .eq("id", user.id)
-          .single();
-
-        if (profileError) {
-          console.error("Error fetching creator profile:", profileError);
-          setProfile({ has_seen_guidelines: false });
+        setProfile(creatorRow);
+        localStorage.setItem(
+          guidelinesCacheKey,
+          String(creatorRow.has_seen_guidelines),
+        );
+        localStorage.setItem(guidelinesTimestampKey, Date.now().toString());
+        if (creatorRow.has_seen_guidelines === false) {
           setShowGuidelines(true);
-        } else {
-          setProfile(creatorProfile);
-          localStorage.setItem(
-            guidelinesCacheKey,
-            creatorProfile.has_seen_guidelines.toString(),
-          );
-          localStorage.setItem(guidelinesTimestampKey, Date.now().toString());
-          if (creatorProfile.has_seen_guidelines === false) {
-            setShowGuidelines(true);
-          }
         }
         setHasCheckedGuidelines(true);
       }
@@ -536,22 +532,16 @@ export default function OpportunitiesPage({
       let localCreatorSubcategories: Record<string, string[]> = {};
       let localCreatorInterests: string[] = [];
 
-      const { data: creatorProfileData } = await supabase
-        .from("creator_profiles")
-        .select("categories, subcategories, interests")
-        .eq("id", user.id)
-        .single();
-
-      if (creatorProfileData) {
-        if (creatorProfileData.categories) {
-          localCreatorCategories = Array.isArray(creatorProfileData.categories)
-            ? creatorProfileData.categories
+      if (creatorRow) {
+        if (creatorRow.categories) {
+          localCreatorCategories = Array.isArray(creatorRow.categories)
+            ? creatorRow.categories
             : [];
         }
 
-        if (creatorProfileData.subcategories) {
-          if (Array.isArray(creatorProfileData.subcategories)) {
-            (creatorProfileData.subcategories as any[]).forEach((item: any) => {
+        if (creatorRow.subcategories) {
+          if (Array.isArray(creatorRow.subcategories)) {
+            (creatorRow.subcategories as any[]).forEach((item: any) => {
               if (item.category && item.subcategory) {
                 if (!localCreatorSubcategories[item.category]) {
                   localCreatorSubcategories[item.category] = [];
@@ -567,15 +557,15 @@ export default function OpportunitiesPage({
                 }
               }
             });
-          } else if (typeof creatorProfileData.subcategories === "object") {
+          } else if (typeof creatorRow.subcategories === "object") {
             localCreatorSubcategories =
-              creatorProfileData.subcategories as Record<string, string[]>;
+              creatorRow.subcategories as Record<string, string[]>;
           }
         }
 
-        if (creatorProfileData.interests) {
-          localCreatorInterests = Array.isArray(creatorProfileData.interests)
-            ? creatorProfileData.interests
+        if (creatorRow.interests) {
+          localCreatorInterests = Array.isArray(creatorRow.interests)
+            ? creatorRow.interests
             : [];
         }
       }
@@ -831,7 +821,7 @@ export default function OpportunitiesPage({
     } finally {
       setIsFetchingData(false);
     }
-  }, [user, router, supabase]);
+  }, [user, router]);
 
   useEffect(() => {
     fetchOpportunities();
@@ -1012,8 +1002,7 @@ export default function OpportunitiesPage({
           return false;
         if (statusFilter === "live") return contest.status === "active";
         if (statusFilter === "upcoming") return contest.status === "upcoming";
-        if (statusFilter === "completed")
-          return contest.post_contest_status === "payouts_processed";
+        if (statusFilter === "ended") return contest.status === "ended";
         return true; // Should not happen if logic is correct
       });
     }
@@ -1227,6 +1216,7 @@ export default function OpportunitiesPage({
   );
 
   const handleViewDetails = (id: string) => {
+    setButtonLoading(id, 'view', true);
     router.push(`/dashboard/opportunities/${id}`);
   };
   const resetFilters = () => {
@@ -1256,10 +1246,12 @@ export default function OpportunitiesPage({
           <div className="absolute top-3 right-3 z-10 flex flex-row gap-2">
             <Badge
               className={cn(
-                "capitalize text-sm px-3 py-1 font-medium border",
-                contest.status === "active" && "bg-[#7F39EC] text-white",
-                contest.status === "upcoming" && "bg-[#7F39EC] text-white",
-                contest.status === "ended" && "bg-[#7F39EC] text-white",
+                "text-sm px-3 py-1 font-medium border",
+                contest.status === "active" && "capitalize bg-[#7F39EC] text-white",
+                contest.status === "upcoming" &&
+                  "capitalize bg-[#7F39EC] text-white",
+                contest.status === "ended" &&
+                  `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
               )}
             >
               {contest.status === "active"
@@ -1267,14 +1259,9 @@ export default function OpportunitiesPage({
                 : contest.status === "upcoming"
                   ? "Upcoming"
                   : contest.status === "ended"
-                    ? "completed"
+                    ? getEndedOpportunityPhaseLabel(contest.post_contest_status)
                     : contest.status || "Unknown"}
             </Badge>
-            {contest.post_contest_status === "payouts_processed" && (
-              <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
-                paid
-              </Badge>
-            )}
           </div>
         )}
         {/* Thumbnail */}
@@ -1752,8 +1739,13 @@ export default function OpportunitiesPage({
               e.stopPropagation();
               handleViewDetails(contest.id);
             }}
+            disabled={loadingButtons[contest.id]?.view}
           >
-            <Eye className="h-4 w-4" />
+            {loadingButtons[contest.id]?.view ? (
+              <ButtonLoadingSpinner />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
             <span className="text-sm font-medium">View Details</span>
           </button>
         </div>
@@ -1809,12 +1801,18 @@ export default function OpportunitiesPage({
     );
   }
   const isDark = mode === "dark";
+  const displayViewMode: "grid" | "list" = layoutAllowsListView
+    ? viewMode
+    : "grid";
+
   return (
     <div className="w-full no-theme-transition">
       <div className="mb-6">
         {/* Heading Row - Heading on left, buttons on right */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <h1 className="text-2xl font-bold">Opportunities</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-balance min-w-0">
+            Opportunities
+          </h1>
           <div className="flex flex-wrap items-center gap-2">
             <a
               href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N"
@@ -1844,128 +1842,183 @@ export default function OpportunitiesPage({
             </Link>
           </div>
         </div>
-        {/* Search and View Toggle Row */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          {/* Search Input - Left Side */}
-          <div className="relative max-w-md w-full">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                aria-label="Clear search"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-            <Input
-              type="text"
-              placeholder="Search opportunities by title..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={cn(
-                "pl-10 border w-full",
-                searchQuery && "pr-10",
-                isDark
-                  ? "border-gray-500 bg-[#020817] text-white"
-                  : "border-gray-400 text-black",
+        {/* Search + filter toolbar */}
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch w-full min-w-0 lg:max-w-xl xl:max-w-2xl">
+            <div className="relative flex-1 min-w-0">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none"
+                aria-hidden
+              />
+              {searchQuery.trim() !== "" && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-md"
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               )}
-            />
+              <Input
+                type="text"
+                role="searchbox"
+                enterKeyHint="search"
+                autoComplete="off"
+                placeholder="Search by title…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && searchQuery.trim() !== "") {
+                    e.preventDefault();
+                    opportunitiesResultsRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  }
+                }}
+                className={cn(
+                  "pl-10 h-11 w-full text-sm sm:text-base border rounded-xl shadow-sm",
+                  searchQuery.trim() !== "" && "pr-10",
+                  isDark
+                    ? "border-gray-600 bg-[#020817] text-white placeholder:text-gray-500"
+                    : "border-gray-300 bg-white text-gray-900 placeholder:text-gray-500",
+                )}
+              />
+            </div>
+            {searchQuery.trim() !== "" && (
+              <Button
+                type="button"
+                variant="outline"
+                className={cn(
+                  "h-11 w-full sm:w-auto shrink-0 rounded-xl font-semibold text-sm",
+                  isDark
+                    ? "border-violet-400/60 text-violet-100 bg-transparent hover:bg-white/10 hover:text-white"
+                    : "border-[#7F39EC] text-[#7F39EC] bg-[#D9C0FF26] hover:bg-[#D9C0FF61]",
+                )}
+                onClick={() =>
+                  opportunitiesResultsRef.current?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  })
+                }
+              >
+                Search
+              </Button>
+            )}
           </div>
-          {/* View Toggle Buttons - Right Side */}
-          <div className="flex gap-2">
-            {/* Format Toggle: All / Text/Image*/}
-            <div className="flex items-center gap-1 border border-gray-400 rounded-md p-1">
-              <button
-                onClick={() => setMediaType("all")}
+
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:justify-between lg:gap-4">
+            {/* Format: single segmented control — short labels, full text in title */}
+            <div
+              className={cn(
+                "w-full min-w-0 overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0 sm:overflow-visible",
+                "[scrollbar-width:thin]",
+              )}
+            >
+              <div
+                role="group"
+                aria-label="Opportunity type"
                 className={cn(
-                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium ",
-                  mediaType === "all"
-                    ? isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#7F39EC] text-white"
-                    : isDark
-                      ? "text-gray-300 hover:text-white"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
+                  "flex w-full sm:w-auto rounded-xl border p-1 gap-1 min-h-[2.75rem] box-border",
+                  isDark
+                    ? "border-gray-600 bg-[#020817]/60"
+                    : "border-gray-300 bg-gray-50/90",
                 )}
-                title="All Opportunities"
               >
-                <LayoutGrid className="h-4 w-4 mr-1.5 sm:mr-2 shrink-0" />
-                <span>All</span>
-              </button>
-              <button
-                onClick={() => setMediaType("text")}
-                className={cn(
-                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium ",
-                  mediaType === "text"
-                    ? isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#7F39EC] text-white"
-                    : isDark
-                      ? "text-gray-300 hover:text-white"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
-                )}
-                title="Text/Image Opportunities"
-              >
-                <FileType className="h-4 w-4 mr-1.5 sm:mr-2 shrink-0" />
-                <span>Text/Image Opportunities</span>
-              </button>
-              <button
-                onClick={() => setMediaType("media")}
-                className={cn(
-                  "flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors text-xs sm:text-sm font-medium",
-                  mediaType === "media"
-                    ? isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#7F39EC] text-white"
-                    : isDark
-                      ? "text-gray-300 hover:text-white"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
-                )}
-                title="Video Opportunities"
-              >
-                <Film className="h-4 w-4 mr-1.5 sm:mr-2 shrink-0" />
-                <span>Video Opportunities</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setMediaType("all")}
+                  title="All opportunities"
+                  className={cn(
+                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                    mediaType === "all"
+                      ? "bg-[#7F39EC] text-white shadow-sm"
+                      : isDark
+                        ? "text-gray-300 hover:text-white hover:bg-white/10"
+                        : "text-gray-700 hover:bg-white hover:text-gray-900",
+                  )}
+                >
+                  <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
+                  <span>All</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMediaType("text")}
+                  title="Text and image opportunities"
+                  className={cn(
+                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                    mediaType === "text"
+                      ? "bg-[#7F39EC] text-white shadow-sm"
+                      : isDark
+                        ? "text-gray-300 hover:text-white hover:bg-white/10"
+                        : "text-gray-700 hover:bg-white hover:text-gray-900",
+                  )}
+                >
+                  <FileType className="h-4 w-4 shrink-0 opacity-90" />
+                  <span>Text & image</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMediaType("media")}
+                  title="Video opportunities"
+                  className={cn(
+                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                    mediaType === "media"
+                      ? "bg-[#7F39EC] text-white shadow-sm"
+                      : isDark
+                        ? "text-gray-300 hover:text-white hover:bg-white/10"
+                        : "text-gray-700 hover:bg-white hover:text-gray-900",
+                  )}
+                >
+                  <Film className="h-4 w-4 shrink-0 opacity-90" />
+                  <span>Video</span>
+                </button>
+              </div>
             </div>
 
-            <div className="hidden md:flex items-center gap-1 border border-gray-400 rounded-md p-1">
+            {/* View mode — lg+ only (1024px); below that grid is forced */}
+            <div
+              role="group"
+              aria-label="Layout"
+              className={cn(
+                "hidden lg:flex w-full sm:w-auto shrink-0 rounded-xl border p-1 gap-1 min-h-[2.75rem] items-stretch box-border",
+                isDark
+                  ? "border-gray-600 bg-[#020817]/60"
+                  : "border-gray-300 bg-gray-50/90",
+              )}
+            >
               <button
+                type="button"
                 onClick={() => setViewMode("grid")}
+                title="Grid view"
                 className={cn(
-                  "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
+                  "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
                   viewMode === "grid"
-                    ? isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#7F39EC] text-white"
+                    ? "bg-[#7F39EC] text-white shadow-sm"
                     : isDark
-                      ? "text-gray-300 hover:text-white"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
+                      ? "text-gray-300 hover:text-white hover:bg-white/10"
+                      : "text-gray-700 hover:bg-white hover:text-gray-900",
                 )}
-                title="Grid View"
               >
-                <LayoutGrid className="h-4 w-4 mr-2" />
+                <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
                 <span>Grid</span>
-                <span className="flex sm:hidden lg:flex ml-1">View</span>
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode("list")}
+                title="List view"
                 className={cn(
-                  "flex items-center px-3 py-2 rounded transition-colors text-sm font-medium",
+                  "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
                   viewMode === "list"
-                    ? isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#7F39EC] text-white"
+                    ? "bg-[#7F39EC] text-white shadow-sm"
                     : isDark
-                      ? "text-gray-300 hover:text-white"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
+                      ? "text-gray-300 hover:text-white hover:bg-white/10"
+                      : "text-gray-700 hover:bg-white hover:text-gray-900",
                 )}
-                title="List View"
               >
-                <List className="h-4 w-4 mr-2" />
+                <List className="h-4 w-4 shrink-0 opacity-90" />
                 <span>List</span>
-                <span className="flex sm:hidden lg:flex ml-1">View</span>
               </button>
             </div>
           </div>
@@ -2012,8 +2065,8 @@ export default function OpportunitiesPage({
           <TabsTrigger value="upcoming">
             Upcoming <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.moderation_status === 'published' && c.status === 'upcoming').length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="completed">
-            Completed <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.moderation_status === 'published' && c.post_contest_status === 'payouts_processed').length}</Badge>
+          <TabsTrigger value="ended">
+            Ended <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.moderation_status === 'published' && c.status === 'ended').length}</Badge>
           </TabsTrigger>
         </TabsList>
       </Tabs> */}
@@ -2152,8 +2205,12 @@ export default function OpportunitiesPage({
         </Select>
       </div>
 
-      <div className="space-y-6">
-        {viewMode === "grid" ? (
+      <div
+        ref={opportunitiesResultsRef}
+        id="opportunities-results"
+        className="space-y-6 scroll-mt-4"
+      >
+        {displayViewMode === "grid" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {paginatedContests && paginatedContests.length > 0 ? (
               paginatedContests.map((contest) => (
@@ -2180,16 +2237,16 @@ export default function OpportunitiesPage({
                     <div className="absolute top-2 right-2 flex gap-2">
                       <Badge
                         className={cn(
-                          "capitalize text-sm px-3 py-1 font-medium border",
+                          "text-sm px-3 py-1 font-medium border",
                           contest.status === "active" &&
-                            "bg-[#7F39EC] text-white",
+                            "capitalize bg-[#7F39EC] text-white",
                           contest.status === "upcoming" &&
-                            "bg-[#7F39EC] text-white",
+                            "capitalize bg-[#7F39EC] text-white",
                           contest.status === "ended" &&
-                            "bg-[#7F39EC] text-white",
+                            `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
                           !["active", "upcoming", "ended"].includes(
                             contest.status,
-                          ) && "bg-[#7F39EC] text-white",
+                          ) && "capitalize bg-[#7F39EC] text-white",
                         )}
                       >
                         {contest.status === "active"
@@ -2197,14 +2254,11 @@ export default function OpportunitiesPage({
                           : contest.status === "upcoming"
                             ? "Upcoming"
                             : contest.status === "ended"
-                              ? "completed"
+                              ? getEndedOpportunityPhaseLabel(
+                                  contest.post_contest_status,
+                                )
                               : contest.status}
                       </Badge>
-                      {contest.post_contest_status === "payouts_processed" && (
-                        <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
-                          paid
-                        </Badge>
-                      )}
                     </div>
                   </div>
                   <CardHeader className="p-4 pb-2">
@@ -2791,8 +2845,14 @@ export default function OpportunitiesPage({
                         color: isDark ? "white" : "#7F39EC",
                         transition: "none",
                       }}
+                      disabled={loadingButtons[contest.id]?.view}
                     >
-                      View Details
+                      {loadingButtons[contest.id]?.view ? (
+                        <ButtonLoadingSpinner />
+                      ) : (
+                        <Eye className="h-4 w-4 mr-1" />
+                      )}
+                      <span>View Details</span>
                     </button>
                   </CardContent>
                 </Card>
