@@ -49,7 +49,7 @@ import {
 import { useEffect, useState, useCallback } from "react";
 import { FaXTwitter } from "react-icons/fa6";
 import { FaDiscord, FaWhatsapp, FaLinkedin } from "react-icons/fa";
-import { SiInstagram, SiYoutube } from "react-icons/si";
+import { SiInstagram, SiYoutube, SiTiktok } from "react-icons/si";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
 import dayjs from "dayjs";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
@@ -99,12 +99,19 @@ interface SocialAccount {
   followers_count?: number;
   follows_count?: number;
   media_count?: number;
+  // TikTok specific
+  tiktok_user_id?: string; // TikTok Open ID
+  union_id?: string; // TikTok Union ID
+  likes_count?: number;
+  bio?: string;
+  refresh_token_expiry?: string; // ISO string - TikTok
   needs_reconnect?: boolean; // Set when token/connection failed; user should reconnect
 }
 
 interface CreatorProfile {
   youtube_account: SocialAccount | null;
   instagram_account: SocialAccount | null;
+  tiktok_account: SocialAccount | null;
 }
 
 interface AdvertiserProfile {
@@ -148,6 +155,8 @@ export default function SettingsPage({
   );
   const [instagramAccount, setInstagramAccount] =
     useState<SocialAccount | null>(null);
+  const [tiktokAccount, setTiktokAccount] =
+    useState<SocialAccount | null>(null);
   const [twitterAccount, setTwitterAccount] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingYouTube, setIsLoadingYouTube] = useState(false);
@@ -158,9 +167,13 @@ export default function SettingsPage({
   const [isRefreshingTwitter, setIsRefreshingTwitter] = useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [instagramConnected, setInstagramConnected] = useState(false);
+  const [tiktokConnected, setTiktokConnected] = useState(false);
+  const [isLoadingTiktok, setIsLoadingTiktok] = useState(false);
+  const [isLoadingTiktokDisconnect, setIsLoadingTiktokDisconnect] =
+    useState(false);
   const [mode, setMode] = useState<"light" | "dark">("light");
   const [connectionError, setConnectionError] = useState<{
-    type: "youtube" | "instagram";
+    type: "youtube" | "instagram" | "tiktok";
     message: string;
     details?: string;
     code?: "no_channel" | "generic";
@@ -297,9 +310,10 @@ export default function SettingsPage({
     }
 
     // Handle success parameters
-    // Pattern A: success=true&platform=youtube|instagram
+    // Pattern A: success=true&platform=youtube|instagram|tiktok
     if (success === "true" && platform) {
-      const platformName = platform === "youtube" ? "YouTube" : "Instagram";
+      const platformName = platform === "youtube" ? "YouTube" : 
+                           platform === "instagram" ? "Instagram" : "TikTok";
 
       toast({
         title: `${platformName} Connected Successfully`,
@@ -314,10 +328,11 @@ export default function SettingsPage({
       router.replace(newUrl.pathname);
     }
 
-    // Pattern B: success=youtube_connected | instagram_connected
-    if (success === "youtube_connected" || success === "instagram_connected") {
+    // Pattern B: success=youtube_connected | instagram_connected | tiktok_connected
+    if (success === "youtube_connected" || success === "instagram_connected" || success === "tiktok_connected") {
       const platformName =
-        success === "youtube_connected" ? "YouTube" : "Instagram";
+        success === "youtube_connected" ? "YouTube" : 
+        success === "instagram_connected" ? "Instagram" : "TikTok";
 
       toast({
         title: `${platformName} Connected Successfully`,
@@ -431,7 +446,7 @@ export default function SettingsPage({
           const { data, error } = await supabase
             .from("creator_profiles")
             .select(
-              "youtube_account, instagram_account, phone_number, date_of_birth, gender, country, state, city, address, languages, categories, subcategories, interests, has_claimed_profile_reward"
+              "youtube_account, instagram_account, tiktok_account, phone_number, date_of_birth, gender, country, state, city, address, languages, categories, subcategories, interests, has_claimed_profile_reward"
             )
             .eq("id", user!.id)
             .single();
@@ -507,12 +522,22 @@ export default function SettingsPage({
         setInstagramAccount(null);
         setInstagramConnected(false);
       }
+
+      if (creatorProfile.tiktok_account) {
+        setTiktokAccount(creatorProfile.tiktok_account);
+        setTiktokConnected(true);
+      } else {
+        setTiktokAccount(null);
+        setTiktokConnected(false);
+      }
     } else {
       // Reset if profile is null or user is not a creator, or if profile is for an advertiser
       setYoutubeAccount(null);
       setYoutubeConnected(false);
       setInstagramAccount(null);
       setInstagramConnected(false);
+      setTiktokAccount(null);
+      setTiktokConnected(false);
     }
   }, [profile, userType]);
 
@@ -832,6 +857,76 @@ export default function SettingsPage({
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleTiktokConnect = () => {
+    setIsLoadingTiktok(true);
+    try {
+      // Set a timeout to reset loading state if redirect doesn't happen
+      const timeoutId = setTimeout(() => {
+        setIsLoadingTiktok(false);
+        toast({
+          title: "Error",
+          description: "Connection timed out. Please try again.",
+          variant: "destructive",
+        });
+      }, API_TIMEOUT_LONG);
+
+      window.location.href = "/api/tiktok/auth";
+    } catch (err: any) {
+      setIsLoadingTiktok(false);
+      toast({
+        title: "Error",
+        description: err.message || "Failed to initiate TikTok connection",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleTiktokDisconnect = async () => {
+    if (!user) return;
+    setIsLoadingTiktokDisconnect(true);
+    try {
+      // Set a timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        setIsLoadingTiktokDisconnect(false);
+        toast({
+          title: "Error",
+          description: "Disconnection timed out. Please try again.",
+          variant: "destructive",
+        });
+      }, API_TIMEOUT_SHORT);
+
+      const { error: updateError } = await supabase
+        .from("creator_profiles")
+        .update({
+          tiktok_account: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+
+      clearTimeout(timeoutId);
+
+      if (updateError) throw updateError;
+
+      setTiktokAccount(null);
+      setProfile((prev) =>
+        prev ? { ...prev, tiktok_account: null } : null
+      );
+      toast({
+        title: "Success",
+        description: "TikTok account disconnected successfully.",
+        variant: "default",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to disconnect TikTok account.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingTiktokDisconnect(false);
     }
   };
 
@@ -1806,6 +1901,127 @@ export default function SettingsPage({
                       className="mt-2 inline-block font-semibold underline hover:text-primary"
                     >
                       Learn more about these requirements{" "}
+                      <ExternalLink className="inline h-3 w-3 ml-0.5" />
+                    </a>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* TikTok Connection */}
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <SiTiktok className="text-2xl" />
+                  <div>
+                    <h3 className="font-medium">TikTok</h3>
+                    {tiktokConnected ? (
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Connected as{" "}
+                          <span className="font-medium">
+                            {tiktokAccount?.username}
+                          </span>
+                          {tiktokAccount?.followers_count && (
+                            <>
+                              {" "}
+                              with{" "}
+                              {tiktokAccount.followers_count.toLocaleString()}{" "}
+                              followers
+                            </>
+                          )}
+                          {tiktokAccount?.needs_reconnect ? (
+                            <span className="ml-2 text-amber-600 text-xs">
+                              Needs reconnect
+                            </span>
+                          ) : (
+                            <span className="ml-2 text-green-600 text-xs">
+                              Connected
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Connect your TikTok account to participate in TikTok campaigns
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {tiktokConnected ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      className="bg-[#C90808] text-white"
+                      onClick={handleTiktokDisconnect}
+                      disabled={isLoadingTiktokDisconnect}
+                    >
+                      {isLoadingTiktokDisconnect && (
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      Disconnect
+                    </Button>
+                    {tiktokAccount?.needs_reconnect && (
+                      <Button
+                        onClick={handleTiktokConnect}
+                        disabled={isLoadingTiktok}
+                        variant="default"
+                        className="ml-2"
+                      >
+                        {isLoadingTiktok && (
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Reconnect
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <Button onClick={handleTiktokConnect} disabled={isLoadingTiktok}>
+                    {isLoadingTiktok && (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Connect
+                  </Button>
+                )}
+              </div>
+
+              {/* TikTok needs reconnect - connected but token/connection failed */}
+              {tiktokConnected && tiktokAccount?.needs_reconnect && (
+                <Alert
+                  variant="destructive"
+                  className="mt-2 border-amber-500/50 bg-amber-500/10"
+                >
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-sm leading-relaxed">
+                    Your TikTok connection needs to be reconnected. We
+                    couldn&apos;t fetch your insights (e.g. expired token or
+                    disconnected account). Please click{" "}
+                    <strong>Reconnect TikTok</strong> above to reconnect and
+                    restore insights for your submissions.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* TikTok Connection Information - Display if not connected */}
+              {!tiktokConnected && (
+                <Alert
+                  variant="default"
+                  className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]"
+                >
+                  <Bell className="h-4 w-4" />
+                  <AlertDescription className="text-sm leading-relaxed">
+                    To participate in TikTok campaigns, you need to connect
+                    your TikTok account. This allows us to:
+                    <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
+                      <li>Verify your TikTok profile and metrics</li>
+                      <li>Track campaign performance and engagement</li>
+                      <li>Automatically verify your submissions</li>
+                    </ul>
+                    <a
+                      href="/tiktok-connection-faq"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-block font-semibold underline hover:text-primary"
+                    >
+                      Learn more about TikTok connection{" "}
                       <ExternalLink className="inline h-3 w-3 ml-0.5" />
                     </a>
                   </AlertDescription>
