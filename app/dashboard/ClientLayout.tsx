@@ -54,6 +54,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { subscriptionPlans } from "@/constants/subscriptionPlans";
+import { MARKETING_HOME_AS_GUEST } from "@/constants/marketingHome";
 import Link from "next/link";
 import Image from "next/image";
 import goldLogoHorizontal from "@/public/images/gold_logo_horizontal.svg";
@@ -962,7 +963,7 @@ function DashboardContent({
             <div className="relative flex items-center justify-center flex-1 z-10">
               {!sidebarCollapsed ? (
                 <Link
-                  href="/"
+                  href={MARKETING_HOME_AS_GUEST}
                   className="flex items-center group transition-all duration-300"
                 >
                   <div
@@ -989,7 +990,7 @@ function DashboardContent({
                 </Link>
               ) : (
                 <Link
-                  href="/"
+                  href={MARKETING_HOME_AS_GUEST}
                   className="flex items-center justify-center group transition-all duration-300"
                 >
                   <div

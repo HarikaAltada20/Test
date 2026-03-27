@@ -1,5 +1,23 @@
 import { type NextRequest, NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { shouldAllowLoggedInMarketingHome } from '@/constants/marketingHome'
 import { updateSession } from './utils/supabase/middleware'
+
+async function getLoggedInLandingPath(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<string> {
+  const { data: userData } = await supabase
+    .from('users')
+    .select('user_type, username')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (!userData?.username) return '/choose-username'
+  if (userData.user_type === 'admin') return '/dashboard/admin'
+  if (userData.user_type === 'advertiser') return '/dashboard/contests'
+  return '/dashboard/opportunities'
+}
 
 export async function middleware(request: NextRequest) {
   // Session update and auth; returns response plus user/supabase to avoid duplicate getUser()
@@ -12,28 +30,21 @@ export async function middleware(request: NextRequest) {
   // Then add route protection for authenticated users (reuse user/supabase from updateSession)
   const { pathname } = request.nextUrl
   
+  // Marketing home: send logged-in users straight to their workspace (unless ?guest=1)
+  if (
+    pathname === '/' &&
+    user &&
+    !shouldAllowLoggedInMarketingHome(request.nextUrl.searchParams)
+  ) {
+    const redirectPath = await getLoggedInLandingPath(supabase, user.id)
+    return NextResponse.redirect(new URL(redirectPath, request.url))
+  }
+
   // Auth route protection - redirect logged-in users away from auth pages
   if (pathname.startsWith('/auth/')) {
     if (user) {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('user_type, username')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      let redirectPath = '/choose-username'
-      if (userData?.username) {
-        if (userData.user_type === 'admin') {
-          redirectPath = '/dashboard/admin'
-        } else if (userData.user_type === 'advertiser') {
-          redirectPath = '/dashboard/contests'
-        } else {
-          redirectPath = '/dashboard/opportunities'
-        }
-      }
-
-      const redirectUrl = new URL(redirectPath, request.url)
-      return NextResponse.redirect(redirectUrl)
+      const redirectPath = await getLoggedInLandingPath(supabase, user.id)
+      return NextResponse.redirect(new URL(redirectPath, request.url))
     }
   }
   
@@ -131,6 +142,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/',
     '/dashboard/:path*',
     '/choose-username',
     '/auth/:path*'
