@@ -36,6 +36,7 @@ import {
   ChevronDown,
   Zap,
   Star,
+  Home,
 } from "lucide-react";
 import logo from "@/public/images/gold_logo_horizontal.svg";
 import Image from "next/image";
@@ -44,6 +45,7 @@ import { useClientAuth } from "@/hooks/use-client-auth";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { subscriptionPlans, PRODUCT_IDS } from "@/constants/subscriptionPlans";
+import { MARKETING_HOME_AS_GUEST } from "@/constants/marketingHome";
 
 interface NavProps {
   user: UserResponse["data"]["user"];
@@ -67,6 +69,7 @@ export function Nav({
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [quickLinkLoading, setQuickLinkLoading] = useState(false);
+  const [homeLoading, setHomeLoading] = useState(false);
 
   const handleSignOut = async () => {
     try {
@@ -107,6 +110,7 @@ export function Nav({
       : userType === "creator"
         ? "Opportunities"
         : "Profile";
+  const marketingHomeHref = user ? MARKETING_HOME_AS_GUEST : "/";
   const QuickLinkIcon =
     userType === "advertiser"
       ? Trophy
@@ -119,9 +123,9 @@ export function Nav({
   const handleNavigation = (e: React.MouseEvent) => {
     setIsNavigating(true);
   };
-  
 
-  
+
+
   useEffect(() => {
     setOpen(false);
     setIsNavigating(false);
@@ -154,7 +158,7 @@ export function Nav({
             {/* Enhanced Logo Section */}
             <div className="flex items-center">
               <Link
-                href="/"
+                href={marketingHomeHref}
                 className="group flex items-center transition-all duration-300"
               >
                 <div className="relative">
@@ -299,6 +303,7 @@ export function Nav({
                         className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
                       >
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -306,7 +311,7 @@ export function Nav({
                             window.location.href = quickLinkHref;
                           }}
                           disabled={quickLinkLoading}
-                          className="flex items-center w-full"
+                          className="flex w-full items-center"
                         >
                           {quickLinkLoading ? (
                             <ButtonLoadingSpinner />
@@ -321,14 +326,15 @@ export function Nav({
                         className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
                       >
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             setDashboardLoading(true);
-                            window.location.href = '/dashboard';
+                            window.location.href = "/dashboard";
                           }}
                           disabled={dashboardLoading}
-                          className="flex items-center w-full"
+                          className="flex w-full items-center"
                         >
                           {dashboardLoading ? (
                             <ButtonLoadingSpinner />
@@ -343,14 +349,38 @@ export function Nav({
                         className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
                       >
                         <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setHomeLoading(true);
+                            window.location.href = MARKETING_HOME_AS_GUEST;
+                          }}
+                          disabled={homeLoading}
+                          className="flex w-full items-center"
+                        >
+                          {homeLoading ? (
+                            <ButtonLoadingSpinner />
+                          ) : (
+                            <Home className="mr-2 h-4 w-4" />
+                          )}
+                          Home
+                        </button>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        asChild
+                        className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
+                      >
+                        <button
+                          type="button"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             setSettingsLoading(true);
-                            window.location.href = '/dashboard/settings';
+                            window.location.href = "/dashboard/settings";
                           }}
                           disabled={settingsLoading}
-                          className="flex items-center w-full"
+                          className="flex w-full items-center"
                         >
                           {settingsLoading ? (
                             <ButtonLoadingSpinner />
@@ -454,7 +484,7 @@ export function Nav({
                       <div className="px-4 pb-6">
                         {/* Mobile Logo */}
                         <Link
-                          href="/"
+                          href={marketingHomeHref}
                           className="flex items-center gap-3 mb-8 p-3 rounded-xl bg-gradient-to-r from-slate-900/50 to-slate-800/50 border border-violet-400/15"
                         >
                           <Image
@@ -553,6 +583,13 @@ export function Nav({
                             >
                               <LayoutDashboard className="h-5 w-5" />
                               Dashboard
+                            </Link>
+                            <Link
+                              href={MARKETING_HOME_AS_GUEST}
+                              className="flex items-center gap-3 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-violet-600/10 transition-colors"
+                            >
+                              <Home className="h-5 w-5" />
+                              Home
                             </Link>
                             <Link
                               href="/dashboard/settings"

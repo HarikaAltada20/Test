@@ -13,6 +13,7 @@ import {
   ArrowUp,
 } from "lucide-react";
 import logo from "@/public/images/gold_logo_horizontal.svg";
+import { MARKETING_HOME_AS_GUEST } from "@/constants/marketingHome";
 
 export function Footer() {
   const scrollToTop = () => {
@@ -24,7 +25,7 @@ export function Footer() {
       <div className="relative max-w-[1250px] pt-20 mx-auto flex flex-nowrap max-[700px]:flex-wrap justify-between gap-16  max-[1000px]:gap-16 max-[1180px]:gap-8">
         {/* Logo & Description */}
         <div className="flex flex-col max-w-xl space-y-6">
-          <Link href="/" className="inline-block">
+          <Link href={MARKETING_HOME_AS_GUEST} className="inline-block">
             <div className="h-150">
               <Image
                 src={logo}
