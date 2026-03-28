@@ -33,6 +33,26 @@ export type AccountInsightsPreset =
   | "overall"
   | "custom";
 
+const ACCOUNT_INSIGHTS_PRESET_SET = new Set<string>([
+  "day",
+  "7d",
+  "30d",
+  "365d",
+  "overall",
+  "custom",
+]);
+
+/** Normalize API/query input to a supported preset (invalid values → fallback). */
+export function normalizeAccountInsightsPreset(
+  raw: unknown,
+  fallback: AccountInsightsPreset = "overall"
+): AccountInsightsPreset {
+  if (typeof raw === "string" && ACCOUNT_INSIGHTS_PRESET_SET.has(raw)) {
+    return raw as AccountInsightsPreset;
+  }
+  return fallback;
+}
+
 /** Meta demographic insights only support these rolling windows (not arbitrary ranges). */
 export type DemographicsTimeframe =
   | "last_7_days"
@@ -275,6 +295,13 @@ const DEMOGRAPHICS_FETCH_HEADERS = {
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
 };
 
+type FollowerDemoMap = NonNullable<
+  InstagramDemographicsBundle["follower_demographics"]
+>;
+type EngagedDemoMap = NonNullable<
+  InstagramDemographicsBundle["engaged_audience_demographics"]
+>;
+
 function engagedAudienceHasAnyRows(
   engaged: InstagramDemographicsBundle["engaged_audience_demographics"]
 ): boolean {
@@ -290,12 +317,11 @@ async function runEngagedAudienceOnly(
   accessToken: string,
   timeframe: DemographicsTimeframe
 ): Promise<{
-  engaged: InstagramDemographicsBundle["engaged_audience_demographics"];
+  engaged: EngagedDemoMap;
   errors: string[];
 }> {
   const errors: string[] = [];
-  const engaged: InstagramDemographicsBundle["engaged_audience_demographics"] =
-    {};
+  const engaged: EngagedDemoMap = {};
 
   const run = async (breakdown: "country" | "age" | "gender") => {
     const params = new URLSearchParams({
@@ -337,9 +363,8 @@ export async function fetchAccountDemographics(
   timeframe: DemographicsTimeframe = "last_30_days"
 ): Promise<InstagramDemographicsBundle> {
   const errors: string[] = [];
-  const follower: InstagramDemographicsBundle["follower_demographics"] = {};
-  let engaged: InstagramDemographicsBundle["engaged_audience_demographics"] =
-    {};
+  const follower: FollowerDemoMap = {};
+  let engaged: EngagedDemoMap = {};
 
   const run = async (
     metric: "follower_demographics" | "engaged_audience_demographics",

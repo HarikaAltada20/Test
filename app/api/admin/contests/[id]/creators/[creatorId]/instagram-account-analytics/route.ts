@@ -6,6 +6,7 @@ import {
   demographicsTimeframeForPreset,
   fetchAccountDemographics,
   fetchUserAccountInsights,
+  normalizeAccountInsightsPreset,
   type AccountInsightsPreset,
 } from "@/lib/instagram-account-insights";
 import {
@@ -18,11 +19,16 @@ import { isTokenExpiring, refreshToken } from "@/lib/instagram-insights";
 
 export const dynamic = "force-dynamic";
 
+type ContestMembershipResult =
+  | { ok: true }
+  | { ok: false; reason: "not_in_contest" }
+  | { ok: false; reason: "query_failed" };
+
 async function assertCreatorInContest(
   admin: ReturnType<typeof createAdminClient>,
   contestId: string,
   creatorId: string
-): Promise<boolean> {
+): Promise<ContestMembershipResult> {
   const { data, error } = await admin
     .from("submissions")
     .select("id")
@@ -32,9 +38,21 @@ async function assertCreatorInContest(
     .maybeSingle();
   if (error) {
     console.error("[instagram-account-analytics] submission check:", error);
-    return false;
+    return { ok: false, reason: "query_failed" };
   }
-  return !!data;
+  if (!data) {
+    return { ok: false, reason: "not_in_contest" };
+  }
+  return { ok: true };
+}
+
+function parseOptionalUnixQueryParam(
+  raw: string | null
+): number | undefined {
+  if (raw == null || raw === "") return undefined;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n)) return undefined;
+  return n;
 }
 
 function entryKeyForRequest(
@@ -61,16 +79,25 @@ export async function GET(
   }
 
   const { id: contestId, creatorId } = await context.params;
-  const preset = (request.nextUrl.searchParams.get("preset") ||
-    "overall") as AccountInsightsPreset;
-  const sinceParam = request.nextUrl.searchParams.get("since");
-  const untilParam = request.nextUrl.searchParams.get("until");
-  const since = sinceParam ? parseInt(sinceParam, 10) : undefined;
-  const until = untilParam ? parseInt(untilParam, 10) : undefined;
+  const preset = normalizeAccountInsightsPreset(
+    request.nextUrl.searchParams.get("preset") ?? "overall"
+  );
+  const since = parseOptionalUnixQueryParam(
+    request.nextUrl.searchParams.get("since")
+  );
+  const until = parseOptionalUnixQueryParam(
+    request.nextUrl.searchParams.get("until")
+  );
 
   const admin = createAdminClient();
-  const inContest = await assertCreatorInContest(admin, contestId, creatorId);
-  if (!inContest) {
+  const membership = await assertCreatorInContest(admin, contestId, creatorId);
+  if (!membership.ok) {
+    if (membership.reason === "query_failed") {
+      return NextResponse.json(
+        { error: "Failed to verify contest membership" },
+        { status: 500 }
+      );
+    }
     return NextResponse.json(
       { error: "Creator not found in this contest" },
       { status: 404 }
@@ -117,14 +144,20 @@ export async function POST(
 
   const { id: contestId, creatorId } = await context.params;
   const body = await request.json().catch(() => ({}));
-  const preset = (body.preset || "overall") as AccountInsightsPreset;
+  const preset = normalizeAccountInsightsPreset(body.preset ?? "overall");
   const forceRefresh = Boolean(body.forceRefresh);
   const customSince = typeof body.since === "number" ? body.since : undefined;
   const customUntil = typeof body.until === "number" ? body.until : undefined;
 
   const admin = createAdminClient();
-  const inContest = await assertCreatorInContest(admin, contestId, creatorId);
-  if (!inContest) {
+  const membership = await assertCreatorInContest(admin, contestId, creatorId);
+  if (!membership.ok) {
+    if (membership.reason === "query_failed") {
+      return NextResponse.json(
+        { error: "Failed to verify contest membership" },
+        { status: 500 }
+      );
+    }
     return NextResponse.json(
       { error: "Creator not found in this contest" },
       { status: 404 }
@@ -187,10 +220,20 @@ export async function POST(
       entryKey,
       errEntry
     );
-    await admin
+    const { error: archiveErr } = await admin
       .from("creator_profiles")
       .update({ instagram_archive: merged as unknown as Record<string, unknown> })
       .eq("id", creatorId);
+    if (archiveErr) {
+      console.error(
+        "[instagram-account-analytics] failed to persist error entry:",
+        archiveErr
+      );
+      return NextResponse.json(
+        { error: "Failed to save analytics cache" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       source: "network" as const,
@@ -216,12 +259,22 @@ export async function POST(
           ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
           : ig.token_expiry,
       };
-      await admin
+      const { error: tokenUpErr } = await admin
         .from("creator_profiles")
         .update({
           instagram_account: updatedAccount as unknown as Record<string, unknown>,
         })
         .eq("id", creatorId);
+      if (tokenUpErr) {
+        console.error(
+          "[instagram-account-analytics] token refresh persist failed:",
+          tokenUpErr
+        );
+        return NextResponse.json(
+          { error: "Failed to persist refreshed Instagram token" },
+          { status: 500 }
+        );
+      }
     }
   }
 
@@ -274,12 +327,22 @@ export async function POST(
     entry
   );
 
-  await admin
+  const { error: persistErr } = await admin
     .from("creator_profiles")
     .update({
       instagram_archive: mergedArchive as unknown as Record<string, unknown>,
     })
     .eq("id", creatorId);
+  if (persistErr) {
+    console.error(
+      "[instagram-account-analytics] failed to persist analytics:",
+      persistErr
+    );
+    return NextResponse.json(
+      { error: "Failed to save analytics cache" },
+      { status: 500 }
+    );
+  }
 
   return NextResponse.json({
     source: "network" as const,

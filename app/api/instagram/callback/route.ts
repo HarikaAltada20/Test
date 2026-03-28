@@ -189,10 +189,13 @@ export async function GET(request: NextRequest) {
                 };
             }
             const merged = mergeInstagramAnalyticsEntry(row?.instagram_archive, entryKey, entry);
-            await supabase
+            const { error: archiveUpdateErr } = await supabase
                 .from('creator_profiles')
-                .update({ instagram_archive: merged as any })
+                .update({ instagram_archive: merged as Record<string, unknown> })
                 .eq('id', user.id);
+            if (archiveUpdateErr) {
+                console.warn('[instagram/callback] Optional analytics seed archive update failed:', archiveUpdateErr);
+            }
         } catch (seedErr) {
             console.warn('[instagram/callback] Optional analytics seed skipped:', seedErr);
         }
