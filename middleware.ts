@@ -108,9 +108,43 @@ export async function middleware(request: NextRequest) {
           }
 
           if (userType === 'advertiser' && isAccessingCreatorRoute) {
-            const redirectUrl = new URL('/dashboard/contests', request.url)
-            redirectUrl.searchParams.set('error', 'unauthorized')
-            return NextResponse.redirect(redirectUrl)
+            // Own contest: send brands to the brand contest page (not the creator opportunity UI).
+            const opportunityContestMatch = pathname.match(
+              /^\/dashboard\/opportunities\/([^/]+)/
+            )
+            if (opportunityContestMatch?.[1]) {
+              const { data: contestRow } = await supabase
+                .from('contests')
+                .select('advertiser_id')
+                .eq('id', opportunityContestMatch[1])
+                .maybeSingle()
+              if (contestRow?.advertiser_id === user.id) {
+                const brandContestUrl = new URL(
+                  `/dashboard/contests/${opportunityContestMatch[1]}`,
+                  request.url
+                )
+                return NextResponse.redirect(brandContestUrl)
+              } else {
+                const redirectUrl = new URL('/dashboard/contests', request.url)
+                redirectUrl.searchParams.set('creator_route', '1')
+                redirectUrl.searchParams.set(
+                  'contest_id',
+                  opportunityContestMatch[1]
+                )
+                return NextResponse.redirect(redirectUrl)
+              }
+            } else {
+              const redirectUrl = new URL('/dashboard/contests', request.url)
+              redirectUrl.searchParams.set('creator_route', '1')
+              if (pathname.startsWith('/dashboard/opportunities')) {
+                redirectUrl.searchParams.set('creator_section', 'opportunities')
+              } else if (pathname.startsWith('/dashboard/submissions')) {
+                redirectUrl.searchParams.set('creator_section', 'submissions')
+              } else if (pathname.startsWith('/dashboard/earnings')) {
+                redirectUrl.searchParams.set('creator_section', 'earnings')
+              }
+              return NextResponse.redirect(redirectUrl)
+            }
           }
 
           // Admin route protection - only admins can access admin routes

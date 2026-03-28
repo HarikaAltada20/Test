@@ -1,30 +1,92 @@
 "use client";
 
 import React, { Suspense, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ContestListClient } from "./ContestListClient";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2, Phone } from "lucide-react";
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { createClient } from "@/utils/supabase/client";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 const BOOK_A_CALL_URL = "https://calendly.com/guptavishesh2/30min";
+
+export type CreatorRouteNotice =
+  | null
+  | {
+      kind: "from_opportunity";
+      contestId: string;
+      contestTitle: string | null;
+    }
+  | {
+      kind: "generic";
+      section?: "submissions" | "earnings" | "opportunities";
+    };
 
 interface ContestsPageClientProps {
   initialContests: any[];
   userId: string;
+  creatorRouteNotice?: CreatorRouteNotice;
 }
 
 export function ContestsPageClient({
   initialContests,
   userId,
+  creatorRouteNotice = null,
 }: ContestsPageClientProps) {
+  const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const { handleCreateContest } = useContestCreation(userId);
   const [selectedTab, setSelectedTab] = useState("all");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"light" | "dark">("light");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  /** Keeps the notice after router.replace strips search params (RSC refetch). */
+  const [lockedCreatorRouteNotice, setLockedCreatorRouteNotice] =
+    useState<CreatorRouteNotice>(null);
+  const [creatorRouteModalDismissed, setCreatorRouteModalDismissed] =
+    useState(false);
+  const [isSigningOutForCreator, setIsSigningOutForCreator] = useState(false);
+
+  useEffect(() => {
+    if (creatorRouteNotice) {
+      setLockedCreatorRouteNotice(creatorRouteNotice);
+      setCreatorRouteModalDismissed(false);
+      router.replace("/dashboard/contests", { scroll: false });
+    }
+  }, [creatorRouteNotice, router]);
+
+  const activeCreatorRouteNotice =
+    lockedCreatorRouteNotice ?? creatorRouteNotice;
+
+  const showCreatorRouteModal =
+    Boolean(activeCreatorRouteNotice) && !creatorRouteModalDismissed;
+
+  const handleSignOutAndSignupAsCreator = async () => {
+    setIsSigningOutForCreator(true);
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      localStorage.setItem("signupRole", "creator");
+      router.push("/auth/signup");
+      router.refresh();
+    } catch (e) {
+      console.error("Sign out before creator sign-up failed:", e);
+    } finally {
+      setIsSigningOutForCreator(false);
+    }
+  };
+
   // Read mode from data attribute
   useEffect(() => {
     const checkMode = () => {
@@ -69,8 +131,104 @@ export function ContestsPageClient({
 
   const isDark = mode === "dark";
 
+  const creatorRouteModalVariant = (() => {
+    if (!activeCreatorRouteNotice) return null;
+    if (activeCreatorRouteNotice.kind === "from_opportunity") {
+      const { contestTitle } = activeCreatorRouteNotice;
+      return {
+        kind: "needs_creator_account" as const,
+        headline:
+          "You are currently signed up as a brand — you need to sign up as a creator to see this contest.",
+        detail: contestTitle ? (
+          <span className="block mt-2 text-sm text-muted-foreground">
+            Contest: {contestTitle}
+          </span>
+        ) : null,
+      };
+    }
+    const section = activeCreatorRouteNotice.section;
+    const headline =
+      section === "submissions"
+        ? "You are currently signed up as a brand — creator submissions require a creator account."
+        : section === "earnings"
+          ? "You are currently signed up as a brand — creator earnings require a creator account."
+          : section === "opportunities"
+            ? "You are currently signed up as a brand — creator opportunities require a creator account."
+            : "You are currently signed up as a brand — you need a creator account to use creator-only areas (opportunities, submissions, earnings).";
+    return {
+      kind: "needs_creator_account" as const,
+      headline,
+      detail: null,
+    };
+  })();
+
   return (
     <div className="space-y-6">
+      <Dialog
+        open={showCreatorRouteModal}
+        onOpenChange={(open) => {
+          if (!open) setCreatorRouteModalDismissed(true);
+        }}
+      >
+        <DialogContent
+          className={cn(
+            "sm:max-w-lg rounded-2xl border p-6 shadow-lg",
+            isDark
+              ? "bg-[#0c0c14] border-white/10 text-white"
+              : "bg-white border-gray-200 text-gray-900"
+          )}
+        >
+          {creatorRouteModalVariant?.kind === "needs_creator_account" ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-xl font-semibold leading-snug">
+                  Signed in as a brand
+                </DialogTitle>
+                <DialogDescription
+                  asChild
+                  className={cn(
+                    "text-base leading-relaxed pt-1",
+                    isDark ? "text-slate-300" : "text-gray-600"
+                  )}
+                >
+                  <div>
+                    <p className="font-medium text-foreground">
+                      {creatorRouteModalVariant.headline}
+                    </p>
+                    {creatorRouteModalVariant.detail}
+                  </div>
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="mt-6 flex-col gap-2 sm:flex-row sm:justify-stretch">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "w-full sm:flex-1 order-2 sm:order-1",
+                    isDark && "border-white/20 bg-transparent hover:bg-white/10"
+                  )}
+                  onClick={() => setCreatorRouteModalDismissed(true)}
+                  disabled={isSigningOutForCreator}
+                >
+                  Continue as brand
+                </Button>
+                <Button
+                  type="button"
+                  className={cn(
+                    "w-full sm:flex-1 order-1 sm:order-2 text-white bg-gradient-to-r from-[#DD7209] to-[#FF652D] hover:opacity-95",
+                    isDark && "from-[#DD7209] to-[#FF652D]"
+                  )}
+                  onClick={handleSignOutAndSignupAsCreator}
+                  disabled={isSigningOutForCreator}
+                >
+                  {isSigningOutForCreator ? <ButtonLoadingSpinner /> : null}
+                  Sign out &amp; sign up as creator
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
       <div className="flex flex-row gap-4 md:items-center md:justify-between">
         <div className="flex-1">
           <h1 className="text-2xl md:text-2xl font-bold tracking-tight">
