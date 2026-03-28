@@ -821,17 +821,18 @@ export default function SettingsPage({
         });
       }, API_TIMEOUT_SHORT);
 
-      const { error: updateError } = await supabase
-        .from("creator_profiles")
-        .update({
-          instagram_account: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user.id);
+      const response = await fetch("/api/creator/social-disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform: "instagram" }),
+      });
 
       clearTimeout(timeoutId);
 
-      if (updateError) throw updateError;
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(result?.error || "Failed to disconnect Instagram.");
+      }
 
       setInstagramAccount(null);
       setProfile((prev) =>
@@ -866,11 +867,12 @@ export default function SettingsPage({
         });
       }, API_TIMEOUT_SHORT);
 
-      const response = await fetch("/api/twitter-apis/disconnect", {
+      const response = await fetch("/api/creator/social-disconnect", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ platform: "twitter" }),
       });
 
       clearTimeout(timeoutId);
@@ -914,14 +916,18 @@ export default function SettingsPage({
         });
       }, 5000);
 
-      const { error: updateError } = await supabase
-        .from("creator_profiles")
-        .update({ youtube_account: null, updated_at: new Date().toISOString() })
-        .eq("id", user.id);
+      const response = await fetch("/api/creator/social-disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform: "youtube" }),
+      });
 
       clearTimeout(timeoutId);
 
-      if (updateError) throw updateError;
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(result?.error || "Failed to disconnect YouTube.");
+      }
 
       setYoutubeAccount(null);
       setProfile((prev) => (prev ? { ...prev, youtube_account: null } : null));

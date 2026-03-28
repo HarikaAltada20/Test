@@ -171,6 +171,10 @@ export interface Database {
           bio: string | null;
           youtube_account: Json | null;
           instagram_account: Json | null;
+          twitter_account: Json | null;
+          instagram_archive: Json | null;
+          youtube_archive: Json | null;
+          twitter_archive: Json | null;
           total_contests_participated: number;
           total_contests_won: number;
           total_money_won: number;
@@ -187,6 +191,10 @@ export interface Database {
           bio?: string | null;
           youtube_account?: Json | null;
           instagram_account?: Json | null;
+          twitter_account?: Json | null;
+          instagram_archive?: Json | null;
+          youtube_archive?: Json | null;
+          twitter_archive?: Json | null;
           total_contests_participated?: number;
           total_contests_won?: number;
           total_money_won?: number;
@@ -203,6 +211,10 @@ export interface Database {
           bio?: string | null;
           youtube_account?: Json | null;
           instagram_account?: Json | null;
+          twitter_account?: Json | null;
+          instagram_archive?: Json | null;
+          youtube_archive?: Json | null;
+          twitter_archive?: Json | null;
           total_contests_participated?: number;
           total_contests_won?: number;
           total_money_won?: number;
