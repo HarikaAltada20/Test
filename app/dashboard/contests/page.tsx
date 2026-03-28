@@ -2,10 +2,21 @@ import React, { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { RouteGuard } from "@/components/guards/RouteGuard";
-import { ContestsPageClient } from "./ContestsPageClient";
+import {
+  ContestsPageClient,
+  type CreatorRouteNotice,
+} from "./ContestsPageClient";
 import { getAdvertiserContestsWithCalculatedBudgets } from "@/lib/contest-service";
 
-export default async function ContestsPage() {
+export default async function ContestsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    creator_route?: string;
+    contest_id?: string;
+    creator_section?: string;
+  }>;
+}) {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
 
@@ -43,9 +54,41 @@ export default async function ContestsPage() {
 
   const typedContests = contestsWithCalculatedBudgets as any[];
 
+  const resolvedSearch = await searchParams;
+  let creatorRouteNotice: CreatorRouteNotice = null;
+  if (resolvedSearch.creator_route === "1") {
+    if (resolvedSearch.contest_id) {
+      const { data: contest } = await supabase
+        .from("contests")
+        .select("advertiser_id, title")
+        .eq("id", resolvedSearch.contest_id)
+        .maybeSingle();
+      const owns = Boolean(contest && contest.advertiser_id === data.user.id);
+      // Only block / modal when this brand does not own the contest (owners are redirected to /dashboard/contests/[id] by middleware).
+      if (!owns) {
+        creatorRouteNotice = {
+          kind: "from_opportunity",
+          contestId: resolvedSearch.contest_id,
+          contestTitle: contest?.title ?? null,
+        };
+      }
+    } else {
+      const s = resolvedSearch.creator_section;
+      if (s === "submissions" || s === "earnings" || s === "opportunities") {
+        creatorRouteNotice = { kind: "generic", section: s };
+      } else {
+        creatorRouteNotice = { kind: "generic" };
+      }
+    }
+  }
+
   return (
     // <RouteGuard allowedUserTypes={['advertiser', 'admin']} fallbackPath="/dashboard/opportunities">
-    <ContestsPageClient initialContests={typedContests} userId={data.user.id} />
+    <ContestsPageClient
+      initialContests={typedContests}
+      userId={data.user.id}
+      creatorRouteNotice={creatorRouteNotice}
+    />
     // </RouteGuard>
   );
 }

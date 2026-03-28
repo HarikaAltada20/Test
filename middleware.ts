@@ -108,9 +108,63 @@ export async function middleware(request: NextRequest) {
           }
 
           if (userType === 'advertiser' && isAccessingCreatorRoute) {
-            const redirectUrl = new URL('/dashboard/contests', request.url)
-            redirectUrl.searchParams.set('error', 'unauthorized')
-            return NextResponse.redirect(redirectUrl)
+            // Own contest: send brands to the brand contest page (not the creator opportunity UI).
+            const opportunityContestMatch = pathname.match(
+              /^\/dashboard\/opportunities\/([^/]+)/
+            )
+            if (opportunityContestMatch?.[1]) {
+              const contestId = opportunityContestMatch[1]
+              const brandContestUrl = new URL(
+                `/dashboard/contests/${contestId}`,
+                request.url
+              )
+              const blockedFromCreatorUrl = new URL(
+                '/dashboard/contests',
+                request.url
+              )
+              blockedFromCreatorUrl.searchParams.set('creator_route', '1')
+              blockedFromCreatorUrl.searchParams.set('contest_id', contestId)
+
+              let ownsContest = false
+              try {
+                const { data: contestRow, error: contestLookupError } =
+                  await supabase
+                    .from('contests')
+                    .select('advertiser_id')
+                    .eq('id', contestId)
+                    .maybeSingle()
+                if (contestLookupError) {
+                  console.error(
+                    'Middleware contest ownership lookup failed:',
+                    contestLookupError
+                  )
+                  return NextResponse.redirect(blockedFromCreatorUrl)
+                }
+                ownsContest = contestRow?.advertiser_id === user.id
+              } catch (e) {
+                console.error(
+                  'Middleware contest ownership lookup threw:',
+                  e
+                )
+                return NextResponse.redirect(blockedFromCreatorUrl)
+              }
+
+              if (ownsContest) {
+                return NextResponse.redirect(brandContestUrl)
+              }
+              return NextResponse.redirect(blockedFromCreatorUrl)
+            } else {
+              const redirectUrl = new URL('/dashboard/contests', request.url)
+              redirectUrl.searchParams.set('creator_route', '1')
+              if (pathname.startsWith('/dashboard/opportunities')) {
+                redirectUrl.searchParams.set('creator_section', 'opportunities')
+              } else if (pathname.startsWith('/dashboard/submissions')) {
+                redirectUrl.searchParams.set('creator_section', 'submissions')
+              } else if (pathname.startsWith('/dashboard/earnings')) {
+                redirectUrl.searchParams.set('creator_section', 'earnings')
+              }
+              return NextResponse.redirect(redirectUrl)
+            }
           }
 
           // Admin route protection - only admins can access admin routes

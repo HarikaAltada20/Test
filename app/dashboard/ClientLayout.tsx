@@ -29,6 +29,7 @@ import {
   CreditCard,
   Maximize,
   Minimize,
+  Loader2,
 } from "lucide-react";
 import {
   Breadcrumb,
@@ -302,6 +303,7 @@ function DashboardContent({
   });
   // Track very small screens (≤ 400px) so we can force 85% zoom and hide the toggle
   const [isSmallScreen, setIsSmallScreen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const {
     isFullscreen,
     isSupported: isFullscreenSupported,
@@ -310,11 +312,14 @@ function DashboardContent({
   } = useFullscreen();
 
   const handleSignOut = async () => {
+    setIsSigningOut(true);
     try {
       await completeLogout();
       console.log("Sign out successful");
     } catch (error) {
       console.error("Error signing out:", error);
+    } finally {
+      setIsSigningOut(false);
     }
   };
 
@@ -2459,9 +2464,17 @@ function DashboardContent({
                           }}
                         >
                           <Button
+                            type="button"
                             onClick={handleSignOut}
+                            disabled={isSigningOut}
+                            aria-busy={isSigningOut}
+                            aria-label={
+                              isSigningOut
+                                ? "Signing out"
+                                : "Sign out, end your session"
+                            }
                             variant="ghost"
-                            className="w-full border-[#E50000] bg-[#A8000014] hover:bg-[#A8000014] text-black justify-start gap-3 p-3 h-auto border transition-all duration-300"
+                            className="w-full border-[#E50000] bg-[#A8000014] hover:bg-[#A8000014] text-black justify-start gap-3 p-3 h-auto border transition-all duration-300 disabled:opacity-90 disabled:pointer-events-none"
                             // style={{
                             //   backgroundColor: "rgba(244, 63, 94, 0.2)",
                             //   borderColor: "rgba(244, 63, 94, 0.2)",
@@ -2485,19 +2498,27 @@ function DashboardContent({
                             // }}
                           >
                             <div
-                              className="w-10 h-10 bg-[#FF323224] rounded-lg flex items-center justify-center"
+                              className="w-10 h-10 bg-[#FF323224] rounded-lg flex items-center justify-center shrink-0"
                               // style={{
                               //   backgroundColor: "rgba(244, 63, 94, 0.2)",
                               // }}
                             >
-                              <LogOut
-                                className="h-5 w-5"
-                                style={{
-                                  color: "rgb(244, 63, 94)",
-                                }}
-                              />
+                              {isSigningOut ? (
+                                <Loader2
+                                  className="h-5 w-5 animate-spin"
+                                  style={{ color: "rgb(244, 63, 94)" }}
+                                  aria-hidden
+                                />
+                              ) : (
+                                <LogOut
+                                  className="h-5 w-5"
+                                  style={{
+                                    color: "rgb(244, 63, 94)",
+                                  }}
+                                />
+                              )}
                             </div>
-                            <div className="flex-1 text-left">
+                            <div className="flex-1 text-left min-w-0">
                               <div
                                 className={cn(
                                   "text-md font-semibold",
@@ -2506,7 +2527,7 @@ function DashboardContent({
                                     : "text-white"
                                 )}
                               >
-                                Sign Out
+                                {isSigningOut ? "Signing out…" : "Sign Out"}
                               </div>
                               <div
                                 className={cn(
@@ -2520,7 +2541,9 @@ function DashboardContent({
                                 //   color: "rgba(244, 63, 94, 0.8)",
                                 // }}
                               >
-                                End your session
+                                {isSigningOut
+                                  ? "Please wait"
+                                  : "End your session"}
                               </div>
                             </div>
                           </Button>

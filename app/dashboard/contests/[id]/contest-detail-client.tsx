@@ -2638,7 +2638,7 @@ export default function ContestDetailClient({
             title: "Bonus paid",
             description:
               "Flat fee bonus credited to creator. Main reward was not paid.",
-            variant: "default",
+            variant: "payment",
           });
           if (!options?.skipReload)
             setTimeout(() => window.location.reload(), 1000);
@@ -2747,7 +2747,7 @@ export default function ContestDetailClient({
                 newStatus === "mark_both_paid"
                   ? "Expected reward and bonus credited to creator."
                   : "Tweet payment processed. Reward granted for this tweet added to withdrawal.",
-              variant: "default",
+              variant: "payment",
             });
             if (!options?.skipReload)
               setTimeout(() => window.location.reload(), 1000);
@@ -2785,7 +2785,7 @@ export default function ContestDetailClient({
                 newStatus === "mark_both_paid"
                   ? "Expected reward and bonus credited to creator."
                   : "Payment processed successfully.",
-              variant: "default",
+              variant: "payment",
             });
             if (!options?.skipReload)
               setTimeout(() => window.location.reload(), 1000);
@@ -2896,7 +2896,7 @@ export default function ContestDetailClient({
               title: "✅ Submission Verified",
               description:
                 "Content has been verified and is now eligible for rewards",
-              variant: "default" as const,
+              variant: "success" as const,
             };
           case "rejected":
             return {
@@ -2910,25 +2910,25 @@ export default function ContestDetailClient({
             return {
               title: "⏳ Status Reset to Pending",
               description: "Submission is back in pending review",
-              variant: "default" as const,
+              variant: "pending" as const,
             };
           case "paid":
             return {
               title: "💰 Payment Confirmed",
               description: "Payment has been processed and confirmed",
-              variant: "default" as const,
+              variant: "payment" as const,
             };
           case "mark_bonus_paid":
             return {
               title: "🎁 Bonus Paid",
               description: "Flat fee bonus marked as paid",
-              variant: "default" as const,
+              variant: "payment" as const,
             };
           case "mark_both_paid":
             return {
               title: "💰 Payment & Bonus Paid",
               description: "Standard reward and bonus paid together",
-              variant: "default" as const,
+              variant: "payment" as const,
             };
           default:
             return {
@@ -3133,10 +3133,29 @@ export default function ContestDetailClient({
         });
       } else {
         const actionText = action === "verified" || action === "approve" ? "Verified" : action === "rejected" || action === "reject" ? "Rejected" : action === "pending" ? "Set to Pending" : "Updated";
+        const isRejectBulk =
+          action === "rejected" || action === "reject";
+        const isPendingBulk = action === "pending";
+        const isVerifiedBulk =
+          action === "verified" || action === "approve";
+        const isPaidBulk = action === "paid";
+        const bulkVariant = isRejectBulk
+          ? "destructive"
+          : isPendingBulk
+            ? "pending"
+            : isVerifiedBulk
+              ? "success"
+              : isPaidBulk
+                ? "payment"
+                : "default";
         toast({
-          title: "✅Success",
+          title: isRejectBulk
+            ? "Bulk rejection complete"
+            : isPendingBulk
+              ? "Bulk update complete"
+              : "✅Success",
           description: `Successfully ${actionText} ${totalProcessed} submissions.`,
-          variant: "default",
+          variant: bulkVariant,
         });
       }
       
@@ -3282,7 +3301,7 @@ export default function ContestDetailClient({
       toast({
         title: "Success",
         description: "Creator payment processed successfully",
-        variant: "default",
+        variant: "payment",
       });
 
       // Refresh page after a delay to show updated payment status
@@ -3351,7 +3370,7 @@ export default function ContestDetailClient({
         title: "Success",
         description:
           "Expected reward and flat bonus credited for this creator based on their points.",
-        variant: "default",
+        variant: "payment",
       });
       setTimeout(() => window.location.reload(), 1000);
     } catch (error: any) {
@@ -3496,6 +3515,7 @@ export default function ContestDetailClient({
       toast({
         title: "Downloading...",
         description: "Please wait while downloading.",
+        variant: "pending",
       });
 
       const apiUrl = `/api/admin/download-reel?submissionId=${submissionId}`;
@@ -3610,6 +3630,7 @@ export default function ContestDetailClient({
       toast({
         title: "Download Started",
         description: "Your video download has started.",
+        variant: "success",
       });
       setDownloadingSubmissionId(null);
     } catch (error: any) {
@@ -3686,26 +3707,31 @@ export default function ContestDetailClient({
             return {
               title: "📋 Status: Pending Review",
               description: "Contest is now pending review phase",
+              variant: "pending" as const,
             };
           case "in_review":
             return {
               title: "🔍 Status: In Review",
               description: "Contest is currently under review",
+              variant: "pending" as const,
             };
           case "verification_complete":
             return {
               title: "✅ Status: Verification Complete",
               description: "All submissions have been verified",
+              variant: "success" as const,
             };
           case "payouts_processed":
             return {
               title: "💰 Status: Payouts Processed",
               description: "All payments have been processed",
+              variant: "payment" as const,
             };
           default:
             return {
               title: "Status Updated",
               description: result.message,
+              variant: "default" as const,
             };
         }
       };
@@ -3810,7 +3836,7 @@ export default function ContestDetailClient({
         title: "Please Wait",
         description: `You can refresh again in ${cooldownInfo.remainingMinutes
           } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
-        variant: "destructive",
+        variant: "pending",
       });
       return;
     }
@@ -3888,6 +3914,7 @@ export default function ContestDetailClient({
                       title: "Instagram insights refresh completed",
                       description: `Reviewed ${run.reviewed_count ?? 0}, Processed ${run.processed_submissions ?? 0}. Success: ${run.success_count ?? 0}, Permanent failure: ${run.permanent_failure_count ?? 0}, Temporary failure: ${run.temporary_failure_count ?? 0}, Skipped: ${run.skipped_recent_count ?? 0}.`,
                       duration: 10000,
+                      variant: "success",
                     });
                   }
                   // Keep popup visible for 10 seconds, then hide and reload
@@ -3923,6 +3950,7 @@ export default function ContestDetailClient({
           title: "Success! 🎉",
           description: `${result?.message ?? "Budget and leaderboard updated!"
             }`,
+          variant: "success",
         });
         if (currentContest.platform?.toLowerCase() === "twitter") {
           fetchTwitterMetrics();
@@ -3999,6 +4027,7 @@ export default function ContestDetailClient({
         title: "Analytics Updated",
         description:
           result.message || `Updated ${result.updated} submission(s)`,
+        variant: "success",
       });
 
       if (result.reauth_needed?.length) {
@@ -4059,6 +4088,7 @@ export default function ContestDetailClient({
         title: "All metrics updated",
         description:
           data2?.message || "Basic and detailed analytics refreshed.",
+        variant: "success",
       });
       setTimeout(() => window.location.reload(), 1200);
     } catch (e: any) {
@@ -4543,8 +4573,22 @@ export default function ContestDetailClient({
         ),
       );
 
+      const tweetModerationVariant =
+        action === "approve"
+          ? "success"
+          : action === "reject"
+            ? "destructive"
+            : action === "paid"
+              ? "payment"
+              : "pending";
+      const tweetModerationTitle =
+        action === "reject"
+          ? "Tweet rejected"
+          : action === "pending"
+            ? "Tweet set to pending"
+            : "Success";
       toast({
-        title: "Success",
+        title: tweetModerationTitle,
         description: `Tweet ${action === "approve"
           ? "approved"
           : action === "reject"
@@ -4553,6 +4597,7 @@ export default function ContestDetailClient({
               ? "marked as paid"
               : "set to pending"
           } successfully`,
+        variant: tweetModerationVariant,
       });
 
       // Clear contest cache and refresh contest list to update budget tracker
@@ -4697,9 +4742,10 @@ export default function ContestDetailClient({
           throw new Error(err.error || `Failed to update creator status`);
         }
         toast({
-          title: "Success",
+          title: action === "approve" ? "Success" : "Creator rejected",
           description: `Creator ${action === "approve" ? "approved" : "rejected"
             } and payment reversed successfully`,
+          variant: action === "approve" ? "success" : "destructive",
         });
       } else {
         const response = await fetch(
@@ -4724,9 +4770,10 @@ export default function ContestDetailClient({
         }
 
         toast({
-          title: "Success",
+          title: action === "approve" ? "Success" : "Creator rejected",
           description: `Creator ${action === "approve" ? "approved" : "rejected"
             } and payment reversed successfully`,
+          variant: action === "approve" ? "success" : "destructive",
         });
       }
 
@@ -4819,9 +4866,10 @@ export default function ContestDetailClient({
             throw new Error(err.error || "Failed to update creator status");
           }
           toast({
-            title: "Success",
+            title: "Creator rejected",
             description: `Creator @${pendingTwitterRejection.creatorUsername || "creator"
               } and all tweets have been rejected (payments reversed where applicable).`,
+            variant: "destructive",
           });
         } else {
           // Leaderboard: use creator-level moderation API
@@ -4844,9 +4892,10 @@ export default function ContestDetailClient({
           }
 
           toast({
-            title: "Success",
+            title: "Creator rejected",
             description: `Creator @${pendingTwitterRejection.creatorUsername || "creator"
               } has been rejected`,
+            variant: "destructive",
           });
         }
 
@@ -4930,6 +4979,7 @@ export default function ContestDetailClient({
       toast({
         title: "Success",
         description: `Points adjusted successfully`,
+        variant: "success",
       });
 
       if (
@@ -5004,64 +5054,67 @@ export default function ContestDetailClient({
 
   return (
     <div>
-      <div className="flex flex-col px-1 lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <Button
-            className="cursor-pointer"
-            variant="ghost"
-            size="icon"
-            asChild
-          >
-            <Link
-              href={
-                isAdminView
-                  ? "/dashboard/admin/contests"
-                  : "/dashboard/contests"
-              }
+      <header
+        className={cn(
+          "mb-8 px-1 pb-6 border-b",
+          isDark ? "border-white/10" : "border-gray-200/90",
+        )}
+      >
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+          <div className="flex gap-3 min-w-0">
+            <Button
+              className="cursor-pointer shrink-0 mt-0.5"
+              variant="ghost"
+              size="icon"
+              asChild
             >
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-          </Button>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1
-              className={cn(
-                "text-lg sm:text-xl md:text-2xl font-bold text-gray-900 break-words",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
-              {currentContest.title}
-            </h1>
-
-            {/* Status + Contest type */}
-
-            <Badge
-              className={cn(
-                contestStatusBadgeInfo.className,
-                "capitalize text-sm font-medium px-3 py-1 rounded-full",
-              )}
-            >
-              {contestStatusBadgeInfo.text}
-            </Badge>
-            {currentContest.contest_type && (
-              <Badge
-                // variant={
-                //   currentContest.contest_type === "cpm" ? "secondary" : "default"
-                // }
-
+              <Link
+                href={
+                  isAdminView
+                    ? "/dashboard/admin/contests"
+                    : "/dashboard/contests"
+                }
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+            </Button>
+            <div className="min-w-0 space-y-3 flex-1">
+              <h1
                 className={cn(
-                  "capitalize text-sm font-medium px-3 py-1 rounded-full",
-                  isDark
-                    ? "bg-purple-500/20 text-purple-300 border-purple-400"
-                    : "bg-purple-100 text-purple-900 border-purple-400",
+                  "text-2xl sm:text-3xl font-bold tracking-tight text-balance leading-snug",
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
-                {currentContest.contest_type === "cpm" ? "CPM" : "Leaderboard"}
-              </Badge>
-            )}
+                {currentContest.title}
+              </h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  className={cn(
+                    contestStatusBadgeInfo.className,
+                    "capitalize text-xs sm:text-sm font-medium px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full border",
+                  )}
+                >
+                  {contestStatusBadgeInfo.text}
+                </Badge>
+                {currentContest.contest_type && (
+                  <Badge
+                    className={cn(
+                      "capitalize text-xs sm:text-sm font-medium px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full border",
+                      isDark
+                        ? "bg-purple-500/15 text-purple-200 border-purple-400/50"
+                        : "bg-purple-50 text-purple-900 border-purple-200",
+                    )}
+                  >
+                    {currentContest.contest_type === "cpm"
+                      ? "CPM"
+                      : "Leaderboard"}
+                  </Badge>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
         {/* Quick Actions Bar */}
-        <div className="flex gap-4 items-center mb-3">
+        <div className="flex flex-wrap gap-2 items-center lg:justify-end shrink-0 w-full lg:w-auto pl-0 sm:pl-12 lg:pl-0 lg:max-w-[min(100%,28rem)]">
           {/* Contest Status Update Button */}
           {canUpdateContestStatus() && (
             <Dialog
@@ -5074,12 +5127,13 @@ export default function ContestDetailClient({
                   size="sm"
                   variant="outline"
                   className={cn(
+                    "rounded-xl",
                     isDark
-                      ? "py-3 border border-purple-400 text-purple-400"
-                      : "border-purple-500 text-purple-500",
+                      ? "border-purple-400/60 text-purple-300 hover:bg-white/5"
+                      : "border-purple-400/50 text-purple-700 hover:bg-purple-50",
                   )}
                 >
-                  <Settings className="h-4 w-4" />
+                  <Settings className="h-4 w-4 shrink-0" />
                   Update Status
                 </Button>
               </DialogTrigger>
@@ -5196,7 +5250,7 @@ export default function ContestDetailClient({
           {contest.moderation_status === "approved" && (
             <Button
               size="sm"
-              className="flex items-center gap-2 mt-3 text-md bg-[#6C43D0] hover:bg-[#6C43D0] text-white transition-all duration-200 hover:scale-105"
+              className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl bg-[#4A00BE] hover:bg-[#4A00BE]/90 text-white shadow-sm"
               onClick={async (e) => {
                 e.stopPropagation();
                 try {
@@ -5225,11 +5279,16 @@ export default function ContestDetailClient({
             <Button
               variant="outline"
               size="sm"
-              className="flex items-center gap-2 bg-[#6C43D0] hover:bg-[#6C43D0] text-white transition-all duration-200 hover:scale-105"
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl font-medium transition-colors",
+                isDark
+                  ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                  : "border-[#4A00BE]/35 bg-white text-[#4A00BE] hover:bg-[#4A00BE]/[0.06]",
+              )}
               onClick={handleShare}
             >
-              <Share2 className="h-4 w-4" />
-              <span className="hidden sm:inline font-medium">Share</span>
+              <Share2 className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">Share</span>
             </Button>
           )}
 
@@ -5237,7 +5296,12 @@ export default function ContestDetailClient({
             <Button
               size="sm"
               variant="outline"
-              className="flex items-center gap-2 bg-[#6C43D0] hover:bg-[#6C43D0] text-white transition-all duration-200 hover:scale-105"
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl font-medium transition-colors",
+                isDark
+                  ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                  : "border-gray-300 bg-white text-gray-900 hover:bg-gray-50",
+              )}
               asChild
             >
               <Link
@@ -5263,7 +5327,8 @@ export default function ContestDetailClient({
             />
           )}
         </div>
-      </div>
+        </div>
+      </header>
 
       {/* Modern Contest Overview - Redesigned for better UX */}
       <div className="space-y-6 mb-8">
@@ -9695,6 +9760,7 @@ export default function ContestDetailClient({
                                     title: "Saved",
                                     description:
                                       "Payout adjustment saved. It will apply to payouts and persist after refresh.",
+                                    variant: "success",
                                   });
                                 } catch (err: any) {
                                   console.error(
@@ -14850,7 +14916,7 @@ export default function ContestDetailClient({
                                                                       description:
                                                                         "Creator payment processed successfully",
                                                                       variant:
-                                                                        "default",
+                                                                        "payment",
                                                                     });
                                                                     setTimeout(
                                                                       () => {
