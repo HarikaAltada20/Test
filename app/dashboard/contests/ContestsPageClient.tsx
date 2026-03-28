@@ -229,46 +229,63 @@ export function ContestsPageClient({
           ) : null}
         </DialogContent>
       </Dialog>
-      <div className="flex flex-row gap-4 md:items-center md:justify-between">
-        <div className="flex-1">
-          <h1 className="text-2xl md:text-2xl font-bold tracking-tight">
+      <header
+        className={cn(
+          "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6",
+          "pb-6 border-b",
+          isDark ? "border-white/10" : "border-gray-200/90"
+        )}
+      >
+        <div className="min-w-0 space-y-0.5">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-balance">
             My Contests
           </h1>
+          <p
+            className={cn(
+              "text-sm leading-relaxed max-w-xl",
+              isDark ? "text-slate-400" : "text-muted-foreground"
+            )}
+          >
+            Create, review, and manage your campaigns in one place.
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
           {!initialContests.some((c) => c.moderation_status !== "draft") && (
             <a
               href={BOOK_A_CALL_URL}
               target="_blank"
               rel="noopener noreferrer"
               className={cn(
-                "flex items-center gap-2 px-4 py-2.5 text-md rounded-xl font-medium border transition-colors",
+                "inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl border transition-colors",
                 isDark
-                  ? "border-gray-600 text-gray-200 hover:bg-gray-800"
+                  ? "border-gray-600 text-gray-200 hover:bg-gray-800/80"
                   : "border-gray-300 text-gray-700 hover:bg-gray-50"
               )}
             >
-              <Phone className="h-4 w-4" />
+              <Phone className="h-4 w-4 shrink-0" />
               Book a Call
             </a>
           )}
           <button
+            type="button"
             onClick={handleCreateContestClick}
             disabled={loading}
             className={cn(
-              "flex items-center gap-2 px-4 py-2.5 text-md rounded-xl text-white font-medium",
-              isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+              "inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl text-white shadow-sm transition-[opacity,box-shadow] hover:opacity-95",
+              isDark
+                ? "bg-[#5F2BB1] ring-1 ring-white/10"
+                : "bg-[#4A00BE] ring-1 ring-black/5"
             )}
           >
             {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
             ) : (
-              <Plus className="h-4 w-4" />
+              <Plus className="h-4 w-4 shrink-0" />
             )}
             Create Contest
           </button>
         </div>
-      </div>
+      </header>
       <Suspense fallback={<div>Loading contests...</div>}>
         <ContestListClient
           initialContests={initialContests}

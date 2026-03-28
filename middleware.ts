@@ -113,26 +113,46 @@ export async function middleware(request: NextRequest) {
               /^\/dashboard\/opportunities\/([^/]+)/
             )
             if (opportunityContestMatch?.[1]) {
-              const { data: contestRow } = await supabase
-                .from('contests')
-                .select('advertiser_id')
-                .eq('id', opportunityContestMatch[1])
-                .maybeSingle()
-              if (contestRow?.advertiser_id === user.id) {
-                const brandContestUrl = new URL(
-                  `/dashboard/contests/${opportunityContestMatch[1]}`,
-                  request.url
+              const contestId = opportunityContestMatch[1]
+              const brandContestUrl = new URL(
+                `/dashboard/contests/${contestId}`,
+                request.url
+              )
+              const blockedFromCreatorUrl = new URL(
+                '/dashboard/contests',
+                request.url
+              )
+              blockedFromCreatorUrl.searchParams.set('creator_route', '1')
+              blockedFromCreatorUrl.searchParams.set('contest_id', contestId)
+
+              let ownsContest = false
+              try {
+                const { data: contestRow, error: contestLookupError } =
+                  await supabase
+                    .from('contests')
+                    .select('advertiser_id')
+                    .eq('id', contestId)
+                    .maybeSingle()
+                if (contestLookupError) {
+                  console.error(
+                    'Middleware contest ownership lookup failed:',
+                    contestLookupError
+                  )
+                  return NextResponse.redirect(blockedFromCreatorUrl)
+                }
+                ownsContest = contestRow?.advertiser_id === user.id
+              } catch (e) {
+                console.error(
+                  'Middleware contest ownership lookup threw:',
+                  e
                 )
-                return NextResponse.redirect(brandContestUrl)
-              } else {
-                const redirectUrl = new URL('/dashboard/contests', request.url)
-                redirectUrl.searchParams.set('creator_route', '1')
-                redirectUrl.searchParams.set(
-                  'contest_id',
-                  opportunityContestMatch[1]
-                )
-                return NextResponse.redirect(redirectUrl)
+                return NextResponse.redirect(blockedFromCreatorUrl)
               }
+
+              if (ownsContest) {
+                return NextResponse.redirect(brandContestUrl)
+              }
+              return NextResponse.redirect(blockedFromCreatorUrl)
             } else {
               const redirectUrl = new URL('/dashboard/contests', request.url)
               redirectUrl.searchParams.set('creator_route', '1')
