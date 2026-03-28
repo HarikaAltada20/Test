@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server'; // Ensure this points to server client
 import dayjs from 'dayjs';
+import {
+    computeSinceUntilForPreset,
+    fetchUserAccountInsights,
+} from '@/lib/instagram-account-insights';
+import {
+    mergeInstagramAnalyticsEntry,
+    type InstagramAnalyticsEntry,
+} from '@/lib/platform-social-archive';
 
 export const dynamic = 'force-dynamic'; // Ensures the route is not statically cached
 
@@ -144,6 +152,52 @@ export async function GET(request: NextRequest) {
         if (updateError) {
             console.error('Supabase update error for Instagram account:', updateError);
             throw new Error(`Failed to update creator profile with Instagram data: ${updateError.message}`);
+        }
+
+        // Optional: seed "overall" account insights into instagram_archive (non-blocking)
+        try {
+            const { data: row } = await supabase
+                .from('creator_profiles')
+                .select('instagram_archive')
+                .eq('id', user.id)
+                .single();
+            const nowSec = Math.floor(Date.now() / 1000);
+            const { since, until, entryKey } = computeSinceUntilForPreset('overall', nowSec);
+            const insights = await fetchUserAccountInsights(
+                profile.id as string,
+                long_lived_access_token,
+                since,
+                until
+            );
+            let entry: InstagramAnalyticsEntry;
+            if (insights.kind === 'success') {
+                entry = {
+                    fetched_at: new Date().toISOString(),
+                    since,
+                    until,
+                    preset: 'overall',
+                    metrics: insights.metrics,
+                };
+            } else {
+                entry = {
+                    fetched_at: new Date().toISOString(),
+                    since,
+                    until,
+                    preset: 'overall',
+                    metrics: {},
+                    error: insights.message || 'Insights unavailable',
+                };
+            }
+            const merged = mergeInstagramAnalyticsEntry(row?.instagram_archive, entryKey, entry);
+            const { error: archiveUpdateErr } = await supabase
+                .from('creator_profiles')
+                .update({ instagram_archive: merged as Record<string, unknown> })
+                .eq('id', user.id);
+            if (archiveUpdateErr) {
+                console.warn('[instagram/callback] Optional analytics seed archive update failed:', archiveUpdateErr);
+            }
+        } catch (seedErr) {
+            console.warn('[instagram/callback] Optional analytics seed skipped:', seedErr);
         }
 
         console.log('Instagram account connected successfully for user:', user.id);
