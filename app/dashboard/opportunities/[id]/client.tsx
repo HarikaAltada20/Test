@@ -240,6 +240,13 @@ export function ContestClientPage({
   const [joinCampaignLoading, setJoinCampaignLoading] = useState(false);
   const [hasJoinedTwitterCampaign, setHasJoinedTwitterCampaign] =
     useState(false);
+  const [twitterConnectStatus, setTwitterConnectStatus] = useState<
+    "loading" | "connected" | "disconnected"
+  >("loading");
+  const [twitterJoinError, setTwitterJoinError] = useState<{
+    kind: "not_connected" | "bio" | "generic";
+    message: string;
+  } | null>(null);
   const [showAllSubmissionsModal, setShowAllSubmissionsModal] = useState(false);
   const [modalViewMode, setModalViewMode] = useState<"simple" | "detailed">(
     "simple",
@@ -1718,38 +1725,74 @@ export function ContestClientPage({
     contest?.platform === "twitter" &&
     (contest as any)?.contest_format === "text_image";
 
-  // Check if user has already joined this Twitter campaign
+  // Twitter text/image: join status + X connection (parallel) for upfront gating
   useEffect(() => {
-    const checkJoinStatus = async () => {
+    const loadTwitterCampaignState = async () => {
       if (!contestId || !isTwitterTextImageContest || !user) return;
 
+      setTwitterConnectStatus("loading");
       try {
-        const res = await fetch(
-          `/api/twitter-apis/join-status?contestId=${encodeURIComponent(
-            contestId,
-          )}`,
-        );
+        const [joinRes, profileRes] = await Promise.all([
+          fetch(
+            `/api/twitter-apis/join-status?contestId=${encodeURIComponent(
+              contestId,
+            )}`,
+          ),
+          fetch("/api/twitter-apis/get-profile"),
+        ]);
 
-        if (!res.ok) return;
-        const data = await res.json().catch(() => null);
-        if (data && typeof data.joined === "boolean") {
-          setHasJoinedTwitterCampaign(data.joined);
+        if (joinRes.ok) {
+          const joinData = await joinRes.json().catch(() => null);
+          if (joinData && typeof joinData.joined === "boolean") {
+            setHasJoinedTwitterCampaign(joinData.joined);
+          }
         }
-      } catch (e) {
-        // Silently ignore join-status errors; button will still allow join
+
+        if (profileRes.ok) {
+          const profileData = await profileRes.json().catch(() => null);
+          if (profileData && typeof profileData.connected === "boolean") {
+            setTwitterConnectStatus(
+              profileData.connected ? "connected" : "disconnected",
+            );
+          } else {
+            setTwitterConnectStatus("disconnected");
+          }
+        } else {
+          setTwitterConnectStatus("disconnected");
+        }
+      } catch {
+        setTwitterConnectStatus("disconnected");
       }
     };
 
-    checkJoinStatus();
+    loadTwitterCampaignState();
   }, [contestId, isTwitterTextImageContest, user]);
 
   const handleSubmitContent = () => {
     router.push(`/dashboard/opportunities/${contestId}/submit`);
   };
 
+  const mapTwitterJoinApiError = (payload: {
+    error?: string;
+    code?: string;
+  }) => {
+    const message =
+      payload.error ||
+      "Failed to join this Twitter (X) campaign. Please try again.";
+    switch (payload.code) {
+      case "TWITTER_NOT_CONNECTED":
+        return { kind: "not_connected" as const, message };
+      case "BIO_USERNAME_MISSING":
+        return { kind: "bio" as const, message };
+      default:
+        return { kind: "generic" as const, message };
+    }
+  };
+
   const handleJoinTwitterCampaign = async () => {
     if (!contest?.id) return;
 
+    setTwitterJoinError(null);
     setJoinCampaignLoading(true);
     try {
       const res = await fetch("/api/twitter-apis/join-campaign", {
@@ -1758,12 +1801,20 @@ export function ContestClientPage({
         body: JSON.stringify({ contestId: contest.id }),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        code?: string;
+      };
       if (!res.ok) {
-        throw new Error(
-          data.error ||
-            "Failed to join Twitter (X) campaign. Please try again.",
-        );
+        const mapped = mapTwitterJoinApiError(data);
+        setTwitterJoinError(mapped);
+        if (mapped.kind === "generic") {
+          toast({
+            title: "Could not join campaign",
+            description: mapped.message,
+          });
+        }
+        return;
       }
 
       toast({
@@ -1771,15 +1822,15 @@ export function ContestClientPage({
         description: "You have successfully joined this Twitter (X) campaign.",
       });
 
-      // Reflect joined state in UI
       setHasJoinedTwitterCampaign(true);
     } catch (err: any) {
+      const message =
+        err?.message ||
+        "Something went wrong. Please try again in a few moments.";
+      setTwitterJoinError({ kind: "generic", message });
       toast({
-        title: "Cannot join campaign",
-        description:
-          err?.message ||
-          "Please check your Twitter connection and X bio, then try again.",
-        variant: "destructive",
+        title: "Could not join campaign",
+        description: message,
       });
     } finally {
       setJoinCampaignLoading(false);
@@ -2220,6 +2271,50 @@ export function ContestClientPage({
                     </p>
                   </div>
 
+                  {user &&
+                    contest.status?.toLowerCase() === "active" &&
+                    isTwitterTextImageContest &&
+                    !hasJoinedTwitterCampaign &&
+                    twitterConnectStatus === "disconnected" && (
+                      <Alert
+                        variant="default"
+                        className="mb-4 max-w-lg mx-auto text-center border border-[#7F39EC] bg-[#D9C0FF26]"
+                      >
+                        <AlertDescription
+                          className={cn(
+                            "text-sm",
+                            isDark ? "text-gray-200" : "text-gray-700",
+                          )}
+                        >
+                          Connect your X (Twitter) account in Settings before
+                          you can join this campaign.
+                        </AlertDescription>
+                        <Link href="/dashboard/settings">
+                          <Button
+                            variant="link"
+                            className="mt-1 text-[#7F39EC]"
+                          >
+                            Connect X in Settings
+                          </Button>
+                        </Link>
+                      </Alert>
+                    )}
+
+                  {user &&
+                    contest.status?.toLowerCase() === "active" &&
+                    isTwitterTextImageContest &&
+                    !hasJoinedTwitterCampaign &&
+                    twitterConnectStatus === "loading" && (
+                      <p
+                        className={cn(
+                          "text-sm mb-3 text-center",
+                          isDark ? "text-slate-400" : "text-slate-600",
+                        )}
+                      >
+                        Checking your X connection…
+                      </p>
+                    )}
+
                   <Button
                     size="lg"
                     onClick={
@@ -2230,7 +2325,12 @@ export function ContestClientPage({
                     disabled={
                       contest.status?.toLowerCase() !== "active" ||
                       joinCampaignLoading ||
-                      (isTwitterTextImageContest && hasJoinedTwitterCampaign)
+                      (isTwitterTextImageContest && hasJoinedTwitterCampaign) ||
+                      (!!user &&
+                        isTwitterTextImageContest &&
+                        !hasJoinedTwitterCampaign &&
+                        (twitterConnectStatus === "disconnected" ||
+                          twitterConnectStatus === "loading"))
                     }
                     className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${
                       contest.status?.toLowerCase() === "active"
@@ -2265,7 +2365,10 @@ export function ContestClientPage({
                                   ? "Joined"
                                   : joinCampaignLoading
                                     ? "Joining..."
-                                    : "Join Twitter Campaign"
+                                    : user &&
+                                        twitterConnectStatus === "loading"
+                                      ? "Checking…"
+                                      : "Join Twitter Campaign"
                                 : "Submit Your Entry!"}
                             </span>
                           </div>
@@ -2276,6 +2379,67 @@ export function ContestClientPage({
                       )}
                     </span>
                   </Button>
+
+                  {user &&
+                    twitterJoinError &&
+                    contest.status?.toLowerCase() === "active" &&
+                    isTwitterTextImageContest &&
+                    !hasJoinedTwitterCampaign && (
+                      <Alert
+                        variant={
+                          twitterJoinError.kind === "generic"
+                            ? "destructive"
+                            : "default"
+                        }
+                        className={cn(
+                          "mt-4 max-w-lg mx-auto text-center",
+                          twitterJoinError.kind !== "generic" &&
+                            "border border-[#7F39EC] bg-[#D9C0FF26]",
+                        )}
+                      >
+                        <AlertDescription
+                          className={cn(
+                            "text-sm",
+                            twitterJoinError.kind === "generic"
+                              ? ""
+                              : isDark
+                                ? "text-gray-200"
+                                : "text-gray-700",
+                          )}
+                        >
+                          {twitterJoinError.message}
+                        </AlertDescription>
+                        {(twitterJoinError.kind === "not_connected" ||
+                          twitterJoinError.kind === "bio") && (
+                          <Link href="/dashboard/settings">
+                            <Button
+                              variant="link"
+                              className="mt-1 text-[#7F39EC]"
+                            >
+                              {twitterJoinError.kind === "bio"
+                                ? "Open Settings to update X bio"
+                                : "Connect X in Settings"}
+                            </Button>
+                          </Link>
+                        )}
+                      </Alert>
+                    )}
+
+                  {user &&
+                    contest.status?.toLowerCase() === "active" &&
+                    isTwitterTextImageContest &&
+                    !hasJoinedTwitterCampaign &&
+                    twitterConnectStatus === "disconnected" && (
+                      <p
+                        className={cn(
+                          "text-xs mt-2 text-center max-w-md mx-auto",
+                          isDark ? "text-slate-400" : "text-slate-600",
+                        )}
+                      >
+                        After you connect X in Settings, come back here and tap
+                        Join.
+                      </p>
+                    )}
 
                   {/* Preserve existing pulse indicator for non-joined Twitter contests */}
                   {contest.status?.toLowerCase() === "active" &&

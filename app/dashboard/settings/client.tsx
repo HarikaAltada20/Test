@@ -207,6 +207,24 @@ export default function SettingsPage({
 
     return bio.toLowerCase().includes(username.toLowerCase());
   };
+
+  const copyGocUsernameToClipboard = () => {
+    if (!username?.trim()) {
+      toast({
+        title: "Set a username first",
+        description:
+          "Add your Game Of Creators username on your Profile page, then try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    void navigator.clipboard.writeText(username.trim());
+    toast({
+      title: "Copied",
+      description: "Paste this into your bio on X, then save.",
+    });
+  };
+
   const [isTwitterModalOpen, setIsTwitterModalOpen] = useState(false);
   const [twitterUsername, setTwitterUsername] = useState("");
   const [twitterFetchState, setTwitterFetchState] = useState<
@@ -1892,29 +1910,13 @@ export default function SettingsPage({
                 >
                   <Bell className="h-4 w-4" />
                   <AlertDescription className="text-sm leading-relaxed">
-                    To participate in Twitter (X) campaigns, you will need to
-                    connect your X account. This will allow
-                    Game Of Creators to view basic public profile and post
-                    information for eligibility and performance insights.
-                    <br />
-                    <br />
-                    <strong className="font-semibold">Important Steps:</strong>
-                    <ul className="list-disc list-inside mt-1 space-y-0.5">
-                      <li>
-                        Make sure your X profile is&nbsp;
-                        <strong className="font-semibold">public</strong> so
-                        your posts and metrics are visible for campaign
-                        evaluation.
-                      </li>
-                      <li>
-                        Add your&nbsp;
-                        <strong className="font-semibold">
-                          Game Of Creators username{" "}
-                          {username ? `(${username})` : ""}
-                        </strong>
-                        &nbsp;in your X bio to verify your profile quickly.
-                      </li>
-                    </ul>
+                    Connect X to join Twitter campaigns. We only use your public
+                    profile and posts for eligibility and stats. Your X account
+                    must be{" "}
+                    <strong className="font-semibold">public</strong>. When you
+                    click <strong className="font-semibold">Connect Twitter</strong>
+                    , follow the short steps in the window (copy your site
+                    username into your X bio, then link your handle).
                   </AlertDescription>
                 </Alert>
               )}
@@ -2601,28 +2603,108 @@ export default function SettingsPage({
             <DialogTitle
               className={cn(isDark ? "text-white" : "text-gray-900")}
             >
-              Connect Twitter (X)
+              Link your X (Twitter) account
             </DialogTitle>
             <DialogDescription
               className={cn(isDark ? "text-gray-300" : "text-gray-600")}
             >
-              Enter your Twitter (X) username. Make sure your Game Of Creators
-              username is added in your X bio before fetching.
+              We match your X profile to your Game Of Creators account by
+              looking for your site username in your public X bio.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 mt-2">
-            <Alert className="bg-[#D9C0FF26] border-[#7F39EC]">
-              <AlertDescription
-                className={cn(isDark ? "text-gray-200" : "text-gray-700")}
-              >
-                Before fetching your X profile, please add your{" "}
-                <strong className="font-semibold">
-                  Game Of Creators username {username ? `(${username})` : ""}
-                </strong>
-                &nbsp;to your X bio.
-              </AlertDescription>
-            </Alert>
+            <ol
+              className={cn(
+                "list-none space-y-3 text-sm rounded-lg border p-4",
+                isDark
+                  ? "border-[#7F39EC]/50 bg-[#D9C0FF]/10"
+                  : "border-[#7F39EC]/30 bg-[#D9C0FF26]"
+              )}
+            >
+              <li className="flex gap-3">
+                <span
+                  className={cn(
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-[#7F39EC] text-white" : "bg-[#6C43D0] text-white"
+                  )}
+                >
+                  1
+                </span>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <p
+                    className={cn(
+                      "font-medium leading-snug",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}
+                  >
+                    Put your Game Of Creators username in your X bio
+                  </p>
+                  <p
+                    className={cn(
+                      "text-xs leading-relaxed",
+                      isDark ? "text-gray-300" : "text-gray-600"
+                    )}
+                  >
+                    On X: Profile → Edit profile → Bio. Paste the name below,
+                    then save.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div
+                      className={cn(
+                        "flex min-w-0 flex-1 items-center rounded-md border px-3 py-2 font-mono text-sm",
+                        isDark
+                          ? "border-gray-600 bg-[#06021d] text-white"
+                          : "border-gray-200 bg-white text-gray-900"
+                      )}
+                    >
+                      <span className="truncate">
+                        {username?.trim() ? username.trim() : "—"}
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={copyGocUsernameToClipboard}
+                    >
+                      <Copy className="mr-1.5 h-3.5 w-3.5" />
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span
+                  className={cn(
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-[#7F39EC] text-white" : "bg-[#6C43D0] text-white"
+                  )}
+                >
+                  2
+                </span>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p
+                    className={cn(
+                      "font-medium leading-snug",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}
+                  >
+                    Tell us your X handle here
+                  </p>
+                  <p
+                    className={cn(
+                      "text-xs leading-relaxed",
+                      isDark ? "text-gray-300" : "text-gray-600"
+                    )}
+                  >
+                    Type the same handle you use on X (do not include @). Then
+                    we load your public profile to confirm the bio.
+                  </p>
+                </div>
+              </li>
+            </ol>
 
             {twitterFetchState !== "success" && (
               <>
@@ -2631,11 +2713,11 @@ export default function SettingsPage({
                     htmlFor="twitter-username"
                     className={cn(isDark ? "text-white" : "text-gray-900")}
                   >
-                    X Username
+                    Your X username
                   </Label>
                   <Input
                     id="twitter-username"
-                    placeholder="Enter your X username (without @)"
+                    placeholder="Example: yourhandle"
                     value={twitterUsername}
                     onChange={(e) => setTwitterUsername(e.target.value)}
                     className={cn(
@@ -2688,9 +2770,9 @@ export default function SettingsPage({
                         setTwitterProfile(data);
                         setTwitterFetchState("success");
                         toast({
-                          title: "Profile fetched",
+                          title: "X profile loaded",
                           description:
-                            "We have fetched your public X profile details.",
+                            "Check that your bio shows your Game Of Creators username, then save.",
                         });
                       } catch (error: any) {
                         setTwitterFetchState("error");
@@ -2698,7 +2780,7 @@ export default function SettingsPage({
                           title: "Error",
                           description:
                             error?.message ||
-                            "Failed to fetch your X profile. Please try again.",
+                            "Could not load your X profile. Try again.",
                           variant: "destructive",
                         });
                       }
@@ -2707,10 +2789,10 @@ export default function SettingsPage({
                     {twitterFetchState === "loading" ? (
                       <div className="flex items-center justify-center gap-2">
                         <RefreshCw className="h-4 w-4 animate-spin" />
-                        <span>Fetching...</span>
+                        <span>Loading…</span>
                       </div>
                     ) : (
-                      "Fetch"
+                      "Load my X profile"
                     )}
                   </Button>
                 </div>
@@ -2725,7 +2807,7 @@ export default function SettingsPage({
                     isDark && "text-green-400"
                   )}
                 >
-                  Profile fetched successfully.
+                  We loaded your public X profile.
                 </p>
                 {twitterProfile && (
                   <div
@@ -2818,9 +2900,9 @@ export default function SettingsPage({
                               setTwitterProfile(data);
                               setTwitterFetchState("success");
                               toast({
-                                title: "Profile fetched",
+                                title: "X profile loaded",
                                 description:
-                                  "We have fetched your public X profile details.",
+                                  "Check your bio again, then save on X if needed.",
                               });
                             } catch (error: any) {
                               console.error("Error refreshing X profile", error);
@@ -2924,9 +3006,13 @@ export default function SettingsPage({
                     </div>
                     {!isUsernameInBio(twitterProfile.desc) && (
                       <p className="text-[11px] text-red-600 text-right dark:text-red-400">
-                        You have not added your Game Of Creators username in
-                        your X bio yet. Until then, you cannot connect
-                        Twitter.
+                        {"We still don't see "}
+                        <strong className="font-semibold">
+                          {username || "your username"}
+                        </strong>{" "}
+                        in your bio. Add it on X, save, then tap{" "}
+                        <strong className="font-semibold">Refresh profile</strong>
+                        .
                       </p>
                     )}
                   </div>
@@ -2978,9 +3064,9 @@ export default function SettingsPage({
                       setTwitterProfile(data);
                       setTwitterFetchState("success");
                       toast({
-                        title: "Profile fetched",
+                        title: "X profile loaded",
                         description:
-                          "We have fetched your public X profile details.",
+                          "Check that your bio shows your Game Of Creators username, then save.",
                       });
                     } catch (error: any) {
                       setTwitterFetchState("error");
@@ -2988,7 +3074,7 @@ export default function SettingsPage({
                         title: "Error",
                         description:
                           error?.message ||
-                          "Failed to fetch your X profile. Please try again.",
+                          "Could not load your X profile. Try again.",
                         variant: "destructive",
                       });
                     }

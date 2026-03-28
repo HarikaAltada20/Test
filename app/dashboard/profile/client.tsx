@@ -2138,7 +2138,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -2196,7 +2196,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -3628,7 +3628,7 @@ export default function ProfilePage({
               </label>
               <div
                 className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                  "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                   isDark
                     ? "text-[#8A8A8A] border-[#8A8A8A]"
                     : "border border-gray-300 text-gray-500"
@@ -3660,7 +3660,7 @@ export default function ProfilePage({
               </label>
               <div
                 className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                  "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                   isDark
                     ? "text-[#8A8A8A] border-[#8A8A8A]"
                     : "border border-gray-300 text-gray-500"
@@ -3701,7 +3701,7 @@ export default function ProfilePage({
               </label>
               <div
                 className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                  "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                   isDark
                     ? "text-[#8A8A8A] border-[#8A8A8A]"
                     : "border border-gray-300 text-gray-500"
@@ -3742,7 +3742,7 @@ export default function ProfilePage({
               </label>
               <div
                 className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                  "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                   isDark
                     ? "text-[#8A8A8A] border-[#8A8A8A]"
                     : "border border-gray-300 text-gray-500"
@@ -3808,7 +3808,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -3848,7 +3848,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -3888,7 +3888,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -3928,7 +3928,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -4198,7 +4198,7 @@ export default function ProfilePage({
                       className={cn(
                         "peer block w-full rounded-lg border px-3 pt-5 pb-2 text-[14px] focus:outline-none focus:ring-1 focus:border-purple-500 cursor-default",
                         isDark
-                          ? "bg-[#180438] text-white border-gray-300 text-white"
+                          ? "bg-[#180438] text-white border-gray-300"
                           : "bg-gray-50 text-[#1A1A1A]"
                       )}
                     />
@@ -4264,7 +4264,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -4321,7 +4321,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -4362,7 +4362,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -4402,7 +4402,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -4442,7 +4442,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
