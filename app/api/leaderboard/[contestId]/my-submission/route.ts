@@ -22,7 +22,7 @@ export async function GET(
   try {
     const { data: contestData, error: contestError } = await supabase
       .from('contests')
-      .select('id, contest_type')
+      .select('id, contest_type, moderation_status')
       .eq('id', contestId)
       .single();
 
@@ -33,6 +33,10 @@ export async function GET(
 
     if (!contestData) {
       throw new Error('Contest not found');
+    }
+
+    if (contestData.moderation_status !== 'published') {
+      return NextResponse.json({ error: 'Contest not found' }, { status: 404 });
     }
 
     const { data: mySubmissions, error: submissionError } = await supabase

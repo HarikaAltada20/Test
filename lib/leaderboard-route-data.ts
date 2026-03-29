@@ -141,7 +141,7 @@ export async function fetchLeaderboardPayload(
 
   const { data: contestData, error: contestError } = await supabase
     .from("contests")
-    .select("id, contest_type, contest_based_details")
+    .select("id, contest_type, contest_based_details, moderation_status")
     .eq("id", contestId)
     .single();
 
@@ -151,6 +151,10 @@ export async function fetchLeaderboardPayload(
   }
 
   if (!contestData) {
+    throw new Error("Contest not found");
+  }
+
+  if ((contestData as { moderation_status?: string }).moderation_status !== "published") {
     throw new Error("Contest not found");
   }
 
